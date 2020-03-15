@@ -7,6 +7,9 @@ import time
 from model import ChessCoachModel
 from tensorflow.keras import backend as K
 import chess
+import chess.pgn
+from profiler import Profiler
+from operator import itemgetter
 
 ##########################
 ####### Helpers ##########
@@ -75,6 +78,9 @@ class Game(object):
     self.chess_terminal = None
     self.chess_legal_moves = None
 
+  def pgn(self):
+    return str(chess.pgn.Game.from_board(self.board))
+
   def terminal(self):
     # Game specific termination rules.
     # TODO: Lots of redundant checks inside python-chess, can optimize
@@ -84,6 +90,11 @@ class Game(object):
 
   def terminal_value(self, to_play):
     # Game specific value.
+    # TODO: Make sure that python-chess is giving 1/2-1/2, not *, for a claimed draw
+    # when it's claiming up in terminal() that the game is over. I think it's giving *
+    # right now. Also, make sure that the game contains the final repetition so that
+    # the network learns to actually play it in a game (in an otherwising losing position)
+    # or recognizes the opponent can play it in the inverse.
     result_string = self.board.result(claim_draw=True)
     result = {
       "1-0": 1,
@@ -98,7 +109,7 @@ class Game(object):
   def legal_actions(self):
     # Game specific calculation of legal actions.
     if (self.chess_legal_moves is None):
-      self.chess_legal_moves = self.board.legal_moves
+      self.chess_legal_moves = list(self.board.legal_moves)
     return self.chess_legal_moves
 
   def clone(self):
@@ -247,9 +258,8 @@ def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage,
 def play_game(config: AlphaZeroConfig, network: Network):
   game = Game()
   while not game.terminal() and len(game.history) < config.max_moves:
-    start_mcts = time.time()
-    action, root = run_mcts(config, game, network)
-    print("MCTS time: ", (time.time() - start_mcts))
+    with Profiler("MCTS", threshold_time=10.0):
+      action, root = run_mcts(config, game, network)
     game.apply(action)
     game.store_search_statistics(root)
   return game
@@ -265,17 +275,20 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network):
   add_exploration_noise(config, root)
 
   for _ in range(config.num_simulations):
+    #with Profiler("Expand"):
     node = root
     scratch_game = game.clone()
     search_path = [node]
 
     while node.expanded():
+      #with Profiler("Select child"):
       action, node = select_child(config, node)
+      #with Profiler("Apply"):
       scratch_game.apply(action)
       search_path.append(node)
 
-    value = evaluate(node, scratch_game, network)
-    backpropagate(search_path, value, scratch_game.to_play())
+  value = evaluate(node, scratch_game, network)
+  backpropagate(search_path, value, scratch_game.to_play())
   return select_action(config, game, root), root
 
 
@@ -285,9 +298,7 @@ def select_action(config: AlphaZeroConfig, game: Game, root: Node):
   if len(game.history) < config.num_sampling_moves:
     _, action = softmax_sample(visit_counts) # over the expits
   else:
-    # TODO: Use to/from uci for now so moves are lexico comparable for max ucb ties
-    _, action = max([(visit_count, action.uci()) for (visit_count, action) in visit_counts])
-    action = chess.Move.from_uci(action)
+    _, action = max([(visit_count, action) for (visit_count, action) in visit_counts], key=itemgetter(0))
   return action
 
 def softmax_sample(visit_counts):
@@ -296,10 +307,9 @@ def softmax_sample(visit_counts):
 
 # Select the child with the highest UCB score.
 def select_child(config: AlphaZeroConfig, node: Node):
-  # TODO: Use to/from uci for now so moves are lexico comparable for max ucb ties
-  _, action, child = max((ucb_score(config, node, child), action.uci(), child)
-                         for action, child in node.children.items())
-  return chess.Move.from_uci(action), child
+  _, action, child = max([(ucb_score(config, node, child), action, child)
+                         for action, child in node.children.items()], key=itemgetter(0))
+  return action, child
 
 
 # The score for a node is based on its value, plus an exploration bonus based on
@@ -316,15 +326,17 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node):
 
 # We use the neural network to obtain a value and policy prediction.
 def evaluate(node: Node, game: Game, network: Network):
-  # Score terminal positions mid-MCTS.
-  if (game.terminal()):
+  #with Profiler("Evaluate"):
+  policy_actions = game.legal_actions()
+  node.to_play = game.to_play()
+
+  # Score terminal positions mid-MCTS (TODO: probably doesn't check for "claim" draws)
+  if (len(policy_actions) == 0):
     node.to_play = game.to_play()
     return game.terminal_value(game.to_play())
 
   # Expand the node.
-  node.to_play = game.to_play()
   value, policy_logits = network.inference(game.make_image(-1))
-  policy_actions = game.legal_actions()
   policy_values = special.softmax([policy_logits[a] for a in policy_actions])
   for action, p in zip(policy_actions, policy_values):
     node.children[action] = Node(p)
@@ -369,29 +381,26 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage,
     # Until threading is done properly, self-play here.
     
     # Generate a game (test duration)
-    start_play = time.time()
-    play_network = storage.latest_network()
-    game = play_game(config, play_network)
-    replay_buffer.save_game(game)
-    print("Game time: ", (time.time() - start_play))
+    with Profiler("Game"):
+      play_network = storage.latest_network()
+      game = play_game(config, play_network)
+      replay_buffer.save_game(game)
 
     # Train (test duration)
-    start_train = time.time()
+    with Profiler("Train"):
+      if i % config.checkpoint_interval == 0:
+        storage.save_network(i, network)
+      batch = replay_buffer.sample_batch()
 
-    if i % config.checkpoint_interval == 0:
-      storage.save_network(i, network)
-    batch = replay_buffer.sample_batch()
+      x = [image for image, (target_value, target_policy) in batch]
+      y_value = [target_value for image, (target_value, target_policy) in batch]
+      y_policy = [target_policy for image, (target_value, target_policy) in batch]
 
-    x = [image for image, (target_value, target_policy) in batch]
-    y_value = [target_value for image, (target_value, target_policy) in batch]
-    y_policy = [target_policy for image, (target_value, target_policy) in batch]
+      new_learning_rate = config.learning_rate_schedule.get(i)
+      if (new_learning_rate is not None):
+        K.set_value(optimizer.lr, new_learning_rate)
 
-    new_learning_rate = config.learning_rate_schedule.get(i)
-    if (new_learning_rate is not None):
-      K.set_value(optimizer.lr, new_learning_rate)
-
-    network.model.train_on_batch(x, [y_value, y_policy])
-    print("Train time: ", (time.time() - start_train))
+      network.model.model.train_on_batch(x, [y_value, y_policy])
 
   storage.save_network(config.training_steps, network)
 
