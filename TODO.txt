@@ -1,0 +1,2 @@
+- Game.make_image (map python-chess to NN input planes (remember to check spec, e.g. mirror/rotate))
+- ChessPolicy.__getitem__ (key moves into NN output planes)
