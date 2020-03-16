@@ -38,6 +38,7 @@ class ChessCoachModel:
       kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(tower)
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Flatten()(x)
     x = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(1e-4), activation="relu")(x)
     x = tf.keras.layers.Dense(1, kernel_regularizer=tf.keras.regularizers.l2(1e-4), activation="tanh")(x)
     value = x

@@ -37,7 +37,7 @@ class AlphaZeroConfig(object):
     self.training_steps = int(700e3)
     self.checkpoint_interval = int(1e3)
     self.window_size = int(1e6)
-    self.batch_size = 4096
+    self.batch_size = 2048 # OOM on GTX 1080 @ 4096
 
     self.weight_decay = 1e-4
     self.momentum = 0.9
@@ -48,7 +48,6 @@ class AlphaZeroConfig(object):
         300e3: 2e-3,
         500e3: 2e-4
     }
-
 
 class Node(object):
 
@@ -67,6 +66,47 @@ class Node(object):
       return 0
     return self.value_sum / self.visit_count
 
+# TODO: Put somewhere clean
+MOVE_LOOKUP_OFFSET = 64
+queen_knight_planes = [1e6 for i in range(128)] # Initialize out-of-range
+# Queen moves (clockwise from up)
+QUEEN_MOVES = [8, 9, 1, -7, -8, -9, -1, 7]
+for i in range(len(QUEEN_MOVES)):
+  for distance in range(1, 8):
+    queen_knight_planes[MOVE_LOOKUP_OFFSET + QUEEN_MOVES[i] * distance] = 7 * i + (distance - 1)
+# Knight moves (clockwise from up)
+KNIGHT_MOVES = [17, 10, -6, -15, -17, -10, 6, 15]
+for i in range(len(KNIGHT_MOVES)):
+  queen_knight_planes[MOVE_LOOKUP_OFFSET + KNIGHT_MOVES[i]] = 56 + i
+# Underpromotions
+underpromotion_planes = {
+  chess.KNIGHT: {
+    MOVE_LOOKUP_OFFSET + 7: 64,
+    MOVE_LOOKUP_OFFSET + 8: 65,
+    MOVE_LOOKUP_OFFSET + 9: 66
+  },
+  chess.BISHOP: {
+    MOVE_LOOKUP_OFFSET + 7: 67,
+    MOVE_LOOKUP_OFFSET + 8: 68,
+    MOVE_LOOKUP_OFFSET + 9: 69
+  },
+  chess.ROOK: {
+    MOVE_LOOKUP_OFFSET + 7: 70,
+    MOVE_LOOKUP_OFFSET + 8: 71,
+    MOVE_LOOKUP_OFFSET + 9: 72
+  }
+}
+
+def get_move_index(from_square, to_square, promotion, *, rotate):
+  if (rotate):
+    from_square = 63 - from_square
+    to_square = 63 - to_square
+  move_delta_offset = MOVE_LOOKUP_OFFSET + (to_square - from_square)
+  if (promotion and (promotion != chess.QUEEN)):
+    plane = underpromotion_planes[promotion][move_delta_offset]
+  else:
+    plane = queen_knight_planes[move_delta_offset]
+  return (plane, from_square // 8, from_square % 8)
 
 class Game(object):
 
@@ -127,18 +167,41 @@ class Game(object):
 
   def store_search_statistics(self, root):
     sum_visits = sum(child.visit_count for child in root.children.values())
-    self.child_visits.append([
-        root.children[a].visit_count / sum_visits if a in root.children else 0
-        for a in range(self.num_actions)
-    ])
-
+    self.child_visits.append({action: (child.visit_count / sum_visits) for action, child in root.children.items()})
+  
   def make_image(self, state_index: int):
     # Game specific feature planes.
-    return []
+    
+    # Roll back to the "state_index" position
+    switchyard = []
+    for _ in range(len(self.history) - 1 - state_index):
+      switchyard.append(self.board.pop())
+
+    # If it's black's turn, rotate the board and flip colors so that the game is viewed from black's perpsective,
+    # and black's pieces still go in the "self" planes 0-5.
+    # TODO: Just pieces for now (12 planes)
+    image = numpy.zeros((12, 8, 8))
+    pieces = self.board if (state_index % 2 == 0) else self.board.mirror().transform(chess.flip_horizontal)
+    for y in range(8):
+      for x in range(8):
+        piece = pieces.piece_at(chess.SQUARES[8 * y + x])
+        if (piece is not None):
+          plane = piece.piece_type - 1 + (0 if piece.color else 6)
+          image[plane][y][x] = 1
+
+    # Roll forwards to the current position
+    while (switchyard):
+      self.board.push(switchyard.pop())
+
+    return image
 
   def make_target(self, state_index: int):
-    return (map_01_to_11(self.terminal_value(state_index % 2)),
-            self.child_visits[state_index])
+    visits = numpy.zeros((73, 8, 8))
+    rotate = (state_index % 2 == 1)
+    for action, logit in self.child_visits[state_index].items():
+      indices = get_move_index(action.from_square, action.to_square, action.promotion, rotate=rotate)
+      visits[indices] = logit
+    return (map_01_to_11(self.terminal_value(state_index % 2)), visits)
 
   def to_play(self):
     return len(self.history) % 2
@@ -180,13 +243,13 @@ class UniformPolicy:
 
 class ChessPolicy:
   
-  def __init__(self, planes):
+  def __init__(self, planes, *, rotate):
     self.planes = planes
+    self.rotate = rotate
 
   def __getitem__(self, key):
-    return 100
-
-initial_inference = (0.5, UniformPolicy()) # policy -> uniform, value -> 0.5
+    indices = get_move_index(key.from_square, key.to_square, key.promotion, rotate=self.rotate)
+    return self.planes[indices]
 
 class Network(object):
 
@@ -194,12 +257,13 @@ class Network(object):
     self.model = model
 
   # (Value, Policy)
-  def inference(self, image):
+  def inference(self, image, *, rotate):
     if (self.model is not None):
-      # TODO: Need to remap value range, and map actions to logits
+      image = image.reshape((1, 12, 8, 8)) # TODO: Only one at a time right now, need to parallelize across MCTSs
       (value, policy) = self.model.model.predict_on_batch(image)
-      return (map_11_to_01(value), ChessPolicy(policy))
-    return initial_inference
+      policy = numpy.reshape(policy, (73, 8, 8)) # TODO: Only one at a time right now, need to parallelize across MCTSs
+      return (map_11_to_01(value), ChessPolicy(policy, rotate=rotate))
+    return (0.5, UniformPolicy()) # policy -> uniform, value -> 0.5
 
 class SharedStorage(object):
 
@@ -258,7 +322,7 @@ def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage,
 def play_game(config: AlphaZeroConfig, network: Network):
   game = Game()
   while not game.terminal() and len(game.history) < config.max_moves:
-    with Profiler("MCTS", threshold_time=10.0):
+    with Profiler("MCTS"):
       action, root = run_mcts(config, game, network)
     game.apply(action)
     game.store_search_statistics(root)
@@ -336,7 +400,7 @@ def evaluate(node: Node, game: Game, network: Network):
     return game.terminal_value(game.to_play())
 
   # Expand the node.
-  value, policy_logits = network.inference(game.make_image(-1))
+  value, policy_logits = network.inference(game.make_image(-1), rotate=(node.to_play % 2 == 1))
   policy_values = special.softmax([policy_logits[a] for a in policy_actions])
   for action, p in zip(policy_actions, policy_values):
     node.children[action] = Node(p)
@@ -380,21 +444,22 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage,
 
     # Until threading is done properly, self-play here.
     
-    # Generate a game (test duration)
-    with Profiler("Game"):
-      play_network = storage.latest_network()
-      game = play_game(config, play_network)
-      replay_buffer.save_game(game)
+    # Generate 5 games
+    for _ in range(5):
+      with Profiler("Game", threshold_time=0.0):
+        play_network = storage.latest_network()
+        game = play_game(config, play_network)
+        replay_buffer.save_game(game)
 
-    # Train (test duration)
-    with Profiler("Train"):
+    # Train
+    with Profiler("Train", threshold_time=0.0):
       if i % config.checkpoint_interval == 0:
         storage.save_network(i, network)
       batch = replay_buffer.sample_batch()
 
-      x = [image for image, (target_value, target_policy) in batch]
-      y_value = [target_value for image, (target_value, target_policy) in batch]
-      y_policy = [target_policy for image, (target_value, target_policy) in batch]
+      x = tf.stack([image for image, (target_value, target_policy) in batch])
+      y_value = tf.stack([target_value for image, (target_value, target_policy) in batch])
+      y_policy = tf.stack([target_policy for image, (target_value, target_policy) in batch])
 
       new_learning_rate = config.learning_rate_schedule.get(i)
       if (new_learning_rate is not None):

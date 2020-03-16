@@ -1,2 +1,27 @@
-- Game.make_image (map python-chess to NN input planes (remember to check spec, e.g. mirror/rotate))
-- ChessPolicy.__getitem__ (key moves into NN output planes)
+Very basics
+- It's usually hitting 3-fold repetition via biased tie handling after 30-ply (in the top-right corner) and not learning very fast
+  - How do we generate some wins to learn from?
+- Why are we evaluate()ing the root before exploring? Wasn't it already evaluated? Step through to be less fuzzy
+
+Basic loop
+1) Roughly proportion self-play to training ratio
+2) Get multiple self-play workers running and batching their predictions
+3) Add additional input planes (beyond just pieces) once basic loop is working
+4) Maybe make self-play/training workers use an --arg which also makes TF chatty (vs. UCI mode by default with no args)
+
+Longer training
+1) Save/load generated games
+2) Save/load network
+
+Correctness
+- Make sure python-chess claimed repetition checking is working/stable - perhaps get rid of claim flags and manually check/cache is_rep or w/e after move already played (see code TODOs)
+
+Performance
+- Decide whether we need to self-play in C++
+
+UCI
+- Integrate sync-UCI hack with trained model
+- Split out UCI thread so infinite think, ponder, etc. can workers
+- Implement infinite think, ponder, time controls
+- Implement endgame tablebases (invisible/external to the training loop?)
+- Switch from python-chess to own board, movegen, etc. (or be sure of GPLv3 static vs. dynamic)
