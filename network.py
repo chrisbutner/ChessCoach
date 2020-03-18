@@ -153,7 +153,6 @@ class Game(object):
     return self.chess_legal_moves
 
   def clone(self):
-    # Copy history list but share nodes, copy board.
     return Game(list(self.history), self.board.copy())
 
   def apply(self, action):
@@ -322,7 +321,7 @@ def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage,
 def play_game(config: AlphaZeroConfig, network: Network):
   game = Game()
   while not game.terminal() and len(game.history) < config.max_moves:
-    with Profiler("MCTS"):
+    with Profiler("MCTS", threshold_time=0.0):
       action, root = run_mcts(config, game, network)
     game.apply(action)
     game.store_search_statistics(root)
@@ -351,8 +350,9 @@ def run_mcts(config: AlphaZeroConfig, game: Game, network: Network):
       scratch_game.apply(action)
       search_path.append(node)
 
-  value = evaluate(node, scratch_game, network)
-  backpropagate(search_path, value, scratch_game.to_play())
+    value = evaluate(node, scratch_game, network)
+    backpropagate(search_path, value, scratch_game.to_play())
+
   return select_action(config, game, root), root
 
 
