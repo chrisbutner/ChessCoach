@@ -125,7 +125,7 @@ class Game(object):
     # Game specific termination rules.
     # TODO: Lots of redundant checks inside python-chess, can optimize
     if (self.chess_terminal is None):
-      self.chess_terminal = self.board.is_game_over(claim_draw=True)
+      self.chess_terminal = self.board.is_game_over(claim_draw=False) # Don't claim draws for now; this still checks for 5/75 though
     return self.chess_terminal
 
   def terminal_value(self, to_play):
@@ -135,7 +135,7 @@ class Game(object):
     # right now. Also, make sure that the game contains the final repetition so that
     # the network learns to actually play it in a game (in an otherwising losing position)
     # or recognizes the opponent can play it in the inverse.
-    result_string = self.board.result(claim_draw=True)
+    result_string = self.board.result(claim_draw=False) # Don't claim draws for now; this still checks for 5/75 though
     result = {
       "1-0": 1,
       "0-1": 0,
@@ -322,7 +322,7 @@ def play_game(config: AlphaZeroConfig, network: Network):
   game = Game()
   root = None
   while not game.terminal() and len(game.history) < config.max_moves:
-    with Profiler("MCTS", threshold_time=0.0):
+    with Profiler("MCTS", threshold_time=30.0):
       action, root = run_mcts(config, game, root, network)
     game.apply(action)
     game.store_search_statistics(root)
@@ -451,6 +451,7 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage,
   model.model.compile(optimizer=optimizer, loss=losses, metrics=["accuracy"])
   network = Network(model)
   
+  game_number = 1
   for i in range(config.training_steps):
 
     # Until threading is done properly, self-play here.
@@ -461,6 +462,11 @@ def train_network(config: AlphaZeroConfig, storage: SharedStorage,
         play_network = storage.latest_network()
         game = play_game(config, play_network)
         replay_buffer.save_game(game)
+
+        result = game.terminal_value(0)
+        with open(f"C:\\Users\\Public\\Game-{game_number}-{result}.txt", "w") as game_file:
+          print(game.pgn(), file=game_file)
+        game_number += 1
 
     # Train
     with Profiler("Train", threshold_time=0.0):
