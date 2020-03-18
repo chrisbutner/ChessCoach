@@ -320,11 +320,13 @@ def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage,
 # of the game is reached.
 def play_game(config: AlphaZeroConfig, network: Network):
   game = Game()
+  root = None
   while not game.terminal() and len(game.history) < config.max_moves:
     with Profiler("MCTS", threshold_time=0.0):
-      action, root = run_mcts(config, game, network)
+      action, root = run_mcts(config, game, root, network)
     game.apply(action)
     game.store_search_statistics(root)
+    root = root.children[action]
   return game
 
 
@@ -332,12 +334,16 @@ def play_game(config: AlphaZeroConfig, network: Network):
 # To decide on an action, we run N simulations, always starting at the root of
 # the search tree and traversing the tree according to the UCB formula until we
 # reach a leaf node.
-def run_mcts(config: AlphaZeroConfig, game: Game, network: Network):
-  root = Node(0)
-  evaluate(root, game, network)
+def run_mcts(config: AlphaZeroConfig, game: Game, root: Node, network: Network):
+  if (root is not None):
+    prepare_subtree(root)
+  else:
+    root = Node(0)
+    evaluate(root, game, network)
   add_exploration_noise(config, root)
 
-  for _ in range(config.num_simulations):
+  num_simulations = (config.num_simulations - root.visit_count)
+  for _ in range(num_simulations):
     #with Profiler("Expand"):
     node = root
     scratch_game = game.clone()
@@ -387,6 +393,10 @@ def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node):
   value_score = child.value()
   return prior_score + value_score
 
+def prepare_subtree(node: Node):
+  assert len(node.children) == len(node.network_policy)
+  for action, p in node.network_policy:
+    node.children[action].prior = p
 
 # We use the neural network to obtain a value and policy prediction.
 def evaluate(node: Node, game: Game, network: Network):
@@ -402,7 +412,8 @@ def evaluate(node: Node, game: Game, network: Network):
   # Expand the node.
   value, policy_logits = network.inference(game.make_image(-1), rotate=(node.to_play % 2 == 1))
   policy_values = special.softmax([policy_logits[a] for a in policy_actions])
-  for action, p in zip(policy_actions, policy_values):
+  node.network_policy = list(zip(policy_actions, policy_values))
+  for action, p in node.network_policy:
     node.children[action] = Node(p)
   return value
 
