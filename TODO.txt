@@ -1,3 +1,6 @@
+C++
+- Need to move stockfish to its own lib to isolate unicode and warning settings
+
 Very basics
 - It's usually hitting 3-fold repetition via biased tie handling after 30-ply (in the top-right corner) and not learning very fast
   - How do we generate some wins to learn from?

@@ -1,0 +1,3 @@
+
+def predict():
+	print("hi!")
