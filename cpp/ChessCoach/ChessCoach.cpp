@@ -18,7 +18,19 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
+void TestMovegen();
+int TestPython();
+
 int main(int argc, char* argv[])
+{
+    TestMovegen();
+
+    //TestPython();
+
+    return 0;
+}
+
+void TestMovegen()
 {
     Bitboards::init();
     Position::init();
@@ -32,24 +44,44 @@ int main(int argc, char* argv[])
     const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     StateListPtr states(new std::deque<StateInfo>(1));
     Position position;
-    position.set(StartFEN, false /* isChess960 */, &states->back(), Threads.main());  
+    position.set(StartFEN, false /* isChess960 */, &states->back(), Threads.main());
 
-    // Generate legal moves.
     ExtMove moves[MAX_MOVES];
-    ExtMove* cur = moves;
-    ExtMove* endMoves = generate<LEGAL>(position, cur);
-
-    // Debug
-    std::cout << "Legal moves: " << (endMoves - cur) << std::endl;
-    while (cur != endMoves)
+    for (int i = 0; i < 4; i++)
     {
-        std::cout << from_sq(cur->move) << " to " << to_sq(cur->move) << std::endl;
-        cur++;
+        // Generate legal moves.
+        ExtMove* endMoves = generate<LEGAL>(position, moves);
+
+        // Debug
+        std::cout << "Legal moves: " << (endMoves - moves) << std::endl;
+        for (ExtMove* cur = moves; cur != endMoves; cur++)
+        {
+            std::cout << from_sq(cur->move) << " to " << to_sq(cur->move) << std::endl;
+        }
+
+        // Make first move in list.
+        states->emplace_back();
+        position.do_move(moves[0], states->back());
     }
+
+    // Test out a branching copied position.
+    Position position2 = position;
+    StateListPtr states2(new std::deque<StateInfo>());
+    ExtMove moves2[MAX_MOVES];
+    ExtMove* endMoves2 = generate<LEGAL>(position2, moves2);
+    states2->emplace_back();
+    position2.do_move(moves2[0], states2->back());
+    position2.undo_move(moves2[0]);
+    position.undo_move(moves[0]);
+    position2.undo_move(moves[0]);
+    assert(position.fen() == position2.fen());
 
     // Clean up.
     Threads.set(0);
+}
 
+int TestPython()
+{
     // Test Python
 
     // Work around a Python crash.
@@ -95,19 +127,19 @@ int main(int argc, char* argv[])
                 {
                     pythonValue = PyTuple_GetItem(result, 0);
                     assert(PyArray_Check(pythonValue));
-                    
+
                     pythonPolicy = PyTuple_GetItem(result, 1);
                     assert(PyArray_Check(pythonPolicy));
-                    
+
                     PyArrayObject* pythonValueArray = reinterpret_cast<PyArrayObject*>(pythonValue);
                     float value = reinterpret_cast<float*>(PyArray_DATA(pythonValueArray))[0];
-                        
+
                     PyArrayObject* pythonPolicyArray = reinterpret_cast<PyArrayObject*>(pythonPolicy);
                     float(*policy)[8][8] = reinterpret_cast<float(*)[8][8]>(PyArray_DATA(pythonPolicyArray));
 
                     float test = policy[0][1][2];
                     float test2 = policy[3][4][5];
-                    
+
                     success = true;
                 }
             }
@@ -115,7 +147,7 @@ int main(int argc, char* argv[])
             delete[] image;
         }
     }
-    
+
     if (!success && PyErr_Occurred())
     {
         PyErr_Print();
@@ -130,6 +162,5 @@ int main(int argc, char* argv[])
 
     // Clean up python.
     Py_FinalizeEx();
-
     return 0;
 }
