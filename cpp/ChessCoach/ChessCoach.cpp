@@ -70,8 +70,10 @@ int main(int argc, char* argv[])
 
     PyObject* module = nullptr;
     PyObject* function = nullptr;
-    PyObject* pythonArray = nullptr;
+    PyObject* pythonImage = nullptr;
     PyObject* result = nullptr;
+    PyObject* pythonValue = nullptr;
+    PyObject* pythonPolicy = nullptr;
     bool success = false;
 
     module = PyImport_ImportModule("predict");
@@ -80,23 +82,37 @@ int main(int argc, char* argv[])
         function = PyObject_GetAttrString(module, "predict");
         if (function && PyCallable_Check(function))
         {
-            npy_intp dims[3]{ 73, 8, 8 };
+            npy_intp dims[3]{ 12, 8, 8 };
 
-            float(*array)[8][8]{ new float[73][8][8] };
+            float(*image)[8][8]{ new float[12][8][8] };
 
-            pythonArray = PyArray_SimpleNewFromData(
-                Py_ARRAY_LENGTH(dims), dims, NPY_FLOAT, reinterpret_cast<void*>(array));
-            if (pythonArray)
+            pythonImage = PyArray_SimpleNewFromData(
+                Py_ARRAY_LENGTH(dims), dims, NPY_FLOAT, reinterpret_cast<void*>(image));
+            if (pythonImage)
             {
-                result = PyObject_CallFunctionObjArgs(function, pythonArray, nullptr);
+                result = PyObject_CallFunctionObjArgs(function, pythonImage, nullptr);
                 if (result)
                 {
-                    // TODO: Use result
+                    pythonValue = PyTuple_GetItem(result, 0);
+                    assert(PyArray_Check(pythonValue));
+                    
+                    pythonPolicy = PyTuple_GetItem(result, 1);
+                    assert(PyArray_Check(pythonPolicy));
+                    
+                    PyArrayObject* pythonValueArray = reinterpret_cast<PyArrayObject*>(pythonValue);
+                    float value = reinterpret_cast<float*>(PyArray_DATA(pythonValueArray))[0];
+                        
+                    PyArrayObject* pythonPolicyArray = reinterpret_cast<PyArrayObject*>(pythonPolicy);
+                    float(*policy)[8][8] = reinterpret_cast<float(*)[8][8]>(PyArray_DATA(pythonPolicyArray));
+
+                    float test = policy[0][1][2];
+                    float test2 = policy[3][4][5];
+                    
                     success = true;
                 }
             }
 
-            delete[] array;
+            delete[] image;
         }
     }
     
@@ -105,8 +121,10 @@ int main(int argc, char* argv[])
         PyErr_Print();
     }
 
+    Py_XDECREF(pythonPolicy);
+    Py_XDECREF(pythonValue);
     Py_XDECREF(result);
-    Py_XDECREF(pythonArray);
+    Py_XDECREF(pythonImage);
     Py_XDECREF(function);
     Py_XDECREF(module);
 
