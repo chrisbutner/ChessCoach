@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
 
     // Initialize threads. They directly reach out to UCI options, so we need to initialize that too.
     UCI::init(Options);
-    Threads.set(Options["Threads"]);
+    Threads.set(static_cast<size_t>(Options["Threads"]));
 
     // Set up the starting position.
     const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
