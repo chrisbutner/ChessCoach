@@ -15,6 +15,8 @@
 #else
 #include <Python.h>
 #endif
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
 
 int main(int argc, char* argv[])
 {
@@ -64,39 +66,51 @@ int main(int argc, char* argv[])
     }
 
     Py_Initialize();
+    import_array();
 
-    PyObject* module = PyImport_ImportModule("predict");
-    if (module != nullptr)
+    PyObject* module = nullptr;
+    PyObject* function = nullptr;
+    PyObject* pythonArray = nullptr;
+    PyObject* result = nullptr;
+    bool success = false;
+
+    module = PyImport_ImportModule("predict");
+    if (module)
     {
-        PyObject* function = PyObject_GetAttrString(module, "predict");
+        function = PyObject_GetAttrString(module, "predict");
         if (function && PyCallable_Check(function))
         {
-            // TODO: Args
-            PyObject* result = PyObject_CallObject(function, nullptr);
-            if (result)
+            npy_intp dims[3]{ 73, 8, 8 };
+
+            float(*array)[8][8]{ new float[73][8][8] };
+
+            pythonArray = PyArray_SimpleNewFromData(
+                Py_ARRAY_LENGTH(dims), dims, NPY_FLOAT, reinterpret_cast<void*>(array));
+            if (pythonArray)
             {
-                // TODO: Use result
-                Py_DECREF(result);
+                result = PyObject_CallFunctionObjArgs(function, pythonArray, nullptr);
+                if (result)
+                {
+                    // TODO: Use result
+                    success = true;
+                }
             }
-            else
-            {
-                PyErr_Print();
-            }
+
+            delete[] array;
         }
-        else
-        {
-            if (PyErr_Occurred())
-            {
-                PyErr_Print();
-            }
-        }
-        Py_XDECREF(function);
-        Py_DECREF(module);
     }
-    else
+    
+    if (!success && PyErr_Occurred())
     {
         PyErr_Print();
     }
+
+    Py_XDECREF(result);
+    Py_XDECREF(pythonArray);
+    Py_XDECREF(function);
+    Py_XDECREF(module);
+
+    // Clean up python.
     Py_FinalizeEx();
 
     return 0;

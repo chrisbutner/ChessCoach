@@ -1,3 +1,3 @@
 
-def predict():
-	print("hi!")
+def predict(image):
+	print("Input shape:", image.shape)
