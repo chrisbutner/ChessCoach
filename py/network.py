@@ -197,9 +197,9 @@ class Game(object):
   def make_target(self, state_index: int):
     visits = numpy.zeros((73, 8, 8))
     rotate = (state_index % 2 == 1)
-    for action, logit in self.child_visits[state_index].items():
+    for action, probability in self.child_visits[state_index].items():
       indices = get_move_index(action.from_square, action.to_square, action.promotion, rotate=rotate)
-      visits[indices] = logit
+      visits[indices] = probability
     return (map_01_to_11(self.terminal_value(state_index % 2)), visits)
 
   def to_play(self):
