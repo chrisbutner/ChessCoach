@@ -72,20 +72,20 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(SolutionDir)Include;$(SolutionDir)Stockfish;$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <LibraryPath>$(USERPROFILE)\Anaconda3\libs;$(SolutionDir)Lib\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir)Include;$(SolutionDir)Stockfish;$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir)Include;$(SolutionDir)Stockfish;$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir)Include;$(SolutionDir)Stockfish;$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
     <LibraryPath>$(USERPROFILE)\Anaconda3\libs;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -98,6 +98,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -117,6 +118,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -138,6 +140,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -161,6 +164,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -174,6 +178,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ChessCoach.cpp" />
+    <ClCompile Include="PythonNetwork.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -182,6 +187,8 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Network.h" />
+    <ClInclude Include="PythonNetwork.h" />
     <ClInclude Include="SelfPlay.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

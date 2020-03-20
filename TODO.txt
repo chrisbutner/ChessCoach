@@ -1,10 +1,11 @@
+Porting
+- Get play/train loop working - need to pass games back, orchestrate it all
+- Delete Python self-play code when ready
+
 C++
 - Eventually modify stockfish - Position, etc. - so it doesn't reach out to uci/options/threads code at all
-
-Very basics
-- It's usually hitting 3-fold repetition via biased tie handling after 30-ply (in the top-right corner) and not learning very fast
-  - How do we generate some wins to learn from?
-- Why are we evaluate()ing the root before exploring? Wasn't it already evaluated? Step through to be less fuzzy
+- Validate that SelfPlay.cpp draw checking is valid (re: ply) - step through basic + triangulation examples from starting position with knights
+- Turn 12/8/8, 73/8/8 everywhere into constexpr
 
 Basic loop
 1) Roughly proportion self-play to training ratio
@@ -18,9 +19,6 @@ Longer training
 
 Correctness
 - Make sure python-chess claimed repetition checking is working/stable - perhaps get rid of claim flags and manually check/cache is_rep or w/e after move already played (see code TODOs)
-
-Performance
-- Decide whether we need to self-play in C++
 
 UCI
 - Integrate sync-UCI hack with trained model
