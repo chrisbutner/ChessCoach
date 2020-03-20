@@ -45,7 +45,7 @@ class Profiler:
     
     Profiler.active = Profiler.active.parent
 
-    if ((Profiler.active.parent is None) or (self.node.time >= self.threshold_time)):
+    if (self.node.time >= self.threshold_time):
       self.consume(self.node)
 
   def consume(self, node):
