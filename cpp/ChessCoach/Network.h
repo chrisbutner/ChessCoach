@@ -14,7 +14,7 @@ struct IPrediction
 
 struct INetwork
 {
-    virtual IPrediction* Predict(InputPlanes& image) const = 0;
+    virtual IPrediction* Predict(InputPlanes& image) = 0;
 };
 
 #endif // _NETWORK_H_

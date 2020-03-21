@@ -72,7 +72,7 @@ public:
     bool IsTerminal() const;
     Color ToPlay() const;
     void ApplyMove(Move move, Node* newRoot);
-    float ExpandAndEvaluate(const INetwork* network);
+    float ExpandAndEvaluate(INetwork* network);
     std::vector<float> Softmax(const std::vector<float>& logits) const;
     float GetLogit(const OutputPlanesPtr policy, Move move) const;
     InputPlanes MakeImage() const;
@@ -96,8 +96,9 @@ class Mcts
 {
 public:
 
-    void Play() const;
-    std::pair<Move, Node*> RunMcts(const INetwork* network, Game& game) const;
+    void Work(INetwork* network) const;
+    void Play(INetwork* network) const;
+    std::pair<Move, Node*> RunMcts(INetwork* network, Game& game) const;
     void AddExplorationNoise(Game& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;

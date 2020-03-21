@@ -1,7 +1,10 @@
 #ifndef _PYTHONNETWORK_H_
 #define _PYTHONNETWORK_H_
 
+#include <vector>
+
 #include "Network.h"
+#include "Threading.h"
 
 #ifdef _DEBUG
 #undef _DEBUG
@@ -28,20 +31,53 @@ private:
     void* _policy;
 };
 
+class BatchedPythonPrediction : public IPrediction
+{
+public:
+
+    BatchedPythonPrediction(PyObject* tupleResult, int index);
+    virtual ~BatchedPythonPrediction();
+
+    virtual float Value() const;
+    virtual void* Policy() const; // To view as an OutputPlanesPtr
+
+private:
+
+    PyObject* _tupleResult;
+    float _value;
+    void* _policy;
+};
+
 class PythonNetwork : public INetwork
 {
 public:
 
-    static INetwork* GetLatestNetwork();
-
     PythonNetwork();
     virtual ~PythonNetwork();
-    virtual IPrediction* Predict(InputPlanes& image) const;
+    virtual IPrediction* Predict(InputPlanes& image);
 
 private:
 
     PyObject* _predictModule;
     PyObject* _predictFunction;
+};
+
+class BatchedPythonNetwork : public INetwork
+{
+public:
+
+    static const int BatchSize = 16;
+
+    BatchedPythonNetwork();
+    virtual ~BatchedPythonNetwork();
+    virtual IPrediction* Predict(InputPlanes& image);
+
+private:
+
+    PyObject* _predictModule;
+    PyObject* _predictBatchFunction;
+    std::mutex _mutex;
+    std::vector<std::pair<InputPlanes*, SyncQueue<IPrediction*>*>> _predictQueue;
 };
 
 class UniformPrediction : public IPrediction
@@ -65,7 +101,7 @@ public:
 
     UniformNetwork();
     virtual ~UniformNetwork();
-    virtual IPrediction* Predict(InputPlanes& image) const;
+    virtual IPrediction* Predict(InputPlanes& image);
 
 private:
 

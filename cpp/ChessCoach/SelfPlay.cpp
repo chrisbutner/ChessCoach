@@ -7,8 +7,6 @@
 
 #include <Stockfish/thread.h>
 
-#include "PythonNetwork.h"
-
 int Config::NumSampingMoves = 30;
 int Config::MaxMoves = 512;
 int Config::NumSimulations = 800;
@@ -38,7 +36,7 @@ bool Node::IsExpanded() const
 
 float Node::Value() const
 {
-    return (visitCount > 0) ? (valueSum / visitCount) : 0.f;
+    return (visitCount > 0) ? (valueSum / visitCount) : CHESSCOACH_VALUE_LOSE;
 }
 
 int Node::SumChildVisits() const
@@ -109,7 +107,7 @@ void Game::ApplyMove(Move move, Node* newRoot)
     _root = newRoot;
 }
 
-float Game::ExpandAndEvaluate(const INetwork* network)
+float Game::ExpandAndEvaluate(INetwork* network)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
@@ -253,30 +251,41 @@ int Game::Ply() const
     return _position.game_ply();
 }
 
-void Mcts::Play() const
+void Mcts::Work(INetwork* network) const
 {
-    std::unique_ptr<const INetwork> network(PythonNetwork::GetLatestNetwork());
+    while (true)
+    {
+        Play(network);
+    }
+}
+
+void Mcts::Play(INetwork* network) const
+{
+    auto startGame = std::chrono::high_resolution_clock::now();
 
     Game game;
-    game.ExpandAndEvaluate(network.get());
+    game.ExpandAndEvaluate(network);
 
     while (!game.IsTerminal())
     {
-        auto start = std::chrono::high_resolution_clock::now();
+        auto startMcts = std::chrono::high_resolution_clock::now();
         Node* root = game.Root();
-        std::pair<Move, Node*> selected = RunMcts(network.get(), game);
+        std::pair<Move, Node*> selected = RunMcts(network, game);
         game.StoreSearchStatistics();
         game.ApplyMove(selected.first, selected.second);
-        Prune(root, selected.second /* == game.Root() */);
+        Prune(root, selected.second /* == game.Root() */); // Can't instead auto-trigger by ApplyMove because of scratch games, which share nodes.
         std::cout << "MCTS, ply " << game.Ply() << ", time " <<
-            std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count() << std::endl;
+            std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startMcts).count() << std::endl;
     }
 
     // TODO: Gather results
-    PruneAll(game.Root());
+    PruneAll(game.Root()); // Can't instead auto-trigger by destructor because of scratch games, which share nodes.
+
+    std::cout << "Game, ply " << game.Ply() << ", time " <<
+        std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count() << std::endl;
 }
 
-std::pair<Move, Node*> Mcts::RunMcts(const INetwork* network, Game& game) const
+std::pair<Move, Node*> Mcts::RunMcts(INetwork* network, Game& game) const
 {
     AddExplorationNoise(game);
 

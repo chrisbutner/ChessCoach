@@ -1,6 +1,7 @@
 Porting
 - Get play/train loop working - need to pass games back, orchestrate it all
 - Delete Python self-play code when ready
+- Check for Python interop leaks (audit refcounting)
 
 C++
 - Eventually modify stockfish - Position, etc. - so it doesn't reach out to uci/options/threads code at all
@@ -17,8 +18,13 @@ Longer training
 1) Save/load generated games
 2) Save/load network
 
-Correctness
-- Make sure python-chess claimed repetition checking is working/stable - perhaps get rid of claim flags and manually check/cache is_rep or w/e after move already played (see code TODOs)
+Improvements
+- Multi-thread MCTS, if not for self-play generation then for UCI play
+	- "On the scalability of parallel UCT"
+	- https://medium.com/oracledevs/lessons-from-alpha-zero-part-5-performance-optimization-664b38dc509e
+- "Random move with eval within 1%"
+	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
+	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
 
 UCI
 - Integrate sync-UCI hack with trained model

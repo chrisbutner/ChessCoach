@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <array>
+#include <thread>
 
 #include <Stockfish/bitboard.h>
 #include <Stockfish/position.h>
@@ -20,6 +21,8 @@
 #include <numpy/arrayobject.h>
 
 #include "SelfPlay.h"
+#include "Threading.h"
+#include "PythonNetwork.h"
 
 int InitializePython();
 void FinalizePython();
@@ -28,6 +31,7 @@ void FinalizeStockfish();
 void TestMovegen();
 void TestPython();
 void TestMcts();
+void TestThreading();
 
 int main(int argc, char* argv[])
 {
@@ -37,6 +41,7 @@ int main(int argc, char* argv[])
     //TestMovegen();
     //TestPython();
     TestMcts();
+    //TestThreading();
 
     FinalizePython();
     FinalizeStockfish();
@@ -186,7 +191,28 @@ void TestPython()
 
 void TestMcts()
 {
-    Mcts mcts;
+    INetwork* network = new BatchedPythonNetwork();
 
-    mcts.Play();
+    std::vector<Mcts> workers(128);
+    std::vector<std::thread> workerThreads;
+
+    for (int i = 0; i < workers.size(); i++)
+    {
+        std::cout << "Starting worker " << (i + 1) << std::endl;
+
+        workerThreads.emplace_back(&Mcts::Work, &workers[i], network);
+    }
+
+    workerThreads[0].join();
+}
+
+void TestThreading()
+{
+    SyncQueue<int> test;
+
+    std::thread a([&test] { test.Push(5); });
+    std::thread b([&test] { int item = test.Pop(); std::cout << "Item: " << item << std::endl; });
+
+    a.join();
+    b.join();
 }
