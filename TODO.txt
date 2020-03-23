@@ -7,6 +7,7 @@ C++
 - Eventually modify stockfish - Position, etc. - so it doesn't reach out to uci/options/threads code at all
 - Validate that SelfPlay.cpp draw checking is valid (re: ply) - step through basic + triangulation examples from starting position with knights
 - Turn 12/8/8, 73/8/8 everywhere into constexpr
+- Compile with AVX (2?), benchmark
 
 Basic loop
 1) Roughly proportion self-play to training ratio

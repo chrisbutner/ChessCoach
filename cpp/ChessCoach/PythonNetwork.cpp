@@ -1,5 +1,7 @@
 #include "PythonNetwork.h"
 
+#include <vector>
+
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
@@ -33,53 +35,26 @@ float PythonPrediction::Value() const
     return _value;
 }
 
-void* PythonPrediction::Policy() const
+void* PythonPrediction::Policy()
 {
     return _policy;
 }
 
-BatchedPythonPrediction::BatchedPythonPrediction(PyObject* tupleResult, int index)
-    : _tupleResult(tupleResult)
+RawPrediction::RawPrediction(float value, OutputPlanesPtr policy)
+    : _value(value)
 {
-    assert(tupleResult);
-
-    // Increase the refcount so that the result tuple isn't destroyed until all predictions are.
-    if (index > 0)
-    {
-        Py_INCREF(tupleResult);
-    }
-
-    // Extract the value.
-    PyObject* pythonValue = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
-    assert(PyArray_Check(pythonValue));
-
-    PyArrayObject* pythonValueArray = reinterpret_cast<PyArrayObject*>(pythonValue);
-    _value = reinterpret_cast<float*>(PyArray_DATA(pythonValueArray))[index];
-
-    // Extract the policy.
-    PyObject* pythonPolicy = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
-    assert(PyArray_Check(pythonPolicy));
-
-    PyArrayObject* pythonPolicyArray = reinterpret_cast<PyArrayObject*>(pythonPolicy);
-    _policy = reinterpret_cast<void*>(
-        reinterpret_cast<float(*)[BatchedPythonNetwork::BatchSize][73][8][8]>(
-            PyArray_DATA(pythonPolicyArray))
-        [index]);
+    constexpr int count = sizeof(_policy) / sizeof(float);
+    std::copy(reinterpret_cast<float*>(policy), reinterpret_cast<float*>(policy) + count, reinterpret_cast<float*>(_policy.data()));
 }
 
-BatchedPythonPrediction::~BatchedPythonPrediction()
-{
-    Py_XDECREF(_tupleResult);
-}
-
-float BatchedPythonPrediction::Value() const
+float RawPrediction::Value() const
 {
     return _value;
 }
 
-void* BatchedPythonPrediction::Policy() const
+void* RawPrediction::Policy()
 {
-    return _policy;
+    return reinterpret_cast<void*>(_policy.data());
 }
 
 PythonNetwork::PythonNetwork()
@@ -142,32 +117,49 @@ BatchedPythonNetwork::~BatchedPythonNetwork()
 
 IPrediction* BatchedPythonNetwork::Predict(InputPlanes& image)
 {
-    std::unique_lock lock(_mutex);
-
-    // The SyncQueue needs to out-live the queue pointer.
     SyncQueue<IPrediction*> output;
-    _predictQueue.emplace_back(&image, &output);
-
-    if (_predictQueue.size() >= BatchSize)
+    
+    // Safely push to the worker queue.
     {
-        // The queue is full enough to process, so this predictor does the work.
-        assert(_predictQueue.size() == BatchSize);
+        std::unique_lock lock(_mutex);
 
-        // Steal the queue's storage to unlock as quickly as possible and let other predictors in for the next batch
-        // while delivering predictions back to this batch.
-        std::vector<std::pair<InputPlanes*, SyncQueue<IPrediction*>*>> predictQueue(std::move(_predictQueue));
-        
-        // Go with "radioactive" and reinitialize rather than clear.
-        // http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2011/n3241.html
-        _predictQueue = std::vector<std::pair<InputPlanes*, SyncQueue<IPrediction*>*>>();
-        
+        _predictQueue.emplace_back(&image, &output);
+
+        // Only send a wake-up on the (BatchSize-1) to BatchSize transition, to avoid spam.
+        if (_predictQueue.size() == BatchSize)
+        {
+            _condition.notify_one();
+        }
+    }
+
+    // Wait for the worker thread to process the batch.
+    return output.Pop();
+}
+
+void BatchedPythonNetwork::Work()
+{
+    while (true)
+    {
+        // Wait until the queue is full enough to process.
+        std::unique_lock lock(_mutex);
+        _condition.wait(lock, [&] { return (_predictQueue.size() >= BatchSize); });
+
+        // Drain and unlock as quickly as possible.
+        std::vector<std::pair<InputPlanes*, SyncQueue<IPrediction*>*>> batch(BatchSize);
+        for (int i = 0; i < BatchSize; i++)
+        {
+            batch[i] = _predictQueue.front();
+            _predictQueue.pop_front();
+        }
+        lock.unlock();
+
         // Combine images.
         npy_intp dims[4]{ BatchSize, 12, 8, 8 };
         std::unique_ptr<std::array<std::array<std::array<std::array<float, 8>, 8>, 12>, BatchSize>> batchImage(
             new std::array<std::array<std::array<std::array<float, 8>, 8>, 12>, BatchSize>());
         for (int i = 0; i < BatchSize; i++)
         {
-            (*batchImage)[i] = *predictQueue[i].first;
+            (*batchImage)[i] = *batch[i].first;
         }
 
         PyObject* pythonBatchImage = PyArray_SimpleNewFromData(
@@ -177,24 +169,28 @@ IPrediction* BatchedPythonNetwork::Predict(InputPlanes& image)
         PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction, pythonBatchImage, nullptr);
         assert(tupleResult);
 
-        Py_DECREF(pythonBatchImage);
+        // Extract the values.
+        PyObject* pythonValue = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
+        assert(PyArray_Check(pythonValue));
 
-        // We've finished calling into Python, so it's safe to let the next batch in.
-        lock.unlock();
+        PyArrayObject* pythonValueArray = reinterpret_cast<PyArrayObject*>(pythonValue);
+        float* values = reinterpret_cast<float*>(PyArray_DATA(pythonValueArray));
 
-        // Deliver predictions, including to self.
+        // Extract the policies.
+        PyObject* pythonPolicy = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
+        assert(PyArray_Check(pythonPolicy));
+
+        PyArrayObject* pythonPolicyArray = reinterpret_cast<PyArrayObject*>(pythonPolicy);
+        float(*policies)[73][8][8] = reinterpret_cast<float(*)[73][8][8]>(PyArray_DATA(pythonPolicyArray));
+
+        // Deliver predictions.
         for (int i = 0; i < BatchSize; i++)
         {
-            predictQueue[i].second->Push(new BatchedPythonPrediction(tupleResult, i));
+            batch[i].second->Push(new RawPrediction(values[i], policies[i]));
         }
 
-        return output.Pop();
-    }
-    else
-    {
-        // Not ready, so unlock and wait for another predictor to do the work.
-        lock.unlock();
-        return output.Pop();
+        Py_DECREF(tupleResult);
+        Py_DECREF(pythonBatchImage);
     }
 }
 
@@ -212,7 +208,7 @@ float UniformPrediction::Value() const
     return 0.5f;
 }
 
-void* UniformPrediction::Policy() const
+void* UniformPrediction::Policy()
 {
     return _policy;
 }

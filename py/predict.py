@@ -20,7 +20,8 @@ def predict(image):
 
 def predict_batch(image):
   with Profiler("predict_batch", threshold_time=1.0):
-    value, policy = numpy.array(model.model.predict_on_batch(image))
+    value, policy = model.model.predict_on_batch(image)
     value = network.map_11_to_01(numpy.array(value))
+    policy = numpy.array(policy)
 
   return value, policy

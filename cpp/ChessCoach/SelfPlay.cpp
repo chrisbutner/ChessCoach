@@ -141,7 +141,7 @@ float Game::ExpandAndEvaluate(INetwork* network)
 
     // Get a prediction from the network - either the uniform policy or NN policy.
     InputPlanes image = MakeImage();
-    const IPrediction* prediction = network->Predict(image);
+    std::unique_ptr<IPrediction> prediction(network->Predict(image));
     const float value = prediction->Value();
     const OutputPlanesPtr policy = reinterpret_cast<float(*)[8][8]>(prediction->Policy());
 

@@ -191,19 +191,19 @@ void TestPython()
 
 void TestMcts()
 {
-    INetwork* network = new BatchedPythonNetwork();
+    std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
 
-    std::vector<Mcts> workers(128);
+    std::vector<Mcts> workers(2048);
     std::vector<std::thread> workerThreads;
 
     for (int i = 0; i < workers.size(); i++)
     {
         std::cout << "Starting worker " << (i + 1) << std::endl;
 
-        workerThreads.emplace_back(&Mcts::Work, &workers[i], network);
+        workerThreads.emplace_back(&Mcts::Work, &workers[i], network.get());
     }
 
-    workerThreads[0].join();
+    network->Work();
 }
 
 void TestThreading()
