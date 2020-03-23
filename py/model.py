@@ -1,6 +1,9 @@
 import tensorflow as tf
 
 # TODO: lots of redundancy in regularizer, config stuff - extract out
+InputName = "Input"
+OutputValueName = "OutputValue"
+OutputPolicyName = "OutputPolicy"
 
 class ChessCoachModel:
 
@@ -22,7 +25,7 @@ class ChessCoachModel:
     return x
 
   def build(self):
-    input = tf.keras.layers.Input(shape=(12,8,8)) # Just pieces for now; dtype?
+    input = tf.keras.layers.Input(shape=(12,8,8), name=InputName) # Just pieces for now; dtype?
 
     x = tf.keras.layers.Conv2D(filters=256, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(input)
@@ -39,8 +42,7 @@ class ChessCoachModel:
     x = tf.keras.layers.ReLU()(x)
     x = tf.keras.layers.Flatten()(x)
     x = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(1e-4), activation="relu")(x)
-    x = tf.keras.layers.Dense(1, kernel_regularizer=tf.keras.regularizers.l2(1e-4), activation="tanh")(x)
-    value = x
+    value = tf.keras.layers.Dense(1, kernel_regularizer=tf.keras.regularizers.l2(1e-4), activation="tanh", name=OutputValueName)(x)
 
     x = tf.keras.layers.Conv2D(filters=256, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(tower)
@@ -48,8 +50,7 @@ class ChessCoachModel:
     x = tf.keras.layers.ReLU()(x)
     # This Conv2D doesn't get BatchNormalized, so use bias. It follows many layers + ReLU, and gets softmaxed in code,
     # so it may not need it? But leave it for now.
-    x = tf.keras.layers.Conv2D(filters=73, kernel_size=(1,1), strides=1, data_format="channels_first",
-      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
-    policy = x
+    policy = tf.keras.layers.Conv2D(filters=73, kernel_size=(1,1), strides=1, data_format="channels_first",
+      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4), name=OutputPolicyName)(x)
 
     self.model = tf.keras.Model(input, [value, policy])
