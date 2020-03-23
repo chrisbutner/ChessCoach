@@ -1,23 +1,19 @@
 Porting
 - Get play/train loop working - need to pass games back, orchestrate it all
 - Delete Python self-play code when ready
-- Check for Python interop leaks (audit refcounting)
+- Delete non-batched prediction interop when ready
+
+Basic loop
+1) Minimal necessary passing of games/networks between workers
+2) Serializing checkpoints so everything can be paused/resumed
+3) Add additional input planes (beyond just pieces) once basic loop is working
+4) Maybe make self-play/training workers use an --arg which also makes TF chatty (vs. UCI mode by default with no args)
 
 C++
 - Eventually modify stockfish - Position, etc. - so it doesn't reach out to uci/options/threads code at all
 - Validate that SelfPlay.cpp draw checking is valid (re: ply) - step through basic + triangulation examples from starting position with knights
 - Turn 12/8/8, 73/8/8 everywhere into constexpr
-- Compile with AVX (2?), benchmark
-
-Basic loop
-1) Roughly proportion self-play to training ratio
-2) Get multiple self-play workers running and batching their predictions
-3) Add additional input planes (beyond just pieces) once basic loop is working
-4) Maybe make self-play/training workers use an --arg which also makes TF chatty (vs. UCI mode by default with no args)
-
-Longer training
-1) Save/load generated games
-2) Save/load network
+- Try Intel compiler in future
 
 Improvements
 - Multi-thread MCTS, if not for self-play generation then for UCI play

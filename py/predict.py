@@ -1,27 +1,19 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import network
-from model import ChessCoachModel
+import tensorflow as tf
+from tensorflow.python.saved_model import signature_constants
 import numpy
-from profiler import Profiler
+import network
+import model
 
-model = ChessCoachModel()
-model.build()
-
-def predict(image):
-  with Profiler("predict", threshold_time=1.0):
-    image = image.reshape((1, 12, 8, 8)) # TODO: Only one at a time right now, need to parallelize across MCTSs
-    value, policy = model.model.predict_on_batch(image)
-
-    value = network.map_11_to_01(numpy.array(value))
-    policy = numpy.reshape(policy, (73, 8, 8)) # TODO: Only one at a time right now, need to parallelize across MCTSs
-
-  return value, policy
+tf_model = tf.saved_model.load("C:\\Users\\Public\\test")
+model_function = tf_model.signatures[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
 
 def predict_batch(image):
-  with Profiler("predict_batch", threshold_time=1.0):
-    value, policy = model.model.predict_on_batch(image)
-    value = network.map_11_to_01(numpy.array(value))
-    policy = numpy.array(policy)
+  image = tf.constant(image)
+  prediction = model_function(image)
+  value, policy = prediction[model.OutputValueName], prediction[model.OutputPolicyName]
+  value = network.map_11_to_01(numpy.array(value))
+  policy = numpy.array(policy)
 
   return value, policy
