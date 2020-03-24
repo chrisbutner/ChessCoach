@@ -67,7 +67,6 @@ int InitializePython()
     }
 
     Py_Initialize();
-    //import_array();
     return 0;
 }
 
@@ -202,17 +201,19 @@ void TestMcts()
     std::unique_ptr<UniformNetwork> network(new UniformNetwork());
 
     std::vector<Mcts> workers(1);
-    std::vector<std::thread> workerThreads;
+    std::vector<std::thread> selfPlayThreads;
 
     for (int i = 0; i < workers.size(); i++)
     {
-        std::cout << "Starting worker " << (i + 1) << std::endl;
+        std::cout << "Starting self-play thread " << (i + 1) << std::endl;
 
-        workerThreads.emplace_back(&Mcts::Work, &workers[i], network.get());
+        selfPlayThreads.emplace_back(&Mcts::Work, &workers[i], network.get());
     }
 
+    std::thread trainThread(&UniformNetwork::Train, network.get());
+
     //network->Work();
-    workerThreads[0].join();
+    selfPlayThreads[0].join();
 }
 
 void TestThreading()

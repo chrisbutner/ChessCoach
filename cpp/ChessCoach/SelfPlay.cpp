@@ -63,6 +63,7 @@ StoredGame::StoredGame(float terminalValue, size_t moveCount)
 }
 
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
+// TODO: Also input/output planes? e.g. for StoredGames vector storage
 
 void Game::Initialize()
 {
@@ -294,10 +295,10 @@ StoredGame Game::Store()
 {
     StoredGame stored(TerminalValue(), _history.size());
 
-    stored.moves = _history;
     for (int i = static_cast<int>(_history.size()) - 1; i >= 0; i--)
     {
         // Rely on return value optimization here (can't be more explicit via emplace because we're walking backwards).
+        stored.moves[i] = _history[i];
         _position.undo_move(_history[i]);
         stored.images[i] = GenerateImage();
         stored.policies[i] = GeneratePolicy(_childVisits[i]);
@@ -308,6 +309,7 @@ StoredGame Game::Store()
 
 float& Game::PolicyValue(OutputPlanesPtr policy, Move move) const
 {
+    // If it's black to play, rotate the board and flip colors: always from the "current player's" perspective.
     Square from = RotateSquare(ToPlay(), from_sq(move));
     Square to = RotateSquare(ToPlay(), to_sq(move));
 
@@ -332,7 +334,7 @@ InputPlanes Game::GenerateImage() const
 {
     InputPlanes image = {};
 
-    // If it's black to play, rotate the board and flip colors: image is always from the "current player's" perspective.
+    // If it's black to play, rotate the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = ToPlay();
     for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
     {
@@ -397,8 +399,11 @@ void Mcts::Play(INetwork* network) const
     // - Store() wipes anything relying on the position, e.g. ply.
     // - PruneAll() wipes anything relying on nodes, e.g. terminal value.
     const int ply = game.Ply();
-    game.Store();
+    StoredGame stored = game.Store();
     PruneAll(game.Root());
+
+    // Submit the game back to Python for training.
+    network->Submit(stored.terminalValue, stored.moves, stored.images, stored.policies);
 
     std::cout << "Game, ply " << ply << ", time " <<
         std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count() << std::endl;
@@ -458,6 +463,7 @@ std::pair<Move, Node*> Mcts::SelectChild(const Node* parent) const
     return max;
 }
 
+// TODO: Profile, see if significant, whether vectorizing is viable/worth it
 float Mcts::CalculateUcbScore(const Node* parent, const Node* child) const
 {
     const float pbC = (std::logf((parent->visitCount + Config::PbCBase + 1.f) / Config::PbCBase) + Config::PbCInit) *

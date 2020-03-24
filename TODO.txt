@@ -1,13 +1,11 @@
-Porting
-- Get play/train loop working - need to pass games back, orchestrate it all
-- Delete Python self-play code when ready
-- Delete non-batched prediction interop when ready
-
 Basic loop
 1) Minimal necessary passing of games/networks between workers
+	- lots to fix still
+	- save PGNs for non-draws (or just every N games, need to observe)
 2) Serializing checkpoints so everything can be paused/resumed
 3) Add additional input planes (beyond just pieces) once basic loop is working
 4) Maybe make self-play/training workers use an --arg which also makes TF chatty (vs. UCI mode by default with no args)
+5) Get bridge/worker/etc. situation to a good point re: checkpoints, CPU/GPU usage, throughput
 
 C++
 - Eventually modify stockfish - Position, etc. - so it doesn't reach out to uci/options/threads code at all

@@ -20,6 +20,10 @@ struct INetwork
     virtual ~INetwork() {};
 
     virtual IPrediction* Predict(InputPlanes& image) = 0;
+    virtual void Submit(float terminalValue,
+        std::vector<int>& moves,
+        std::vector<InputPlanes>& images,
+        std::vector<OutputPlanes>& policies) = 0;
 };
 
 #endif // _NETWORK_H_

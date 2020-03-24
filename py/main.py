@@ -1,8 +1,8 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 # Suppress all TensorFlow output so it doesn't interfere with UCI.
-import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+#import os
+#os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import argparse
 from engine import Engine
@@ -23,4 +23,4 @@ if (args.uci):
   uci.start()
 if (args.train):
   print("Starting training")
-  network.alphazero()
+  network.train()

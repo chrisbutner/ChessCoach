@@ -63,7 +63,7 @@ public:
     StoredGame(float terminalValue, size_t moveCount);
 
     float terminalValue;
-    std::vector<Move> moves;
+    std::vector<int> moves;
     std::vector<InputPlanes> images;
     std::vector<OutputPlanes> policies;
 };
@@ -152,7 +152,6 @@ public:
 
     void Work(INetwork* network) const;
     void Play(INetwork* network) const;
-    void Store(const Game& game);
     std::pair<Move, Node*> RunMcts(INetwork* network, Game& game) const;
     void AddExplorationNoise(Game& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
