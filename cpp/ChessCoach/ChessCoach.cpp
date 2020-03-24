@@ -27,6 +27,7 @@
 int InitializePython();
 void FinalizePython();
 void InitializeStockfish();
+void InitializeChess();
 void FinalizeStockfish();
 void TestMovegen();
 void TestPython();
@@ -37,6 +38,7 @@ int main(int argc, char* argv[])
 {
     InitializePython();
     InitializeStockfish();
+    InitializeChess();
 
     //TestMovegen();
     //TestPython();
@@ -83,6 +85,11 @@ void InitializeStockfish()
     // Initialize threads. They directly reach out to UCI options, so we need to initialize that too.
     UCI::init(Options);
     Threads.set(static_cast<size_t>(Options["Threads"]));
+}
+
+void InitializeChess()
+{
+    Game::Initialize();
 }
 
 void FinalizeStockfish()
@@ -191,9 +198,10 @@ void TestPython()
 
 void TestMcts()
 {
-    std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
+    //std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
+    std::unique_ptr<UniformNetwork> network(new UniformNetwork());
 
-    std::vector<Mcts> workers(2048);
+    std::vector<Mcts> workers(1);
     std::vector<std::thread> workerThreads;
 
     for (int i = 0; i < workers.size(); i++)
@@ -203,7 +211,8 @@ void TestMcts()
         workerThreads.emplace_back(&Mcts::Work, &workers[i], network.get());
     }
 
-    network->Work();
+    //network->Work();
+    workerThreads[0].join();
 }
 
 void TestThreading()

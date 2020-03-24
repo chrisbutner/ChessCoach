@@ -215,7 +215,7 @@ class ReplayBuffer(object):
 
   def save_game(self, game):
     if len(self.buffer) > self.window_size:
-      self.buffer.pop(0)
+      self.buffer.pop(0) # TODO: Don't do this
     self.buffer.append(game)
 
   def sample_batch(self):

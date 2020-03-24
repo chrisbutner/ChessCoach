@@ -56,8 +56,58 @@ private:
     mutable int _sumChildVisits;
 };
 
+struct StoredGame
+{
+public:
+    
+    StoredGame(float terminalValue, size_t moveCount);
+
+    float terminalValue;
+    std::vector<Move> moves;
+    std::vector<InputPlanes> images;
+    std::vector<OutputPlanes> policies;
+};
+
 class Game
 {
+public:
+
+    static void Initialize();
+
+    constexpr static Piece FlipPiece[COLOR_NB][PIECE_NB] =
+    {
+        { NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE,
+            NO_PIECE, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, NO_PIECE },
+        { NO_PIECE, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, NO_PIECE,
+            NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE },
+    };
+
+    constexpr static Square RotateSquare(Color color, Square square)
+    {
+        return Square(square + color * (SQUARE_NB - 1 - 2 * square));
+    }
+
+    // TODO: Later optimization idea to benchmark: could allocate one extra plane,
+    // let the -1s go in without branching, then pass [1] reinterpreted to consumers
+    const static int NO_PLANE = -1;
+
+    constexpr static int ImagePiecePlane[PIECE_NB] =
+    {
+        NO_PLANE, 0, 1, 2, 3, 4, 5, NO_PLANE,
+        NO_PLANE, 6, 7, 8, 9, 10, 11, NO_PLANE,
+    };
+
+    // UnderpromotionPlane[Piece - KNIGHT][to - from - NORTH_WEST]
+    constexpr static int UnderpromotionPlane[3][3] =
+    {
+        { 64, 65, 66, },
+        { 67, 68, 69, },
+        { 70, 71, 72, },
+    };
+
+    // QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB]
+    static int QueenKnightPlane[SQUARE_NB];
+
 public:
 
     Game();
@@ -70,15 +120,19 @@ public:
 
     Node* Root() const;
     bool IsTerminal() const;
+    float TerminalValue() const;
     Color ToPlay() const;
     void ApplyMove(Move move, Node* newRoot);
+    void ApplyMoveWithHistory(Move move, Node* newRoot);
     float ExpandAndEvaluate(INetwork* network);
     std::vector<float> Softmax(const std::vector<float>& logits) const;
-    float GetLogit(const OutputPlanesPtr policy, Move move) const;
-    InputPlanes MakeImage() const;
     std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
     int Ply() const;
+    StoredGame Store();
+    float& PolicyValue(OutputPlanesPtr policy, Move move) const;
+    InputPlanes GenerateImage() const;
+    OutputPlanes GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const;
 
 private:
 
@@ -98,6 +152,7 @@ public:
 
     void Work(INetwork* network) const;
     void Play(INetwork* network) const;
+    void Store(const Game& game);
     std::pair<Move, Node*> RunMcts(INetwork* network, Game& game) const;
     void AddExplorationNoise(Game& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;

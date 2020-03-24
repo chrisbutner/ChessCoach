@@ -65,7 +65,7 @@ class BatchedPythonNetwork : public INetwork
 {
 public:
 
-    static const int BatchSize = 1024;
+    static const int BatchSize = 1;
 
     BatchedPythonNetwork();
     virtual ~BatchedPythonNetwork();

@@ -19,6 +19,8 @@ float Config::PbCInit = 1.25f;
 
 std::default_random_engine Config::Random;
 
+int Game::QueenKnightPlane[SQUARE_NB];
+
 Node::Node(float setPrior)
     : originalPrior(setPrior)
     , prior(setPrior)
@@ -52,7 +54,41 @@ int Node::SumChildVisits() const
     return _sumChildVisits;
 }
 
+StoredGame::StoredGame(float terminalValue, size_t moveCount)
+    : terminalValue(terminalValue)
+    , moves(moveCount)
+    , images(moveCount)
+    , policies(moveCount)
+{
+}
+
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
+
+void Game::Initialize()
+{
+    for (int& plane : QueenKnightPlane)
+    {
+        plane = NO_PLANE;
+    }
+    int nextPlane = 0;
+
+    const Direction QueenDirections[] = { NORTH, NORTH_EAST, EAST, SOUTH_EAST, SOUTH, SOUTH_WEST, WEST, NORTH_WEST };
+    const int MaxDistance = 7;
+    for (Direction direction : QueenDirections)
+    {
+        for (int distance = 1; distance <= MaxDistance; distance++)
+        {
+            QueenKnightPlane[(SQUARE_NB + direction * distance) % SQUARE_NB] = nextPlane++;
+        }
+    }
+
+    const int KnightMoves[] = { NORTH_EAST + NORTH, NORTH_EAST + EAST, SOUTH_EAST + EAST, SOUTH_EAST + SOUTH,
+        SOUTH_WEST + SOUTH, SOUTH_WEST + WEST, NORTH_WEST + WEST, NORTH_WEST + NORTH };
+    for (int delta : KnightMoves)
+    {
+        QueenKnightPlane[(SQUARE_NB + delta) % SQUARE_NB] = nextPlane++;
+    }
+}
 
 Game::Game()
     : _positionStates(new std::deque<StateInfo>(1))
@@ -95,6 +131,13 @@ bool Game::IsTerminal() const
     return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) || (Ply() >= Config::MaxMoves);
 }
 
+float Game::TerminalValue() const
+{
+    // Require that the caller has seen IsTerminal() as true before calling TerminalValue().
+    // So, just coalesce a draw for the Ply >= MaxMoves case.
+    return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) ? _root->terminalValue : CHESSCOACH_VALUE_DRAW;
+}
+
 Color Game::ToPlay() const
 {
     return _position.side_to_move();
@@ -105,6 +148,12 @@ void Game::ApplyMove(Move move, Node* newRoot)
     _positionStates->emplace_back();
     _position.do_move(move, _positionStates->back());
     _root = newRoot;
+}
+
+void Game::ApplyMoveWithHistory(Move move, Node* newRoot)
+{
+    ApplyMove(move, newRoot);
+    _history.push_back(move);
 }
 
 float Game::ExpandAndEvaluate(INetwork* network)
@@ -140,7 +189,7 @@ float Game::ExpandAndEvaluate(INetwork* network)
     // Not terminal, so expand the node with legal moves.
 
     // Get a prediction from the network - either the uniform policy or NN policy.
-    InputPlanes image = MakeImage();
+    InputPlanes image = GenerateImage();
     std::unique_ptr<IPrediction> prediction(network->Predict(image));
     const float value = prediction->Value();
     const OutputPlanesPtr policy = reinterpret_cast<float(*)[8][8]>(prediction->Policy());
@@ -150,7 +199,7 @@ float Game::ExpandAndEvaluate(INetwork* network)
     std::vector<float> logits;
     for (ExtMove* cur = moves; cur != endMoves; cur++)
     {
-        logits.push_back(GetLogit(policy, cur->move));
+        logits.push_back(PolicyValue(policy, cur->move));
     }
     std::vector<float> priors = Softmax(logits);
 
@@ -183,18 +232,6 @@ std::vector<float> Game::Softmax(const std::vector<float>& logits) const
     }
 
     return probabilities;
-}
-
-float Game::GetLogit(const OutputPlanesPtr policy, Move move) const
-{
-    // TODO: Still need to port Python->C++, python-chess->stockfish
-    return 0.f;
-}
-
-InputPlanes Game::MakeImage() const
-{
-    // TODO: Still need to port Python->C++, python-chess->stockfish
-    return InputPlanes();
 }
 
 std::pair<Move, Node*> Game::SelectMove() const
@@ -251,6 +288,84 @@ int Game::Ply() const
     return _position.game_ply();
 }
 
+// Store() leaves the Game in an inconsistent state, w.r.t. _position vs. _positionStates vs. _history.
+// This is intentional laziness to avoid unnecessary housekeeping, since the Game will no longer be needed.
+StoredGame Game::Store()
+{
+    StoredGame stored(TerminalValue(), _history.size());
+
+    stored.moves = _history;
+    for (int i = static_cast<int>(_history.size()) - 1; i >= 0; i--)
+    {
+        // Rely on return value optimization here (can't be more explicit via emplace because we're walking backwards).
+        _position.undo_move(_history[i]);
+        stored.images[i] = GenerateImage();
+        stored.policies[i] = GeneratePolicy(_childVisits[i]);
+    }
+
+    return stored;
+}
+
+float& Game::PolicyValue(OutputPlanesPtr policy, Move move) const
+{
+    Square from = RotateSquare(ToPlay(), from_sq(move));
+    Square to = RotateSquare(ToPlay(), to_sq(move));
+
+    int plane;
+    PieceType promotion;
+    if ((type_of(move) == PROMOTION) && ((promotion = promotion_type(move)) != QUEEN))
+    {
+        plane = UnderpromotionPlane[promotion - KNIGHT][to - from - NORTH_WEST];
+        assert((plane >= 0) && (plane < 73));
+    }
+    else
+    {
+        plane = QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB];
+        assert((plane >= 0) && (plane < 73));
+    }
+
+    return policy[plane][rank_of(from)][file_of(from)];
+}
+
+#pragma warning(disable:6262) // Ignore stack warning, caller can emplace to heap via RVO.
+InputPlanes Game::GenerateImage() const
+{
+    InputPlanes image = {};
+
+    // If it's black to play, rotate the board and flip colors: image is always from the "current player's" perspective.
+    const Color toPlay = ToPlay();
+    for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
+    {
+        for (File file = FILE_A; file <= FILE_H; ++file)
+        {
+            Piece piece = FlipPiece[toPlay][_position.piece_on(RotateSquare(toPlay, make_square(file, rank)))];
+            int plane = ImagePiecePlane[piece];
+            if (plane != NO_PLANE)
+            {
+                assert((plane >= 0) && (plane < 12));
+                image[plane][rank][file] = 1.f;
+            }
+        }
+    }
+
+    return image;
+}
+
+OutputPlanes Game::GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const
+{
+    OutputPlanes policy = {};
+    OutputPlanesPtr policyPtr = reinterpret_cast<float(*)[8][8]>(policy.data());
+
+    const Color toPlay = ToPlay();
+    for (auto pair : childVisits)
+    {
+        PolicyValue(policyPtr, pair.first) = pair.second;
+    }
+
+    return policy;
+}
+#pragma warning(default:6262) // Ignore stack warning, caller can emplace to heap via RVO.
+
 void Mcts::Work(INetwork* network) const
 {
     while (true)
@@ -268,20 +383,24 @@ void Mcts::Play(INetwork* network) const
 
     while (!game.IsTerminal())
     {
-        auto startMcts = std::chrono::high_resolution_clock::now();
+        //auto startMcts = std::chrono::high_resolution_clock::now();
         Node* root = game.Root();
         std::pair<Move, Node*> selected = RunMcts(network, game);
         game.StoreSearchStatistics();
-        game.ApplyMove(selected.first, selected.second);
-        Prune(root, selected.second /* == game.Root() */); // Can't instead auto-trigger by ApplyMove because of scratch games, which share nodes.
-        std::cout << "MCTS, ply " << game.Ply() << ", time " <<
-            std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startMcts).count() << std::endl;
+        game.ApplyMoveWithHistory(selected.first, selected.second);
+        Prune(root, selected.second /* == game.Root() */);
+        //std::cout << "MCTS, ply " << game.Ply() << ", time " <<
+        //    std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startMcts).count() << std::endl;
     }
 
-    // TODO: Gather results
-    PruneAll(game.Root()); // Can't instead auto-trigger by destructor because of scratch games, which share nodes.
+    // Take care with ordering:
+    // - Store() wipes anything relying on the position, e.g. ply.
+    // - PruneAll() wipes anything relying on nodes, e.g. terminal value.
+    const int ply = game.Ply();
+    game.Store();
+    PruneAll(game.Root());
 
-    std::cout << "Game, ply " << game.Ply() << ", time " <<
+    std::cout << "Game, ply " << ply << ", time " <<
         std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count() << std::endl;
 }
 
