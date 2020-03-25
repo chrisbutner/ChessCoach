@@ -9,6 +9,7 @@
 #include <Stockfish/movegen.h>
 
 #include "Network.h"
+#include "Storage.h"
 
 const static float CHESSCOACH_VALUE_WIN = 1.0f;
 const static float CHESSCOACH_VALUE_DRAW = 0.5f;
@@ -54,18 +55,6 @@ private:
     // Doesn't strictly follow "mutable" if SumChildVisits() is misused and
     // called before children are changed while this node is still around.
     mutable int _sumChildVisits;
-};
-
-struct StoredGame
-{
-public:
-    
-    StoredGame(float terminalValue, size_t moveCount);
-
-    float terminalValue;
-    std::vector<int> moves;
-    std::vector<InputPlanes> images;
-    std::vector<OutputPlanes> policies;
 };
 
 class Game
@@ -161,6 +150,10 @@ public:
     float FlipValue(float value) const;
     void Prune(Node* root, Node* except) const;
     void PruneAll(Node* root) const;
+
+private:
+
+    Storage _storage;
 };
 
 #endif // _SELFPLAY_H_

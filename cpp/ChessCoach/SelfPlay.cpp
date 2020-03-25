@@ -402,8 +402,8 @@ void Mcts::Play(INetwork* network) const
     StoredGame stored = game.Store();
     PruneAll(game.Root());
 
-    // Submit the game back to Python for training.
-    network->Submit(stored.terminalValue, stored.moves, stored.images, stored.policies);
+    // Save the game to disk for training.
+    _storage.SaveToDisk(stored);
 
     std::cout << "Game, ply " << ply << ", time " <<
         std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count() << std::endl;

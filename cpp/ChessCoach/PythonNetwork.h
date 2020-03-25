@@ -53,19 +53,13 @@ public:
     virtual ~BatchedPythonNetwork();
 
     virtual IPrediction* Predict(InputPlanes& image);
-    virtual void Submit(float terminalValue,
-        std::vector<int>& moves,
-        std::vector<InputPlanes>& images,
-        std::vector<OutputPlanes>& policies);
 
     void Work();
-    void Train();
 
 private:
 
     PyObject* _module;
     PyObject* _predictBatchFunction;
-    PyObject* _submitFunction;
     std::mutex _mutex;
     std::condition_variable _condition;
     std::deque<std::pair<InputPlanes*, SyncQueue<IPrediction*>*>> _predictQueue;
@@ -94,17 +88,8 @@ public:
     virtual ~UniformNetwork();
 
     virtual IPrediction* Predict(InputPlanes& image);
-    virtual void Submit(float terminalValue,
-        std::vector<int>& moves,
-        std::vector<InputPlanes>& images,
-        std::vector<OutputPlanes>& policies);
-
-    void Train();
 
 private:
-
-    // Use to initialize Python and delegate submitting games.
-    BatchedPythonNetwork _batchedPythonNetwork;
 
     // All-zero logits gives uniform softmax probability distribution.
     std::array<std::array<std::array<float, 8>, 8>, 73> _policy = {};

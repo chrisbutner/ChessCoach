@@ -58,15 +58,10 @@ BatchedPythonNetwork::BatchedPythonNetwork()
     _predictBatchFunction = PyObject_GetAttrString(_module, "predict_batch");
     assert(_predictBatchFunction);
     assert(PyCallable_Check(_predictBatchFunction));
-
-    _submitFunction = PyObject_GetAttrString(_module, "submit");
-    assert(_submitFunction);
-    assert(PyCallable_Check(_submitFunction));
 }
 
 BatchedPythonNetwork::~BatchedPythonNetwork()
 {
-    Py_XDECREF(_submitFunction);
     Py_XDECREF(_predictBatchFunction);
     Py_XDECREF(_module);
 }
@@ -90,43 +85,6 @@ IPrediction* BatchedPythonNetwork::Predict(InputPlanes& image)
 
     // Wait for the worker thread to process the batch.
     return output.Pop();
-}
-
-void BatchedPythonNetwork::Submit(float terminalValue,
-    std::vector<int>& moves,
-    std::vector<InputPlanes>& images,
-    std::vector<OutputPlanes>& policies)
-{
-    // TODO: Don't queue/batch/etc. for now while we have one game thread.
-    
-    PythonContext context;
-
-    PyObject* pythonTerminalValue = PyFloat_FromDouble(terminalValue);
-    assert(pythonTerminalValue);
-
-    npy_intp moveDims[1]{ static_cast<int>(moves.size()) };
-    PyObject* pythonMoves = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_INT32, reinterpret_cast<void*>(moves.data()));
-    assert(pythonMoves);
-
-    npy_intp imageDims[4]{ static_cast<int>(images.size()), 12, 8, 8 };
-    PyObject* pythonImages = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, reinterpret_cast<void*>(images.data()));
-    assert(pythonImages);
-
-    npy_intp policyDims[4]{ static_cast<int>(policies.size()), 73, 8, 8 };
-    PyObject* pythonPolicies = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, reinterpret_cast<void*>(policies.data()));
-    assert(pythonPolicies);
-
-    PyObject* result = PyObject_CallFunctionObjArgs(_submitFunction, pythonTerminalValue, pythonMoves, pythonImages, pythonPolicies, nullptr);
-    assert(result);
-
-    Py_DECREF(result);
-    Py_DECREF(pythonPolicies);
-    Py_DECREF(pythonImages);
-    Py_DECREF(pythonMoves);
-    Py_DECREF(pythonTerminalValue);
 }
 
 void BatchedPythonNetwork::Work()
@@ -192,19 +150,6 @@ void BatchedPythonNetwork::Work()
     }
 }
 
-void BatchedPythonNetwork::Train()
-{
-    PythonContext context;
-
-    PyObject* trainFunction = PyObject_GetAttrString(_module, "train");
-    assert(trainFunction);
-    assert(PyCallable_Check(trainFunction));
-
-    // Make the call and train forever.
-    PyObject* result = PyObject_CallFunctionObjArgs(trainFunction, nullptr);
-    assert(result);
-}
-
 UniformPrediction::UniformPrediction(void* policy)
     : _policy(policy)
 {
@@ -235,17 +180,4 @@ UniformNetwork::~UniformNetwork()
 IPrediction* UniformNetwork::Predict(InputPlanes& image)
 {
     return new UniformPrediction(reinterpret_cast<void*>(_policy.data()));
-}
-
-void UniformNetwork::Submit(float terminalValue,
-    std::vector<int>& moves,
-    std::vector<InputPlanes>& images,
-    std::vector<OutputPlanes>& policies)
-{
-    _batchedPythonNetwork.Submit(terminalValue, moves, images, policies);
-}
-
-void UniformNetwork::Train()
-{
-    _batchedPythonNetwork.Train();
 }

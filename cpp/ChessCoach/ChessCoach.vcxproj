@@ -188,7 +188,7 @@
     <ClCompile Include="ChessCoach.cpp" />
     <ClCompile Include="PythonNetwork.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
-    <ClCompile Include="Threading.cpp" />
+    <ClCompile Include="Storage.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Stockfish\Stockfish.vcxproj">
@@ -199,6 +199,7 @@
     <ClInclude Include="Network.h" />
     <ClInclude Include="PythonNetwork.h" />
     <ClInclude Include="SelfPlay.h" />
+    <ClInclude Include="Storage.h" />
     <ClInclude Include="Threading.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

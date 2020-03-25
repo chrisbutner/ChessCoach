@@ -2,6 +2,7 @@
 #define _NETWORK_H_
 
 #include <array>
+#include <vector>
 
 typedef std::array<std::array<std::array<float, 8>, 8>, 12> InputPlanes;
 typedef std::array<std::array<std::array<float, 8>, 8>, 73> OutputPlanes;
@@ -20,10 +21,6 @@ struct INetwork
     virtual ~INetwork() {};
 
     virtual IPrediction* Predict(InputPlanes& image) = 0;
-    virtual void Submit(float terminalValue,
-        std::vector<int>& moves,
-        std::vector<InputPlanes>& images,
-        std::vector<OutputPlanes>& policies) = 0;
 };
 
 #endif // _NETWORK_H_

@@ -1,11 +1,16 @@
 Basic loop
 1) Minimal necessary passing of games/networks between workers
-	- lots to fix still
+	- use latest network
+	- test + benchmamrk full end-to-end
 	- save PGNs for non-draws (or just every N games, need to observe)
-2) Serializing checkpoints so everything can be paused/resumed
-3) Add additional input planes (beyond just pieces) once basic loop is working
+	- try new architecture (N threads, each has BatchSize games in flight, ticks all, acquires GIL, batches up to python)
+2) Add additional input planes (beyond just pieces) once basic loop is working
+	- constant-ize the 12/X/73 everywhere
+3) Serializing checkpoints so everything can be paused/resumed
+	- can't afford this with current game size on disk (or, accept effectively shrinking the window to zero then re-growing)
 4) Maybe make self-play/training workers use an --arg which also makes TF chatty (vs. UCI mode by default with no args)
 5) Get bridge/worker/etc. situation to a good point re: checkpoints, CPU/GPU usage, throughput
+6) Try unify config across C++/Python
 
 C++
 - Eventually modify stockfish - Position, etc. - so it doesn't reach out to uci/options/threads code at all
@@ -22,6 +27,7 @@ Improvements
 	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
 
 UCI
+- (New: Probably just wrap the C++ with UCI now? Can kill python-installer, etc.)
 - Integrate sync-UCI hack with trained model
 - Split out UCI thread so infinite think, ponder, etc. can workers
 - Implement infinite think, ponder, time controls
