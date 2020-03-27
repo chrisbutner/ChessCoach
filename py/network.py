@@ -3,9 +3,12 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import math
 import numpy
 import time
+import os
+
 import tensorflow as tf
 from tensorflow.python.saved_model import signature_constants
 from tensorflow.keras import backend as K
+
 from model import ChessCoachModel, OutputValueName, OutputPolicyName
 from profiler import Profiler
 import storage
@@ -34,19 +37,21 @@ class AlphaZeroConfig(object):
     self.pb_c_init = 1.25
 
     ### Training
-    self.training_steps = int(700e3)
+    self.batch_size = 2048 # OOM on GTX 1080 @ 4096
+    self.training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
+    self.training_steps = int(700e3 * self.training_factor)
     self.checkpoint_interval = 10 #int(1e3) # Currently training about 100x as slowly as AlphaZero, so reduce accordingly.
     self.window_size = int(1e6)
-    self.batch_size = 2048 # OOM on GTX 1080 @ 4096
+    
 
     self.weight_decay = 1e-4
     self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
     self.learning_rate_schedule = {
         0: 2e-1,
-        100e3: 2e-2,
-        300e3: 2e-3,
-        500e3: 2e-4
+        int(100e3 * self.training_factor): 2e-2,
+        int(300e3 * self.training_factor): 2e-3,
+        int(500e3 * self.training_factor): 2e-4
     }
 
 class ReplayBuffer(object):
@@ -73,47 +78,97 @@ class ReplayBuffer(object):
 
 class Network(object):
 
-  def __init__(self, model=None):
+  def predict_batch(self, image):
+    assert False
+
+class KerasNetwork(Network):
+
+  def __init__(self):
+    self.model = ChessCoachModel().build()
+
+  def predict_batch(self, image):
+    assert False
+
+class UniformNetwork(Network):
+
+  def __init__(self):
+    self.latest_values = None
+    self.latest_policies = None
+
+  def predict_batch(self, image):
+    if ((self.latest_values is None) or (len(image) != len(self.latest_values))):
+      self.latest_values = numpy.full((len(image)), 0.5)
+      self.latest_policies = numpy.zeros((len(image), 73, 8, 8))
+    return self.latest_values, self.latest_policies
+
+class TensorFlowNetwork(Network):
+
+  # NEED to pass the model in THEN extract the function, otherwise all hell breaks loose.
+  def __init__(self, model):
     self.model = model
+    self.function = self.model.signatures[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
+
+  def predict_batch(self, image):
+    image = tf.constant(image)
+    prediction = self.function(image)
+    value, policy = prediction[OutputValueName], prediction[OutputPolicyName]
+    value = storage.map_11_to_01(numpy.array(value))
+    policy = numpy.array(policy)
+    return value, policy
 
 ##### End Helpers ########
 ##########################
 
-config = AlphaZeroConfig()
-replay_buffer = ReplayBuffer(config)
+latest_network = None
 
-storage.load_and_watch_games(replay_buffer.add_game)
+def update_network(network_path):
+  name = os.path.basename(os.path.normpath(network_path))
+  print(f"Loading network: {name}...")
+  global latest_network
+  while True:
+    try:
+      tf_model = tf.saved_model.load(network_path)
+      break
+    except:
+      time.sleep(0.001)
+  latest_network = TensorFlowNetwork(tf_model)
+  print(f"Loaded network: {name}")
 
-tf_model = tf.saved_model.load("C:\\Users\\Public\\test")
-model_function = tf_model.signatures[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
+def prepare_predictions():
+  global latest_network
+  if (not latest_network):
+    storage.load_and_watch_networks(update_network)
+  if (not latest_network):
+    latest_network = UniformNetwork()
+    print("Loaded uniform network")
 
 def predict_batch(image):
-  image = tf.constant(image)
-  prediction = model_function(image)
-  value, policy = prediction[OutputValueName], prediction[OutputPolicyName]
-  value = storage.map_11_to_01(numpy.array(value))
-  policy = numpy.array(policy)
-
-  return value, policy
+  prepare_predictions()
+  return latest_network.predict_batch(image)
 
 def train():
+  config = AlphaZeroConfig()
+  replay_buffer = ReplayBuffer(config)
+  storage.load_and_watch_games(replay_buffer.add_game)
+
   if (len(replay_buffer.buffer) < 1):
     print("Sleeping until games are found")
     while (len(replay_buffer.buffer) < 1):
       time.sleep(1)
+  
   print("Training")
-  model = ChessCoachModel()
-  model.build()
+  network = KerasNetwork()
+  
   optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
   losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
-  model.model.compile(optimizer=optimizer, loss=losses, metrics=["accuracy"])
-  network = Network(model)
+  network.model.compile(optimizer=optimizer, loss=losses)
   
   for i in range(config.training_steps):
     with Profiler("Train", threshold_time=60.0):
       if (i > 0) and (i % config.checkpoint_interval == 0):
-        print(f"Saving network ({i} steps)")
+        print(f"Saving network ({i} steps)...")
         storage.save_network(i, network)
+        print(f"Saved network ({i} steps)")
       batch = replay_buffer.sample_batch()
 
       x = tf.stack([image for image, (target_value, target_policy) in batch])
@@ -124,7 +179,8 @@ def train():
       if (new_learning_rate is not None):
         K.set_value(optimizer.lr, new_learning_rate)
 
-      network.model.model.train_on_batch(x, [y_value, y_policy])
+      network.model.train_on_batch(x, [y_value, y_policy])
 
-  print(f"Saving network ({config.training_steps} steps)")
+  print(f"Saving network ({config.training_steps} steps)...")
   storage.save_network(config.training_steps, network)
+  print(f"Saved network ({config.training_steps} steps)")

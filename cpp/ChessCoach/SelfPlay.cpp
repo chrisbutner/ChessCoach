@@ -399,14 +399,16 @@ void Mcts::Play(INetwork* network) const
     // - Store() wipes anything relying on the position, e.g. ply.
     // - PruneAll() wipes anything relying on nodes, e.g. terminal value.
     const int ply = game.Ply();
+    const float result = game.TerminalValue();
     StoredGame stored = game.Store();
     PruneAll(game.Root());
 
     // Save the game to disk for training.
     _storage.SaveToDisk(stored);
 
-    std::cout << "Game, ply " << ply << ", time " <<
-        std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count() << std::endl;
+    const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count();
+    const float mctsTime = (gameTime / ply);
+    std::cout << "Game, ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
 }
 
 std::pair<Move, Node*> Mcts::RunMcts(INetwork* network, Game& game) const

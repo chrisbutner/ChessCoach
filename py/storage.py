@@ -3,6 +3,14 @@ import watchdog.events
 import os
 import struct
 import numpy
+import time
+
+# These need to be backslashes on Windows for TensorFlow's recursive creation code.
+games_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Games")
+networks_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Networks")
+
+os.makedirs(games_path, exist_ok=True)
+os.makedirs(networks_path, exist_ok=True)
 
 def map_01_to_11(value):
   return 2.0 * value - 1.0
@@ -34,26 +42,26 @@ class Game(object):
 
 class Watcher(watchdog.events.FileSystemEventHandler):
 
-  def __init__(self, path, handler):
+  def __init__(self, path, handler, files=True, directories=False):
     self.handler = handler
+    self.files = files
+    self.directories = directories
     self.observer = watchdog.observers.Observer()
     self.observer.schedule(self, path, recursive=False)
     self.observer.start()
 
   def on_created(self, event):
-    if (not event.is_directory):
+    if ((not event.is_directory and self.files) or (event.is_directory and self.directories)):
       self.handler(event.src_path)
 
-# There's some slight dead time between loading and watching. Don't worry about it.
-def load_and_watch(path, handler):
-  _, _, files = next(os.walk(path))
-  for file in files:
-    handler(os.path.join(path, file))
-  Watcher(path, handler)
-
 def load_game(path):
-  with open(path, mode="rb") as f:
-    data = f.read()
+  while True:
+    try:
+      with open(path, mode="rb") as f:
+        data = f.read()
+      break
+    except:
+      time.sleep(0.001)
 
   version, terminal_value, move_count = struct.unpack_from("ifi", data)
   assert version == 1
@@ -74,10 +82,22 @@ def load_game(path):
 
   return Game(terminal_value, moves, images, policies)
 
+# There's some slight dead time between loading and watching. Don't worry about it for our use.
 def load_and_watch_games(game_handler):
-  games_path = os.path.join(os.environ["localappdata"], "ChessCoach/Training/Games")
-  load_and_watch(games_path, lambda path: game_handler(load_game(path)))
+  parent_path = games_path
+  _, _, files = next(os.walk(parent_path))
+  for file in files:
+    game_handler(load_game(os.path.join(parent_path, file)))
+  Watcher(parent_path, lambda path: game_handler(load_game(path)))
+
+def load_and_watch_networks(network_path_handler):
+  parent_path = networks_path
+  _, directories, _ = next(os.walk(parent_path))
+  for directory in reversed(directories): # Only load the latest.
+    network_path_handler(os.path.join(parent_path, directory))
+    break # Only load the latest.
+  Watcher(parent_path, network_path_handler, files=False, directories=True) # But still load each new one.
 
 def save_network(step, network):
-  # TODO
-  pass
+  directory_name = "network_" + str(step).zfill(9)
+  network.model.save(os.path.join(networks_path, directory_name), include_optimizer=False, save_format="tf")

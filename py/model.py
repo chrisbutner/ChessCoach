@@ -7,9 +7,6 @@ OutputPolicyName = "OutputPolicy"
 
 class ChessCoachModel:
 
-  def __init__(self):
-    self.model = None
-
   def build_residual_piece(self, x):
     x = tf.keras.layers.Conv2D(filters=256, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
@@ -53,4 +50,4 @@ class ChessCoachModel:
     policy = tf.keras.layers.Conv2D(filters=73, kernel_size=(1,1), strides=1, data_format="channels_first",
       use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4), name=OutputPolicyName)(x)
 
-    self.model = tf.keras.Model(input, [value, policy])
+    return tf.keras.Model(input, [value, policy])

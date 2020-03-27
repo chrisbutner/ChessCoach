@@ -197,10 +197,9 @@ void TestPython()
 
 void TestMcts()
 {
-    //std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
-    std::unique_ptr<UniformNetwork> network(new UniformNetwork());
+    std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
 
-    std::vector<Mcts> workers(4);
+    std::vector<Mcts> workers(8);
     std::vector<std::thread> selfPlayThreads;
 
     for (int i = 0; i < workers.size(); i++)
@@ -210,8 +209,7 @@ void TestMcts()
         selfPlayThreads.emplace_back(&Mcts::Work, &workers[i], network.get());
     }
 
-    //network->Work();
-    selfPlayThreads[0].join();
+    network->Work();
 }
 
 void TestThreading()

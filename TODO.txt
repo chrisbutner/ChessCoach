@@ -1,7 +1,10 @@
 Basic loop
 1) Minimal necessary passing of games/networks between workers
-	- use latest network
 	- test + benchmamrk full end-to-end
+	- delete games after loading
+	- more efficient 1m-windowing
+	- try increase Cuda utilization during training - measure downtown between calls
+	- see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
 	- save PGNs for non-draws (or just every N games, need to observe)
 	- try new architecture (N threads, each has BatchSize games in flight, ticks all, acquires GIL, batches up to python)
 2) Add additional input planes (beyond just pieces) once basic loop is working
