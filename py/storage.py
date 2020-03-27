@@ -5,40 +5,14 @@ import struct
 import numpy
 import time
 
+from game import Game
+
 # These need to be backslashes on Windows for TensorFlow's recursive creation code.
 games_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Games")
 networks_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Networks")
 
 os.makedirs(games_path, exist_ok=True)
 os.makedirs(networks_path, exist_ok=True)
-
-def map_01_to_11(value):
-  return 2.0 * value - 1.0
-
-def map_11_to_01(value):
-  return (value + 1.0)/2.0
-
-class Game(object):
-
-  def __init__(self, terminal_value, moves, images, policies):
-    self.terminal_value = terminal_value
-    self.moves = moves
-    self.images = images
-    self.policies = policies
-
-  def pgn(self):
-    # TODO
-    # return str(chess.pgn.Game.from_board(self.board))
-    pass
-
-  def make_image(self, state_index: int):
-    return self.images[state_index]
-
-  def make_target(self, state_index: int):
-    flip = ((state_index % 2) == 1)
-    value = map_01_to_11((1 - self.terminal_value) if flip else self.terminal_value)
-    policy = self.policies[state_index]
-    return value, policy
 
 class Watcher(watchdog.events.FileSystemEventHandler):
 

@@ -12,8 +12,7 @@ from tensorflow.keras import backend as K
 from model import ChessCoachModel, OutputValueName, OutputPolicyName
 from profiler import Profiler
 import storage
-#import chess
-#import chess.pgn
+import game
 
 ##########################
 ####### Helpers ##########
@@ -112,7 +111,7 @@ class TensorFlowNetwork(Network):
     image = tf.constant(image)
     prediction = self.function(image)
     value, policy = prediction[OutputValueName], prediction[OutputPolicyName]
-    value = storage.map_11_to_01(numpy.array(value))
+    value = game.map_11_to_01(numpy.array(value))
     policy = numpy.array(policy)
     return value, policy
 

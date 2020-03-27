@@ -21,6 +21,9 @@ C++
 - Turn 12/8/8, 73/8/8 everywhere into constexpr
 - Try Intel compiler in future
 
+Python
+- Add type info everywhere - look up best practices for linting etc.
+
 Improvements
 - Multi-thread MCTS, if not for self-play generation then for UCI play
 	- "On the scalability of parallel UCT"
