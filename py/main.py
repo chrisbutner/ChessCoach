@@ -10,5 +10,5 @@ args = parser.parse_args()
 print("Starting ChessCoach")
 
 print("Testing")
-game = storage.load_game(os.path.join(storage.games_path, "game_000000119"))
+game = storage.load_game(os.path.join(storage.games_path, "game_000000026"))
 print(game.pgn())

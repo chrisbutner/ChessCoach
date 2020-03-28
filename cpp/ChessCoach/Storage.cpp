@@ -1,8 +1,5 @@
 #include "Storage.h"
 
-//#include <cassert>
-//#include <cstdlib>
-//#include <cstdio>
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -25,7 +22,6 @@ TrainingBatch::~TrainingBatch()
 
 StoredGame::StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::unordered_map<Move, float>>& setChildVisits)
     : result(setResult)
-    , moveCount(static_cast<int>(setMoves.size()))
     , moves(setMoves.size())
 {
     assert(setMoves.size() == setChildVisits.size());
@@ -37,9 +33,20 @@ StoredGame::StoredGame(float setResult, const std::vector<Move>& setMoves, const
 
     // No point shrinking keys from 32 to 16 bits because they alternate with floats. Don't bother zipping/unzipping.
     childVisits = setChildVisits;
+
+    moveCount = static_cast<int>(moves.size());
+}
+
+StoredGame::StoredGame(float setResult, const std::vector<uint16_t>&& setMoves, const std::vector<std::unordered_map<Move, float>>&& setChildVisits)
+    : result(setResult)
+    , moves(setMoves)
+    , childVisits(setChildVisits)
+{
+    moveCount = static_cast<int>(moves.size());
 }
 
 Storage::Storage()
+    : _nextGameNumber(1)
 {
     char* rootEnvPath;
     errno_t err = _dupenv_s(&rootEnvPath, nullptr, RootEnvPath);
@@ -52,6 +59,16 @@ Storage::Storage()
     assert(!error);
 }
 
+#include <iostream>
+void Storage::LoadExistingGames()
+{
+    for (const auto& directory : std::filesystem::directory_iterator(_gamesPath))
+    {
+        std::cout << "Loading game: " << directory.path().filename() << std::endl;
+        AddGame(LoadFromDisk(directory.path().string()));
+    }
+}
+
 void Storage::AddGame(const StoredGame&& game)
 {
     int gameNumber;
@@ -60,7 +77,9 @@ void Storage::AddGame(const StoredGame&& game)
         std::lock_guard lock(_mutex);
 
         _games.emplace_back(game);
-        gameNumber = static_cast<int>(_games.size());
+
+        // It would be nice to use _games.size() but we pop_front() beyond the window size.
+        gameNumber = _nextGameNumber++;
 
         while (_games.size() > Config::WindowSize)
         {
@@ -126,19 +145,58 @@ void Storage::SaveToDisk(const StoredGame& game, int gameNumber) const
 
     const uint16_t version = 1;
     const uint16_t moveCount = static_cast<int>(game.moves.size());
-    file << version << moveCount << game.result;
+
+    file.write(reinterpret_cast<const char*>(&version), sizeof(version));
+    file.write(reinterpret_cast<const char*>(&moveCount), sizeof(moveCount));
+    file.write(reinterpret_cast<const char*>(&game.result), sizeof(game.result));
 
     file.write(reinterpret_cast<const char*>(game.moves.data()), sizeof(uint16_t) * moveCount);
 
     for (int i = 0; i < moveCount; i++)
     {
         const int mapSize = static_cast<int>(game.childVisits[i].size());
-        file << mapSize;
+        file.write(reinterpret_cast<const char*>(&mapSize), sizeof(mapSize));
 
         for (auto pair : game.childVisits[i])
         {
-            file << pair.first << pair.second;
+            file.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
+            file.write(reinterpret_cast<const char*>(&pair.second), sizeof(pair.second));
         }
     }
 }
 
+StoredGame Storage::LoadFromDisk(std::string path) const
+{
+    std::ifstream file = std::ifstream(path, std::ios::in | std::ios::binary);
+
+    uint16_t version;
+    uint16_t moveCount;
+    float result;
+
+    file.read(reinterpret_cast<char*>(&version), sizeof(version));
+    file.read(reinterpret_cast<char*>(&moveCount), sizeof(moveCount));
+    file.read(reinterpret_cast<char*>(&result), sizeof(result));
+    assert(version == 1);
+    assert(moveCount >= 1);
+    assert((result >= 0.f) && (result <= 1.f));
+
+    std::vector<uint16_t> moves(moveCount);
+    file.read(reinterpret_cast<char*>(moves.data()), sizeof(uint16_t) * moveCount);
+
+    std::vector<std::unordered_map<Move, float>> childVisits(moveCount);
+    for (int i = 0; i < moveCount; i++)
+    {
+        int mapSize;
+        file.read(reinterpret_cast<char*>(&mapSize), sizeof(mapSize));
+        for (int j = 0; j < mapSize; j++)
+        {
+            Move key;
+            float value;
+            file.read(reinterpret_cast<char*>(&key), sizeof(key));
+            file.read(reinterpret_cast<char*>(&value), sizeof(value));
+            childVisits[i][key] = value;
+        }
+    }
+
+    return StoredGame(result, std::move(moves), std::move(childVisits));
+}

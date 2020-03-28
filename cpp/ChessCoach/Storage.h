@@ -28,6 +28,7 @@ struct StoredGame
 public:
 
     StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::unordered_map<Move, float>>& setChildVisits);
+    StoredGame(float setResult, const std::vector<uint16_t>&& setMoves, const std::vector<std::unordered_map<Move, float>>&& setChildVisits);
 
     float result;
     int moveCount;
@@ -46,17 +47,21 @@ public:
 
     Storage();
 
+    void LoadExistingGames();
     void AddGame(const StoredGame&& game);
     TrainingBatch SampleBatch() const;
         
 private:
 
     void SaveToDisk(const StoredGame& game, int gameNumber) const;
+    StoredGame LoadFromDisk(std::string path) const;
 
 private:
 
     std::mutex _mutex;
     std::deque<StoredGame> _games;
+    int _nextGameNumber;
+
     Game _startingPosition;
 
     mutable std::default_random_engine _random;

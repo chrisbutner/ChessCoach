@@ -52,28 +52,6 @@ class AlphaZeroConfig(object):
         int(500e3 * self.training_factor): 2e-4
     }
 
-class ReplayBuffer(object):
-
-  def __init__(self, config: AlphaZeroConfig):
-    self.window_size = config.window_size
-    self.batch_size = config.batch_size
-    self.buffer = []
-
-  def add_game(self, game):
-    if len(self.buffer) > self.window_size:
-      self.buffer.pop(0) # TODO: Don't do this
-    self.buffer.append(game)
-
-  def sample_batch(self):
-    # Sample uniformly across positions.
-    move_sum = float(sum(len(g.moves) for g in self.buffer))
-    games = numpy.random.choice(
-        self.buffer,
-        size=self.batch_size,
-        p=[len(g.moves) / move_sum for g in self.buffer])
-    game_pos = [(g, numpy.random.randint(len(g.moves))) for g in games]
-    return [(g.make_image(i), g.make_target(i)) for (g, i) in game_pos]
-
 class Network(object):
 
   def predict_batch(self, image):

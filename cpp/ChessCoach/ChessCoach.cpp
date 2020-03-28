@@ -101,6 +101,8 @@ void TrainChessCoach()
     std::thread networkBatcher(&BatchedPythonNetwork::Work, network.get()); // TODO: Lasts too long
 
     Storage storage;
+    storage.LoadExistingGames();
+
     std::vector<Mcts> selfPlayWorkers;
     for (int i = 0; i < 8; i++)
     {

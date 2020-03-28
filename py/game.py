@@ -41,7 +41,6 @@ class Game(object):
 
   def pgn(self):
     game = chess.pgn.Game()
-    #game.setup()
     node = game
     for move in self.moves:
       node = node.add_variation(StockfishMove(move).to_python_chess())
