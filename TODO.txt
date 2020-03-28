@@ -1,7 +1,9 @@
 Basic loop
 1) Minimal necessary passing of games/networks between workers
 	- test + benchmamrk full end-to-end
-	- delete games after loading
+	- remove C++ uniform network when possible
+	- roll up the dangling atomic_ints into some kind of organizer class
+	- privatize C++ methods (got too python-brained)
 	- more efficient 1m-windowing
 	- try increase Cuda utilization during training - measure downtown between calls
 	- see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)

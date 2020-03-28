@@ -35,11 +35,9 @@ class StockfishMove:
 
 class Game(object):
 
-  def __init__(self, terminal_value, moves, images, policies):
-    self.terminal_value = self.flip_value(len(moves), terminal_value)
+  def __init__(self, result, moves):
+    self.result = result
     self.moves = moves
-    self.images = images
-    self.policies = policies
 
   def pgn(self):
     game = chess.pgn.Game()
@@ -47,17 +45,6 @@ class Game(object):
     node = game
     for move in self.moves:
       node = node.add_variation(StockfishMove(move).to_python_chess())
-    game.headers["Result"] = map_01_to_pgn(self.terminal_value)
+    game.headers["Result"] = map_01_to_pgn(self.result)
     return str(game)
-
-  def make_image(self, state_index: int):
-    return self.images[state_index]
-
-  def make_target(self, state_index: int):
-    value = map_01_to_11(self.flip_value(state_index, self.terminal_value))
-    policy = self.policies[state_index]
-    return value, policy
-
-  def flip_value(self, state_index, value):
-    return value if ((state_index % 2) == 0) else (1.0 - value)
 

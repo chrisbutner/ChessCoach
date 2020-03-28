@@ -7,19 +7,9 @@
 
 #include <Stockfish/thread.h>
 
-int Config::NumSampingMoves = 30;
-int Config::MaxMoves = 512;
-int Config::NumSimulations = 800;
+#include "Config.h"
 
-float Config::RootDirichletAlpha = 0.3f;
-float Config::RootExplorationFraction = 0.25f;
-
-float Config::PbCBase = 19652.f;
-float Config::PbCInit = 1.25f;
-
-std::default_random_engine Config::Random;
-
-int Game::QueenKnightPlane[SQUARE_NB];
+thread_local std::default_random_engine SelfPlayGame::Random;
 
 Node::Node(float setPrior)
     : originalPrior(setPrior)
@@ -54,110 +44,73 @@ int Node::SumChildVisits() const
     return _sumChildVisits;
 }
 
-StoredGame::StoredGame(float terminalValue, size_t moveCount)
-    : terminalValue(terminalValue)
-    , moves(moveCount)
-    , images(moveCount)
-    , policies(moveCount)
-{
-}
-
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
 // TODO: Also input/output planes? e.g. for StoredGames vector storage
 
-void Game::Initialize()
-{
-    for (int& plane : QueenKnightPlane)
-    {
-        plane = NO_PLANE;
-    }
-    int nextPlane = 0;
-
-    const Direction QueenDirections[] = { NORTH, NORTH_EAST, EAST, SOUTH_EAST, SOUTH, SOUTH_WEST, WEST, NORTH_WEST };
-    const int MaxDistance = 7;
-    for (Direction direction : QueenDirections)
-    {
-        for (int distance = 1; distance <= MaxDistance; distance++)
-        {
-            QueenKnightPlane[(SQUARE_NB + direction * distance) % SQUARE_NB] = nextPlane++;
-        }
-    }
-
-    const int KnightMoves[] = { NORTH_EAST + NORTH, NORTH_EAST + EAST, SOUTH_EAST + EAST, SOUTH_EAST + SOUTH,
-        SOUTH_WEST + SOUTH, SOUTH_WEST + WEST, NORTH_WEST + WEST, NORTH_WEST + NORTH };
-    for (int delta : KnightMoves)
-    {
-        QueenKnightPlane[(SQUARE_NB + delta) % SQUARE_NB] = nextPlane++;
-    }
-}
-
-Game::Game()
-    : _positionStates(new std::deque<StateInfo>(1))
+SelfPlayGame::SelfPlayGame()
+    : Game()
     , _root(new Node(0.f))
 {
-    const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    _position.set(StartFEN, false /* isChess960 */, &_positionStates->back(), Threads.main());
 }
 
-Game::Game(const Game& other)
-    : _position(other._position)
-    , _positionStates(new std::deque<StateInfo>())
+SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
+    : Game(other)
     , _root(other._root)
 {
     assert(&other != this);
 }
 
-Game& Game::operator=(const Game& other)
+SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
 {
     assert(&other != this);
 
-    _position = other._position;
-    _positionStates.reset(new std::deque<StateInfo>());
+    Game::operator=(other);
+
     _root = other._root;
 
     return *this;
 }
 
-Game::~Game()
+SelfPlayGame::~SelfPlayGame()
 {
 }
 
-Node* Game::Root() const
+Node* SelfPlayGame::Root() const
 {
     return _root;
 }
 
-bool Game::IsTerminal() const
+bool SelfPlayGame::IsTerminal() const
 {
     return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) || (Ply() >= Config::MaxMoves);
 }
 
-float Game::TerminalValue() const
+float SelfPlayGame::TerminalValue() const
 {
     // Require that the caller has seen IsTerminal() as true before calling TerminalValue().
     // So, just coalesce a draw for the Ply >= MaxMoves case.
     return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) ? _root->terminalValue : CHESSCOACH_VALUE_DRAW;
 }
 
-Color Game::ToPlay() const
+float SelfPlayGame::Result() const
 {
-    return _position.side_to_move();
+    // Require that the caller has seen IsTerminal() as true before calling Result(), and hasn't played/unplayed any moves.
+    return FlipValue(ToPlay(), TerminalValue());
 }
 
-void Game::ApplyMove(Move move, Node* newRoot)
+void SelfPlayGame::ApplyMoveWithRoot(Move move, Node* newRoot)
 {
-    _positionStates->emplace_back();
-    _position.do_move(move, _positionStates->back());
+    ApplyMove(move);
     _root = newRoot;
 }
 
-void Game::ApplyMoveWithHistory(Move move, Node* newRoot)
+void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
 {
-    ApplyMove(move, newRoot);
+    ApplyMoveWithRoot(move, newRoot);
     _history.push_back(move);
 }
 
-float Game::ExpandAndEvaluate(INetwork* network)
+float SelfPlayGame::ExpandAndEvaluate(INetwork* network)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
@@ -192,6 +145,11 @@ float Game::ExpandAndEvaluate(INetwork* network)
     // Get a prediction from the network - either the uniform policy or NN policy.
     InputPlanes image = GenerateImage();
     std::unique_ptr<IPrediction> prediction(network->Predict(image));
+    if (!prediction)
+    {
+        // Terminating self-play.
+        return std::nanf("");
+    }
     const float value = prediction->Value();
     const OutputPlanesPtr policy = reinterpret_cast<float(*)[8][8]>(prediction->Policy());
 
@@ -214,7 +172,7 @@ float Game::ExpandAndEvaluate(INetwork* network)
     return value;
 }
 
-std::vector<float> Game::Softmax(const std::vector<float>& logits) const
+std::vector<float> SelfPlayGame::Softmax(const std::vector<float>& logits) const
 {
     std::vector<float> probabilities(logits.size());
 
@@ -235,13 +193,13 @@ std::vector<float> Game::Softmax(const std::vector<float>& logits) const
     return probabilities;
 }
 
-std::pair<Move, Node*> Game::SelectMove() const
+std::pair<Move, Node*> SelfPlayGame::SelectMove() const
 {
     if (Ply() < Config::NumSampingMoves)
     {
         // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
         const int sumChildVisits = _root->SumChildVisits();
-        int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Config::Random);
+        int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random);
         for (auto pair : _root->children)
         {
             const int visitCount = pair.second->visitCount;
@@ -273,7 +231,7 @@ std::pair<Move, Node*> Game::SelectMove() const
     }
 }
 
-void Game::StoreSearchStatistics()
+void SelfPlayGame::StoreSearchStatistics()
 {
     std::unordered_map<Move, float> visits;
     const int sumVisits = _root->SumChildVisits();
@@ -284,112 +242,66 @@ void Game::StoreSearchStatistics()
     _childVisits.emplace_back(std::move(visits));
 }
 
-int Game::Ply() const
-{
-    return _position.game_ply();
-}
-
 // Store() leaves the Game in an inconsistent state, w.r.t. _position vs. _positionStates vs. _history.
 // This is intentional laziness to avoid unnecessary housekeeping, since the Game will no longer be needed.
-StoredGame Game::Store()
+StoredGame SelfPlayGame::Store()
 {
-    StoredGame stored(TerminalValue(), _history.size());
-
-    for (int i = static_cast<int>(_history.size()) - 1; i >= 0; i--)
-    {
-        // Rely on return value optimization here (can't be more explicit via emplace because we're walking backwards).
-        stored.moves[i] = _history[i];
-        _position.undo_move(_history[i]);
-        stored.images[i] = GenerateImage();
-        stored.policies[i] = GeneratePolicy(_childVisits[i]);
-    }
-
-    return stored;
+    return StoredGame(Result(), _history, _childVisits);
 }
 
-float& Game::PolicyValue(OutputPlanesPtr policy, Move move) const
+Mcts::Mcts(Storage* storage)
+    : _storage(storage)
 {
-    // If it's black to play, rotate the board and flip colors: always from the "current player's" perspective.
-    Square from = RotateSquare(ToPlay(), from_sq(move));
-    Square to = RotateSquare(ToPlay(), to_sq(move));
-
-    int plane;
-    PieceType promotion;
-    if ((type_of(move) == PROMOTION) && ((promotion = promotion_type(move)) != QUEEN))
-    {
-        plane = UnderpromotionPlane[promotion - KNIGHT][to - from - NORTH_WEST];
-        assert((plane >= 0) && (plane < 73));
-    }
-    else
-    {
-        plane = QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB];
-        assert((plane >= 0) && (plane < 73));
-    }
-
-    return policy[plane][rank_of(from)][file_of(from)];
 }
 
-#pragma warning(disable:6262) // Ignore stack warning, caller can emplace to heap via RVO.
-InputPlanes Game::GenerateImage() const
+void Mcts::PlayGames(WorkCoordinator& workCoordinator, INetwork* network) const
 {
-    InputPlanes image = {};
-
-    // If it's black to play, rotate the board and flip colors: always from the "current player's" perspective.
-    const Color toPlay = ToPlay();
-    for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
+    while (Play(network))
     {
-        for (File file = FILE_A; file <= FILE_H; ++file)
-        {
-            Piece piece = FlipPiece[toPlay][_position.piece_on(RotateSquare(toPlay, make_square(file, rank)))];
-            int plane = ImagePiecePlane[piece];
-            if (plane != NO_PLANE)
-            {
-                assert((plane >= 0) && (plane < 12));
-                image[plane][rank][file] = 1.f;
-            }
-        }
-    }
-
-    return image;
-}
-
-OutputPlanes Game::GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const
-{
-    OutputPlanes policy = {};
-    OutputPlanesPtr policyPtr = reinterpret_cast<float(*)[8][8]>(policy.data());
-
-    const Color toPlay = ToPlay();
-    for (auto pair : childVisits)
-    {
-        PolicyValue(policyPtr, pair.first) = pair.second;
-    }
-
-    return policy;
-}
-#pragma warning(default:6262) // Ignore stack warning, caller can emplace to heap via RVO.
-
-void Mcts::Work(INetwork* network) const
-{
-    while (true)
-    {
-        Play(network);
+        workCoordinator.OnWorkItemCompleted();
     }
 }
 
-void Mcts::Play(INetwork* network) const
+void Mcts::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
+{
+    for (int step = checkpoint - stepCount + 1; step <= checkpoint; step++)
+    {
+        auto startTrain = std::chrono::high_resolution_clock::now();
+
+        TrainingBatch batch = _storage->SampleBatch();
+        network->TrainBatch(step, batch.images, batch.values, batch.policies);
+
+        std::cout << "Train, step " << step << ", time " <<
+            std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count() << std::endl;
+    }
+
+    network->SaveNetwork(checkpoint);
+}
+
+bool Mcts::Play(INetwork* network) const
 {
     auto startGame = std::chrono::high_resolution_clock::now();
 
-    Game game;
-    game.ExpandAndEvaluate(network);
+    SelfPlayGame game;
+    float check = game.ExpandAndEvaluate(network);
+    if (std::isnan(check))
+    {
+        // Terminating self-play.
+        return false;
+    }
 
     while (!game.IsTerminal())
     {
         //auto startMcts = std::chrono::high_resolution_clock::now();
         Node* root = game.Root();
         std::pair<Move, Node*> selected = RunMcts(network, game);
+        if (selected.second == nullptr)
+        {
+            // Terminating self-play.
+            return false;
+        }
         game.StoreSearchStatistics();
-        game.ApplyMoveWithHistory(selected.first, selected.second);
+        game.ApplyMoveWithRootAndHistory(selected.first, selected.second);
         Prune(root, selected.second /* == game.Root() */);
         //std::cout << "MCTS, ply " << game.Ply() << ", time " <<
         //    std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startMcts).count() << std::endl;
@@ -399,31 +311,30 @@ void Mcts::Play(INetwork* network) const
     // - Store() wipes anything relying on the position, e.g. ply.
     // - PruneAll() wipes anything relying on nodes, e.g. terminal value.
     const int ply = game.Ply();
-    const float result = game.TerminalValue();
-    StoredGame stored = game.Store();
+    const float result = game.Result();
+    _storage->AddGame(game.Store());
     PruneAll(game.Root());
-
-    // Save the game to disk for training.
-    _storage.SaveToDisk(stored);
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count();
     const float mctsTime = (gameTime / ply);
     std::cout << "Game, ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
+
+    return true;
 }
 
-std::pair<Move, Node*> Mcts::RunMcts(INetwork* network, Game& game) const
+std::pair<Move, Node*> Mcts::RunMcts(INetwork* network, SelfPlayGame& game) const
 {
     AddExplorationNoise(game);
 
     for (int i = 0; i < Config::NumSimulations; i++)
     {
-        Game scratchGame = game;
+        SelfPlayGame scratchGame = game;
         std::vector<Node*> searchPath{ scratchGame.Root() };
 
         while (scratchGame.Root()->IsExpanded())
         {
             std::pair<Move, Node*> selected = SelectChild(scratchGame.Root());
-            scratchGame.ApplyMove(selected.first, selected.second);
+            scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
             searchPath.push_back(selected.second /* == scratchGame.Root() */);
         }
 
@@ -431,20 +342,25 @@ std::pair<Move, Node*> Mcts::RunMcts(INetwork* network, Game& game) const
         // and we start applying it at the current position of the actual game (could again be WHITE or BLACK),
         // so flip it if they differ.
         float value = scratchGame.ExpandAndEvaluate(network);
-        value = FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
+        if (std::isnan(value))
+        {
+            // Terminating self-play.
+            return std::pair(MOVE_NULL, nullptr);
+        }
+        value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
     }
 
     return game.SelectMove();
 }
 
-void Mcts::AddExplorationNoise(Game& game) const
+void Mcts::AddExplorationNoise(SelfPlayGame& game) const
 {
     std::gamma_distribution<float> noise(Config::RootDirichletAlpha, 1.f);
     for (auto pair : game.Root()->children)
     {
         Node* child = pair.second;
-        const float childNoise = noise(Config::Random);
+        const float childNoise = noise(SelfPlayGame::Random);
         child->prior = child->originalPrior * (1 - Config::RootExplorationFraction) + childNoise * Config::RootExplorationFraction;
     }
 }
@@ -481,18 +397,8 @@ void Mcts::Backpropagate(const std::vector<Node*>& searchPath, float value) cons
     {
         node->visitCount++;
         node->valueSum += value;
-        value = FlipValue(value);
+        value = SelfPlayGame::FlipValue(value);
     }
-}
-
-float Mcts::FlipValue(Color toPlay, float value) const
-{
-    return (toPlay == WHITE) ? value : FlipValue(value);
-}
-
-float Mcts::FlipValue(float value) const
-{
-    return (CHESSCOACH_VALUE_WIN - value);
 }
 
 void Mcts::Prune(Node* root, Node* except) const

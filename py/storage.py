@@ -37,33 +37,18 @@ def load_game(path):
     except:
       time.sleep(0.001)
 
-  version, terminal_value, move_count = struct.unpack_from("ifi", data)
+  version, move_count, result = struct.unpack_from("HHf", data)
   assert version == 1
   assert move_count >= 1
 
-  move_offset = 12
-  moves = numpy.frombuffer(data, dtype=numpy.int32, count=move_count, offset=move_offset)
+  move_offset = 8
+  moves = numpy.frombuffer(data, dtype=numpy.int16, count=move_count, offset=move_offset)
 
-  images_offset = move_offset + move_count * 4
-  images_count = move_count * 12 * 8 * 8
-  images = numpy.frombuffer(data, dtype=numpy.float32, count=images_count, offset=images_offset)
-  images.shape = (move_count, 12, 8, 8)
+  # Ignore child_visits
 
-  policies_offset = images_offset + images_count * 4
-  policies_count = move_count * 73 * 8 * 8
-  policies = numpy.frombuffer(data, dtype=numpy.float32, count=policies_count, offset=policies_offset)
-  policies.shape = (move_count, 73, 8, 8)
-
-  return Game(terminal_value, moves, images, policies)
+  return Game(result, moves)
 
 # There's some slight dead time between loading and watching. Don't worry about it for our use.
-def load_and_watch_games(game_handler):
-  parent_path = games_path
-  _, _, files = next(os.walk(parent_path))
-  for file in files:
-    game_handler(load_game(os.path.join(parent_path, file)))
-  Watcher(parent_path, lambda path: game_handler(load_game(path)))
-
 def load_and_watch_networks(network_path_handler):
   parent_path = networks_path
   _, directories, _ = next(os.walk(parent_path))

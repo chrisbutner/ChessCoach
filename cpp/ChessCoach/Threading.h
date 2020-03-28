@@ -53,4 +53,20 @@ private:
     T _item;
 };
 
+class WorkCoordinator
+{
+public:
+
+    WorkCoordinator(int workItemCount);
+
+    void OnWorkItemCompleted();
+    void Wait();
+
+private:
+
+    std::mutex _mutex;
+    std::condition_variable _condition;
+    int _workItemsRemaining;
+};
+
 #endif // _THREADING_H_

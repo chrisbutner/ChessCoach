@@ -186,9 +186,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ChessCoach.cpp" />
+    <ClCompile Include="Game.cpp" />
+    <ClCompile Include="Config.cpp" />
     <ClCompile Include="PythonNetwork.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Storage.cpp" />
+    <ClCompile Include="Threading.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Stockfish\Stockfish.vcxproj">
@@ -196,6 +199,8 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Game.h" />
+    <ClInclude Include="Config.h" />
     <ClInclude Include="Network.h" />
     <ClInclude Include="PythonNetwork.h" />
     <ClInclude Include="SelfPlay.h" />

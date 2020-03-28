@@ -23,27 +23,26 @@
 #include "SelfPlay.h"
 #include "Threading.h"
 #include "PythonNetwork.h"
+#include "Config.h"
 
 int InitializePython();
 void FinalizePython();
 void InitializeStockfish();
 void InitializeChess();
 void FinalizeStockfish();
-void TestMovegen();
-void TestPython();
-void TestMcts();
-void TestThreading();
+void TrainChessCoach();
+void PlayGames(const std::vector<Mcts>& workers, INetwork* network, int gamesPerNetwork);
+void TrainNetwork(const Mcts& worker, INetwork* network, int stepCount, int checkpoint);
 
 int main(int argc, char* argv[])
 {
+    // TODO: May need to set TF_CPP_MIN_LOG_LEVEL to "3" to avoid TF spam during UCI use
+
     InitializePython();
     InitializeStockfish();
     InitializeChess();
 
-    //TestMovegen();
-    //TestPython();
-    TestMcts();
-    //TestThreading();
+    TrainChessCoach();
 
     FinalizePython();
     FinalizeStockfish();
@@ -96,129 +95,53 @@ void FinalizeStockfish()
     Threads.set(0);
 }
 
-void TestMovegen()
-{
-    // Set up the starting position.
-    const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    StateListPtr states(new std::deque<StateInfo>(1));
-    Position position;
-    position.set(StartFEN, false /* isChess960 */, &states->back(), Threads.main());
-
-    ExtMove moves[MAX_MOVES];
-    for (int i = 0; i < 4; i++)
-    {
-        // Generate legal moves.
-        ExtMove* endMoves = generate<LEGAL>(position, moves);
-
-        // Debug
-        std::cout << "Legal moves: " << (endMoves - moves) << std::endl;
-        for (ExtMove* cur = moves; cur != endMoves; cur++)
-        {
-            std::cout << from_sq(cur->move) << " to " << to_sq(cur->move) << std::endl;
-        }
-
-        // Make first move in list.
-        states->emplace_back();
-        position.do_move(moves[0], states->back());
-    }
-
-    // Test out a branching copied position.
-    Position position2 = position;
-    StateListPtr states2(new std::deque<StateInfo>());
-    ExtMove moves2[MAX_MOVES];
-    ExtMove* endMoves2 = generate<LEGAL>(position2, moves2);
-    states2->emplace_back();
-    position2.do_move(moves2[0], states2->back());
-    position2.undo_move(moves2[0]);
-    position.undo_move(moves[0]);
-    position2.undo_move(moves[0]);
-    assert(position.fen() == position2.fen());
-}
-
-void TestPython()
-{
-    PyObject* module = nullptr;
-    PyObject* function = nullptr;
-    PyObject* pythonImage = nullptr;
-    PyObject* result = nullptr;
-    bool success = false;
-
-    module = PyImport_ImportModule("predict");
-    if (module)
-    {
-        function = PyObject_GetAttrString(module, "predict");
-        if (function && PyCallable_Check(function))
-        {
-            npy_intp dims[3]{ 12, 8, 8 };
-
-            //float(*image)[8][8] = new float[12][8][8];
-            std::array<std::array<std::array<float, 8>, 8>, 12> image;
-
-            pythonImage = PyArray_SimpleNewFromData(
-                Py_ARRAY_LENGTH(dims), dims, NPY_FLOAT, reinterpret_cast<void*>(image.data()));
-            if (pythonImage)
-            {
-                result = PyObject_CallFunctionObjArgs(function, pythonImage, nullptr);
-                if (result)
-                {
-                    PyObject* pythonValue = PyTuple_GetItem(result, 0); // PyTuple_GetItem does not INCREF
-                    assert(PyArray_Check(pythonValue));
-
-                    PyObject* pythonPolicy = PyTuple_GetItem(result, 1); // PyTuple_GetItem does not INCREF
-                    assert(PyArray_Check(pythonPolicy));
-
-                    PyArrayObject* pythonValueArray = reinterpret_cast<PyArrayObject*>(pythonValue);
-                    float value = reinterpret_cast<float*>(PyArray_DATA(pythonValueArray))[0];
-
-                    PyArrayObject* pythonPolicyArray = reinterpret_cast<PyArrayObject*>(pythonPolicy);
-                    float(*policy)[8][8] = reinterpret_cast<float(*)[8][8]>(PyArray_DATA(pythonPolicyArray));
-
-                    float test = policy[0][1][2];
-                    float test2 = policy[3][4][5];
-
-                    success = true;
-                }
-            }
-
-            //delete[] image;
-        }
-    }
-
-    if (!success && PyErr_Occurred())
-    {
-        PyErr_Print();
-    }
-
-    Py_XDECREF(result);
-    Py_XDECREF(pythonImage);
-    Py_XDECREF(function);
-    Py_XDECREF(module);
-}
-
-void TestMcts()
+void TrainChessCoach()
 {
     std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
+    std::thread networkBatcher(&BatchedPythonNetwork::Work, network.get()); // TODO: Lasts too long
 
-    std::vector<Mcts> workers(8);
+    Storage storage;
+    std::vector<Mcts> selfPlayWorkers;
+    for (int i = 0; i < 8; i++)
+    {
+        selfPlayWorkers.emplace_back(&storage);
+    }
+
+    const int networkCount = (Config::TrainingSteps / Config::CheckpointInterval);
+    const int gamesPerNetwork = (Config::SelfPlayGames / networkCount);
+    int checkpoint = Config::CheckpointInterval;
+
+    for (int n = 0; n < networkCount; n++)
+    {
+        PlayGames(selfPlayWorkers, network.get(), gamesPerNetwork);
+        TrainNetwork(selfPlayWorkers.front(), network.get(), Config::CheckpointInterval, checkpoint);
+        checkpoint += Config::CheckpointInterval;
+    }
+}
+
+void PlayGames(const std::vector<Mcts>& selfPlayWorkers, INetwork* network, int gamesPerNetwork)
+{
     std::vector<std::thread> selfPlayThreads;
 
-    for (int i = 0; i < workers.size(); i++)
+    WorkCoordinator workCoordinator(gamesPerNetwork);
+    network->SetEnabled(true);
+    for (int i = 0; i < selfPlayWorkers.size(); i++)
     {
         std::cout << "Starting self-play thread " << (i + 1) << std::endl;
 
-        selfPlayThreads.emplace_back(&Mcts::Work, &workers[i], network.get());
+        selfPlayThreads.emplace_back(&Mcts::PlayGames, &selfPlayWorkers[i], std::ref(workCoordinator), network);
     }
 
-    network->Work();
+    workCoordinator.Wait();
+    network->SetEnabled(false);
+
+    for (int i = 0; i < selfPlayWorkers.size(); i++)
+    {
+        selfPlayThreads[i].join();
+    }
 }
 
-void TestThreading()
+void TrainNetwork(const Mcts& worker, INetwork* network, int stepCount, int checkpoint)
 {
-    SyncQueue<int> test;
-
-    std::thread a([&test] { test.Push(5); });
-    std::thread b([&test] { int item = test.Pop(); std::cout << "Item: " << item << std::endl; });
-
-    a.join();
-    b.join();
+    worker.TrainNetwork(network, stepCount, checkpoint);
 }

@@ -39,9 +39,8 @@ class AlphaZeroConfig(object):
     self.batch_size = 2048 # OOM on GTX 1080 @ 4096
     self.training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
     self.training_steps = int(700e3 * self.training_factor)
-    self.checkpoint_interval = 10 #int(1e3) # Currently training about 100x as slowly as AlphaZero, so reduce accordingly.
+    self.checkpoint_interval = 100 #int(1e3) # Currently training about 100x as slowly as AlphaZero, so reduce accordingly.
     self.window_size = int(1e6)
-    
 
     self.weight_decay = 1e-4
     self.momentum = 0.9
@@ -118,7 +117,9 @@ class TensorFlowNetwork(Network):
 ##### End Helpers ########
 ##########################
 
+config = AlphaZeroConfig()
 latest_network = None
+training_network = None
 
 def update_network(network_path):
   name = os.path.basename(os.path.normpath(network_path))
@@ -141,45 +142,28 @@ def prepare_predictions():
     latest_network = UniformNetwork()
     print("Loaded uniform network")
 
+def prepare_training():
+  global training_network
+  if (not training_network):
+    training_network = KerasNetwork()
+    optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
+    losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
+    training_network.model.compile(optimizer=optimizer, loss=losses)
+
 def predict_batch(image):
   prepare_predictions()
   return latest_network.predict_batch(image)
 
-def train():
-  config = AlphaZeroConfig()
-  replay_buffer = ReplayBuffer(config)
-  storage.load_and_watch_games(replay_buffer.add_game)
+def train_batch(step, images, values, policies):
+  prepare_training()
 
-  if (len(replay_buffer.buffer) < 1):
-    print("Sleeping until games are found")
-    while (len(replay_buffer.buffer) < 1):
-      time.sleep(1)
-  
-  print("Training")
-  network = KerasNetwork()
-  
-  optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
-  losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
-  network.model.compile(optimizer=optimizer, loss=losses)
-  
-  for i in range(config.training_steps):
-    with Profiler("Train", threshold_time=60.0):
-      if (i > 0) and (i % config.checkpoint_interval == 0):
-        print(f"Saving network ({i} steps)...")
-        storage.save_network(i, network)
-        print(f"Saved network ({i} steps)")
-      batch = replay_buffer.sample_batch()
+  new_learning_rate = config.learning_rate_schedule.get(step)
+  if (new_learning_rate is not None):
+    K.set_value(training_network.model.optimizer.lr, new_learning_rate)
 
-      x = tf.stack([image for image, (target_value, target_policy) in batch])
-      y_value = tf.stack([target_value for image, (target_value, target_policy) in batch])
-      y_policy = tf.stack([target_policy for image, (target_value, target_policy) in batch])
+  training_network.model.train_on_batch(images, [values, policies])
 
-      new_learning_rate = config.learning_rate_schedule.get(i)
-      if (new_learning_rate is not None):
-        K.set_value(optimizer.lr, new_learning_rate)
-
-      network.model.train_on_batch(x, [y_value, y_policy])
-
-  print(f"Saving network ({config.training_steps} steps)...")
-  storage.save_network(config.training_steps, network)
-  print(f"Saved network ({config.training_steps} steps)")
+def save_network(checkpoint):
+  print(f"Saving network ({checkpoint} steps)...")
+  storage.save_network(checkpoint, training_network)
+  print(f"Saved network ({checkpoint} steps)")
