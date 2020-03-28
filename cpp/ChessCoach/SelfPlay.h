@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <random>
+#include <atomic>
 
 #include <Stockfish/Position.h>
 #include <Stockfish/movegen.h>
@@ -42,6 +43,7 @@ class SelfPlayGame : public Game
 {
 public:
 
+    static std::atomic_uint ThreadSeed;
     thread_local static std::default_random_engine Random;
 
 public:

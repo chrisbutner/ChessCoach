@@ -104,20 +104,32 @@ void TrainChessCoach()
     storage.LoadExistingGames();
 
     std::vector<Mcts> selfPlayWorkers;
-    for (int i = 0; i < 8; i++)
+    const int selfPlayWorkerCount =
+#ifdef _DEBUG
+        1;
+#else
+        32;
+#endif
+    for (int i = 0; i < selfPlayWorkerCount; i++)
     {
         selfPlayWorkers.emplace_back(&storage);
     }
 
+    // Set up configuration for full training.
     const int networkCount = (Config::TrainingSteps / Config::CheckpointInterval);
     const int gamesPerNetwork = (Config::SelfPlayGames / networkCount);
-    int checkpoint = Config::CheckpointInterval;
 
-    for (int n = 0; n < networkCount; n++)
+    // If existing games found, resume progress.
+    int existingNetworks = storage.CountNetworks();
+    int bonusGames = std::max(0, storage.GamesPlayed() - gamesPerNetwork * existingNetworks);
+
+    for (int n = existingNetworks; n < networkCount; n++)
     {
-        PlayGames(selfPlayWorkers, network.get(), gamesPerNetwork);
+        PlayGames(selfPlayWorkers, network.get(), gamesPerNetwork - bonusGames);
+        bonusGames = std::max(0, bonusGames - gamesPerNetwork);
+
+        const int checkpoint = (n + 1) * Config::CheckpointInterval;
         TrainNetwork(selfPlayWorkers.front(), network.get(), Config::CheckpointInterval, checkpoint);
-        checkpoint += Config::CheckpointInterval;
     }
 }
 

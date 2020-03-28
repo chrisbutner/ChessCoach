@@ -42,23 +42,27 @@ private:
 
     static constexpr const char* const RootEnvPath = "localappdata";
     static constexpr const char* const GamesPart = "ChessCoach/Training/Games";
+    static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
 
 public:
 
     Storage();
 
     void LoadExistingGames();
-    void AddGame(const StoredGame&& game);
+    int AddGame(StoredGame&& game);
     TrainingBatch SampleBatch() const;
+    int GamesPlayed() const;
+    int CountNetworks() const;
         
 private:
 
+    int AddGameWithoutSaving(StoredGame&& game);
     void SaveToDisk(const StoredGame& game, int gameNumber) const;
     StoredGame LoadFromDisk(std::string path) const;
 
 private:
 
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     std::deque<StoredGame> _games;
     int _nextGameNumber;
 
@@ -67,6 +71,7 @@ private:
     mutable std::default_random_engine _random;
 
     std::filesystem::path _gamesPath;
+    std::filesystem::path _networksPath;
 };
 
 #endif // _STORAGE_H_

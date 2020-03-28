@@ -43,13 +43,13 @@ class AlphaZeroConfig(object):
     self.window_size = int(1e6)
 
     self.weight_decay = 1e-4
-    self.momentum = 0.9
+    self.momentum = 0.8 # 0.9 # Exploding error/gradients, see how this goes.
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
     self.learning_rate_schedule = {
-        0: 2e-1,
-        int(100e3 * self.training_factor): 2e-2,
-        int(300e3 * self.training_factor): 2e-3,
-        int(500e3 * self.training_factor): 2e-4
+        0: 2e-1 / self.training_factor,
+        int(100e3 * self.training_factor): 2e-2 / self.training_factor,
+        int(300e3 * self.training_factor): 2e-3 / self.training_factor,
+        int(500e3 * self.training_factor): 2e-4 / self.training_factor
     }
 
 class Network(object):
@@ -59,8 +59,11 @@ class Network(object):
 
 class KerasNetwork(Network):
 
-  def __init__(self):
-    self.model = ChessCoachModel().build()
+  def __init__(self, model=None):
+    self.model = ChessCoachModel().build() if not model else model
+    optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
+    losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
+    self.model.compile(optimizer=optimizer, loss=losses)
 
   def predict_batch(self, image):
     assert False
@@ -99,34 +102,49 @@ config = AlphaZeroConfig()
 latest_network = None
 training_network = None
 
-def update_network(network_path):
+def update_network_for_predictions(network_path):
   name = os.path.basename(os.path.normpath(network_path))
-  print(f"Loading network: {name}...")
+  print(f"Loading network (predictions): {name}...")
   global latest_network
   while True:
     try:
       tf_model = tf.saved_model.load(network_path)
       break
-    except:
-      time.sleep(0.001)
+    except Exception as e:
+      print(e)
+      time.sleep(0.25)
   latest_network = TensorFlowNetwork(tf_model)
-  print(f"Loaded network: {name}")
+  print(f"Loaded network (predictions): {name}")
+
+def update_network_for_training(network_path):
+  name = os.path.basename(os.path.normpath(network_path))
+  print(f"Loading network (training): {name}...")
+  global training_network
+  while True:
+    try:
+      keras_model = tf.keras.models.load_model(network_path)
+      break
+    except Exception as e:
+      print(e)
+      time.sleep(0.25)
+  training_network = KerasNetwork(keras_model)
+  print(f"Loaded network (training): {name}")
 
 def prepare_predictions():
   global latest_network
   if (not latest_network):
-    storage.load_and_watch_networks(update_network)
+    storage.load_and_watch_networks(update_network_for_predictions)
   if (not latest_network):
     latest_network = UniformNetwork()
-    print("Loaded uniform network")
+    print("Loaded uniform network (predictions)")
 
 def prepare_training():
   global training_network
   if (not training_network):
+    storage.load_latest_network(update_network_for_training)
+  if (not training_network):
+    print("Creating new network (training)")
     training_network = KerasNetwork()
-    optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
-    losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
-    training_network.model.compile(optimizer=optimizer, loss=losses)
 
 def predict_batch(image):
   prepare_predictions()
@@ -139,7 +157,8 @@ def train_batch(step, images, values, policies):
   if (new_learning_rate is not None):
     K.set_value(training_network.model.optimizer.lr, new_learning_rate)
 
-  training_network.model.train_on_batch(images, [values, policies])
+  losses = training_network.model.train_on_batch(images, [values, policies])
+  print(f"Loss: {str(losses[0]).rjust(10)} (Value: {str(losses[1]).rjust(10)}, Policy: {str(losses[2]).rjust(10)})")
 
 def save_network(checkpoint):
   print(f"Saving network ({checkpoint} steps)...")

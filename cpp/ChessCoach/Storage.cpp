@@ -47,12 +47,14 @@ StoredGame::StoredGame(float setResult, const std::vector<uint16_t>&& setMoves, 
 
 Storage::Storage()
     : _nextGameNumber(1)
+    , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
 {
     char* rootEnvPath;
     errno_t err = _dupenv_s(&rootEnvPath, nullptr, RootEnvPath);
     assert(!err && rootEnvPath);
 
     _gamesPath = std::filesystem::path(rootEnvPath) / GamesPart;
+    _networksPath = std::filesystem::path(rootEnvPath) / NetworksPart;
 
     std::error_code error;
     std::filesystem::create_directories(_gamesPath, error);
@@ -65,13 +67,30 @@ void Storage::LoadExistingGames()
     for (const auto& directory : std::filesystem::directory_iterator(_gamesPath))
     {
         std::cout << "Loading game: " << directory.path().filename() << std::endl;
-        AddGame(LoadFromDisk(directory.path().string()));
+        AddGameWithoutSaving(LoadFromDisk(directory.path().string()));
     }
 }
 
-void Storage::AddGame(const StoredGame&& game)
+int Storage::AddGame(StoredGame&& game)
+{
+    int gameNumber = AddGameWithoutSaving(std::move(game));
+
+    SaveToDisk(game, gameNumber);
+
+    return gameNumber;
+}
+
+int Storage::AddGameWithoutSaving(StoredGame&& game)
 {
     int gameNumber;
+
+    for (auto map : game.childVisits)
+    {
+        for (auto pair : map)
+        {
+            assert(!std::isnan(pair.second));
+        }
+    }
 
     {
         std::lock_guard lock(_mutex);
@@ -87,7 +106,7 @@ void Storage::AddGame(const StoredGame&& game)
         }
     }
 
-    SaveToDisk(game, gameNumber);
+    return gameNumber;
 }
 
 TrainingBatch Storage::SampleBatch() const
@@ -129,6 +148,19 @@ TrainingBatch Storage::SampleBatch() const
     }
 
     return TrainingBatch(images, values, policies);
+}
+
+int Storage::GamesPlayed() const
+{
+    std::lock_guard lock(_mutex);
+
+    // Starts at 1
+    return (_nextGameNumber - 1);
+}
+
+int Storage::CountNetworks() const
+{
+    return static_cast<int>(std::distance(std::filesystem::directory_iterator(_networksPath.string()), std::filesystem::directory_iterator()));
 }
 
 void Storage::SaveToDisk(const StoredGame& game, int gameNumber) const

@@ -47,7 +47,12 @@ class BatchedPythonNetwork : public INetwork
 {
 public:
 
-    static const int BatchSize = 4;
+    static const int BatchSize =
+#ifdef _DEBUG
+        1;
+#else
+        16;
+#endif
 
     BatchedPythonNetwork();
     virtual ~BatchedPythonNetwork();

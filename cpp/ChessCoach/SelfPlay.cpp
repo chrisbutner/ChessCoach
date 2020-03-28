@@ -9,7 +9,11 @@
 
 #include "Config.h"
 
-thread_local std::default_random_engine SelfPlayGame::Random;
+std::atomic_uint SelfPlayGame::ThreadSeed;
+thread_local std::default_random_engine SelfPlayGame::Random(
+    std::random_device()() +
+    static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()) +
+    ++ThreadSeed);
 
 Node::Node(float setPrior)
     : originalPrior(setPrior)
@@ -19,6 +23,7 @@ Node::Node(float setPrior)
     , terminalValue(CHESSCOACH_VALUE_UNINITIALIZED)
     , _sumChildVisits(0)
 {
+    assert(!std::isnan(setPrior));
 }
 
 bool Node::IsExpanded() const
@@ -312,12 +317,12 @@ bool Mcts::Play(INetwork* network) const
     // - PruneAll() wipes anything relying on nodes, e.g. terminal value.
     const int ply = game.Ply();
     const float result = game.Result();
-    _storage->AddGame(game.Store());
+    const int gameNumber = _storage->AddGame(game.Store());
     PruneAll(game.Root());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count();
     const float mctsTime = (gameTime / ply);
-    std::cout << "Game, ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
+    std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
 
     return true;
 }

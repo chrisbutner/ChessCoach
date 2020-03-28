@@ -1,5 +1,6 @@
 Basic loop
 1) Minimal necessary passing of games/networks between workers
+	- try to get tensorboard integrated despite the C++ stuff?
 	- test + benchmamrk full end-to-end
 	- privatize C++ methods (got too python-brained)
 	- see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
