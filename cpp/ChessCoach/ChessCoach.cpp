@@ -125,7 +125,11 @@ void TrainChessCoach()
 
     for (int n = existingNetworks; n < networkCount; n++)
     {
-        PlayGames(selfPlayWorkers, network.get(), gamesPerNetwork - bonusGames);
+        const int actualGames = (gamesPerNetwork - bonusGames);
+        if (actualGames > 0)
+        {
+            PlayGames(selfPlayWorkers, network.get(), actualGames);
+        }
         bonusGames = std::max(0, bonusGames - gamesPerNetwork);
 
         const int checkpoint = (n + 1) * Config::CheckpointInterval;

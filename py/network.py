@@ -37,19 +37,20 @@ class AlphaZeroConfig(object):
 
     ### Training
     self.batch_size = 2048 # OOM on GTX 1080 @ 4096
-    self.training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
-    self.training_steps = int(700e3 * self.training_factor)
-    self.checkpoint_interval = 100 #int(1e3) # Currently training about 100x as slowly as AlphaZero, so reduce accordingly.
+    self.chesscoach_training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
+    self.training_steps = int(700e3 * self.chesscoach_training_factor)
+    self.checkpoint_interval = 10 #int(1e3) # Currently training about 10x as slowly as AlphaZero, but self-play 100x+, so reduce accordingly.
     self.window_size = int(1e6)
 
     self.weight_decay = 1e-4
-    self.momentum = 0.8 # 0.9 # Exploding error/gradients, see how this goes.
+    self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
+    self.chesscoach_slowdown_factor = 100
     self.learning_rate_schedule = {
-        0: 2e-1 / self.training_factor,
-        int(100e3 * self.training_factor): 2e-2 / self.training_factor,
-        int(300e3 * self.training_factor): 2e-3 / self.training_factor,
-        int(500e3 * self.training_factor): 2e-4 / self.training_factor
+        int(0 * self.chesscoach_training_factor): 2e-1 / self.chesscoach_slowdown_factor,
+        int(100e3 * self.chesscoach_training_factor): 2e-2 / self.chesscoach_slowdown_factor,
+        int(300e3 * self.chesscoach_training_factor): 2e-3 / self.chesscoach_slowdown_factor,
+        int(500e3 * self.chesscoach_training_factor): 2e-4 / self.chesscoach_slowdown_factor
     }
 
 class Network(object):
@@ -60,7 +61,7 @@ class Network(object):
 class KerasNetwork(Network):
 
   def __init__(self, model=None):
-    self.model = ChessCoachModel().build() if not model else model
+    self.model = model or ChessCoachModel().build()
     optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
     losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
     self.model.compile(optimizer=optimizer, loss=losses)
@@ -111,7 +112,7 @@ def update_network_for_predictions(network_path):
       tf_model = tf.saved_model.load(network_path)
       break
     except Exception as e:
-      print(e)
+      print("Exception:", e)
       time.sleep(0.25)
   latest_network = TensorFlowNetwork(tf_model)
   print(f"Loaded network (predictions): {name}")
@@ -122,10 +123,11 @@ def update_network_for_training(network_path):
   global training_network
   while True:
     try:
-      keras_model = tf.keras.models.load_model(network_path)
+      # Work around bug: AttributeError: 'CategoricalCrossentropy' object has no attribute '__name__'
+      keras_model = tf.keras.models.load_model(network_path, compile=False)
       break
     except Exception as e:
-      print(e)
+      print("Exception:", e)
       time.sleep(0.25)
   training_network = KerasNetwork(keras_model)
   print(f"Loaded network (training): {name}")

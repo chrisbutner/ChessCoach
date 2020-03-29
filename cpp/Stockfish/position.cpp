@@ -1124,6 +1124,16 @@ bool Position::is_draw(int ply) const {
   return st->repetition && st->repetition < ply;
 }
 
+// cbutner-start
+bool Position::is_draw_mcts() const {
+
+    if (st->rule50 > 99 && (!checkers() || MoveList<LEGAL>(*this).size()))
+        return true;
+
+    // Return a draw score for three-fold repetition only.
+    return (st->repetition < 0);
+}
+// cbutner-finish
 
 // Position::has_repeated() tests whether there has been at least one repetition
 // of positions since the last capture or pawn move.

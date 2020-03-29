@@ -64,11 +64,15 @@ Storage::Storage()
 #include <iostream>
 void Storage::LoadExistingGames()
 {
+#ifdef _DEBUG
+    std::cout << "Skipping game loading in debug" << std::endl;
+#else
     for (const auto& directory : std::filesystem::directory_iterator(_gamesPath))
     {
         std::cout << "Loading game: " << directory.path().filename() << std::endl;
         AddGameWithoutSaving(LoadFromDisk(directory.path().string()));
     }
+#endif
 }
 
 int Storage::AddGame(StoredGame&& game)

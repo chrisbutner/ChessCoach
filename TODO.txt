@@ -1,23 +1,29 @@
-Basic loop
-1) Minimal necessary passing of games/networks between workers
-	- try to get tensorboard integrated despite the C++ stuff?
-	- test + benchmamrk full end-to-end
-	- privatize C++ methods (got too python-brained)
-	- see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
-	- save PGNs for non-draws (or just every N games, need to observe)
-	- try new architecture (N threads, each has BatchSize games in flight, ticks all, acquires GIL, batches up to python)
-2) Add additional input planes (beyond just pieces) once basic loop is working
-	- constant-ize the 12/X/73 everywhere
-3) Serializing checkpoints so everything can be paused/resumed
-	- can't afford this with current game size on disk (or, accept effectively shrinking the window to zero then re-growing)
-4) Maybe make self-play/training workers use an --arg which also makes TF chatty (vs. UCI mode by default with no args)
-5) Get bridge/worker/etc. situation to a good point re: checkpoints, CPU/GPU usage, throughput
-6) Try unify config across C++/Python
+High priority
+- make sure we can get to 500-step networks without exploding losses/gradients
+- add additional input planes (beyond just pieces) - make sure it's no less stable
+
+Performance
+- can reserve the training ararys in C++ Storage once rather than per training
+- try new architecture (N threads, each has BatchSize games in flight, ticks all, acquires GIL, batches up to python)
+- try C/C++ API for predictions (Windows? Linux?)
+- think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)
+- it might be faster to use 2-after-search-root repetition checks and throw away subtrees
+  rather than use 3-repetition checks and keep them (even counting extra iterations)
+
+Training quality
+- try to get tensorboard integrated despite the C++ stuff?
+- save PGNs for non-draws (or just every N games, need to observe)
+
+Code quality
+- constant-ize the 12/X/73 everywhere
+- unify config across C++/Python
+- privatize C++ methods (got too python-brained)
+
+Scalability
+- can't afford 1 million games in the window (RAM or disk), work something out
 
 C++
 - Eventually modify stockfish - Position, etc. - so it doesn't reach out to uci/options/threads code at all
-- Validate that SelfPlay.cpp draw checking is valid (re: ply) - step through basic + triangulation examples from starting position with knights
-- Turn 12/8/8, 73/8/8 everywhere into constexpr
 - Try Intel compiler in future
 
 Python
@@ -33,8 +39,12 @@ Improvements
 
 UCI
 - (New: Probably just wrap the C++ with UCI now? Can kill python-installer, etc.)
+- Need to make TF/etc. silent
 - Integrate sync-UCI hack with trained model
 - Split out UCI thread so infinite think, ponder, etc. can workers
 - Implement infinite think, ponder, time controls
 - Implement endgame tablebases (invisible/external to the training loop?)
 - Switch from python-chess to own board, movegen, etc. (or be sure of GPLv3 static vs. dynamic)
+
+Low priority
+- see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)

@@ -128,7 +128,20 @@ float SelfPlayGame::ExpandAndEvaluate(INetwork* network)
     }
 
     // Check for draw by 50-move or 3-repetition.
-    if (_position.is_draw(Ply()))
+    //
+    // Minimax engines check for (a) two-fold repetition strictly after the search root
+    // (e.g. search-root, rep-0, rep-1) or (b) three-fold repetition anywhere
+    // (e.g. rep-0, rep-1, search-root, rep-2) in order to terminate and prune efficiently.
+    //
+    // This doesn't work as well in MCTS because what was a draw at a given node at search-depth 5
+    // via case (a) (two-fold strictly after the search root) is no longer a draw at search-depth 1
+    // if the rep-0 move did not actually take place, but the node has already built up visits
+    // and backpropagated.
+    //
+    // Correspondingly, MCTS doesn't have the same need to prune searches, so it's just fine
+    // to solve the problem by waiting for actual 3-fold repetitions at all times. Stockfish
+    // already calculates this without additional cost.
+    if (_position.is_draw_mcts())
     {
         root->terminalValue = CHESSCOACH_VALUE_DRAW;
         return root->terminalValue;
