@@ -31,8 +31,8 @@ void InitializeStockfish();
 void InitializeChess();
 void FinalizeStockfish();
 void TrainChessCoach();
-void PlayGames(const std::vector<Mcts>& workers, INetwork* network, int gamesPerNetwork);
-void TrainNetwork(const Mcts& worker, INetwork* network, int stepCount, int checkpoint);
+void PlayGames(std::vector<SelfPlayWorker>& workers, INetwork* network, int gamesPerNetwork);
+void TrainNetwork(const SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
 
 int main(int argc, char* argv[])
 {
@@ -98,21 +98,20 @@ void FinalizeStockfish()
 void TrainChessCoach()
 {
     std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
-    std::thread networkBatcher(&BatchedPythonNetwork::Work, network.get()); // TODO: Lasts too long
 
     Storage storage;
     storage.LoadExistingGames();
-
-    std::vector<Mcts> selfPlayWorkers;
+    
     const int selfPlayWorkerCount =
 #ifdef _DEBUG
         1;
 #else
-        32;
+        2;
 #endif
-    for (int i = 0; i < selfPlayWorkerCount; i++)
+    std::vector<SelfPlayWorker> selfPlayWorkers(selfPlayWorkerCount);
+    for (SelfPlayWorker& worker : selfPlayWorkers)
     {
-        selfPlayWorkers.emplace_back(&storage);
+        worker.Initialize(&storage);
     }
 
     // Set up configuration for full training.
@@ -137,29 +136,26 @@ void TrainChessCoach()
     }
 }
 
-void PlayGames(const std::vector<Mcts>& selfPlayWorkers, INetwork* network, int gamesPerNetwork)
+void PlayGames(std::vector<SelfPlayWorker>& selfPlayWorkers, INetwork* network, int gamesPerNetwork)
 {
     std::vector<std::thread> selfPlayThreads;
 
     WorkCoordinator workCoordinator(gamesPerNetwork);
-    network->SetEnabled(true);
     for (int i = 0; i < selfPlayWorkers.size(); i++)
     {
-        std::cout << "Starting self-play thread " << (i + 1) << std::endl;
+        std::cout << "Starting self-play thread " << (i + 1) << " of " << selfPlayWorkers.size() <<
+            " (" << INetwork::PredictionBatchSize << " games per thread)" << std::endl;
 
-        selfPlayThreads.emplace_back(&Mcts::PlayGames, &selfPlayWorkers[i], std::ref(workCoordinator), network);
+        selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, &selfPlayWorkers[i], std::ref(workCoordinator), network);
     }
 
-    workCoordinator.Wait();
-    network->SetEnabled(false);
-
-    for (int i = 0; i < selfPlayWorkers.size(); i++)
+    for (std::thread& selfPlayThread : selfPlayThreads)
     {
-        selfPlayThreads[i].join();
+        selfPlayThread.join();
     }
 }
 
-void TrainNetwork(const Mcts& worker, INetwork* network, int stepCount, int checkpoint)
+void TrainNetwork(const SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
 {
-    worker.TrainNetwork(network, stepCount, checkpoint);
+    selfPlayWorker.TrainNetwork(network, stepCount, checkpoint);
 }

@@ -66,6 +66,23 @@ Game& Game::operator=(const Game& other)
     return *this;
 }
 
+Game::Game(Game&& other) noexcept
+    : _position(other._position)
+    , _positionStates(std::move(other._positionStates))
+{
+    assert(&other != this);
+}
+
+Game& Game::operator=(Game&& other) noexcept
+{
+    assert(&other != this);
+
+    _position = other._position;
+    _positionStates = std::move(other._positionStates);
+
+    return *this;
+}
+
 Game::~Game()
 {
 }
@@ -86,7 +103,7 @@ int Game::Ply() const
     return _position.game_ply();
 }
 
-float& Game::PolicyValue(OutputPlanesPtr policy, Move move) const
+float& Game::PolicyValue(OutputPlanes& policy, Move move) const
 {
     // If it's black to play, rotate the board and flip colors: always from the "current player's" perspective.
     Square from = RotateSquare(ToPlay(), from_sq(move));
@@ -135,12 +152,11 @@ InputPlanes Game::GenerateImage() const
 OutputPlanes Game::GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const
 {
     OutputPlanes policy = {};
-    OutputPlanesPtr policyPtr = reinterpret_cast<float(*)[8][8]>(policy.data());
 
     const Color toPlay = ToPlay();
     for (auto pair : childVisits)
     {
-        PolicyValue(policyPtr, pair.first) = pair.second;
+        PolicyValue(policy, pair.first) = pair.second;
     }
 
     return policy;

@@ -39,6 +39,13 @@ private:
     mutable int _sumChildVisits;
 };
 
+enum class SelfPlayState
+{
+    Working,
+    WaitingForPrediction,
+    Finished,
+};
+
 class SelfPlayGame : public Game
 {
 public:
@@ -49,11 +56,12 @@ public:
 public:
 
     SelfPlayGame();
+    SelfPlayGame(InputPlanes* image, float* value, OutputPlanes* policy);
 
     SelfPlayGame(const SelfPlayGame& other);
     SelfPlayGame& operator=(const SelfPlayGame& other);
-    SelfPlayGame(SelfPlayGame&& other) = delete;
-    SelfPlayGame& operator=(SelfPlayGame && other) = delete;
+    SelfPlayGame(SelfPlayGame&& other) noexcept;
+    SelfPlayGame& operator=(SelfPlayGame&& other) noexcept;
     ~SelfPlayGame();
 
     Node* Root() const;
@@ -63,32 +71,49 @@ public:
     
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
-    float ExpandAndEvaluate(INetwork* network);
+    float ExpandAndEvaluate(SelfPlayState& state);
     std::vector<float> Softmax(const std::vector<float>& logits) const;
     std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
-    StoredGame Store();
+    StoredGame Store() const;
 
 private:
 
     // Used for both real and scratch games.
     Node* _root;
+    InputPlanes* _image;
+    float* _value;
+    OutputPlanes* _policy;
 
+    // Stored history and statistics.
     // Only used for real games, so no need to copy.
     std::vector<std::unordered_map<Move, float>> _childVisits;
     std::vector<Move> _history;
+
+    // Coroutine state.
+    // Only used for real games, so no need to copy.
+    ExtMove _expandAndEvaluate_moves[MAX_MOVES];
+    ExtMove* _expandAndEvaluate_endMoves;
 };
 
-class Mcts
+class SelfPlayWorker
 {
 public:
 
-    Mcts(Storage* storage);
+    SelfPlayWorker();
 
-    void PlayGames(WorkCoordinator& workCoordinator, INetwork* network) const;
+    SelfPlayWorker(const SelfPlayWorker& other) = delete;
+    SelfPlayWorker& operator=(const SelfPlayWorker& other) = delete;
+    SelfPlayWorker(SelfPlayWorker&& other) = delete;
+    SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
+
+    void Initialize(Storage* storage);
+    void ResetGames();
+    void PlayGames(WorkCoordinator& workCoordinator, INetwork* network);
+    void SetUpGame(int index);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint) const;
-    bool Play(INetwork* network) const;
-    std::pair<Move, Node*> RunMcts(INetwork* network, SelfPlayGame& game) const;
+    void Play(int index);
+    std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, std::vector<Node*>& searchPath);
     void AddExplorationNoise(SelfPlayGame& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
@@ -99,6 +124,17 @@ public:
 private:
 
     Storage* _storage;
+
+    std::vector<SelfPlayState> _states;
+    std::vector<InputPlanes> _images;
+    std::vector<float> _values;
+    std::vector<OutputPlanes> _policies;
+
+    std::vector<SelfPlayGame> _games;
+    std::vector<SelfPlayGame> _scratchGames;
+    std::vector<std::chrono::steady_clock::time_point> _gameStarts;
+    std::vector<int> _mctsSimulations;
+    std::vector<std::vector<Node*>> _searchPaths;
 };
 
 #endif // _SELFPLAY_H_

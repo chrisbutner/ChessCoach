@@ -7,16 +7,10 @@ WorkCoordinator::WorkCoordinator(int workItemCount)
 
 void WorkCoordinator::OnWorkItemCompleted()
 {
-    std::lock_guard lock(_mutex);
-
-    if (--_workItemsRemaining <= 0)
-    {
-        _condition.notify_all();
-    }
+    --_workItemsRemaining;
 }
 
-void WorkCoordinator::Wait()
+bool WorkCoordinator::AllWorkItemsCompleted()
 {
-    std::unique_lock lock(_mutex);
-    _condition.wait(lock, [&] { return (_workItemsRemaining <= 0); });
+    return (_workItemsRemaining <= 0);
 }

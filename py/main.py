@@ -7,8 +7,6 @@ import os
 parser = argparse.ArgumentParser()
 args = parser.parse_args()
 
-print("Starting ChessCoach")
-
-print("Testing")
-game = storage.load_game(os.path.join(storage.games_path, "game_000000026"))
+print("Starting Python-ChessCoach")
+game = storage.load_game(os.path.join(storage.games_path, "game_000000111"))
 print(game.pgn())

@@ -52,15 +52,11 @@ def load_latest_network(network_path_handler):
   parent_path = networks_path
   _, directories, _ = next(os.walk(parent_path))
   for directory in reversed(directories): # Only load the latest.
-    network_path_handler(os.path.join(parent_path, directory))
-    break # Only load the latest.
-
-# There's some slight dead time between loading and watching. Don't worry about it for our use.
-def load_and_watch_networks(network_path_handler):
-  parent_path = networks_path
-  load_latest_network(network_path_handler)
-  Watcher(parent_path, network_path_handler, files=False, directories=True) # But still load each new one.
+    return network_path_handler(os.path.join(parent_path, directory))
+  return None
 
 def save_network(step, network):
   directory_name = "network_" + str(step).zfill(9)
-  network.model.save(os.path.join(networks_path, directory_name), include_optimizer=True, save_format="tf")
+  path = os.path.join(networks_path, directory_name)
+  network.model.save(path, include_optimizer=True, save_format="tf")
+  return path

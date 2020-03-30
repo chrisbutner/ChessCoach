@@ -4,8 +4,6 @@ High priority
 
 Performance
 - can reserve the training ararys in C++ Storage once rather than per training
-- try new architecture (N threads, each has BatchSize games in flight, ticks all, acquires GIL, batches up to python)
-- try C/C++ API for predictions (Windows? Linux?)
 - think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)
 - it might be faster to use 2-after-search-root repetition checks and throw away subtrees
   rather than use 3-repetition checks and keep them (even counting extra iterations)

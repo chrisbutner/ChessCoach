@@ -4,6 +4,7 @@
 #include <cassert>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
 
 template <class T>
 class SyncQueue
@@ -60,13 +61,11 @@ public:
     WorkCoordinator(int workItemCount);
 
     void OnWorkItemCompleted();
-    void Wait();
+    bool AllWorkItemsCompleted();
 
 private:
 
-    std::mutex _mutex;
-    std::condition_variable _condition;
-    int _workItemsRemaining;
+    std::atomic_int _workItemsRemaining;
 };
 
 #endif // _THREADING_H_

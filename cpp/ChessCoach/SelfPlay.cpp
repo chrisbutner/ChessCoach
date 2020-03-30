@@ -52,15 +52,26 @@ int Node::SumChildVisits() const
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
 // TODO: Also input/output planes? e.g. for StoredGames vector storage
 
+// Fast default-constructor with no resource ownership, used to size out vectors.
 SelfPlayGame::SelfPlayGame()
+{
+}
+
+SelfPlayGame::SelfPlayGame(InputPlanes* image, float* value, OutputPlanes* policy)
     : Game()
     , _root(new Node(0.f))
+    , _image(image)
+    , _value(value)
+    , _policy(policy)
 {
 }
 
 SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     : Game(other)
     , _root(other._root)
+    , _image(other._image)
+    , _value(other._value)
+    , _policy(other._policy)
 {
     assert(&other != this);
 }
@@ -72,6 +83,38 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
     Game::operator=(other);
 
     _root = other._root;
+    _image = other._image;
+    _value = other._value;
+    _policy = other._policy;
+
+    return *this;
+}
+
+SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
+    : Game(other)
+    , _root(other._root)
+    , _image(other._image)
+    , _value(other._value)
+    , _policy(other._policy)
+    , _childVisits()
+    , _history()
+{
+    assert(&other != this);
+}
+
+SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
+{
+    assert(&other != this);
+
+    Game::operator=(static_cast<Game&&>(other));
+
+    _root = other._root;
+    _image = other._image;
+    _value = other._value;
+    _policy = other._policy;
+    
+    _childVisits.clear();
+    _history.clear();
 
     return *this;
 }
@@ -115,7 +158,7 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     _history.push_back(move);
 }
 
-float SelfPlayGame::ExpandAndEvaluate(INetwork* network)
+float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
@@ -124,70 +167,72 @@ float SelfPlayGame::ExpandAndEvaluate(INetwork* network)
     // quickly return its terminal value on repeated visits.
     if (root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED)
     {
+        state = SelfPlayState::Working;
         return root->terminalValue;
     }
 
-    // Check for draw by 50-move or 3-repetition.
-    //
-    // Minimax engines check for (a) two-fold repetition strictly after the search root
-    // (e.g. search-root, rep-0, rep-1) or (b) three-fold repetition anywhere
-    // (e.g. rep-0, rep-1, search-root, rep-2) in order to terminate and prune efficiently.
-    //
-    // This doesn't work as well in MCTS because what was a draw at a given node at search-depth 5
-    // via case (a) (two-fold strictly after the search root) is no longer a draw at search-depth 1
-    // if the rep-0 move did not actually take place, but the node has already built up visits
-    // and backpropagated.
-    //
-    // Correspondingly, MCTS doesn't have the same need to prune searches, so it's just fine
-    // to solve the problem by waiting for actual 3-fold repetitions at all times. Stockfish
-    // already calculates this without additional cost.
-    if (_position.is_draw_mcts())
+    if (state == SelfPlayState::Working)
     {
-        root->terminalValue = CHESSCOACH_VALUE_DRAW;
-        return root->terminalValue;
-    }
+        // Check for draw by 50-move or 3-repetition.
+        //
+        // Minimax engines check for (a) two-fold repetition strictly after the search root
+        // (e.g. search-root, rep-0, rep-1) or (b) three-fold repetition anywhere
+        // (e.g. rep-0, rep-1, search-root, rep-2) in order to terminate and prune efficiently.
+        //
+        // This doesn't work as well in MCTS because what was a draw at a given node at search-depth 5
+        // via case (a) (two-fold strictly after the search root) is no longer a draw at search-depth 1
+        // if the rep-0 move did not actually take place, but the node has already built up visits
+        // and backpropagated.
+        //
+        // Correspondingly, MCTS doesn't have the same need to prune searches, so it's just fine
+        // to solve the problem by waiting for actual 3-fold repetitions at all times. Stockfish
+        // already calculates this without additional cost.
+        if (_position.is_draw_mcts())
+        {
+            state = SelfPlayState::Working;
+            root->terminalValue = CHESSCOACH_VALUE_DRAW;
+            return root->terminalValue;
+        }
 
-    // Generate legal moves.
-    ExtMove moves[MAX_MOVES];
-    ExtMove* endMoves = generate<LEGAL>(_position, moves);
+        // Generate legal moves.
+        _expandAndEvaluate_endMoves = generate<LEGAL>(_position, _expandAndEvaluate_moves);
 
-    // Check for checkmate and stalemate.
-    if (moves == endMoves)
-    {
-        root->terminalValue = (_position.checkers() ? CHESSCOACH_VALUE_LOSE : CHESSCOACH_VALUE_DRAW);
-        return root->terminalValue;
-    }
+        // Check for checkmate and stalemate.
+        if (_expandAndEvaluate_moves == _expandAndEvaluate_endMoves)
+        {
+            state = SelfPlayState::Working;
+            root->terminalValue = (_position.checkers() ? CHESSCOACH_VALUE_LOSE : CHESSCOACH_VALUE_DRAW);
+            return root->terminalValue;
+        }
 
-    // Not terminal, so expand the node with legal moves.
+        // Not terminal, so expand the node with legal moves.
 
-    // Get a prediction from the network - either the uniform policy or NN policy.
-    InputPlanes image = GenerateImage();
-    std::unique_ptr<IPrediction> prediction(network->Predict(image));
-    if (!prediction)
-    {
-        // Terminating self-play.
+        // Prepare for a prediction from the network.
+        *_image = GenerateImage();
+        state = SelfPlayState::WaitingForPrediction;
         return std::nanf("");
     }
-    const float value = prediction->Value();
-    const OutputPlanesPtr policy = reinterpret_cast<float(*)[8][8]>(prediction->Policy());
+
+    // Received a prediction from the network.
 
     // Index legal moves into the policy output planes to get logits,
     // then calculate softmax over them to get normalized probabilities for priors.
     std::vector<float> logits;
-    for (ExtMove* cur = moves; cur != endMoves; cur++)
+    for (ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
     {
-        logits.push_back(PolicyValue(policy, cur->move));
+        logits.push_back(PolicyValue(*_policy, cur->move));
     }
     std::vector<float> priors = Softmax(logits);
 
     // Expand child nodes with the calculated priors.
     int i = 0;
-    for (const ExtMove* cur = moves; cur != endMoves; cur++, i++)
+    for (const ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++, i++)
     {
         root->children[cur->move] = new Node(priors[i]);
     }
 
-    return value;
+    state = SelfPlayState::Working;
+    return *_value;
 }
 
 std::vector<float> SelfPlayGame::Softmax(const std::vector<float>& logits) const
@@ -260,27 +305,73 @@ void SelfPlayGame::StoreSearchStatistics()
     _childVisits.emplace_back(std::move(visits));
 }
 
-// Store() leaves the Game in an inconsistent state, w.r.t. _position vs. _positionStates vs. _history.
-// This is intentional laziness to avoid unnecessary housekeeping, since the Game will no longer be needed.
-StoredGame SelfPlayGame::Store()
+StoredGame SelfPlayGame::Store() const
 {
     return StoredGame(Result(), _history, _childVisits);
 }
 
-Mcts::Mcts(Storage* storage)
-    : _storage(storage)
+SelfPlayWorker::SelfPlayWorker()
+    : _storage(nullptr)
+    , _states(INetwork::PredictionBatchSize)
+    , _images(INetwork::PredictionBatchSize)
+    , _values(INetwork::PredictionBatchSize)
+    , _policies(INetwork::PredictionBatchSize)
+    , _games(INetwork::PredictionBatchSize)
+    , _scratchGames(INetwork::PredictionBatchSize)
+    , _gameStarts(INetwork::PredictionBatchSize)
+    , _mctsSimulations(INetwork::PredictionBatchSize, 0)
+    , _searchPaths(INetwork::PredictionBatchSize)
 {
+    ResetGames();
 }
 
-void Mcts::PlayGames(WorkCoordinator& workCoordinator, INetwork* network) const
+void SelfPlayWorker::Initialize(Storage* storage)
 {
-    while (Play(network))
+    _storage = storage;
+}
+
+void SelfPlayWorker::ResetGames()
+{
+    for (int i = 0; i < INetwork::PredictionBatchSize; i++)
     {
-        workCoordinator.OnWorkItemCompleted();
+        SetUpGame(i);
     }
 }
 
-void Mcts::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
+void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* network)
+{
+    while (!workCoordinator.AllWorkItemsCompleted())
+    {
+        // CPU work
+        for (int i = 0; i < _games.size(); i++)
+        {
+            Play(i);
+            if (_states[i] == SelfPlayState::Finished)
+            {
+                workCoordinator.OnWorkItemCompleted();
+
+                SetUpGame(i);
+                Play(i);
+            }
+            assert(_states[i] == SelfPlayState::WaitingForPrediction);
+        }
+        
+        // GPU work
+        network->PredictBatch(_images.data(), _values.data(), _policies.data());
+    }
+
+    // Clear away games in progress to ensure that new ones use the new network.
+    ResetGames();
+}
+
+void SelfPlayWorker::SetUpGame(int index)
+{
+    _states[index] = SelfPlayState::Working;
+    _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
+    _gameStarts[index] = std::chrono::high_resolution_clock::now();
+}
+
+void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
 {
     for (int step = checkpoint - stepCount + 1; step <= checkpoint; step++)
     {
@@ -296,83 +387,90 @@ void Mcts::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
     network->SaveNetwork(checkpoint);
 }
 
-bool Mcts::Play(INetwork* network) const
+void SelfPlayWorker::Play(int index)
 {
-    auto startGame = std::chrono::high_resolution_clock::now();
+    SelfPlayState& state = _states[index];
+    SelfPlayGame& game = _games[index];
 
-    SelfPlayGame game;
-    float check = game.ExpandAndEvaluate(network);
-    if (std::isnan(check))
+    if (!game.Root()->IsExpanded())
     {
-        // Terminating self-play.
-        return false;
+        game.ExpandAndEvaluate(state);
+        if (state == SelfPlayState::WaitingForPrediction)
+        {
+            return;
+        }
     }
 
     while (!game.IsTerminal())
     {
-        //auto startMcts = std::chrono::high_resolution_clock::now();
         Node* root = game.Root();
-        std::pair<Move, Node*> selected = RunMcts(network, game);
-        if (selected.second == nullptr)
+        std::pair<Move, Node*> selected = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index]);
+        if (state == SelfPlayState::WaitingForPrediction)
         {
-            // Terminating self-play.
-            return false;
+            return;
         }
+
+        assert(selected.second != nullptr);
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(selected.first, selected.second);
         Prune(root, selected.second /* == game.Root() */);
-        //std::cout << "MCTS, ply " << game.Ply() << ", time " <<
-        //    std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startMcts).count() << std::endl;
     }
 
     // Take care with ordering:
-    // - Store() wipes anything relying on the position, e.g. ply.
-    // - PruneAll() wipes anything relying on nodes, e.g. terminal value.
+    // - PruneAll() wipes anything relying on nodes, e.g. result.
     const int ply = game.Ply();
     const float result = game.Result();
     const int gameNumber = _storage->AddGame(game.Store());
     PruneAll(game.Root());
 
-    const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startGame).count();
+    const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);
     std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
 
-    return true;
+    state = SelfPlayState::Finished;
 }
 
-std::pair<Move, Node*> Mcts::RunMcts(INetwork* network, SelfPlayGame& game) const
+std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, std::vector<Node*>& searchPath)
 {
-    AddExplorationNoise(game);
-
-    for (int i = 0; i < Config::NumSimulations; i++)
+    for (; mctsSimulation < Config::NumSimulations; mctsSimulation++)
     {
-        SelfPlayGame scratchGame = game;
-        std::vector<Node*> searchPath{ scratchGame.Root() };
-
-        while (scratchGame.Root()->IsExpanded())
+        if (state == SelfPlayState::Working)
         {
-            std::pair<Move, Node*> selected = SelectChild(scratchGame.Root());
-            scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
-            searchPath.push_back(selected.second /* == scratchGame.Root() */);
+            if (mctsSimulation == 0)
+            {
+                AddExplorationNoise(game);
+            }
+
+            scratchGame = game;
+            searchPath = std::vector<Node*>{ scratchGame.Root() };
+
+            while (scratchGame.Root()->IsExpanded())
+            {
+                std::pair<Move, Node*> selected = SelectChild(scratchGame.Root());
+                scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
+                searchPath.push_back(selected.second /* == scratchGame.Root() */);
+            }
         }
 
         // The value we get is from the final node of the scratch game (could be WHITE or BLACK)
         // and we start applying it at the current position of the actual game (could again be WHITE or BLACK),
         // so flip it if they differ.
-        float value = scratchGame.ExpandAndEvaluate(network);
-        if (std::isnan(value))
+        float value = scratchGame.ExpandAndEvaluate(state);
+        if (state == SelfPlayState::WaitingForPrediction)
         {
-            // Terminating self-play.
             return std::pair(MOVE_NULL, nullptr);
         }
+
+        assert(!std::isnan(value));
         value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
     }
 
+    mctsSimulation = 0;
     return game.SelectMove();
 }
 
-void Mcts::AddExplorationNoise(SelfPlayGame& game) const
+void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
 {
     std::gamma_distribution<float> noise(Config::RootDirichletAlpha, 1.f);
     for (auto pair : game.Root()->children)
@@ -383,7 +481,7 @@ void Mcts::AddExplorationNoise(SelfPlayGame& game) const
     }
 }
 
-std::pair<Move, Node*> Mcts::SelectChild(const Node* parent) const
+std::pair<Move, Node*> SelfPlayWorker::SelectChild(const Node* parent) const
 {
     float maxUcbScore = -std::numeric_limits<float>::infinity();
     std::pair<Move, Node*> max;
@@ -400,7 +498,7 @@ std::pair<Move, Node*> Mcts::SelectChild(const Node* parent) const
 }
 
 // TODO: Profile, see if significant, whether vectorizing is viable/worth it
-float Mcts::CalculateUcbScore(const Node* parent, const Node* child) const
+float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) const
 {
     const float pbC = (std::logf((parent->visitCount + Config::PbCBase + 1.f) / Config::PbCBase) + Config::PbCInit) *
         std::sqrtf(static_cast<float>(parent->visitCount)) / (child->visitCount + 1.f);
@@ -408,7 +506,7 @@ float Mcts::CalculateUcbScore(const Node* parent, const Node* child) const
     return priorScore + child->Value();
 }
 
-void Mcts::Backpropagate(const std::vector<Node*>& searchPath, float value) const
+void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float value) const
 {
     // Each ply has a different player, so flip each time.
     for (Node* node : searchPath)
@@ -419,7 +517,7 @@ void Mcts::Backpropagate(const std::vector<Node*>& searchPath, float value) cons
     }
 }
 
-void Mcts::Prune(Node* root, Node* except) const
+void SelfPlayWorker::Prune(Node* root, Node* except) const
 {
     for (auto pair : root->children)
     {
@@ -431,7 +529,7 @@ void Mcts::Prune(Node* root, Node* except) const
     delete root;
 }
 
-void Mcts::PruneAll(Node* root) const
+void SelfPlayWorker::PruneAll(Node* root) const
 {
     for (auto pair : root->children)
     {

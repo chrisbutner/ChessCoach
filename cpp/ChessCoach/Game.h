@@ -61,14 +61,14 @@ public:
 
     Game(const Game& other);
     Game& operator=(const Game& other);
-    Game(Game&& other) = delete;
-    Game& operator=(Game && other) = delete;
+    Game(Game&& other) noexcept;
+    Game& operator=(Game && other) noexcept;
     ~Game();
 
     Color ToPlay() const;
     void ApplyMove(Move move);
     int Ply() const;
-    float& PolicyValue(OutputPlanesPtr policy, Move move) const;
+    float& PolicyValue(OutputPlanes& policy, Move move) const;
     InputPlanes GenerateImage() const;
     OutputPlanes GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const;
 

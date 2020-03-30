@@ -45,7 +45,7 @@ class AlphaZeroConfig(object):
     self.weight_decay = 1e-4
     self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
-    self.chesscoach_slowdown_factor = 100
+    self.chesscoach_slowdown_factor = 50
     self.learning_rate_schedule = {
         int(0 * self.chesscoach_training_factor): 2e-1 / self.chesscoach_slowdown_factor,
         int(100e3 * self.chesscoach_training_factor): 2e-2 / self.chesscoach_slowdown_factor,
@@ -76,10 +76,16 @@ class UniformNetwork(Network):
     self.latest_policies = None
 
   def predict_batch(self, image):
-    if ((self.latest_values is None) or (len(image) != len(self.latest_values))):
-      self.latest_values = numpy.full((len(image)), 0.5)
-      self.latest_policies = numpy.zeros((len(image), 73, 8, 8))
-    return self.latest_values, self.latest_policies
+    # Check both separately because of threading
+    values = self.latest_values
+    policies = self.latest_policies
+    if ((values is None) or (len(image) != len(values))):
+      values = numpy.full((len(image)), 0.5)
+      self.latest_values = values
+    if ((policies is None) or (len(image) != len(policies))):
+      policies = numpy.zeros((len(image), 73, 8, 8))
+      self.latest_policies = policies
+    return values, policies
 
 class TensorFlowNetwork(Network):
 
@@ -99,14 +105,9 @@ class TensorFlowNetwork(Network):
 ##### End Helpers ########
 ##########################
 
-config = AlphaZeroConfig()
-latest_network = None
-training_network = None
-
 def update_network_for_predictions(network_path):
   name = os.path.basename(os.path.normpath(network_path))
   print(f"Loading network (predictions): {name}...")
-  global latest_network
   while True:
     try:
       tf_model = tf.saved_model.load(network_path)
@@ -114,13 +115,13 @@ def update_network_for_predictions(network_path):
     except Exception as e:
       print("Exception:", e)
       time.sleep(0.25)
-  latest_network = TensorFlowNetwork(tf_model)
+  prediction_network = TensorFlowNetwork(tf_model)
   print(f"Loaded network (predictions): {name}")
+  return prediction_network
 
 def update_network_for_training(network_path):
   name = os.path.basename(os.path.normpath(network_path))
   print(f"Loading network (training): {name}...")
-  global training_network
   while True:
     try:
       # Work around bug: AttributeError: 'CategoricalCrossentropy' object has no attribute '__name__'
@@ -131,30 +132,26 @@ def update_network_for_training(network_path):
       time.sleep(0.25)
   training_network = KerasNetwork(keras_model)
   print(f"Loaded network (training): {name}")
+  return training_network
 
 def prepare_predictions():
-  global latest_network
-  if (not latest_network):
-    storage.load_and_watch_networks(update_network_for_predictions)
-  if (not latest_network):
-    latest_network = UniformNetwork()
+  prediction_network = storage.load_latest_network(update_network_for_predictions)
+  if (not prediction_network):
+    prediction_network = UniformNetwork()
     print("Loaded uniform network (predictions)")
+  return prediction_network
 
 def prepare_training():
-  global training_network
-  if (not training_network):
-    storage.load_latest_network(update_network_for_training)
+  training_network = storage.load_latest_network(update_network_for_training)
   if (not training_network):
     print("Creating new network (training)")
     training_network = KerasNetwork()
+  return training_network
 
 def predict_batch(image):
-  prepare_predictions()
-  return latest_network.predict_batch(image)
+  return prediction_network.predict_batch(image)
 
 def train_batch(step, images, values, policies):
-  prepare_training()
-
   new_learning_rate = config.learning_rate_schedule.get(step)
   if (new_learning_rate is not None):
     K.set_value(training_network.model.optimizer.lr, new_learning_rate)
@@ -164,5 +161,10 @@ def train_batch(step, images, values, policies):
 
 def save_network(checkpoint):
   print(f"Saving network ({checkpoint} steps)...")
-  storage.save_network(checkpoint, training_network)
+  path = storage.save_network(checkpoint, training_network)
   print(f"Saved network ({checkpoint} steps)")
+  update_network_for_predictions(path)
+
+config = AlphaZeroConfig()
+prediction_network = prepare_predictions()
+training_network = prepare_training()
