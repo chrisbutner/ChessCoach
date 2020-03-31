@@ -112,6 +112,7 @@ public:
     void ResetGames();
     void PlayGames(WorkCoordinator& workCoordinator, INetwork* network);
     void SetUpGame(int index);
+    void DebugGame(INetwork* network, int index, const StoredGame& stored, int startingPly);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint) const;
     void Play(int index);
     std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, std::vector<Node*>& searchPath);

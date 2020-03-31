@@ -33,6 +33,7 @@ void FinalizeStockfish();
 void TrainChessCoach();
 void PlayGames(std::vector<SelfPlayWorker>& workers, INetwork* network, int gamesPerNetwork);
 void TrainNetwork(const SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
+void DebugGame();
 
 int main(int argc, char* argv[])
 {
@@ -158,4 +159,17 @@ void PlayGames(std::vector<SelfPlayWorker>& selfPlayWorkers, INetwork* network, 
 void TrainNetwork(const SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
 {
     selfPlayWorker.TrainNetwork(network, stepCount, checkpoint);
+}
+
+void DebugGame()
+{
+    Storage storage;
+
+    SelfPlayWorker worker;
+    worker.Initialize(&storage);
+
+    std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
+
+    StoredGame stored = storage.LoadFromDisk("path_to_game");
+    worker.DebugGame(network.get(), 0, stored, 23);
 }

@@ -1,14 +1,16 @@
 High priority
 - make sure we can get to 500-step networks without exploding losses/gradients
-- add additional input planes (beyond just pieces) - make sure it's no less stable
 
 Performance
+- game/mcts timing is slightly skewed across training (@ResetGames)
+- break down MCTS timing details just in case anything's off (C++ Profiler class?)
 - can reserve the training ararys in C++ Storage once rather than per training
 - think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)
 - it might be faster to use 2-after-search-root repetition checks and throw away subtrees
   rather than use 3-repetition checks and keep them (even counting extra iterations)
 
 Training quality
+- add additional input planes (beyond just pieces) - make sure it's no less stable
 - try to get tensorboard integrated despite the C++ stuff?
 - save PGNs for non-draws (or just every N games, need to observe)
 

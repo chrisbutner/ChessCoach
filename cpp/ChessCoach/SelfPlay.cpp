@@ -40,7 +40,7 @@ int Node::SumChildVisits() const
 {
     if (_sumChildVisits == 0)
     {
-        for (auto pair : children)
+        for (const auto& pair : children)
         {
             _sumChildVisits += pair.second->visitCount;
         }
@@ -270,7 +270,7 @@ std::pair<Move, Node*> SelfPlayGame::SelectMove() const
         // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
         const int sumChildVisits = _root->SumChildVisits();
         int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random);
-        for (auto pair : _root->children)
+        for (const auto& pair : _root->children)
         {
             const int visitCount = pair.second->visitCount;
             if (sample < visitCount)
@@ -287,7 +287,7 @@ std::pair<Move, Node*> SelfPlayGame::SelectMove() const
         // Use temperature=inf; i.e., just select the most visited.
         int maxVisitCount = std::numeric_limits<int>::min();
         std::pair<Move, Node*> maxVisited;
-        for (auto pair : _root->children)
+        for (const auto& pair : _root->children)
         {
             const int visitCount = pair.second->visitCount;
             if (visitCount > maxVisitCount)
@@ -305,7 +305,7 @@ void SelfPlayGame::StoreSearchStatistics()
 {
     std::unordered_map<Move, float> visits;
     const int sumVisits = _root->SumChildVisits();
-    for (auto pair : _root->children)
+    for (const auto& pair : _root->children)
     {
         visits[pair.first] = static_cast<float>(pair.second->visitCount) / sumVisits;
     }
@@ -378,6 +378,24 @@ void SelfPlayWorker::SetUpGame(int index)
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
 }
 
+void SelfPlayWorker::DebugGame(INetwork* network, int index, const StoredGame& stored, int startingPly)
+{
+    SetUpGame(index);
+
+    SelfPlayGame& game = _games[index];
+    for (int i = 0; i < startingPly; i++)
+    {
+        game.ApplyMove(Move(stored.moves[i]));
+    }
+
+    while (true)
+    {
+        Play(index);
+        assert(_states[index] == SelfPlayState::WaitingForPrediction);
+        network->PredictBatch(_images.data(), _values.data(), _policies.data());
+    }
+}
+
 void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
 {
     for (int step = checkpoint - stepCount + 1; step <= checkpoint; step++)
@@ -446,6 +464,12 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             if (mctsSimulation == 0)
             {
                 AddExplorationNoise(game);
+
+#if DEBUG_MCTS
+                std::cout << "(Ready for ply " << game.Ply() << "...)" << std::endl;
+                std::string _;
+                std::getline(std::cin, _);
+#endif
             }
 
             scratchGame = game;
@@ -456,6 +480,9 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
                 std::pair<Move, Node*> selected = SelectChild(scratchGame.Root());
                 scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
                 searchPath.push_back(selected.second /* == scratchGame.Root() */);
+#if DEBUG_MCTS
+                std::cout << Game::SquareName[from_sq(selected.first)] << Game::SquareName[to_sq(selected.first)] << "(" << selected.second->visitCount << "), ";
+#endif
             }
         }
 
@@ -471,6 +498,10 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         assert(!std::isnan(value));
         value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
+
+#if DEBUG_MCTS
+        std::cout << "prior " << scratchGame.Root()->originalPrior << ", noisy prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
+#endif
     }
 
     mctsSimulation = 0;
@@ -480,7 +511,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
 void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
 {
     std::gamma_distribution<float> noise(Config::RootDirichletAlpha, 1.f);
-    for (auto pair : game.Root()->children)
+    for (const auto& pair : game.Root()->children)
     {
         Node* child = pair.second;
         const float childNoise = noise(SelfPlayGame::Random);
@@ -492,7 +523,7 @@ std::pair<Move, Node*> SelfPlayWorker::SelectChild(const Node* parent) const
 {
     float maxUcbScore = -std::numeric_limits<float>::infinity();
     std::pair<Move, Node*> max;
-    for (auto pair : parent->children)
+    for (const auto& pair : parent->children)
     {
         const float ucbScore = CalculateUcbScore(parent, pair.second);
         if (ucbScore > maxUcbScore)
@@ -526,7 +557,7 @@ void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float v
 
 void SelfPlayWorker::Prune(Node* root, Node* except) const
 {
-    for (auto pair : root->children)
+    for (auto& pair : root->children)
     {
         if (pair.second != except)
         {
@@ -538,7 +569,7 @@ void SelfPlayWorker::Prune(Node* root, Node* except) const
 
 void SelfPlayWorker::PruneAll(Node* root) const
 {
-    for (auto pair : root->children)
+    for (auto& pair : root->children)
     {
         PruneAll(pair.second);
     }

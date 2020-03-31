@@ -11,7 +11,12 @@ typedef std::array<std::array<std::array<float, 8>, 8>, 73> OutputPlanes;
 
 struct INetwork
 {
-    static const int PredictionBatchSize = 64;
+    static const int PredictionBatchSize =
+#ifdef _DEBUG
+        1;
+#else
+        64;
+#endif
 
     virtual ~INetwork() {};
 

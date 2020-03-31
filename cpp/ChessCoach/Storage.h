@@ -53,12 +53,12 @@ public:
     TrainingBatch SampleBatch() const;
     int GamesPlayed() const;
     int CountNetworks() const;
+    StoredGame LoadFromDisk(const std::string& path) const;
         
 private:
 
     int AddGameWithoutSaving(StoredGame&& game);
     void SaveToDisk(const StoredGame& game, int gameNumber) const;
-    StoredGame LoadFromDisk(std::string path) const;
 
 private:
 

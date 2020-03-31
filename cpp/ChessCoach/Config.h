@@ -1,6 +1,8 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
+#define DEBUG_MCTS 0
+
 struct Config
 {
     static int BatchSize;

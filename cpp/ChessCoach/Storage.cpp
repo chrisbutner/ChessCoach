@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <iostream>
 
 #include "Config.h"
 
@@ -61,7 +62,6 @@ Storage::Storage()
     assert(!error);
 }
 
-#include <iostream>
 void Storage::LoadExistingGames()
 {
 #ifdef _DEBUG
@@ -201,7 +201,7 @@ void Storage::SaveToDisk(const StoredGame& game, int gameNumber) const
     }
 }
 
-StoredGame Storage::LoadFromDisk(std::string path) const
+StoredGame Storage::LoadFromDisk(const std::string& path) const
 {
     std::ifstream file = std::ifstream(path, std::ios::in | std::ios::binary);
 
