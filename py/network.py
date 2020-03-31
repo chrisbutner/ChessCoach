@@ -80,10 +80,10 @@ class UniformNetwork(Network):
     values = self.latest_values
     policies = self.latest_policies
     if ((values is None) or (len(image) != len(values))):
-      values = numpy.full((len(image)), 0.5)
+      values = numpy.full((len(image)), 0.5, dtype=numpy.float32)
       self.latest_values = values
     if ((policies is None) or (len(image) != len(policies))):
-      policies = numpy.zeros((len(image), 73, 8, 8))
+      policies = numpy.zeros((len(image), 73, 8, 8), dtype=numpy.float32)
       self.latest_policies = policies
     return values, policies
 
