@@ -495,8 +495,26 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             return std::pair(MOVE_NULL, nullptr);
         }
 
+        // Always value a node from the parent's to-play perspective.
+        //
+        // E.g. imagine it's white to play (game.ToPlay()) and white makes the move a4,
+        // which results in a new position with black to play (scratchGame.ToPlay()).
+        // The network values this position as very bad for black (say 0.1). This means
+        // it's very good for white (0.9), so white should continue visiting this child node.
+        //
+        // Or, imagine it's white to play and they have a mate-in-one. From black's perspective,
+        // in the resulting position, it's a loss (0.0) because they're in check and have no moves,
+        // thus no child nodes. This is a win for white (1.0), so white should continue visiting this
+        // child node.
+        //
+        // It's important to keep the following values in sign/direction parity, for a single child position
+        // (all should tend to be high, or all should tend to be low):
+        // - visits
+        // - network policy prediction (prior)
+        // - network value prediction (valueSum / visitCount, back-propagated)
+        // - terminal valuation (valueSum / visitCount, back-propagated)
         assert(!std::isnan(value));
-        value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
+        value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ ~scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
 
 #if DEBUG_MCTS
