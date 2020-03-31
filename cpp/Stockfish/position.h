@@ -157,9 +157,6 @@ public:
   bool is_chess960() const;
   Thread* this_thread() const;
   bool is_draw(int ply) const;
-  // cbutner-start
-  bool is_draw_mcts() const;
-  // cbutner-finish
   bool has_game_cycle(int ply) const;
   bool has_repeated() const;
   int rule50_count() const;

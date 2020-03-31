@@ -54,6 +54,11 @@ int Node::SumChildVisits() const
 
 // Fast default-constructor with no resource ownership, used to size out vectors.
 SelfPlayGame::SelfPlayGame()
+    : _root(nullptr)
+    , _image(nullptr)
+    , _value(nullptr)
+    , _policy(nullptr)
+    , _searchRootPly(0)
 {
 }
 
@@ -63,6 +68,7 @@ SelfPlayGame::SelfPlayGame(InputPlanes* image, float* value, OutputPlanes* polic
     , _image(image)
     , _value(value)
     , _policy(policy)
+    , _searchRootPly(0)
 {
 }
 
@@ -72,6 +78,7 @@ SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
+    , _searchRootPly(other.Ply())
 {
     assert(&other != this);
 }
@@ -86,6 +93,7 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
+    _searchRootPly = other.Ply();
 
     return *this;
 }
@@ -96,8 +104,9 @@ SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
-    , _childVisits()
-    , _history()
+    , _searchRootPly(other._searchRootPly)
+    , _childVisits(std::move(other._childVisits))
+    , _history(std::move(other._history))
 {
     assert(&other != this);
 }
@@ -112,9 +121,9 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
-    
-    _childVisits.clear();
-    _history.clear();
+    _searchRootPly = other._searchRootPly;
+    _childVisits = std::move(other._childVisits);
+    _history = std::move(other._history);
 
     return *this;
 }
@@ -175,19 +184,17 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state)
     {
         // Check for draw by 50-move or 3-repetition.
         //
-        // Minimax engines check for (a) two-fold repetition strictly after the search root
+        // Stockfish checks for (a) two-fold repetition strictly after the search root
         // (e.g. search-root, rep-0, rep-1) or (b) three-fold repetition anywhere
         // (e.g. rep-0, rep-1, search-root, rep-2) in order to terminate and prune efficiently.
         //
-        // This doesn't work as well in MCTS because what was a draw at a given node at search-depth 5
-        // via case (a) (two-fold strictly after the search root) is no longer a draw at search-depth 1
-        // if the rep-0 move did not actually take place, but the node has already built up visits
-        // and backpropagated.
+        // We can use the same logic safely because we're path-dependent: no post-search valuations
+        // are hashed purely by position (only network-dependent predictions, potentially),
+        // and nodes with identical positions reached differently are distinct in the tree.
         //
-        // Correspondingly, MCTS doesn't have the same need to prune searches, so it's just fine
-        // to solve the problem by waiting for actual 3-fold repetitions at all times. Stockfish
-        // already calculates this without additional cost.
-        if (_position.is_draw_mcts())
+        // This saves time in the 800-simulation budget for more useful exploration.
+        const int plyToSearchRoot = (Ply() - _searchRootPly);
+        if (_position.is_draw(plyToSearchRoot))
         {
             state = SelfPlayState::Working;
             root->terminalValue = CHESSCOACH_VALUE_DRAW;

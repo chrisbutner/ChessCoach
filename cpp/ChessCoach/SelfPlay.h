@@ -84,6 +84,7 @@ private:
     InputPlanes* _image;
     float* _value;
     OutputPlanes* _policy;
+    int _searchRootPly;
 
     // Stored history and statistics.
     // Only used for real games, so no need to copy.
