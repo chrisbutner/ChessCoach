@@ -45,7 +45,7 @@ class AlphaZeroConfig(object):
     self.weight_decay = 1e-4
     self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
-    self.chesscoach_slowdown_factor = 50
+    self.chesscoach_slowdown_factor = 5
     self.learning_rate_schedule = {
         int(0 * self.chesscoach_training_factor): 2e-1 / self.chesscoach_slowdown_factor,
         int(100e3 * self.chesscoach_training_factor): 2e-2 / self.chesscoach_slowdown_factor,
@@ -160,10 +160,11 @@ def train_batch(step, images, values, policies):
   print(f"Loss: {str(losses[0]).rjust(10)} (Value: {str(losses[1]).rjust(10)}, Policy: {str(losses[2]).rjust(10)})")
 
 def save_network(checkpoint):
+  global prediction_network
   print(f"Saving network ({checkpoint} steps)...")
   path = storage.save_network(checkpoint, training_network)
   print(f"Saved network ({checkpoint} steps)")
-  update_network_for_predictions(path)
+  prediction_network = update_network_for_predictions(path)
 
 config = AlphaZeroConfig()
 prediction_network = prepare_predictions()
