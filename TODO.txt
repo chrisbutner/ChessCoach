@@ -2,7 +2,6 @@ High priority
 - make sure we can get to 500-step networks without exploding losses/gradients
 
 Performance
-- game/mcts timing is slightly skewed across training (@ResetGames)
 - break down MCTS timing details just in case anything's off (C++ Profiler class?)
 - can reserve the training ararys in C++ Storage once rather than per training
 - think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)

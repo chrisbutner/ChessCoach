@@ -329,7 +329,6 @@ SelfPlayWorker::SelfPlayWorker()
     , _mctsSimulations(INetwork::PredictionBatchSize, 0)
     , _searchPaths(INetwork::PredictionBatchSize)
 {
-    ResetGames();
 }
 
 void SelfPlayWorker::Initialize(Storage* storage)
@@ -347,6 +346,9 @@ void SelfPlayWorker::ResetGames()
 
 void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* network)
 {
+    // Clear away old games in progress to ensure that new ones use the new network.
+    ResetGames();
+
     while (!workCoordinator.AllWorkItemsCompleted())
     {
         // CPU work
@@ -366,9 +368,6 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
         // GPU work
         network->PredictBatch(_images.data(), _values.data(), _policies.data());
     }
-
-    // Clear away games in progress to ensure that new ones use the new network.
-    ResetGames();
 }
 
 void SelfPlayWorker::SetUpGame(int index)
