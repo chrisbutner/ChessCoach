@@ -43,9 +43,9 @@ class AlphaZeroConfig(object):
     self.window_size = int(1e6)
 
     self.weight_decay = 1e-4
-    self.momentum = 0.9
+    #self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
-    self.chesscoach_slowdown_factor = 5
+    self.chesscoach_slowdown_factor = 500
     self.learning_rate_schedule = {
         int(0 * self.chesscoach_training_factor): 2e-1 / self.chesscoach_slowdown_factor,
         int(100e3 * self.chesscoach_training_factor): 2e-2 / self.chesscoach_slowdown_factor,
@@ -62,7 +62,7 @@ class KerasNetwork(Network):
 
   def __init__(self, model=None):
     self.model = model or ChessCoachModel().build()
-    optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=config.learning_rate_schedule[0])
     losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
     self.model.compile(optimizer=optimizer, loss=losses)
 

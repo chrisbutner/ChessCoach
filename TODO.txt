@@ -5,13 +5,11 @@ Performance
 - break down MCTS timing details just in case anything's off (C++ Profiler class?)
 - can reserve the training ararys in C++ Storage once rather than per training
 - think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)
-- it might be faster to use 2-after-search-root repetition checks and throw away subtrees
-  rather than use 3-repetition checks and keep them (even counting extra iterations)
 
 Training quality
 - add additional input planes (beyond just pieces) - make sure it's no less stable
 - try to get tensorboard integrated despite the C++ stuff?
-- save PGNs for non-draws (or just every N games, need to observe)
+- run tournaments against stockfish or something known/lower to estimate Elo
 
 Code quality
 - constant-ize the 12/X/73 everywhere
@@ -37,10 +35,9 @@ Improvements
 	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
 
 UCI
-- (New: Probably just wrap the C++ with UCI now? Can kill python-installer, etc.)
-- Need to make TF/etc. silent
-- Integrate sync-UCI hack with trained model
-- Split out UCI thread so infinite think, ponder, etc. can workers
+- Wrap the C++ with UCI now
+	- Need to make TF/etc. silent
+	- Work out own threading mechanism or piggyback on Stockfish's if possible
 - Implement infinite think, ponder, time controls
 - Implement endgame tablebases (invisible/external to the training loop?)
 - Switch from python-chess to own board, movegen, etc. (or be sure of GPLv3 static vs. dynamic)
