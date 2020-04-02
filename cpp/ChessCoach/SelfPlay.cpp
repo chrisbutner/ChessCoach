@@ -280,7 +280,7 @@ std::pair<Move, Node*> SelfPlayGame::SelectMove() const
             sample -= visitCount;
         }
         assert(false);
-        return std::pair(MOVE_NULL, nullptr);
+        return std::pair(MOVE_NONE, nullptr);
     }
     else
     {
@@ -491,7 +491,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         float value = scratchGame.ExpandAndEvaluate(state);
         if (state == SelfPlayState::WaitingForPrediction)
         {
-            return std::pair(MOVE_NULL, nullptr);
+            return std::pair(MOVE_NONE, nullptr);
         }
 
         // Always value a node from the parent's to-play perspective.

@@ -26,10 +26,18 @@ public:
             NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE },
     };
 
-    constexpr static Square RotateSquare(Color color, Square square)
+    constexpr static Move FlipMove(Color color, Move move)
     {
-        return Square(square + color * (SQUARE_NB - 1 - 2 * square));
+        return Move(static_cast<int>(move) ^ FlipMoveMask[color]);
     }
+
+    constexpr static Square FlipSquare(Color color, Square square)
+    {
+        return Square(static_cast<int>(square) ^ FlipSquareMask[color]);
+    }
+
+    constexpr const static int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
+    constexpr const static int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
 
     // TODO: Later optimization idea to benchmark: could allocate one extra plane,
     // let the -1s go in without branching, then pass [1] reinterpreted to consumers

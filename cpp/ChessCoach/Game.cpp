@@ -105,9 +105,10 @@ int Game::Ply() const
 
 float& Game::PolicyValue(OutputPlanes& policy, Move move) const
 {
-    // If it's black to play, rotate the board and flip colors: always from the "current player's" perspective.
-    Square from = RotateSquare(ToPlay(), from_sq(move));
-    Square to = RotateSquare(ToPlay(), to_sq(move));
+    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
+    move = FlipMove(ToPlay(), move);
+    Square from = from_sq(move);
+    Square to = to_sq(move);
 
     int plane;
     PieceType promotion;
@@ -130,13 +131,13 @@ InputPlanes Game::GenerateImage() const
 {
     InputPlanes image = {};
 
-    // If it's black to play, rotate the board and flip colors: always from the "current player's" perspective.
+    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = ToPlay();
     for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
     {
         for (File file = FILE_A; file <= FILE_H; ++file)
         {
-            Piece piece = FlipPiece[toPlay][_position.piece_on(RotateSquare(toPlay, make_square(file, rank)))];
+            Piece piece = FlipPiece[toPlay][_position.piece_on(FlipSquare(toPlay, make_square(file, rank)))];
             int plane = ImagePiecePlane[piece];
             if (plane != NO_PLANE)
             {
@@ -153,7 +154,6 @@ OutputPlanes Game::GeneratePolicy(const std::unordered_map<Move, float>& childVi
 {
     OutputPlanes policy = {};
 
-    const Color toPlay = ToPlay();
     for (auto pair : childVisits)
     {
         PolicyValue(policy, pair.first) = pair.second;
