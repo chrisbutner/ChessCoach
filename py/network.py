@@ -9,7 +9,7 @@ import tensorflow as tf
 from tensorflow.python.saved_model import signature_constants
 from tensorflow.keras import backend as K
 
-from model import ChessCoachModel, OutputValueName, OutputPolicyName
+from model import ChessCoachModel
 from profiler import Profiler
 import storage
 import game
@@ -20,29 +20,10 @@ import game
 class AlphaZeroConfig(object):
 
   def __init__(self):
-    ### Self-Play
-    self.num_actors = 5000
-
-    self.num_sampling_moves = 30
-    self.max_moves = 512  # for chess and shogi, 722 for Go.
-    self.num_simulations = 800
-
-    # Root prior exploration noise.
-    self.root_dirichlet_alpha = 0.3  # for chess, 0.03 for Go and 0.15 for shogi.
-    self.root_exploration_fraction = 0.25
-
-    # UCB formula
-    self.pb_c_base = 19652
-    self.pb_c_init = 1.25
-
     ### Training
     self.batch_size = 2048 # OOM on GTX 1080 @ 4096
     self.chesscoach_training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
-    self.training_steps = int(700e3 * self.chesscoach_training_factor)
-    self.checkpoint_interval = 10 #int(1e3) # Currently training about 10x as slowly as AlphaZero, but self-play 100x+, so reduce accordingly.
-    self.window_size = int(1e6)
 
-    self.weight_decay = 1e-4
     #self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
     self.chesscoach_slowdown_factor = 500
@@ -83,7 +64,7 @@ class UniformNetwork(Network):
       values = numpy.full((len(image)), 0.5, dtype=numpy.float32)
       self.latest_values = values
     if ((policies is None) or (len(image) != len(policies))):
-      policies = numpy.zeros((len(image), 73, 8, 8), dtype=numpy.float32)
+      policies = numpy.zeros((len(image), ChessCoachModel.output_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
       self.latest_policies = policies
     return values, policies
 
@@ -97,7 +78,7 @@ class TensorFlowNetwork(Network):
   def predict_batch(self, image):
     image = tf.constant(image)
     prediction = self.function(image)
-    value, policy = prediction[OutputValueName], prediction[OutputPolicyName]
+    value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
     value = game.map_11_to_01(numpy.array(value))
     policy = numpy.array(policy)
     return value, policy

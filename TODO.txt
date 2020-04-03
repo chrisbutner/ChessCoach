@@ -1,22 +1,25 @@
-High priority
-- make sure we can get to 500-step networks without exploding losses/gradients
+Next
+- try batch renormalization
+- try squeeze/excite
+- think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)
+- experiment with endgame tablebases integrated
 
 Performance
 - break down MCTS timing details just in case anything's off (C++ Profiler class?)
-- can reserve the training ararys in C++ Storage once rather than per training
-- think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)
+- can reserve the training arrays in C++ Storage once rather than per training
+- try 16-bit for self-play - need to look up weight compatibility
 
 Training quality
-- add additional input planes (beyond just pieces) - make sure it's no less stable
 - try to get tensorboard integrated despite the C++ stuff?
 - run tournaments against stockfish or something known/lower to estimate Elo
+- Integrate Strategic Test Suite (STS) - wait for UCI first or no?
 
 Code quality
-- constant-ize the 12/X/73 everywhere
 - unify config across C++/Python
 - privatize C++ methods (got too python-brained)
 
 Scalability
+- can't play enough self-play games, work on new ideas soon
 - can't afford 1 million games in the window (RAM or disk), work something out
 
 C++

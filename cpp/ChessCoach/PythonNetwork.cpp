@@ -66,7 +66,7 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     PythonContext context;
 
     // Make the predict call.
-    npy_intp imageDims[4]{ PredictionBatchSize, 12, 8, 8 };
+    npy_intp imageDims[4]{ PredictionBatchSize, InputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
     assert(pythonImages);
@@ -89,11 +89,10 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     assert(PyArray_Check(pythonPolicies));
 
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
-    float(*pythonPoliciesPtr)[73][8][8] = reinterpret_cast<float(*)[73][8][8]>(PyArray_DATA(pythonPoliciesArray));
+    float* pythonPoliciesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonPoliciesArray));
 
-    const int policyCount = PredictionBatchSize * 73 * 8 * 8;
-    std::copy(reinterpret_cast<float*>(pythonPoliciesPtr), reinterpret_cast<float*>(pythonPoliciesPtr) + policyCount,
-        reinterpret_cast<float*>(policies));
+    const int policyCount = (PredictionBatchSize * OutputPlanesFloatCount);
+    std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<float*>(policies));
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonImages);
@@ -106,7 +105,7 @@ void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* valu
     PyObject* pythonStep = PyLong_FromLong(step);
     assert(pythonStep);
 
-    npy_intp imageDims[4]{ Config::BatchSize, 12, 8, 8 };
+    npy_intp imageDims[4]{ Config::BatchSize, InputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
     assert(pythonImages);
@@ -116,7 +115,7 @@ void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* valu
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
     assert(pythonValues);
 
-    npy_intp policyDims[4]{ Config::BatchSize, 73, 8, 8 };
+    npy_intp policyDims[4]{ Config::BatchSize, OutputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonPolicies = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policies);
     assert(pythonPolicies);

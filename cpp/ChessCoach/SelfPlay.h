@@ -56,7 +56,7 @@ public:
 public:
 
     SelfPlayGame();
-    SelfPlayGame(InputPlanes* image, float* value, OutputPlanes* policy);
+    SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
 
     SelfPlayGame(const SelfPlayGame& other);
     SelfPlayGame& operator=(const SelfPlayGame& other);
@@ -81,9 +81,9 @@ private:
 
     // Used for both real and scratch games.
     Node* _root;
-    InputPlanes* _image;
+    INetwork::InputPlanes* _image;
     float* _value;
-    OutputPlanes* _policy;
+    INetwork::OutputPlanes* _policy;
     int _searchRootPly;
 
     // Stored history and statistics.
@@ -128,9 +128,9 @@ private:
     Storage* _storage;
 
     std::vector<SelfPlayState> _states;
-    std::vector<InputPlanes> _images;
+    std::vector<INetwork::InputPlanes> _images;
     std::vector<float> _values;
-    std::vector<OutputPlanes> _policies;
+    std::vector<INetwork::OutputPlanes> _policies;
 
     std::vector<SelfPlayGame> _games;
     std::vector<SelfPlayGame> _scratchGames;

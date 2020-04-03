@@ -62,7 +62,7 @@ SelfPlayGame::SelfPlayGame()
 {
 }
 
-SelfPlayGame::SelfPlayGame(InputPlanes* image, float* value, OutputPlanes* policy)
+SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
     : Game()
     , _root(new Node(0.f))
     , _image(image)

@@ -6,11 +6,22 @@
 
 #include "Config.h"
 
-typedef std::array<std::array<std::array<float, 8>, 8>, 12> InputPlanes;
-typedef std::array<std::array<std::array<float, 8>, 8>, 73> OutputPlanes;
-
 struct INetwork
 {
+    static const int BoardSide = 8;
+    static const int InputPlaneCount = 25;
+    static const int OutputPlaneCount = 73;
+
+    static const int InputPreviousMoveCount = 8;
+
+    static const int PlaneFloatCount = BoardSide * BoardSide;
+    static const int InputPlanesFloatCount = PlaneFloatCount * InputPlaneCount;
+    static const int OutputPlanesFloatCount = PlaneFloatCount * OutputPlaneCount;
+
+    typedef std::array <std::array<float, BoardSide>, BoardSide> Plane;
+    typedef std::array<Plane, InputPlaneCount> InputPlanes;
+    typedef std::array<Plane, OutputPlaneCount> OutputPlanes;
+
     static const int PredictionBatchSize =
 #ifdef _DEBUG
         1;

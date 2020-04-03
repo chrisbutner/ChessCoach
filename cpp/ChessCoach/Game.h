@@ -39,9 +39,13 @@ public:
     constexpr const static int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
     constexpr const static int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
 
+    constexpr static CastlingRights KingsideRights[COLOR_NB] = { WHITE_OO, BLACK_OO };
+    constexpr static CastlingRights QueensideRights[COLOR_NB] = { WHITE_OOO, BLACK_OOO };
+
     // TODO: Later optimization idea to benchmark: could allocate one extra plane,
     // let the -1s go in without branching, then pass [1] reinterpreted to consumers
     const static int NO_PLANE = -1;
+    const static int InputPiecePlaneCount = 12;
 
     constexpr static int ImagePiecePlane[PIECE_NB] =
     {
@@ -87,15 +91,21 @@ public:
     Color ToPlay() const;
     void ApplyMove(Move move);
     int Ply() const;
-    float& PolicyValue(OutputPlanes& policy, Move move) const;
-    InputPlanes GenerateImage() const;
-    OutputPlanes GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const;
+    float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
+    INetwork::InputPlanes GenerateImage() const;
+    INetwork::OutputPlanes GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const;
+
+private:
+
+    void FillPlane(INetwork::Plane& plane, float value) const;
 
 protected:
 
     // Used for both real and scratch games.
     Position _position;
     StateListPtr _positionStates;
+    std::vector<Move> _previousMoves;
+    int _previousMovesOldest;
 };
 
 #endif // _GAME_H_

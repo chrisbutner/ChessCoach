@@ -1,15 +1,22 @@
 import tensorflow as tf
 
-# TODO: lots of redundancy in regularizer, config stuff - extract out
-InputName = "Input"
-OutputValueName = "OutputValue"
-OutputPolicyName = "OutputPolicy"
-
 class ChessCoachModel:
 
+  board_side = 8
+  input_planes_count = 25
+  output_planes_count = 73
+  residual_count = 7 # 19 for full AlphaZero
+  filter_count = 256
+  dense_count = 256
+  weight_decay = 1e-4
+
+  input_name = "Input"
+  output_value_name = "OutputValue"
+  output_policy_name = "OutputPolicy"
+
   def build_residual_piece(self, x):
-    x = tf.keras.layers.Conv2D(filters=256, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
+    x = tf.keras.layers.Conv2D(filters=self.filter_count, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
+      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(x)
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     return x
 
@@ -22,32 +29,36 @@ class ChessCoachModel:
     return x
 
   def build(self):
-    input = tf.keras.layers.Input(shape=(12,8,8), name=InputName) # Just pieces for now; dtype?
+    input = tf.keras.layers.Input(shape=(self.input_planes_count, self.board_side, self.board_side), dtype="float32", name=self.input_name)
 
-    x = tf.keras.layers.Conv2D(filters=256, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(input)
+    # Initial convolutional layer
+    x = tf.keras.layers.Conv2D(filters=self.filter_count, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
+      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(input)
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     x = tf.keras.layers.ReLU()(x)
 
-    for _ in range(7): # 19 for full AlphaZero
+    # Residual layers
+    for _ in range(self.residual_count):
       x = self.build_residual_block(x)
     tower = x
 
+    # Value head
     x = tf.keras.layers.Conv2D(filters=1, kernel_size=(1,1), strides=1, data_format="channels_first", 
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(tower)
+      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(tower)
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     x = tf.keras.layers.ReLU()(x)
     x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(1e-4), activation="relu")(x)
-    value = tf.keras.layers.Dense(1, kernel_regularizer=tf.keras.regularizers.l2(1e-4), activation="tanh", name=OutputValueName)(x)
+    x = tf.keras.layers.Dense(self.dense_count, kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), activation="relu")(x)
+    value = tf.keras.layers.Dense(1, kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), activation="tanh", name=self.output_value_name)(x)
 
-    x = tf.keras.layers.Conv2D(filters=256, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4))(tower)
+    # Policy head
+    x = tf.keras.layers.Conv2D(filters=self.filter_count, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
+      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(tower)
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     x = tf.keras.layers.ReLU()(x)
     # This Conv2D doesn't get BatchNormalized, so use bias. It follows many layers + ReLU, and gets softmaxed in code,
     # so it may not need it? But leave it for now.
-    policy = tf.keras.layers.Conv2D(filters=73, kernel_size=(1,1), strides=1, data_format="channels_first",
-      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(1e-4), name=OutputPolicyName)(x)
+    policy = tf.keras.layers.Conv2D(filters=self.output_planes_count, kernel_size=(1,1), strides=1, data_format="channels_first",
+      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=self.output_policy_name)(x)
 
     return tf.keras.Model(input, [value, policy])

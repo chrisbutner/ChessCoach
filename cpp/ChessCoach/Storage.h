@@ -15,12 +15,12 @@
 
 struct TrainingBatch
 {
-    TrainingBatch(InputPlanes* images, float* values, OutputPlanes* policies);
+    TrainingBatch(INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
     ~TrainingBatch();
 
-    InputPlanes* images;
+    INetwork::InputPlanes* images;
     float* values;
-    OutputPlanes* policies;
+    INetwork::OutputPlanes* policies;
 };
 
 struct StoredGame

@@ -7,7 +7,7 @@
 
 #include "Config.h"
 
-TrainingBatch::TrainingBatch(InputPlanes* setImages, float* setValues, OutputPlanes* setPolicies)
+TrainingBatch::TrainingBatch(INetwork::InputPlanes* setImages, float* setValues, INetwork::OutputPlanes* setPolicies)
     : images(setImages)
     , values(setValues)
     , policies(setPolicies)
@@ -130,9 +130,9 @@ TrainingBatch Storage::SampleBatch() const
 
     std::discrete_distribution distribution(probabilities.begin(), probabilities.end());
 
-    InputPlanes* images = new InputPlanes[Config::BatchSize];
+    INetwork::InputPlanes* images = new INetwork::InputPlanes[Config::BatchSize];
     float* values = new float[Config::BatchSize];
-    OutputPlanes* policies = new OutputPlanes[Config::BatchSize];
+    INetwork::OutputPlanes* policies = new INetwork::OutputPlanes[Config::BatchSize];
 
     for (int i = 0; i < Config::BatchSize; i++)
     {
