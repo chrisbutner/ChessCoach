@@ -5,16 +5,8 @@
 #include "Config.h"
 
 int Game::QueenKnightPlane[SQUARE_NB];
-
-float Game::FlipValue(Color toPlay, float value)
-{
-    return (toPlay == WHITE) ? value : FlipValue(value);
-}
-
-float Game::FlipValue(float value)
-{
-    return (CHESSCOACH_VALUE_WIN - value);
-}
+Key Game::PredictionCache_PreviousMoveSquare[INetwork::InputPreviousMoveCount][SQUARE_NB];
+Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 
 void Game::Initialize()
 {
@@ -40,6 +32,19 @@ void Game::Initialize()
     {
         QueenKnightPlane[(SQUARE_NB + delta) % SQUARE_NB] = nextPlane++;
     }
+
+    PRNG rng(7607098); // Arbitrary seed
+    for (int i = 0; i < INetwork::InputPreviousMoveCount; i++)
+    {
+        for (Square square = SQ_A1; square <= SQ_H8; ++square)
+        {
+            PredictionCache_PreviousMoveSquare[i][square] = rng.rand<Key>();
+        }
+    }
+    for (int i = 0; i <= NoProgressSaturationCount; i++)
+    {
+        PredictionCache_NoProgressCount[i] = rng.rand<Key>();
+    }
 }
 
 Game::Game()
@@ -48,8 +53,7 @@ Game::Game()
     , _previousMovesOldest(0)
 
 {
-    const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    _position.set(StartFEN, false /* isChess960 */, &_positionStates->back(), Threads.main());
+    _position.set(Config::StartingPosition, false /* isChess960 */, &_positionStates->back(), Threads.main());
 }
 
 Game::Game(const Game& other)
@@ -139,6 +143,36 @@ float& Game::PolicyValue(INetwork::OutputPlanes& policy, Move move) const
     return policy[plane][rank_of(from)][file_of(from)];
 }
 
+Key Game::GenerateImageKey() const
+{
+    // Stockfish key includes material (planes 0-11) and castling rights (planes 20-23).
+    Key key = _position.key();
+
+    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
+    const Color toPlay = ToPlay();
+
+    // Add previous move planes 12-19 to key.
+    int previousMoveIndex = _previousMovesOldest;
+    for (int i = 0; i < INetwork::InputPreviousMoveCount; i++)
+    {
+        Move move = _previousMoves[previousMoveIndex];
+        if (move != MOVE_NONE)
+        {
+            move = FlipMove(toPlay, move);
+            Square from = from_sq(move);
+            Square to = to_sq(move);
+            key ^= PredictionCache_PreviousMoveSquare[i][from];
+            key ^= PredictionCache_PreviousMoveSquare[i][to];
+        }
+        previousMoveIndex = (previousMoveIndex + 1) % INetwork::InputPreviousMoveCount;
+    }
+
+    // Add no-progress plane 24 to key.
+    key ^= PredictionCache_NoProgressCount[std::min(NoProgressSaturationCount, _position.rule50_count())];
+
+    return key;
+}
+
 #pragma warning(disable:6262) // Ignore stack warning, caller can emplace to heap via RVO.
 INetwork::InputPlanes Game::GenerateImage() const
 {
@@ -197,7 +231,7 @@ INetwork::InputPlanes Game::GenerateImage() const
     }
 
     // No-progress plane 24
-    const float normalizedFiftyRuleCount = _position.rule50_count() / 99.0f;
+    const float normalizedFiftyRuleCount = std::min(1.f, static_cast<float>(_position.rule50_count()) / NoProgressSaturationCount);
     FillPlane(image[24], normalizedFiftyRuleCount);
 
     return image;

@@ -167,7 +167,7 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     _history.push_back(move);
 }
 
-float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state)
+float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
@@ -182,6 +182,35 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state)
 
     if (state == SelfPlayState::Working)
     {
+        // Try get a cached prediction.
+        cacheStore = nullptr;
+        float cachedValue;
+        int cachedMoveCount;
+        _imageKey = GenerateImageKey();
+        bool hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, &cacheStore, &cachedValue,
+            &cachedMoveCount, _cachedMoves.data(), _cachedPriors.data());
+        if (hitCached)
+        {
+            // Expand child nodes with the cached priors.
+            int i = 0;
+            for (int i = 0; i < cachedMoveCount; i++)
+            {
+                root->children[_cachedMoves[i]] = new Node(_cachedPriors[i]);
+            }
+
+            return cachedValue;
+        }
+
+        // Generate legal moves.
+        _expandAndEvaluate_endMoves = generate<LEGAL>(_position, _expandAndEvaluate_moves);
+
+        // Check for checkmate and stalemate.
+        if (_expandAndEvaluate_moves == _expandAndEvaluate_endMoves)
+        {
+            root->terminalValue = (_position.checkers() ? CHESSCOACH_VALUE_LOSE : CHESSCOACH_VALUE_DRAW);
+            return root->terminalValue;
+        }
+
         // Check for draw by 50-move or 3-repetition.
         //
         // Stockfish checks for (a) two-fold repetition strictly after the search root
@@ -196,23 +225,9 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state)
         const int plyToSearchRoot = (Ply() - _searchRootPly);
         if (_position.is_draw(plyToSearchRoot))
         {
-            state = SelfPlayState::Working;
             root->terminalValue = CHESSCOACH_VALUE_DRAW;
             return root->terminalValue;
         }
-
-        // Generate legal moves.
-        _expandAndEvaluate_endMoves = generate<LEGAL>(_position, _expandAndEvaluate_moves);
-
-        // Check for checkmate and stalemate.
-        if (_expandAndEvaluate_moves == _expandAndEvaluate_endMoves)
-        {
-            state = SelfPlayState::Working;
-            root->terminalValue = (_position.checkers() ? CHESSCOACH_VALUE_LOSE : CHESSCOACH_VALUE_DRAW);
-            return root->terminalValue;
-        }
-
-        // Not terminal, so expand the node with legal moves.
 
         // Prepare for a prediction from the network.
         *_image = GenerateImage();
@@ -225,21 +240,54 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state)
     // Index legal moves into the policy output planes to get logits,
     // then calculate softmax over them to get normalized probabilities for priors.
     std::vector<float> logits;
+    int i = 0;
     for (ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
     {
+        _cachedMoves[i++] = cur->move;
         logits.push_back(PolicyValue(*_policy, cur->move));
     }
     std::vector<float> priors = Softmax(logits);
 
     // Expand child nodes with the calculated priors.
-    int i = 0;
-    for (const ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++, i++)
+    i = 0;
+    for (const ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
     {
-        root->children[cur->move] = new Node(priors[i]);
+        root->children[cur->move] = new Node(priors[i++]);
+    }
+
+    // Store in the cache if appropriate.
+    if (cacheStore)
+    {
+        int moveCount = static_cast<int>(priors.size());
+        if (moveCount > INetwork::MaxBranchMoves)
+        {
+            LimitBranchingToBest(moveCount, _cachedMoves.data(), priors.data());
+            moveCount = INetwork::MaxBranchMoves;
+        }
+        cacheStore->Set(_imageKey, *_value, moveCount, _cachedMoves.data(), priors.data());
     }
 
     state = SelfPlayState::Working;
     return *_value;
+}
+
+void SelfPlayGame::LimitBranchingToBest(int moveCount, Move* moves, float* priors)
+{
+    assert(moveCount > INetwork::MaxBranchMoves);
+
+    for (int i = 0; i < INetwork::MaxBranchMoves; i++)
+    {
+        int max = i;
+        for (int j = i + 1; j < moveCount; j++)
+        {
+            if (priors[j] > priors[max]) max = j;
+        }
+        if (max != i)
+        {
+            std::swap(moves[i], moves[max]);
+            std::swap(priors[i], priors[max]);
+        }
+    }
 }
 
 std::vector<float> SelfPlayGame::Softmax(const std::vector<float>& logits) const
@@ -328,6 +376,7 @@ SelfPlayWorker::SelfPlayWorker()
     , _gameStarts(INetwork::PredictionBatchSize)
     , _mctsSimulations(INetwork::PredictionBatchSize, 0)
     , _searchPaths(INetwork::PredictionBatchSize)
+    , _cacheStores(INetwork::PredictionBatchSize)
 {
 }
 
@@ -418,7 +467,7 @@ void SelfPlayWorker::Play(int index)
 
     if (!game.Root()->IsExpanded())
     {
-        game.ExpandAndEvaluate(state);
+        game.ExpandAndEvaluate(state, _cacheStores[index]);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             return;
@@ -428,7 +477,7 @@ void SelfPlayWorker::Play(int index)
     while (!game.IsTerminal())
     {
         Node* root = game.Root();
-        std::pair<Move, Node*> selected = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index]);
+        std::pair<Move, Node*> selected = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             return;
@@ -450,11 +499,13 @@ void SelfPlayWorker::Play(int index)
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);
     std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
+    //PredictionCache::Instance.PrintDebugInfo();
 
     state = SelfPlayState::Finished;
 }
 
-std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, std::vector<Node*>& searchPath)
+std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+    std::vector<Node*>& searchPath, PredictionCacheEntry*& cacheStore)
 {
     for (; mctsSimulation < Config::NumSimulations; mctsSimulation++)
     {
@@ -485,16 +536,17 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             }
         }
 
-        // The value we get is from the final node of the scratch game (could be WHITE or BLACK)
-        // and we start applying it at the current position of the actual game (could again be WHITE or BLACK),
-        // so flip it if they differ.
-        float value = scratchGame.ExpandAndEvaluate(state);
+        float value = scratchGame.ExpandAndEvaluate(state, cacheStore);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             return std::pair(MOVE_NONE, nullptr);
         }
 
-        // Always value a node from the parent's to-play perspective.
+        // The value we get is from the final node of the scratch game (could be WHITE or BLACK)
+        // and we start applying it at the current position of the actual game (could again be WHITE or BLACK),
+        // so flip it if they differ (the ^).
+        //
+        // Also though, always value a node from the parent's to-play perspective (the ~).
         //
         // E.g. imagine it's white to play (game.ToPlay()) and white makes the move a4,
         // which results in a new position with black to play (scratchGame.ToPlay()).

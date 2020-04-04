@@ -5,22 +5,24 @@
 
 struct Config
 {
-    static int BatchSize;
-    static float TrainingFactor;
-    static int TrainingSteps;
-    static int CheckpointInterval;
-    static int WindowSize;
-    static int SelfPlayGames;
+    static const int BatchSize;
+    static const float TrainingFactor;
+    static const int TrainingSteps;
+    static const int CheckpointInterval;
+    static const int WindowSize;
+    static const int SelfPlayGames;
 
-    static int NumSampingMoves;
-    static int MaxMoves;
-    static int NumSimulations;
+    static const int NumSampingMoves;
+    static const int MaxMoves;
+    static const int NumSimulations;
 
-    static float RootDirichletAlpha;
-    static float RootExplorationFraction;
+    static const float RootDirichletAlpha;
+    static const float RootExplorationFraction;
 
-    static float PbCBase;
-    static float PbCInit;
+    static const float PbCBase;
+    static const float PbCInit;
+
+    static const char* StartingPosition;
 };
 
 #endif // _CONFIG_H_

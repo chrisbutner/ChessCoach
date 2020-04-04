@@ -13,6 +13,7 @@
 #include "Network.h"
 #include "Storage.h"
 #include "Threading.h"
+#include "PredictionCache.h"
 
 class Node
 {
@@ -71,7 +72,8 @@ public:
     
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
-    float ExpandAndEvaluate(SelfPlayState& state);
+    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore);
+    void LimitBranchingToBest(int moveCount, Move* moves, float* priors);
     std::vector<float> Softmax(const std::vector<float>& logits) const;
     std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
@@ -95,6 +97,9 @@ private:
     // Only used for real games, so no need to copy.
     ExtMove _expandAndEvaluate_moves[MAX_MOVES];
     ExtMove* _expandAndEvaluate_endMoves;
+    Key _imageKey;
+    std::array<Move, MAX_MOVES> _cachedMoves;
+    std::array<float, MAX_MOVES> _cachedPriors;
 };
 
 class SelfPlayWorker
@@ -115,7 +120,8 @@ public:
     void DebugGame(INetwork* network, int index, const StoredGame& stored, int startingPly);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint) const;
     void Play(int index);
-    std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, std::vector<Node*>& searchPath);
+    std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+        std::vector<Node*>& searchPath, PredictionCacheEntry*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
@@ -137,6 +143,7 @@ private:
     std::vector<std::chrono::steady_clock::time_point> _gameStarts;
     std::vector<int> _mctsSimulations;
     std::vector<std::vector<Node*>> _searchPaths;
+    std::vector<PredictionCacheEntry*> _cacheStores;
 };
 
 #endif // _SELFPLAY_H_

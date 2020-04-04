@@ -1,11 +1,15 @@
 Next
-- try batch renormalization
+- see if I've accidentally left Diagnostic Tools on
+- try batch renorm + ghost batch norm
+- fix draw-checking regenerating legal moves
+- look through std::vector and reduce allocations (e.g. to std::array)
+- try lerp stockfish eval during self-play
 - try squeeze/excite
-- think about caching - zobrist? - predictions within the same network (just keep at each game until it needs a new prediction)
+- try Wu improvements (accelerating go learning)
 - experiment with endgame tablebases integrated
 
 Performance
-- break down MCTS timing details just in case anything's off (C++ Profiler class?)
+- break down MCTS timing details just in case anything's off (just use sampling)
 - can reserve the training arrays in C++ Storage once rather than per training
 - try 16-bit for self-play - need to look up weight compatibility
 

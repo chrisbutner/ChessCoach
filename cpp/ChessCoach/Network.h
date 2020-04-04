@@ -14,6 +14,8 @@ struct INetwork
 
     static const int InputPreviousMoveCount = 8;
 
+    static const int MaxBranchMoves = 80;
+
     static const int PlaneFloatCount = BoardSide * BoardSide;
     static const int InputPlanesFloatCount = PlaneFloatCount * InputPlaneCount;
     static const int OutputPlanesFloatCount = PlaneFloatCount * OutputPlaneCount;

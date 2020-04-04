@@ -18,14 +18,6 @@ public:
 
     static void Initialize();
 
-    constexpr static Piece FlipPiece[COLOR_NB][PIECE_NB] =
-    {
-        { NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE,
-            NO_PIECE, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, NO_PIECE },
-        { NO_PIECE, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, NO_PIECE,
-            NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE },
-    };
-
     constexpr static Move FlipMove(Color color, Move move)
     {
         return Move(static_cast<int>(move) ^ FlipMoveMask[color]);
@@ -36,11 +28,29 @@ public:
         return Square(static_cast<int>(square) ^ FlipSquareMask[color]);
     }
 
+    constexpr static float FlipValue(Color toPlay, float value)
+    {
+        return (toPlay == WHITE) ? value : FlipValue(value);
+    }
+
+    constexpr static float FlipValue(float value)
+    {
+        return (CHESSCOACH_VALUE_WIN - value);
+    }
+
+    constexpr static Piece FlipPiece[COLOR_NB][PIECE_NB] =
+    {
+        { NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE,
+            NO_PIECE, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, NO_PIECE },
+        { NO_PIECE, B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, NO_PIECE,
+            NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE },
+    };
+
     constexpr const static int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
     constexpr const static int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
 
-    constexpr static CastlingRights KingsideRights[COLOR_NB] = { WHITE_OO, BLACK_OO };
-    constexpr static CastlingRights QueensideRights[COLOR_NB] = { WHITE_OOO, BLACK_OOO };
+    constexpr const static CastlingRights KingsideRights[COLOR_NB] = { WHITE_OO, BLACK_OO };
+    constexpr const static CastlingRights QueensideRights[COLOR_NB] = { WHITE_OOO, BLACK_OOO };
 
     // TODO: Later optimization idea to benchmark: could allocate one extra plane,
     // let the -1s go in without branching, then pass [1] reinterpreted to consumers
@@ -64,6 +74,11 @@ public:
     // QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB]
     static int QueenKnightPlane[SQUARE_NB];
 
+    static const int NoProgressSaturationCount = 99;
+
+    static Key PredictionCache_PreviousMoveSquare[INetwork::InputPreviousMoveCount][SQUARE_NB];
+    static Key PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
+
     constexpr const static char* SquareName[SQUARE_NB] = {
         "A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1",
         "A2", "B2", "C2", "D2", "E2", "F2", "G2", "H2",
@@ -75,8 +90,7 @@ public:
         "A8", "B8", "C8", "D8", "E8", "F8", "G8", "H8",
     };
 
-    static float FlipValue(Color toPlay, float value);
-    static float FlipValue(float value);
+    
 
 public:
 
@@ -92,6 +106,7 @@ public:
     void ApplyMove(Move move);
     int Ply() const;
     float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
+    Key GenerateImageKey() const;
     INetwork::InputPlanes GenerateImage() const;
     INetwork::OutputPlanes GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const;
 

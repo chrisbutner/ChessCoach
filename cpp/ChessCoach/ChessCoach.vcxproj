@@ -185,6 +185,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="PredictionCache.cpp" />
     <ClCompile Include="ChessCoach.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="Config.cpp" />
@@ -199,6 +200,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="PredictionCache.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="Network.h" />

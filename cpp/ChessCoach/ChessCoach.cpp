@@ -28,7 +28,7 @@
 int InitializePython();
 void FinalizePython();
 void InitializeStockfish();
-void InitializeChess();
+void InitializeChessCoach();
 void FinalizeStockfish();
 void TrainChessCoach();
 void PlayGames(std::vector<SelfPlayWorker>& workers, INetwork* network, int gamesPerNetwork);
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 
     InitializePython();
     InitializeStockfish();
-    InitializeChess();
+    InitializeChessCoach();
 
     TrainChessCoach();
 
@@ -86,9 +86,12 @@ void InitializeStockfish()
     Threads.set(static_cast<size_t>(Options["Threads"]));
 }
 
-void InitializeChess()
+void InitializeChessCoach()
 {
     Game::Initialize();
+
+    PredictionCache::Initialize();
+    PredictionCache::Instance.Allocate(8); // 8 GiB
 }
 
 void FinalizeStockfish()
