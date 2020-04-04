@@ -1,7 +1,5 @@
 Next
-- see if I've accidentally left Diagnostic Tools on
 - try batch renorm + ghost batch norm
-- fix draw-checking regenerating legal moves
 - look through std::vector and reduce allocations (e.g. to std::array)
 - try lerp stockfish eval during self-play
 - try squeeze/excite

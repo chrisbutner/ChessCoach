@@ -223,7 +223,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
         //
         // This saves time in the 800-simulation budget for more useful exploration.
         const int plyToSearchRoot = (Ply() - _searchRootPly);
-        if (_position.is_draw(plyToSearchRoot))
+        if (IsDrawByNoProgressOrRepetition(plyToSearchRoot))
         {
             root->terminalValue = CHESSCOACH_VALUE_DRAW;
             return root->terminalValue;
@@ -288,6 +288,20 @@ void SelfPlayGame::LimitBranchingToBest(int moveCount, Move* moves, float* prior
             std::swap(priors[i], priors[max]);
         }
     }
+}
+
+// Avoid Position::is_draw because it regenerates legal moves.
+// If we've already just checked for checkmate and stalemate then this works fine.
+bool SelfPlayGame::IsDrawByNoProgressOrRepetition(int plyToSearchRoot)
+{
+    const StateInfo& stateInfo = _positionStates->back();
+
+    return 
+        // Omit "and not checkmate" from Position::is_draw.
+        (stateInfo.rule50 > 99) ||
+        // Return a draw score if a position repeats once earlier but strictly
+        // after the root, or repeats twice before or at the root.
+        (stateInfo.repetition && (stateInfo.repetition < plyToSearchRoot));
 }
 
 std::vector<float> SelfPlayGame::Softmax(const std::vector<float>& logits) const

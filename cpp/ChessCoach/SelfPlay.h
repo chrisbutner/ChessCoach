@@ -74,6 +74,7 @@ public:
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore);
     void LimitBranchingToBest(int moveCount, Move* moves, float* priors);
+    bool IsDrawByNoProgressOrRepetition(int plyToSearchRoot);
     std::vector<float> Softmax(const std::vector<float>& logits) const;
     std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
