@@ -7,20 +7,6 @@
 
 #include "Config.h"
 
-TrainingBatch::TrainingBatch(INetwork::InputPlanes* setImages, float* setValues, INetwork::OutputPlanes* setPolicies)
-    : images(setImages)
-    , values(setValues)
-    , policies(setPolicies)
-{
-}
-
-TrainingBatch::~TrainingBatch()
-{
-    delete[] images;
-    delete[] values;
-    delete[] policies;
-}
-
 StoredGame::StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::unordered_map<Move, float>>& setChildVisits)
     : result(setResult)
     , moves(setMoves.size())
@@ -38,16 +24,16 @@ StoredGame::StoredGame(float setResult, const std::vector<Move>& setMoves, const
     moveCount = static_cast<int>(moves.size());
 }
 
-StoredGame::StoredGame(float setResult, const std::vector<uint16_t>&& setMoves, const std::vector<std::unordered_map<Move, float>>&& setChildVisits)
+StoredGame::StoredGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::unordered_map<Move, float>>&& setChildVisits)
     : result(setResult)
-    , moves(setMoves)
-    , childVisits(setChildVisits)
+    , moves(std::move(setMoves))
+    , childVisits(std::move(setChildVisits))
 {
     moveCount = static_cast<int>(moves.size());
 }
 
 Storage::Storage()
-    : _nextGameNumber(1)
+    : _latestGameNumber(0)
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
 {
     char* rootEnvPath;
@@ -77,45 +63,49 @@ void Storage::LoadExistingGames()
 
 int Storage::AddGame(StoredGame&& game)
 {
-    int gameNumber = AddGameWithoutSaving(std::move(game));
-
-    SaveToDisk(game, gameNumber);
+    const StoredGame& emplaced = AddGameWithoutSaving(std::move(game));
+    
+    const int gameNumber = _latestGameNumber;
+    SaveToDisk(emplaced, gameNumber);
 
     return gameNumber;
 }
 
-int Storage::AddGameWithoutSaving(StoredGame&& game)
+StoredGame& Storage::AddGameWithoutSaving(StoredGame&& game)
 {
-    int gameNumber;
-
     for (auto map : game.childVisits)
     {
-        for (auto pair : map)
+        for (auto [move, prior] : map)
         {
-            assert(!std::isnan(pair.second));
+            assert(!std::isnan(prior));
         }
     }
 
     {
         std::lock_guard lock(_mutex);
 
-        _games.emplace_back(game);
+        StoredGame& emplaced = _games.emplace_back(std::move(game));
 
         // It would be nice to use _games.size() but we pop_front() beyond the window size.
-        gameNumber = _nextGameNumber++;
+        _latestGameNumber++;
 
         while (_games.size() > Config::WindowSize)
         {
             _games.pop_front();
         }
-    }
 
-    return gameNumber;
+        return emplaced;
+    }
 }
 
-TrainingBatch Storage::SampleBatch() const
+TrainingBatch* Storage::SampleBatch()
 {
     int positionSum = 0;
+
+    if (!_trainingBatch)
+    {
+        _trainingBatch.reset(new TrainingBatch());
+    }
 
     for (const StoredGame& game : _games)
     {
@@ -130,10 +120,6 @@ TrainingBatch Storage::SampleBatch() const
 
     std::discrete_distribution distribution(probabilities.begin(), probabilities.end());
 
-    INetwork::InputPlanes* images = new INetwork::InputPlanes[Config::BatchSize];
-    float* values = new float[Config::BatchSize];
-    INetwork::OutputPlanes* policies = new INetwork::OutputPlanes[Config::BatchSize];
-
     for (int i = 0; i < Config::BatchSize; i++)
     {
         const StoredGame& game = _games[distribution(_random)];
@@ -146,20 +132,20 @@ TrainingBatch Storage::SampleBatch() const
             scratchGame.ApplyMove(Move(game.moves[m]));
         }
 
-        images[i] = scratchGame.GenerateImage();
-        values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
-        policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
+        _trainingBatch->images[i] = scratchGame.GenerateImage();
+        _trainingBatch->values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
+        _trainingBatch->policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
     }
 
-    return TrainingBatch(images, values, policies);
+    return _trainingBatch.get();
 }
 
 int Storage::GamesPlayed() const
 {
     std::lock_guard lock(_mutex);
 
-    // Starts at 1
-    return (_nextGameNumber - 1);
+    // Starts at 0, incremented with each game added.
+    return _latestGameNumber;
 }
 
 int Storage::CountNetworks() const

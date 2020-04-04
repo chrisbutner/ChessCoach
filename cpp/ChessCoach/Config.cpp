@@ -1,6 +1,5 @@
 #include "Config.h"
 
-const int Config::BatchSize = 2048; // OOM on GTX 1080 @ 4096
 const float Config::TrainingFactor = 4096.f / Config::BatchSize; // Increase training to compensate for lower batch size.
 const int Config::TrainingSteps = static_cast<int>(700000 * Config::TrainingFactor);
 const int Config::CheckpointInterval = 10; // 1000; // Currently training about 10x as slowly as AlphaZero, but self-play 100x+, so reduce accordingly.

@@ -5,7 +5,7 @@
 
 struct Config
 {
-    static const int BatchSize;
+    static const int BatchSize = 2048; // OOM on GTX 1080 @ 4096;
     static const float TrainingFactor;
     static const int TrainingSteps;
     static const int CheckpointInterval;

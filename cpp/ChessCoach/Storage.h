@@ -15,12 +15,9 @@
 
 struct TrainingBatch
 {
-    TrainingBatch(INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
-    ~TrainingBatch();
-
-    INetwork::InputPlanes* images;
-    float* values;
-    INetwork::OutputPlanes* policies;
+    std::array<INetwork::InputPlanes, Config::BatchSize> images;
+    std::array<float, Config::BatchSize> values;
+    std::array<INetwork::OutputPlanes, Config::BatchSize> policies;
 };
 
 struct StoredGame
@@ -28,7 +25,7 @@ struct StoredGame
 public:
 
     StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::unordered_map<Move, float>>& setChildVisits);
-    StoredGame(float setResult, const std::vector<uint16_t>&& setMoves, const std::vector<std::unordered_map<Move, float>>&& setChildVisits);
+    StoredGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::unordered_map<Move, float>>&& setChildVisits);
 
     float result;
     int moveCount;
@@ -50,22 +47,23 @@ public:
 
     void LoadExistingGames();
     int AddGame(StoredGame&& game);
-    TrainingBatch SampleBatch() const;
+    TrainingBatch* SampleBatch();
     int GamesPlayed() const;
     int CountNetworks() const;
     StoredGame LoadFromDisk(const std::string& path) const;
         
 private:
 
-    int AddGameWithoutSaving(StoredGame&& game);
+    StoredGame& AddGameWithoutSaving(StoredGame&& game);
     void SaveToDisk(const StoredGame& game, int gameNumber) const;
 
 private:
 
     mutable std::mutex _mutex;
     std::deque<StoredGame> _games;
-    int _nextGameNumber;
+    int _latestGameNumber;
 
+    std::unique_ptr<TrainingBatch> _trainingBatch;
     Game _startingPosition;
 
     mutable std::default_random_engine _random;

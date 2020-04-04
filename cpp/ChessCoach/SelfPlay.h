@@ -75,7 +75,7 @@ public:
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore);
     void LimitBranchingToBest(int moveCount, Move* moves, float* priors);
     bool IsDrawByNoProgressOrRepetition(int plyToSearchRoot);
-    std::vector<float> Softmax(const std::vector<float>& logits) const;
+    void Softmax(int moveCount, float* distribution) const;
     std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
     StoredGame Store() const;
@@ -127,7 +127,7 @@ public:
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
     void Backpropagate(const std::vector<Node*>& searchPath, float value) const;
-    void Prune(Node* root, Node* except) const;
+    void PruneExcept(Node* root, Node* except) const;
     void PruneAll(Node* root) const;
 
 private:

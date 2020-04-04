@@ -51,6 +51,9 @@ void PredictionCache::Allocate(int sizeGb)
     const int bucketBytes = (1024 * 1024 * 1024);
     _bucketEntryCount = (bucketBytes / sizeof(PredictionCacheEntry));
 
+    _bucketMemory.reserve(bucketCount);
+    _bucketEntries.reserve(bucketCount);
+
     for (int i = 0; i < bucketCount; i++)
     {
         void* memory = ::VirtualAlloc(nullptr, bucketBytes, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);

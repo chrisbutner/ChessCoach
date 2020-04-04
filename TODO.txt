@@ -1,14 +1,13 @@
 Next
-- try batch renorm + ghost batch norm
-- look through std::vector and reduce allocations (e.g. to std::array)
+- try Node allocator now, takes a fair bit of CPU creating/destroying
 - try lerp stockfish eval during self-play
 - try squeeze/excite
+	- https://github.com/titu1994/keras-squeeze-excite-network
 - try Wu improvements (accelerating go learning)
 - experiment with endgame tablebases integrated
 
 Performance
 - break down MCTS timing details just in case anything's off (just use sampling)
-- can reserve the training arrays in C++ Storage once rather than per training
 - try 16-bit for self-play - need to look up weight compatibility
 
 Training quality
@@ -49,3 +48,9 @@ UCI
 
 Low priority
 - see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
+- 80 cap on branched moves w/ cache may be a problem later; applies before d-noise, so limits exploration
+- structured binding, check all pairs
+
+Revisit
+- try batch renorm + ghost batch norm
+	- Bug: https://github.com/tensorflow/tensorflow/issues/32380

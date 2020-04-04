@@ -119,7 +119,7 @@ protected:
     // Used for both real and scratch games.
     Position _position;
     StateListPtr _positionStates;
-    std::vector<Move> _previousMoves;
+    std::array<Move, INetwork::InputPreviousMoveCount> _previousMoves;
     int _previousMovesOldest;
 };
 

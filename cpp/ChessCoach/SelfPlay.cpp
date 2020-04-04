@@ -239,32 +239,31 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
 
     // Index legal moves into the policy output planes to get logits,
     // then calculate softmax over them to get normalized probabilities for priors.
-    std::vector<float> logits;
-    int i = 0;
+    int moveCount = 0;
     for (ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
     {
-        _cachedMoves[i++] = cur->move;
-        logits.push_back(PolicyValue(*_policy, cur->move));
+        _cachedMoves[moveCount] = cur->move;
+        _cachedPriors[moveCount] = PolicyValue(*_policy, cur->move); // Logits
+        moveCount++;
     }
-    std::vector<float> priors = Softmax(logits);
+    Softmax(moveCount, _cachedPriors.data()); // Logits -> priors
 
-    // Expand child nodes with the calculated priors.
-    i = 0;
-    for (const ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
-    {
-        root->children[cur->move] = new Node(priors[i++]);
-    }
-
-    // Store in the cache if appropriate.
+    // Store in the cache if appropriate. This may limit moveCount to the branch limit for caching.
+    // In that case, better to also apply that limit now for consistency.
     if (cacheStore)
     {
-        int moveCount = static_cast<int>(priors.size());
         if (moveCount > INetwork::MaxBranchMoves)
         {
-            LimitBranchingToBest(moveCount, _cachedMoves.data(), priors.data());
+            LimitBranchingToBest(moveCount, _cachedMoves.data(), _cachedPriors.data());
             moveCount = INetwork::MaxBranchMoves;
         }
-        cacheStore->Set(_imageKey, *_value, moveCount, _cachedMoves.data(), priors.data());
+        cacheStore->Set(_imageKey, *_value, moveCount, _cachedMoves.data(), _cachedPriors.data());
+    }
+
+    // Expand child nodes with the calculated priors.
+    for (int i = 0; i < moveCount; i++)
+    {
+        root->children[_cachedMoves[i]] = new Node(_cachedPriors[i]);
     }
 
     state = SelfPlayState::Working;
@@ -304,25 +303,21 @@ bool SelfPlayGame::IsDrawByNoProgressOrRepetition(int plyToSearchRoot)
         (stateInfo.repetition && (stateInfo.repetition < plyToSearchRoot));
 }
 
-std::vector<float> SelfPlayGame::Softmax(const std::vector<float>& logits) const
+void SelfPlayGame::Softmax(int moveCount, float* distribution) const
 {
-    std::vector<float> probabilities(logits.size());
-
-    const float max = *std::max_element(logits.begin(), logits.end());
+    const float max = *std::max_element(distribution, distribution + moveCount);
 
     float expSum = 0.f;
-    for (float logit : logits)
+    for (int i = 0; i < moveCount; i++)
     {
-        expSum += std::expf(logit - max);
+        expSum += std::expf(distribution[i] - max);
     }
 
     const float logSumExp = std::logf(expSum) + max;
-    for (int i = 0; i < logits.size(); i++)
+    for (int i = 0; i < moveCount; i++)
     {
-        probabilities[i] = std::expf(logits[i] - logSumExp);
+        distribution[i] = std::expf(distribution[i] - logSumExp);
     }
-
-    return probabilities;
 }
 
 std::pair<Move, Node*> SelfPlayGame::SelectMove() const
@@ -464,8 +459,8 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     {
         auto startTrain = std::chrono::high_resolution_clock::now();
 
-        TrainingBatch batch = _storage->SampleBatch();
-        network->TrainBatch(step, batch.images, batch.values, batch.policies);
+        TrainingBatch* batch = _storage->SampleBatch();
+        network->TrainBatch(step, batch->images.data(), batch->values.data(), batch->policies.data());
 
         std::cout << "Train, step " << step << ", time " <<
             std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count() << std::endl;
@@ -500,7 +495,7 @@ void SelfPlayWorker::Play(int index)
         assert(selected.second != nullptr);
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(selected.first, selected.second);
-        Prune(root, selected.second /* == game.Root() */);
+        PruneExcept(root, selected.second /* == game.Root() */);
     }
 
     // Take care with ordering:
@@ -537,7 +532,8 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             }
 
             scratchGame = game;
-            searchPath = std::vector<Node*>{ scratchGame.Root() };
+            searchPath.clear();
+            searchPath.push_back(scratchGame.Root());
 
             while (scratchGame.Root()->IsExpanded())
             {
@@ -638,7 +634,7 @@ void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float v
     }
 }
 
-void SelfPlayWorker::Prune(Node* root, Node* except) const
+void SelfPlayWorker::PruneExcept(Node* root, Node* except) const
 {
     for (auto& pair : root->children)
     {
