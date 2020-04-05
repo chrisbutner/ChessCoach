@@ -372,7 +372,7 @@ std::pair<Move, Node*> SelfPlayGame::SelectMove() const
 
 void SelfPlayGame::StoreSearchStatistics()
 {
-    std::unordered_map<Move, float> visits;
+    std::map<Move, float> visits;
     const int sumVisits = _root->SumChildVisits();
     for (const auto& pair : _root->children)
     {

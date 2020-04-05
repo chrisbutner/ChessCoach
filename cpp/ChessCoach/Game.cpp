@@ -237,7 +237,7 @@ INetwork::InputPlanes Game::GenerateImage() const
     return image;
 }
 
-INetwork::OutputPlanes Game::GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const
+INetwork::OutputPlanes Game::GeneratePolicy(const std::map<Move, float>& childVisits) const
 {
     INetwork::OutputPlanes policy = {};
 

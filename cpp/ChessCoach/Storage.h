@@ -5,7 +5,7 @@
 #include <mutex>
 #include <deque>
 #include <random>
-#include <unordered_map>
+#include <map>
 #include <vector>
 
 #include <Stockfish/Position.h>
@@ -24,13 +24,13 @@ struct StoredGame
 {
 public:
 
-    StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::unordered_map<Move, float>>& setChildVisits);
-    StoredGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::unordered_map<Move, float>>&& setChildVisits);
+    StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::map<Move, float>>& setChildVisits);
+    StoredGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::map<Move, float>>&& setChildVisits);
 
     float result;
     int moveCount;
     std::vector<uint16_t> moves;
-    std::vector<std::unordered_map<Move, float>> childVisits;
+    std::vector<std::map<Move, float>> childVisits;
 };
 
 class Storage

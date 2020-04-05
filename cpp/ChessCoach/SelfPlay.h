@@ -1,7 +1,7 @@
 #ifndef _SELFPLAY_H_
 #define _SELFPLAY_H_
 
-#include <unordered_map>
+#include <map>
 #include <vector>
 #include <random>
 #include <atomic>
@@ -33,18 +33,18 @@ public:
     float Value() const;
     int SumChildVisits() const;
 
-    std::unordered_map<Move, Node*> children; // 80?
-    float originalPrior; // 4
-    float prior; // 4
-    int visitCount; // 4
-    float valueSum; //4 
-    float terminalValue; //4
+    std::map<Move, Node*> children;
+    float originalPrior;
+    float prior;
+    int visitCount;
+    float valueSum;
+    float terminalValue;
 
 private:
 
     // Doesn't strictly follow "mutable" if SumChildVisits() is misused and
     // called before children are changed while this node is still around.
-    mutable int _sumChildVisits; //4
+    mutable int _sumChildVisits;
 };
 
 enum class SelfPlayState
@@ -98,7 +98,7 @@ private:
 
     // Stored history and statistics.
     // Only used for real games, so no need to copy.
-    std::vector<std::unordered_map<Move, float>> _childVisits;
+    std::vector<std::map<Move, float>> _childVisits;
     std::vector<Move> _history;
 
     // Coroutine state.

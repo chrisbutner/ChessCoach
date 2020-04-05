@@ -7,7 +7,7 @@
 
 #include "Config.h"
 
-StoredGame::StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::unordered_map<Move, float>>& setChildVisits)
+StoredGame::StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::map<Move, float>>& setChildVisits)
     : result(setResult)
     , moves(setMoves.size())
 {
@@ -24,7 +24,7 @@ StoredGame::StoredGame(float setResult, const std::vector<Move>& setMoves, const
     moveCount = static_cast<int>(moves.size());
 }
 
-StoredGame::StoredGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::unordered_map<Move, float>>&& setChildVisits)
+StoredGame::StoredGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::map<Move, float>>&& setChildVisits)
     : result(setResult)
     , moves(std::move(setMoves))
     , childVisits(std::move(setChildVisits))
@@ -205,7 +205,7 @@ StoredGame Storage::LoadFromDisk(const std::string& path) const
     std::vector<uint16_t> moves(moveCount);
     file.read(reinterpret_cast<char*>(moves.data()), sizeof(uint16_t) * moveCount);
 
-    std::vector<std::unordered_map<Move, float>> childVisits(moveCount);
+    std::vector<std::map<Move, float>> childVisits(moveCount);
     for (int i = 0; i < moveCount; i++)
     {
         int mapSize;

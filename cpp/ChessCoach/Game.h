@@ -1,7 +1,7 @@
 #ifndef _GAME_H_
 #define _GAME_H_
 
-#include <unordered_map>
+#include <map>
 
 #include <Stockfish/Position.h>
 
@@ -108,7 +108,7 @@ public:
     float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
     Key GenerateImageKey() const;
     INetwork::InputPlanes GenerateImage() const;
-    INetwork::OutputPlanes GeneratePolicy(const std::unordered_map<Move, float>& childVisits) const;
+    INetwork::OutputPlanes GeneratePolicy(const std::map<Move, float>& childVisits) const;
 
 private:
 
