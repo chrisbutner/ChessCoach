@@ -26,6 +26,11 @@ public:
         std::copy(policyPriorsBegin, policyPriorsBegin + moveCount, _policyPriors);
     }
 
+    void Clear()
+    {
+        _key = 0;
+    }
+
 private:
 
     // pad to 512 bytes, 8 * 64
@@ -58,6 +63,7 @@ public:
     void Allocate(int sizeGb);
 
     bool TryGetPrediction(Key key, PredictionCacheEntry** entryOut, float* valueOut, int* moveCountOut, Move* movesOut, float* priorsOut);
+    void Clear();
 
     void PrintDebugInfo();
 

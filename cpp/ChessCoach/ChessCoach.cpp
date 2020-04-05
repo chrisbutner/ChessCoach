@@ -129,6 +129,7 @@ void TrainChessCoach()
 
     for (int n = existingNetworks; n < networkCount; n++)
     {
+        // Play self-play games (skip if we already have enough to train this checkpoint).
         const int actualGames = (gamesPerNetwork - bonusGames);
         if (actualGames > 0)
         {
@@ -136,8 +137,14 @@ void TrainChessCoach()
         }
         bonusGames = std::max(0, bonusGames - gamesPerNetwork);
 
+        // Train the network.
         const int checkpoint = (n + 1) * Config::CheckpointInterval;
         TrainNetwork(selfPlayWorkers.front(), &network, Config::CheckpointInterval, checkpoint);
+
+        // Clear the prediction cache to prepare for the new network.
+        PredictionCache::Instance.PrintDebugInfo();
+        PredictionCache::Instance.Clear();
+        PredictionCache::Instance.PrintDebugInfo();
     }
 }
 

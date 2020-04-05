@@ -98,6 +98,17 @@ bool PredictionCache::TryGetPrediction(Key key, PredictionCacheEntry** entryOut,
     }
 }
 
+void PredictionCache::Clear()
+{
+    for (PredictionCacheEntry* bucket : _bucketEntries)
+    {
+        for (int i = 0; i < _bucketEntryCount; i++)
+        {
+            bucket[i].Clear();
+        }
+    }
+}
+
 void PredictionCache::PrintDebugInfo()
 {
     std::cout << "Cache hit rate: " << (static_cast<float>(_hitCount) / _probeCount) << std::endl;
