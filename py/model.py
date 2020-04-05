@@ -1,4 +1,7 @@
 import tensorflow as tf
+from tensorflow.keras import backend as K
+
+K.set_image_data_format("channels_first")
 
 class ChessCoachModel:
 
@@ -6,13 +9,27 @@ class ChessCoachModel:
   input_planes_count = 25
   output_planes_count = 73
   residual_count = 7 # 19 for full AlphaZero
-  filter_count = 256
+  filter_count = 128 # 256 for full AlphaZero
   dense_count = 256
+  se_ratio = 8 # 16 default (probably use it for 256 filter_count)
   weight_decay = 1e-4
 
   input_name = "Input"
   output_value_name = "OutputValue"
   output_policy_name = "OutputPolicy"
+
+  def build_se_block(self, x):
+    se_filter_count = self.filter_count
+    se = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first")(x)
+    se = tf.keras.layers.Reshape((1, 1, se_filter_count))(se)
+    se = tf.keras.layers.Dense(se_filter_count // self.se_ratio, activation="relu", use_bias=False, kernel_initializer="he_normal",
+      kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(se)
+    se = tf.keras.layers.Dense(se_filter_count, activation="relu", use_bias=False, kernel_initializer="he_normal",
+      kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(se)
+    se = tf.keras.layers.Permute((3, 1, 2))(se)
+
+    x = tf.keras.layers.multiply([x, se])
+    return x
 
   def build_residual_piece(self, x):
     x = tf.keras.layers.Conv2D(filters=self.filter_count, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
@@ -20,10 +37,12 @@ class ChessCoachModel:
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     return x
 
-  def build_residual_block(self, x):
+  def build_residual_block(self, x, se=False):
     y = self.build_residual_piece(x)
     y = tf.keras.layers.ReLU()(y)
     y = self.build_residual_piece(y)
+    if (se):
+      y = self.build_se_block(y)
     x = tf.keras.layers.Add()([x, y])
     x = tf.keras.layers.ReLU()(x)
     return x

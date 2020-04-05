@@ -4,6 +4,7 @@ Next
 	- https://github.com/titu1994/keras-squeeze-excite-network
 - try Wu improvements (accelerating go learning)
 - experiment with endgame tablebases integrated
+- try v2 residuals
 
 Performance
 - break down MCTS timing details just in case anything's off (just use sampling)

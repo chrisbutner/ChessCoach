@@ -14,6 +14,8 @@ from profiler import Profiler
 import storage
 import game
 
+K.set_image_data_format("channels_first")
+
 ##########################
 ####### Helpers ##########
 
@@ -141,11 +143,11 @@ def train_batch(step, images, values, policies):
   print(f"Loss: {str(losses[0]).rjust(10)} (Value: {str(losses[1]).rjust(10)}, Policy: {str(losses[2]).rjust(10)})")
 
 def save_network(checkpoint):
-  global prediction_network
-  print(f"Saving network ({checkpoint} steps)...")
-  path = storage.save_network(checkpoint, training_network)
-  print(f"Saved network ({checkpoint} steps)")
-  prediction_network = update_network_for_predictions(path)
+   global prediction_network
+   print(f"Saving network ({checkpoint} steps)...")
+   path = storage.save_network(checkpoint, training_network)
+   print(f"Saved network ({checkpoint} steps)")
+   prediction_network = update_network_for_predictions(path)
 
 config = AlphaZeroConfig()
 prediction_network = prepare_predictions()
