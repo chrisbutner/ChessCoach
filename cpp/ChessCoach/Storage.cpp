@@ -55,9 +55,13 @@ void Storage::LoadExistingGames()
 #else
     for (const auto& directory : std::filesystem::directory_iterator(_gamesPath))
     {
-        std::cout << "Loading game: " << directory.path().filename() << std::endl;
         AddGameWithoutSaving(LoadFromDisk(directory.path().string()));
+        if ((_latestGameNumber % 1000) == 0)
+        {
+            std::cout << _latestGameNumber << " games loaded" << std::endl;
+        }
     }
+    std::cout << _latestGameNumber << " games loaded" << std::endl;
 #endif
 }
 

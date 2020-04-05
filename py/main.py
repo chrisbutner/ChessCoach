@@ -8,5 +8,5 @@ parser = argparse.ArgumentParser()
 args = parser.parse_args()
 
 print("Starting Python-ChessCoach")
-game = storage.load_game(os.path.join(storage.games_path, "game_000000111"))
+game = storage.load_game(os.path.join(storage.games_path, "game_000011385"))
 print(game.pgn())

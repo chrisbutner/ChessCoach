@@ -1,5 +1,4 @@
 Next
-- try map instead of unordered_map for small child counts
 - try lerp stockfish eval during self-play
 - try squeeze/excite
 	- https://github.com/titu1994/keras-squeeze-excite-network
@@ -9,6 +8,7 @@ Next
 Performance
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try 16-bit for self-play - need to look up weight compatibility
+- try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 - load games faster - overlapped I/O?
 
 Training quality
