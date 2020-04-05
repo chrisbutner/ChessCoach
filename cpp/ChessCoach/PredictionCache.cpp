@@ -1,28 +1,11 @@
 #include "PredictionCache.h"
 
-#include <windows.h>
-#include <cassert>
 #include <iostream>
+#include <cassert>
+
+#include "PoolAllocator.h"
 
 PredictionCache PredictionCache::Instance;
-
-void PredictionCache::Initialize()
-{
-    HANDLE hToken;
-    TOKEN_PRIVILEGES tokenPrivileges;
-
-    BOOL opened = ::OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
-    assert(opened);
-
-    BOOL gotLuid = ::LookupPrivilegeValue(nullptr, L"SeLockMemoryPrivilege", &tokenPrivileges.Privileges[0].Luid);
-    assert(gotLuid);
-
-    tokenPrivileges.PrivilegeCount = 1;
-    tokenPrivileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-    BOOL adjusted = ::AdjustTokenPrivileges(hToken, FALSE, &tokenPrivileges, 0, nullptr, 0);
-    assert(adjusted);
-}
 
 PredictionCache::PredictionCache()
     : _bucketEntryCount(0)
@@ -38,7 +21,7 @@ PredictionCache::~PredictionCache()
     {
         if (memory)
         {
-            ::VirtualFree(memory, 0, MEM_RELEASE);
+            LargePageAllocator::Free(memory);
         }
     }
     _bucketMemory.clear();
@@ -56,7 +39,7 @@ void PredictionCache::Allocate(int sizeGb)
 
     for (int i = 0; i < bucketCount; i++)
     {
-        void* memory = ::VirtualAlloc(nullptr, bucketBytes, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+        void* memory = LargePageAllocator::Allocate(bucketBytes);
         assert(memory);
         _bucketMemory.push_back(memory);
         _bucketEntries.push_back(static_cast<PredictionCacheEntry*>(memory));

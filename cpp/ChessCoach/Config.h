@@ -23,6 +23,21 @@ struct Config
     static const float PbCInit;
 
     static const char* StartingPosition;
+
+    static const int SelfPlayWorkerCount =
+#ifdef _DEBUG
+        1;
+#else
+        2;
+#endif
+
+    static const int PredictionBatchSize =
+#ifdef _DEBUG
+        1;
+#else
+        64;
+#endif
+
 };
 
 #endif // _CONFIG_H_

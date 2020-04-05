@@ -58,14 +58,30 @@ class WorkCoordinator
 {
 public:
 
-    WorkCoordinator(int workItemCount);
+    WorkCoordinator(int workerCount);
 
     void OnWorkItemCompleted();
     bool AllWorkItemsCompleted();
 
+    void ResetWorkItemsRemaining(int workItemsRemaining);
+
+    void WaitForWorkItems();
+    void WaitForWorkers();
+
+    bool CheckWorkItemsExist();
+    bool CheckWorkersReady();
+
 private:
 
+    std::mutex _mutex;
+    std::condition_variable _workItemsExist;
+    std::condition_variable _workersReady;
+
+    // Atomic is not needed for the locks/waits, but is for OnWorkItemCompleted/AllWorkItemsCompleted.
     std::atomic_int _workItemsRemaining;
+
+    int _workerCount;
+    int _workerReadyCount;
 };
 
 #endif // _THREADING_H_

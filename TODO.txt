@@ -1,5 +1,5 @@
 Next
-- try Node allocator now, takes a fair bit of CPU creating/destroying
+- try map instead of unordered_map for small child counts
 - try lerp stockfish eval during self-play
 - try squeeze/excite
 	- https://github.com/titu1994/keras-squeeze-excite-network
@@ -9,9 +9,10 @@ Next
 Performance
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try 16-bit for self-play - need to look up weight compatibility
+- load games faster - overlapped I/O?
 
 Training quality
-- try to get tensorboard integrated despite the C++ stuff?
+- try to get tensorboard integrated - can probably just log from py training code
 - run tournaments against stockfish or something known/lower to estimate Elo
 - Integrate Strategic Test Suite (STS) - wait for UCI first or no?
 

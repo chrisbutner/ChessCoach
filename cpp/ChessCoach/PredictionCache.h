@@ -48,8 +48,6 @@ class PredictionCache
 {
 public:
 
-    static void Initialize();
-
     static PredictionCache Instance;
 
 public:

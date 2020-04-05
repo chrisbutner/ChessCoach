@@ -66,7 +66,7 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     PythonContext context;
 
     // Make the predict call.
-    npy_intp imageDims[4]{ PredictionBatchSize, InputPlaneCount, BoardSide, BoardSide };
+    npy_intp imageDims[4]{ Config::PredictionBatchSize, InputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
     assert(pythonImages);
@@ -81,7 +81,7 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     PyArrayObject* pythonValuesArray = reinterpret_cast<PyArrayObject*>(pythonValues);
     float* pythonValuesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonValuesArray));
 
-    const int valueCount = PredictionBatchSize;
+    const int valueCount = Config::PredictionBatchSize;
     std::copy(pythonValuesPtr, pythonValuesPtr + valueCount, values);
 
     // Extract the policies.
@@ -91,7 +91,7 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
     float* pythonPoliciesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonPoliciesArray));
 
-    const int policyCount = (PredictionBatchSize * OutputPlanesFloatCount);
+    const int policyCount = (Config::PredictionBatchSize * OutputPlanesFloatCount);
     std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<float*>(policies));
 
     Py_DECREF(tupleResult);

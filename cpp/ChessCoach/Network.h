@@ -24,13 +24,6 @@ struct INetwork
     typedef std::array<Plane, InputPlaneCount> InputPlanes;
     typedef std::array<Plane, OutputPlaneCount> OutputPlanes;
 
-    static const int PredictionBatchSize =
-#ifdef _DEBUG
-        1;
-#else
-        64;
-#endif
-
     virtual ~INetwork() {};
 
     virtual void PredictBatch(InputPlanes* images, float* values, OutputPlanes* policies) = 0;

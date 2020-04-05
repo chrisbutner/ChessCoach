@@ -9,6 +9,8 @@
 
 #include "Config.h"
 
+thread_local PoolAllocator<Node> Node::Allocator;
+
 std::atomic_uint SelfPlayGame::ThreadSeed;
 thread_local std::default_random_engine SelfPlayGame::Random(
     std::random_device()() +
@@ -24,6 +26,16 @@ Node::Node(float setPrior)
     , _sumChildVisits(0)
 {
     assert(!std::isnan(setPrior));
+}
+
+void* Node::operator new(size_t count)
+{
+    return Allocator.Allocate();
+}
+
+void Node::operator delete(void* ptr) noexcept
+{
+    Allocator.Free(ptr);
 }
 
 bool Node::IsExpanded() const
@@ -376,56 +388,67 @@ StoredGame SelfPlayGame::Store() const
 
 SelfPlayWorker::SelfPlayWorker()
     : _storage(nullptr)
-    , _states(INetwork::PredictionBatchSize)
-    , _images(INetwork::PredictionBatchSize)
-    , _values(INetwork::PredictionBatchSize)
-    , _policies(INetwork::PredictionBatchSize)
-    , _games(INetwork::PredictionBatchSize)
-    , _scratchGames(INetwork::PredictionBatchSize)
-    , _gameStarts(INetwork::PredictionBatchSize)
-    , _mctsSimulations(INetwork::PredictionBatchSize, 0)
-    , _searchPaths(INetwork::PredictionBatchSize)
-    , _cacheStores(INetwork::PredictionBatchSize)
+    , _states(Config::PredictionBatchSize)
+    , _images(Config::PredictionBatchSize)
+    , _values(Config::PredictionBatchSize)
+    , _policies(Config::PredictionBatchSize)
+    , _games(Config::PredictionBatchSize)
+    , _scratchGames(Config::PredictionBatchSize)
+    , _gameStarts(Config::PredictionBatchSize)
+    , _mctsSimulations(Config::PredictionBatchSize, 0)
+    , _searchPaths(Config::PredictionBatchSize)
+    , _cacheStores(Config::PredictionBatchSize)
 {
-}
-
-void SelfPlayWorker::Initialize(Storage* storage)
-{
-    _storage = storage;
 }
 
 void SelfPlayWorker::ResetGames()
 {
-    for (int i = 0; i < INetwork::PredictionBatchSize; i++)
+    for (int i = 0; i < Config::PredictionBatchSize; i++)
     {
         SetUpGame(i);
     }
 }
 
-void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* network)
+void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network, int maxNodesPerThread)
 {
-    // Clear away old games in progress to ensure that new ones use the new network.
-    ResetGames();
+    // Initialize on the worker thread.
+    Initialize(storage, maxNodesPerThread);
 
-    while (!workCoordinator.AllWorkItemsCompleted())
+    while (true)
     {
-        // CPU work
-        for (int i = 0; i < _games.size(); i++)
-        {
-            Play(i);
-            if (_states[i] == SelfPlayState::Finished)
-            {
-                workCoordinator.OnWorkItemCompleted();
+        // Wait until games are required.
+        workCoordinator.WaitForWorkItems();
 
-                SetUpGame(i);
+        // Clear away old games in progress to ensure that new ones use the new network.
+        ResetGames();
+
+        // Play games until required.
+        while (!workCoordinator.AllWorkItemsCompleted())
+        {
+            // CPU work
+            for (int i = 0; i < _games.size(); i++)
+            {
                 Play(i);
+                if (_states[i] == SelfPlayState::Finished)
+                {
+                    workCoordinator.OnWorkItemCompleted();
+
+                    SetUpGame(i);
+                    Play(i);
+                }
+                assert(_states[i] == SelfPlayState::WaitingForPrediction);
             }
-            assert(_states[i] == SelfPlayState::WaitingForPrediction);
+
+            // GPU work
+            network->PredictBatch(_images.data(), _values.data(), _policies.data());
         }
-        
-        // GPU work
-        network->PredictBatch(_images.data(), _values.data(), _policies.data());
     }
+}
+
+void SelfPlayWorker::Initialize(Storage* storage, int maxNodesPerThread)
+{
+    _storage = storage;
+    Node::Allocator.Initialize(maxNodesPerThread);
 }
 
 void SelfPlayWorker::SetUpGame(int index)

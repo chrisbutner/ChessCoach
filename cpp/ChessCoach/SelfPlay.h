@@ -14,30 +14,37 @@
 #include "Storage.h"
 #include "Threading.h"
 #include "PredictionCache.h"
+#include "PoolAllocator.h"
 
 class Node
 {
+public:
+
+    thread_local static PoolAllocator<Node> Allocator;
 
 public:
 
     Node(float setPrior);
 
+    void* operator new(size_t byteCount);
+    void operator delete(void* memory) noexcept;
+
     bool IsExpanded() const;
     float Value() const;
     int SumChildVisits() const;
 
-    std::unordered_map<Move, Node*> children;
-    float originalPrior;
-    float prior;
-    int visitCount;
-    float valueSum;
-    float terminalValue;
+    std::unordered_map<Move, Node*> children; // 80?
+    float originalPrior; // 4
+    float prior; // 4
+    int visitCount; // 4
+    float valueSum; //4 
+    float terminalValue; //4
 
 private:
 
     // Doesn't strictly follow "mutable" if SumChildVisits() is misused and
     // called before children are changed while this node is still around.
-    mutable int _sumChildVisits;
+    mutable int _sumChildVisits; //4
 };
 
 enum class SelfPlayState
@@ -114,9 +121,9 @@ public:
     SelfPlayWorker(SelfPlayWorker&& other) = delete;
     SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
 
-    void Initialize(Storage* storage);
     void ResetGames();
-    void PlayGames(WorkCoordinator& workCoordinator, INetwork* network);
+    void PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network, int maxNodesPerThread);
+    void Initialize(Storage* storage, int maxNodesPerThread);
     void SetUpGame(int index);
     void DebugGame(INetwork* network, int index, const StoredGame& stored, int startingPly);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint) const;
