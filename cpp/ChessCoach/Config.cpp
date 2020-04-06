@@ -2,7 +2,7 @@
 
 const float Config::TrainingFactor = 4096.f / Config::BatchSize; // Increase training to compensate for lower batch size.
 const int Config::TrainingSteps = static_cast<int>(700000 * Config::TrainingFactor);
-const int Config::CheckpointInterval = 10; // 1000; // Currently training about 10x as slowly as AlphaZero, but self-play 100x+, so reduce accordingly.
+const int Config::CheckpointInterval = 50; // 1000; // Currently training about 10x as slowly as AlphaZero, but self-play 100x+, so reduce accordingly.
 const int Config::WindowSize = 1000000;
 const int Config::SelfPlayGames = 44000000;
 

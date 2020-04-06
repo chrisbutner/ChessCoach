@@ -60,6 +60,10 @@ public:
 
         _memory = LargePageAllocator::Allocate(poolSizeBytes);
         assert(_memory);
+        if (!_memory)
+        {
+            throw std::bad_alloc();
+        }
 
         Chunk* chunk = reinterpret_cast<Chunk*>(_memory);
         _next = chunk;

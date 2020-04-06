@@ -43,7 +43,11 @@ int main(int argc, char* argv[])
     InitializeStockfish();
     InitializeChessCoach();
 
+#if DEBUG_MCTS
+    DebugGame();
+#else
     TrainChessCoach();
+#endif
 
     FinalizePython();
     FinalizeStockfish();
@@ -72,18 +76,32 @@ int InitializePython()
 
 void FinalizePython()
 {
+    PyGILState_Ensure();
+
     Py_FinalizeEx();
+}
+
+namespace PSQT
+{
+    void init();
 }
 
 void InitializeStockfish()
 {
+    // Positions need threads, and threads need UCI options, unfortunately.
+    UCI::init(Options);
+
+    PSQT::init();
     Bitboards::init();
     Position::init();
     Bitbases::init();
+    Endgames::init();
 
-    // Initialize threads. They directly reach out to UCI options, so we need to initialize that too.
-    UCI::init(Options);
+    // Positions need threads, unfortunately.
     Threads.set(static_cast<size_t>(Options["Threads"]));
+
+    // This usually gets initialized during a search before static evaluations, but we're not searching.
+    Threads.main()->contempt = SCORE_ZERO;
 }
 
 void InitializeChessCoach()
@@ -172,8 +190,8 @@ void DebugGame()
     SelfPlayWorker worker;
     worker.Initialize(&storage, 2 * Config::MaxMoves * INetwork::MaxBranchMoves * Config::PredictionBatchSize);
 
-    std::unique_ptr<BatchedPythonNetwork> network(new BatchedPythonNetwork());
+    BatchedPythonNetwork network;
 
     StoredGame stored = storage.LoadFromDisk("path_to_game");
-    worker.DebugGame(network.get(), 0, stored, 23);
+    worker.DebugGame(&network, 0, stored, 23);
 }

@@ -28,14 +28,14 @@ struct Config
 #ifdef _DEBUG
         1;
 #else
-        2;
+        4;
 #endif
 
     static const int PredictionBatchSize =
 #ifdef _DEBUG
         1;
 #else
-        64;
+        256;
 #endif
 
 };

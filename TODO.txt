@@ -1,5 +1,4 @@
 Next
-- try lerp stockfish eval during self-play
 - try squeeze/excite
 	- https://github.com/titu1994/keras-squeeze-excite-network
 - try Wu improvements (accelerating go learning)
@@ -10,10 +9,13 @@ Performance
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try 16-bit for self-play - need to look up weight compatibility
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
+	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
+	- can always binary search Move-ints or something too, it's not mutated
 - load games faster - overlapped I/O?
 
 Training quality
 - try to get tensorboard integrated - can probably just log from py training code
+- turn down the stockfish eval blend factor as training progresses
 - run tournaments against stockfish or something known/lower to estimate Elo
 - Integrate Strategic Test Suite (STS) - wait for UCI first or no?
 

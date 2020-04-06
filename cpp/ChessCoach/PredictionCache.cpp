@@ -41,6 +41,11 @@ void PredictionCache::Allocate(int sizeGb)
     {
         void* memory = LargePageAllocator::Allocate(bucketBytes);
         assert(memory);
+        if (!memory)
+        {
+            throw std::bad_alloc();
+        }
+
         _bucketMemory.push_back(memory);
         _bucketEntries.push_back(static_cast<PredictionCacheEntry*>(memory));
     }

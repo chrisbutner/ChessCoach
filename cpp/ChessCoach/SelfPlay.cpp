@@ -6,6 +6,7 @@
 #include <iostream>
 
 #include <Stockfish/thread.h>
+#include <Stockfish/evaluate.h>
 
 #include "Config.h"
 
@@ -249,6 +250,23 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
 
     // Received a prediction from the network.
 
+    // Mix in the Stockfish evaluation when available.
+    // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
+    //
+    // The important thing here is that this helps guide the MCTS search and thus the policy training,
+    // but doesn't train the value head: that is still based purely on game result, so the network isn't
+    // trying to learn a linear human evaluation function.
+    if (!_position.checkers())
+    {
+        const Value stockfishValue = Eval::evaluate(_position);
+        const float stockfishProbability11 = (std::atanf(static_cast<float>(stockfishValue) / 111.714640912f) / 1.5620688421f);
+        const float stockfishProbability01 = std::clamp(((stockfishProbability11 + 1.f) / 2.f), 0.f, 1.f);
+
+        // TODO: Lerp based on training progress.
+        const float stockfishiness = 0.5f;
+        *_value = (*_value * (1.f - stockfishiness)) + (stockfishProbability01 * stockfishiness);
+    }
+
     // Index legal moves into the policy output planes to get logits,
     // then calculate softmax over them to get normalized probabilities for priors.
     int moveCount = 0;
@@ -429,14 +447,15 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storag
             for (int i = 0; i < _games.size(); i++)
             {
                 Play(i);
-                if (_states[i] == SelfPlayState::Finished)
+
+                // In degenerate conditions whole games can finish in CPU via the prediction cache, so loop.
+                while (_states[i] == SelfPlayState::Finished)
                 {
                     workCoordinator.OnWorkItemCompleted();
 
                     SetUpGame(i);
                     Play(i);
                 }
-                assert(_states[i] == SelfPlayState::WaitingForPrediction);
             }
 
             // GPU work
@@ -545,7 +564,9 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         {
             if (mctsSimulation == 0)
             {
+#if !DEBUG_MCTS
                 AddExplorationNoise(game);
+#endif
 
 #if DEBUG_MCTS
                 std::cout << "(Ready for ply " << game.Ply() << "...)" << std::endl;
