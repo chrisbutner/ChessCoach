@@ -449,7 +449,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storag
                 Play(i);
 
                 // In degenerate conditions whole games can finish in CPU via the prediction cache, so loop.
-                while (_states[i] == SelfPlayState::Finished)
+                while ((_states[i] == SelfPlayState::Finished) && !workCoordinator.AllWorkItemsCompleted())
                 {
                     workCoordinator.OnWorkItemCompleted();
 

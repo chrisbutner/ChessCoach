@@ -35,7 +35,7 @@ struct Config
 #ifdef _DEBUG
         1;
 #else
-        256;
+        128;
 #endif
 
 };
