@@ -112,6 +112,10 @@ void PredictionCache::Clear()
             bucket[i].Clear();
         }
     }
+
+    _hitCount = 0;
+    _collisionCount = 0;
+    _probeCount = 0;
 }
 
 void PredictionCache::PrintDebugInfo()
