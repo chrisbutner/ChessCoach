@@ -7,9 +7,14 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoach", "ChessCoach\Ch
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Stockfish", "Stockfish\Stockfish.vcxproj", "{C90630FA-8861-415C-AB03-A4C44F1AA394}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestChessCoach", "TestChessCoach\TestChessCoach.vcxproj", "{9FA44135-8B16-47B5-91D0-F4B02FCDDB75}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTest", "ChessCoachTest\ChessCoachTest.vcxproj", "{9FA44135-8B16-47B5-91D0-F4B02FCDDB75}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTraining", "ChessCoachTraining\ChessCoachTraining.vcxproj", "{811C1C94-ED7C-4007-AF1F-BC16D2BFB906}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTrain", "ChessCoachTraining\ChessCoachTraining.vcxproj", "{811C1C94-ED7C-4007-AF1F-BC16D2BFB906}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2F83C3F3-96F3-4B3A-80B6-ED446C68D0DC}"
+	ProjectSection(SolutionItems) = preProject
+		..\TODO.txt = ..\TODO.txt
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

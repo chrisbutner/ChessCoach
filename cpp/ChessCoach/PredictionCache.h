@@ -61,6 +61,7 @@ public:
     ~PredictionCache();
 
     void Allocate(int sizeGb);
+    void Free();
 
     bool TryGetPrediction(Key key, PredictionCacheEntry** entryOut, float* valueOut, int* moveCountOut, Move* movesOut, float* priorsOut);
     void Clear();

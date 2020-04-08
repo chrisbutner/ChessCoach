@@ -72,7 +72,7 @@ void ChessCoach::InitializeChessCoach()
     Game::Initialize();
 
     LargePageAllocator::Initialize();
-    PredictionCache::Instance.Allocate(8); // 8 GiB
+    PredictionCache::Instance.Allocate(8 /* sizeGb */);
 }
 
 void ChessCoach::FinalizePython()

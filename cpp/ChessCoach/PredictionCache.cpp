@@ -17,19 +17,13 @@ PredictionCache::PredictionCache()
 
 PredictionCache::~PredictionCache()
 {
-    for (void* memory : _bucketMemory)
-    {
-        if (memory)
-        {
-            LargePageAllocator::Free(memory);
-        }
-    }
-    _bucketMemory.clear();
-    _bucketEntries.clear();
+    Free();
 }
 
 void PredictionCache::Allocate(int sizeGb)
 {
+    Free();
+
     const int bucketCount = sizeGb;
     const int bucketBytes = (1024 * 1024 * 1024);
     _bucketEntryCount = (bucketBytes / sizeof(PredictionCacheEntry));
@@ -49,6 +43,25 @@ void PredictionCache::Allocate(int sizeGb)
         _bucketMemory.push_back(memory);
         _bucketEntries.push_back(static_cast<PredictionCacheEntry*>(memory));
     }
+}
+
+void PredictionCache::Free()
+{
+    for (void* memory : _bucketMemory)
+    {
+        if (memory)
+        {
+            LargePageAllocator::Free(memory);
+        }
+    }
+
+    _bucketEntryCount = 0;
+    _bucketMemory.clear();
+    _bucketEntries.clear();
+
+    _hitCount = 0;
+    _collisionCount = 0;
+    _probeCount = 0;
 }
 
 // If returning true, valueOut, moveCountOut, movesOut and priorsOut are populated.

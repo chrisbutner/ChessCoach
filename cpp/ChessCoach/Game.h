@@ -110,6 +110,8 @@ public:
     INetwork::InputPlanes GenerateImage() const;
     INetwork::OutputPlanes GeneratePolicy(const std::map<Move, float>& childVisits) const;
 
+    inline Position& DebugPosition() { return _position; }
+
 private:
 
     void FillPlane(INetwork::Plane& plane, float value) const;

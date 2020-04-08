@@ -1,9 +1,5 @@
 Test cases
-- Pool allocator (DONE)
-- Prediction cache
-	- + Multithread
 - Node leaks during MCTS
-	- + Multithread
 - Storage in temp directory?
 - Stockfish evaluation function
 - MCTS over hard-coded priors/values?
