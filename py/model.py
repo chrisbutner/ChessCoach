@@ -21,12 +21,11 @@ class ChessCoachModel:
   def build_se_block(self, x):
     se_filter_count = self.filter_count
     se = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first")(x)
-    se = tf.keras.layers.Reshape((1, 1, se_filter_count))(se)
     se = tf.keras.layers.Dense(se_filter_count // self.se_ratio, activation="relu", use_bias=False, kernel_initializer="he_normal",
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(se)
-    se = tf.keras.layers.Dense(se_filter_count, activation="relu", use_bias=False, kernel_initializer="he_normal",
+    se = tf.keras.layers.Dense(se_filter_count, activation="sigmoid", use_bias=False, kernel_initializer="he_normal",
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(se)
-    se = tf.keras.layers.Permute((3, 1, 2))(se)
+    se = tf.keras.layers.Reshape((se_filter_count, 1, 1))(se)
 
     x = tf.keras.layers.multiply([x, se])
     return x
@@ -37,7 +36,7 @@ class ChessCoachModel:
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     return x
 
-  def build_residual_block(self, x, se=False):
+  def build_residual_block(self, x, se=True):
     y = self.build_residual_piece(x)
     y = tf.keras.layers.ReLU()(y)
     y = self.build_residual_piece(y)

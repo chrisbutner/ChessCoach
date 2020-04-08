@@ -1,8 +1,13 @@
 Next
+- check for Node leaks
+- limit prediction caching to ply 6, perf(6) = 119,060,324
+- run some validation on policy loss - it's always so low
+- write a bunch of tests
 - try to get tensorboard integrated - can probably just log from py training code
 - try squeeze/excite
 	- once data is better for convergence and tensorboard is up, compare
 - try v2 residuals
+- try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
 - try Wu improvements (accelerating go learning)
 - experiment with endgame tablebases integrated
 
@@ -47,6 +52,10 @@ UCI
 - Implement infinite think, ponder, time controls
 - Implement endgame tablebases (invisible/external to the training loop?)
 - Switch from python-chess to own board, movegen, etc. (or be sure of GPLv3 static vs. dynamic)
+
+Deployment
+- add linux support
+- installers, instructions, progress indicators, error handling, etc.
 
 Low priority
 - see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
