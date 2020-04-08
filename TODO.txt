@@ -1,8 +1,19 @@
+Test cases
+- Pool allocator (DONE)
+- Prediction cache
+	- + Multithread
+- Node leaks during MCTS
+	- + Multithread
+- Storage in temp directory?
+- Stockfish evaluation function
+- MCTS over hard-coded priors/values?
+- test plane mapping (image/policy)
+- see if we can test predictions and validate loss functions
+
 Next
 - check for Node leaks
 - limit prediction caching to ply 6, perf(6) = 119,060,324
 - run some validation on policy loss - it's always so low
-- write a bunch of tests
 - try to get tensorboard integrated - can probably just log from py training code
 - try squeeze/excite
 	- once data is better for convergence and tensorboard is up, compare
