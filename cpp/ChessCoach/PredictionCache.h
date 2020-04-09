@@ -15,7 +15,7 @@ public:
     template <typename MIter, typename PIter>
     void Set(Key key, float value, int moveCount, MIter policyMovesBegin, PIter policyPriorsBegin)
     {
-        assert(moveCount <= INetwork::MaxBranchMoves);
+        assert(moveCount <= Config::MaxBranchMoves);
 
         std::unique_lock lock(_mutex);
 
@@ -40,13 +40,13 @@ private:
     float _value;                                           // 4 bytes
     int _moveCount;                                         // 4 bytes
     char _padding[8];                                       // 8 bytes
-    uint16_t _policyMoves[INetwork::MaxBranchMoves];        // 160 bytes
-    float _policyPriors[INetwork::MaxBranchMoves];          // 320 bytes
+    uint16_t _policyMoves[Config::MaxBranchMoves];        // 160 bytes
+    float _policyPriors[Config::MaxBranchMoves];          // 320 bytes
 
     friend class PredictionCache;
 };
 static_assert(sizeof(std::shared_mutex) == 8);
-static_assert(INetwork::MaxBranchMoves == 80);
+static_assert(Config::MaxBranchMoves == 80);
 static_assert(sizeof(PredictionCacheEntry) == 8 * 64);
 
 class PredictionCache

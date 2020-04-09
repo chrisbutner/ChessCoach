@@ -1,6 +1,6 @@
-#include <array>
-
 #include <gtest/gtest.h>
+
+#include <array>
 
 #include <ChessCoach/SelfPlay.h>
 #include <ChessCoach/PredictionCache.h>
@@ -11,8 +11,8 @@ bool TryGetPrediction(Key key)
     PredictionCacheEntry* entry;
     float value;
     int moveCount;
-    std::array<Move, INetwork::MaxBranchMoves> moves;
-    std::array<float, INetwork::MaxBranchMoves> priors;
+    std::array<Move, Config::MaxBranchMoves> moves;
+    std::array<float, Config::MaxBranchMoves> priors;
 
     bool hit = PredictionCache::Instance.TryGetPrediction(key, &entry, &value, &moveCount, moves.data(), priors.data());
     if (!hit)

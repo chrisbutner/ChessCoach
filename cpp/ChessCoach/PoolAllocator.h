@@ -32,6 +32,7 @@ public:
         : _memory(nullptr)
         , _next(nullptr)
         , _currentlyAllocatedCount(0)
+        , _peakAllocatedCount(0)
     {
     }
 
@@ -87,6 +88,7 @@ public:
 
 #ifdef _DEBUG
         _currentlyAllocatedCount++;
+        _peakAllocatedCount = std::max(_peakAllocatedCount, _currentlyAllocatedCount);
 #endif
         
         void* allocation = _next;
@@ -112,11 +114,17 @@ public:
         _next = asChunk;
     }
 
+    std::pair<int, int> DebugAllocations()
+    {
+        return std::pair(_currentlyAllocatedCount, _peakAllocatedCount);
+    }
+
 private:
 
     void* _memory;
     Chunk* _next;
     int _currentlyAllocatedCount;
+    int _peakAllocatedCount;
 };
 
 #endif // _POOLALLOCATOR_H_

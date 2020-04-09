@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include <ChessCoach/SelfPlay.h>
 #include <ChessCoach/PoolAllocator.h>
 
@@ -67,4 +69,23 @@ TEST(PoolAllocator, Node)
     EXPECT_EQ(node3, node4);
 
     EXPECT_THROW(new Node(0.f), std::bad_alloc);
+}
+
+TEST(PoolAllocator, Alignment)
+{
+    const size_t alignment = std::max(__STDCPP_DEFAULT_NEW_ALIGNMENT__, alignof(int));
+    EXPECT_GT(alignment, sizeof(int));
+
+    LargePageAllocator::Initialize();
+
+    PoolAllocator<int> poolAllocator;
+
+    const int itemCount = 5;
+    poolAllocator.Initialize(itemCount);
+        
+    for (int i = 0; i < itemCount; i++)
+    {
+        uintptr_t item = reinterpret_cast<uintptr_t>(poolAllocator.Allocate());
+        EXPECT_EQ(item % alignment, 0);
+    }
 }

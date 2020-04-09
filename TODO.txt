@@ -1,5 +1,4 @@
 Test cases
-- Node leaks during MCTS
 - Storage in temp directory?
 - Stockfish evaluation function
 - MCTS over hard-coded priors/values?
@@ -7,7 +6,6 @@ Test cases
 - see if we can test predictions and validate loss functions
 
 Next
-- check for Node leaks
 - limit prediction caching to ply 6, perf(6) = 119,060,324
 - run some validation on policy loss - it's always so low
 - try to get tensorboard integrated - can probably just log from py training code

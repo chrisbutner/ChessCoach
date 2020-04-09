@@ -85,7 +85,14 @@ public:
     void Softmax(int moveCount, float* distribution) const;
     std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
+    void Complete();
     StoredGame Store() const;
+    void PruneExcept(Node* root, Node* except);
+    void PruneAll();
+
+private:
+
+    void PruneAllInternal(Node* root);
 
 private:
 
@@ -97,9 +104,10 @@ private:
     int _searchRootPly;
 
     // Stored history and statistics.
-    // Only used for real games, so no need to copy.
+    // Only used for real games, so no need to copy, but may make sense for primitives.
     std::vector<std::map<Move, float>> _childVisits;
     std::vector<Move> _history;
+    float _result;
 
     // Coroutine state.
     // Only used for real games, so no need to copy.
@@ -122,20 +130,21 @@ public:
     SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
 
     void ResetGames();
-    void PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network, int maxNodesPerThread);
-    void Initialize(Storage* storage, int maxNodesPerThread);
+    void PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network);
+    void Initialize(Storage* storage);
     void SetUpGame(int index);
     void DebugGame(INetwork* network, int index, const StoredGame& stored, int startingPly);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint) const;
     void Play(int index);
+    void SaveToStorageAndLog(int index);
     std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
         std::vector<Node*>& searchPath, PredictionCacheEntry*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
     void Backpropagate(const std::vector<Node*>& searchPath, float value) const;
-    void PruneExcept(Node* root, Node* except) const;
-    void PruneAll(Node* root) const;
+
+    void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
 
 private:
 

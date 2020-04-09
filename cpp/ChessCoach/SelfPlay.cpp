@@ -72,6 +72,7 @@ SelfPlayGame::SelfPlayGame()
     , _value(nullptr)
     , _policy(nullptr)
     , _searchRootPly(0)
+    , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }
 
@@ -82,6 +83,7 @@ SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork:
     , _value(value)
     , _policy(policy)
     , _searchRootPly(0)
+    , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }
 
@@ -92,6 +94,7 @@ SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     , _value(other._value)
     , _policy(other._policy)
     , _searchRootPly(other.Ply())
+    , _result(other._result)
 {
     assert(&other != this);
 }
@@ -107,6 +110,7 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
     _value = other._value;
     _policy = other._policy;
     _searchRootPly = other.Ply();
+    _result = other._result;
 
     return *this;
 }
@@ -120,6 +124,7 @@ SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
     , _searchRootPly(other._searchRootPly)
     , _childVisits(std::move(other._childVisits))
     , _history(std::move(other._history))
+    , _result(other._result)
 {
     assert(&other != this);
 }
@@ -137,6 +142,7 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
     _searchRootPly = other._searchRootPly;
     _childVisits = std::move(other._childVisits);
     _history = std::move(other._history);
+    _result = other._result;
 
     return *this;
 }
@@ -159,13 +165,15 @@ float SelfPlayGame::TerminalValue() const
 {
     // Require that the caller has seen IsTerminal() as true before calling TerminalValue().
     // So, just coalesce a draw for the Ply >= MaxMoves case.
+    assert(IsTerminal());
     return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) ? _root->terminalValue : CHESSCOACH_VALUE_DRAW;
 }
 
 float SelfPlayGame::Result() const
 {
-    // Require that the caller has seen IsTerminal() as true before calling Result(), and hasn't played/unplayed any moves.
-    return FlipValue(ToPlay(), TerminalValue());
+    // Require that the caller has seen IsTerminal() as true and called Complete() before calling Result().
+    assert(_result != CHESSCOACH_VALUE_UNINITIALIZED);
+    return _result;
 }
 
 void SelfPlayGame::ApplyMoveWithRoot(Move move, Node* newRoot)
@@ -282,10 +290,10 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
     // In that case, better to also apply that limit now for consistency.
     if (cacheStore)
     {
-        if (moveCount > INetwork::MaxBranchMoves)
+        if (moveCount > Config::MaxBranchMoves)
         {
             LimitBranchingToBest(moveCount, _cachedMoves.data(), _cachedPriors.data());
-            moveCount = INetwork::MaxBranchMoves;
+            moveCount = Config::MaxBranchMoves;
         }
         cacheStore->Set(_imageKey, *_value, moveCount, _cachedMoves.data(), _cachedPriors.data());
     }
@@ -302,9 +310,9 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
 
 void SelfPlayGame::LimitBranchingToBest(int moveCount, Move* moves, float* priors)
 {
-    assert(moveCount > INetwork::MaxBranchMoves);
+    assert(moveCount > Config::MaxBranchMoves);
 
-    for (int i = 0; i < INetwork::MaxBranchMoves; i++)
+    for (int i = 0; i < Config::MaxBranchMoves; i++)
     {
         int max = i;
         for (int j = i + 1; j < moveCount; j++)
@@ -399,9 +407,53 @@ void SelfPlayGame::StoreSearchStatistics()
     _childVisits.emplace_back(std::move(visits));
 }
 
+void SelfPlayGame::Complete()
+{
+    assert(IsTerminal());
+
+    // Save state that depends on nodes.
+    _result = FlipValue(ToPlay(), TerminalValue());
+
+    // Clear and detach from all nodes.
+    PruneAll();
+}
+
 StoredGame SelfPlayGame::Store() const
 {
     return StoredGame(Result(), _history, _childVisits);
+}
+
+void SelfPlayGame::PruneExcept(Node* root, Node* except)
+{
+    // Rely on caller to already have updated the _root to the preserved subtree.
+    assert(_root != root);
+    assert(_root == except);
+
+    for (auto& pair : root->children)
+    {
+        if (pair.second != except)
+        {
+            PruneAllInternal(pair.second);
+        }
+    }
+    delete root;
+}
+
+void SelfPlayGame::PruneAll()
+{
+    PruneAllInternal(_root);
+
+    // All nodes in the related tree are gone, so don't leave _root dangling.
+    _root = nullptr;
+}
+
+void SelfPlayGame::PruneAllInternal(Node* root)
+{
+    for (auto& pair : root->children)
+    {
+        PruneAllInternal(pair.second);
+    }
+    delete root;
 }
 
 SelfPlayWorker::SelfPlayWorker()
@@ -427,10 +479,10 @@ void SelfPlayWorker::ResetGames()
     }
 }
 
-void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network, int maxNodesPerThread)
+void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network)
 {
     // Initialize on the worker thread.
-    Initialize(storage, maxNodesPerThread);
+    Initialize(storage);
 
     while (true)
     {
@@ -451,6 +503,8 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storag
                 // In degenerate conditions whole games can finish in CPU via the prediction cache, so loop.
                 while ((_states[i] == SelfPlayState::Finished) && !workCoordinator.AllWorkItemsCompleted())
                 {
+                    SaveToStorageAndLog(i);
+
                     workCoordinator.OnWorkItemCompleted();
 
                     SetUpGame(i);
@@ -464,10 +518,10 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storag
     }
 }
 
-void SelfPlayWorker::Initialize(Storage* storage, int maxNodesPerThread)
+void SelfPlayWorker::Initialize(Storage* storage)
 {
     _storage = storage;
-    Node::Allocator.Initialize(maxNodesPerThread);
+    Node::Allocator.Initialize(Config::MaxNodesPerThread);
 }
 
 void SelfPlayWorker::SetUpGame(int index)
@@ -537,22 +591,27 @@ void SelfPlayWorker::Play(int index)
         assert(selected.second != nullptr);
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(selected.first, selected.second);
-        PruneExcept(root, selected.second /* == game.Root() */);
+        game.PruneExcept(root, selected.second /* == game.Root() */);
     }
 
-    // Take care with ordering:
-    // - PruneAll() wipes anything relying on nodes, e.g. result.
+    // Clean up resources in use and save the result.
+    game.Complete();
+
+    state = SelfPlayState::Finished;
+}
+
+void SelfPlayWorker::SaveToStorageAndLog(int index)
+{
+    const SelfPlayGame& game = _games[index];
+
     const int ply = game.Ply();
     const float result = game.Result();
     const int gameNumber = _storage->AddGame(game.Store());
-    PruneAll(game.Root());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);
     std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
     //PredictionCache::Instance.PrintDebugInfo();
-
-    state = SelfPlayState::Finished;
 }
 
 std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
@@ -678,23 +737,10 @@ void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float v
     }
 }
 
-void SelfPlayWorker::PruneExcept(Node* root, Node* except) const
+void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut)
 {
-    for (auto& pair : root->children)
-    {
-        if (pair.second != except)
-        {
-            PruneAll(pair.second);
-        }
-    }
-    delete root;
-}
-
-void SelfPlayWorker::PruneAll(Node* root) const
-{
-    for (auto& pair : root->children)
-    {
-        PruneAll(pair.second);
-    }
-    delete root;
+    *gameOut = &_games[index];
+    *stateOut = &_states[index];
+    *valuesOut = &_values[index];
+    *policiesOut = &_policies[index];
 }

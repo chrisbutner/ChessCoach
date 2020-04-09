@@ -5,7 +5,7 @@
 #include "Config.h"
 
 int Game::QueenKnightPlane[SQUARE_NB];
-Key Game::PredictionCache_PreviousMoveSquare[INetwork::InputPreviousMoveCount][SQUARE_NB];
+Key Game::PredictionCache_PreviousMoveSquare[Config::InputPreviousMoveCount][SQUARE_NB];
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 
 void Game::Initialize()
@@ -34,7 +34,7 @@ void Game::Initialize()
     }
 
     PRNG rng(7607098); // Arbitrary seed
-    for (int i = 0; i < INetwork::InputPreviousMoveCount; i++)
+    for (int i = 0; i < Config::InputPreviousMoveCount; i++)
     {
         for (Square square = SQ_A1; square <= SQ_H8; ++square)
         {
@@ -112,7 +112,7 @@ void Game::ApplyMove(Move move)
     _positionStates->emplace_back();
     _position.do_move(move, _positionStates->back());
     _previousMoves[_previousMovesOldest] = move;
-    _previousMovesOldest = (_previousMovesOldest + 1) % INetwork::InputPreviousMoveCount;
+    _previousMovesOldest = (_previousMovesOldest + 1) % Config::InputPreviousMoveCount;
 }
 
 int Game::Ply() const
@@ -153,7 +153,7 @@ Key Game::GenerateImageKey() const
 
     // Add previous move planes 12-19 to key.
     int previousMoveIndex = _previousMovesOldest;
-    for (int i = 0; i < INetwork::InputPreviousMoveCount; i++)
+    for (int i = 0; i < Config::InputPreviousMoveCount; i++)
     {
         Move move = _previousMoves[previousMoveIndex];
         if (move != MOVE_NONE)
@@ -164,7 +164,7 @@ Key Game::GenerateImageKey() const
             key ^= PredictionCache_PreviousMoveSquare[i][from];
             key ^= PredictionCache_PreviousMoveSquare[i][to];
         }
-        previousMoveIndex = (previousMoveIndex + 1) % INetwork::InputPreviousMoveCount;
+        previousMoveIndex = (previousMoveIndex + 1) % Config::InputPreviousMoveCount;
     }
 
     // Add no-progress plane 24 to key.
@@ -198,7 +198,7 @@ INetwork::InputPlanes Game::GenerateImage() const
 
     // Previous move planes 12-19
     int previousMoveIndex = _previousMovesOldest;
-    for (int i = 0; i < INetwork::InputPreviousMoveCount; i++)
+    for (int i = 0; i < Config::InputPreviousMoveCount; i++)
     {
         Move move = _previousMoves[previousMoveIndex];
         if (move != MOVE_NONE)
@@ -209,7 +209,7 @@ INetwork::InputPlanes Game::GenerateImage() const
             image[i][rank_of(from)][file_of(from)] = 1.f;
             image[i][rank_of(to)][file_of(to)] = 1.f;
         }
-        previousMoveIndex = (previousMoveIndex + 1) % INetwork::InputPreviousMoveCount;
+        previousMoveIndex = (previousMoveIndex + 1) % Config::InputPreviousMoveCount;
     }
 
     // Castling planes 20-23

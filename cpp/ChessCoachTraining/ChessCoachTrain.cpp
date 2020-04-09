@@ -52,7 +52,6 @@ void ChessCoachTrain::TrainChessCoach()
     // Set up configuration for full training.
     const int networkCount = (Config::TrainingSteps / Config::CheckpointInterval);
     const int gamesPerNetwork = (Config::SelfPlayGames / networkCount);
-    const int maxNodesPerThread = (2 * Config::MaxMoves * INetwork::MaxBranchMoves * Config::PredictionBatchSize);
     
     std::vector<SelfPlayWorker> selfPlayWorkers(Config::SelfPlayWorkerCount);
     std::vector<std::thread> selfPlayThreads;
@@ -63,7 +62,7 @@ void ChessCoachTrain::TrainChessCoach()
         std::cout << "Starting self-play thread " << (i + 1) << " of " << selfPlayWorkers.size() <<
             " (" << Config::PredictionBatchSize << " games per thread)" << std::endl;
 
-        selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, &selfPlayWorkers[i], std::ref(workCoordinator), &storage, network.get(), maxNodesPerThread);
+        selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, &selfPlayWorkers[i], std::ref(workCoordinator), &storage, network.get());
     }
 
     // If existing games found, resume progress.
@@ -114,7 +113,7 @@ void ChessCoachTrain::DebugGame()
     Storage storage;
 
     SelfPlayWorker worker;
-    worker.Initialize(&storage, 2 * Config::MaxMoves * INetwork::MaxBranchMoves * Config::PredictionBatchSize);
+    worker.Initialize(&storage);
 
     StoredGame stored = storage.LoadFromDisk("path_to_game");
     worker.DebugGame(network.get(), 0, stored, 23);

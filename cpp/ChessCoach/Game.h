@@ -76,7 +76,7 @@ public:
 
     static const int NoProgressSaturationCount = 99;
 
-    static Key PredictionCache_PreviousMoveSquare[INetwork::InputPreviousMoveCount][SQUARE_NB];
+    static Key PredictionCache_PreviousMoveSquare[Config::InputPreviousMoveCount][SQUARE_NB];
     static Key PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 
     constexpr const static char* SquareName[SQUARE_NB] = {
@@ -121,7 +121,7 @@ protected:
     // Used for both real and scratch games.
     Position _position;
     StateListPtr _positionStates;
-    std::array<Move, INetwork::InputPreviousMoveCount> _previousMoves;
+    std::array<Move, Config::InputPreviousMoveCount> _previousMoves;
     int _previousMovesOldest;
 };
 

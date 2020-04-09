@@ -5,6 +5,9 @@
 
 struct Config
 {
+    static const int InputPreviousMoveCount = 8;
+    static const int MaxBranchMoves = 80;
+
     static const int BatchSize = 2048; // OOM on GTX 1080 @ 4096;
     static const float TrainingFactor;
     static const int TrainingSteps;
@@ -13,7 +16,7 @@ struct Config
     static const int SelfPlayGames;
 
     static const int NumSampingMoves;
-    static const int MaxMoves;
+    static const int MaxMoves = 512;
     static const int NumSimulations;
 
     static const float RootDirichletAlpha;
@@ -38,6 +41,7 @@ struct Config
         128;
 #endif
 
+    static const int MaxNodesPerThread = (2 * MaxMoves * MaxBranchMoves * PredictionBatchSize);
 };
 
 #endif // _CONFIG_H_

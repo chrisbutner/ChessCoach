@@ -7,7 +7,6 @@ const int Config::WindowSize = 1000000;
 const int Config::SelfPlayGames = 44000000;
 
 const int Config::NumSampingMoves = 30;
-const int Config::MaxMoves = 512;
 const int Config::NumSimulations = 800;
 
 const float Config::RootDirichletAlpha = 0.3f;
