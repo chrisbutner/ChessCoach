@@ -86,6 +86,17 @@ SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork:
 {
 }
 
+SelfPlayGame::SelfPlayGame(const std::string& fen, INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
+    : Game(fen)
+    , _root(new Node(0.f))
+    , _image(image)
+    , _value(value)
+    , _policy(policy)
+    , _searchRootPly(0)
+    , _result(CHESSCOACH_VALUE_UNINITIALIZED)
+{
+}
+
 SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     : Game(other)
     , _root(other._root)

@@ -51,6 +51,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="MctsTest.cpp" />
+    <ClCompile Include="NetworkTest.cpp" />
     <ClCompile Include="PoolAllocatorTest.cpp" />
     <ClCompile Include="PredictionCacheTest.cpp" />
     <ClCompile Include="StockfishTest.cpp" />

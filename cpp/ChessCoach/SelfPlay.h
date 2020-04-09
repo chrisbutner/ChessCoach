@@ -65,6 +65,7 @@ public:
 
     SelfPlayGame();
     SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
+    SelfPlayGame(const std::string& fen, INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
 
     SelfPlayGame(const SelfPlayGame& other);
     SelfPlayGame& operator=(const SelfPlayGame& other);

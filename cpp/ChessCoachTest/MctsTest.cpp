@@ -34,7 +34,7 @@ SelfPlayGame& PlayGame(SelfPlayWorker& selfPlayWorker)
     }
 }
 
-TEST(Mcts, DISABLED_NodeLeaks)
+TEST(Mcts, NodeLeaks)
 {
     ChessCoach chessCoach;
     chessCoach.Initialize();
