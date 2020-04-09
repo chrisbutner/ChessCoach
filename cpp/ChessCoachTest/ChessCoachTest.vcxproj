@@ -53,6 +53,7 @@
     <ClCompile Include="MctsTest.cpp" />
     <ClCompile Include="PoolAllocatorTest.cpp" />
     <ClCompile Include="PredictionCacheTest.cpp" />
+    <ClCompile Include="StockfishTest.cpp" />
     <ClCompile Include="StorageTest.cpp" />
   </ItemGroup>
   <ItemGroup>

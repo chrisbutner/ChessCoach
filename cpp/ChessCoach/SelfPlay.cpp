@@ -6,7 +6,6 @@
 #include <iostream>
 
 #include <Stockfish/thread.h>
-#include <Stockfish/evaluate.h>
 
 #include "Config.h"
 
@@ -257,18 +256,14 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
     // Received a prediction from the network.
 
     // Mix in the Stockfish evaluation when available.
-    // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
     //
     // The important thing here is that this helps guide the MCTS search and thus the policy training,
     // but doesn't train the value head: that is still based purely on game result, so the network isn't
     // trying to learn a linear human evaluation function.
-    if (!_position.checkers())
+    if (StockfishCanEvaluate())
     {
-        const Value stockfishValue = Eval::evaluate(_position);
-        const float stockfishProbability11 = (std::atanf(static_cast<float>(stockfishValue) / 111.714640912f) / 1.5620688421f);
-        const float stockfishProbability01 = std::clamp(((stockfishProbability11 + 1.f) / 2.f), 0.f, 1.f);
-
         // TODO: Lerp based on training progress.
+        const float stockfishProbability01 = StockfishEvaluation();
         const float stockfishiness = 0.5f;
         *_value = (*_value * (1.f - stockfishiness)) + (stockfishProbability01 * stockfishiness);
     }

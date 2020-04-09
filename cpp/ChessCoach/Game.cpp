@@ -1,6 +1,7 @@
 #include "Game.h"
 
 #include <Stockfish/thread.h>
+#include <Stockfish/evaluate.h>
 
 #include "Config.h"
 
@@ -54,6 +55,15 @@ Game::Game()
 
 {
     _position.set(Config::StartingPosition, false /* isChess960 */, &_positionStates->back(), Threads.main());
+}
+
+Game::Game(const std::string& fen)
+    : _positionStates(new std::deque<StateInfo>(1))
+    , _previousMoves{} // Fills with MOVE_NONE == 0
+    , _previousMovesOldest(0)
+
+{
+    _position.set(fen, false /* isChess960 */, &_positionStates->back(), Threads.main());
 }
 
 Game::Game(const Game& other)
@@ -249,6 +259,18 @@ INetwork::OutputPlanes Game::GeneratePolicy(const std::map<Move, float>& childVi
     return policy;
 }
 #pragma warning(default:6262) // Ignore stack warning, caller can emplace to heap via RVO.
+
+bool Game::StockfishCanEvaluate() const
+{
+    return !_position.checkers();
+}
+
+float Game::StockfishEvaluation() const
+{
+    const Value centipawns = Eval::evaluate(_position);
+    const float probability01 = CentipawnsToProbability01(static_cast<float>(centipawns));
+    return probability01;
+}
 
 void Game::FillPlane(INetwork::Plane& plane, float value) const
 {

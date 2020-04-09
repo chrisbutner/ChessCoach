@@ -2,6 +2,8 @@
 #define _GAME_H_
 
 #include <map>
+#include <cmath>
+#include <algorithm>
 
 #include <Stockfish/Position.h>
 
@@ -17,6 +19,25 @@ class Game
 public:
 
     static void Initialize();
+
+    constexpr static float CentipawnConversionPhase = 1.5620688421f;
+    constexpr static float CentipawnConversionScale = 111.714640912f;
+
+    inline static float CentipawnsToProbability01(float centipawns)
+    {
+        // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
+        const float probability11 = (std::atanf(centipawns / CentipawnConversionScale) / CentipawnConversionPhase);
+        const float probability01 = ((probability11 + 1.f) / 2.f);
+        return std::clamp(probability01, 0.f, 1.f);
+    }
+
+    inline static float Probability01ToCentipawns(float probability01)
+    {
+        // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
+        const float probability11 = ((probability01 * 2.f) - 1.f);
+        const float centipawns = (std::tanf(probability11 * CentipawnConversionPhase) * CentipawnConversionScale);
+        return centipawns;
+    }
 
     constexpr static Move FlipMove(Color color, Move move)
     {
@@ -95,6 +116,7 @@ public:
 public:
 
     Game();
+    explicit Game(const std::string& fen);
 
     Game(const Game& other);
     Game& operator=(const Game& other);
@@ -109,6 +131,8 @@ public:
     Key GenerateImageKey() const;
     INetwork::InputPlanes GenerateImage() const;
     INetwork::OutputPlanes GeneratePolicy(const std::map<Move, float>& childVisits) const;
+    bool StockfishCanEvaluate() const;
+    float StockfishEvaluation() const;
 
     inline Position& DebugPosition() { return _position; }
 
