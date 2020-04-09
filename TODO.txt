@@ -7,6 +7,7 @@ Next
 - try v2 residuals
 - try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
 - try Wu improvements (accelerating go learning)
+- try deformable CNNs
 - experiment with endgame tablebases integrated
 
 Performance
