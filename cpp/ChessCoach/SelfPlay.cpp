@@ -46,7 +46,7 @@ bool Node::IsExpanded() const
 
 float Node::Value() const
 {
-    return (visitCount > 0) ? (valueSum / visitCount) : CHESSCOACH_VALUE_LOSE;
+    return (visitCount > 0) ? (valueSum / visitCount) : CHESSCOACH_VALUE_LOSS;
 }
 
 int Node::SumChildVisits() const
@@ -163,15 +163,13 @@ bool SelfPlayGame::IsTerminal() const
 
 float SelfPlayGame::TerminalValue() const
 {
-    // Require that the caller has seen IsTerminal() as true before calling TerminalValue().
-    // So, just coalesce a draw for the Ply >= MaxMoves case.
-    assert(IsTerminal());
+    // Coalesce a draw for the (Ply >= MaxMoves) and other undetermined/unfinished cases.
     return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) ? _root->terminalValue : CHESSCOACH_VALUE_DRAW;
 }
 
 float SelfPlayGame::Result() const
 {
-    // Require that the caller has seen IsTerminal() as true and called Complete() before calling Result().
+    // Require that the caller has called Complete() before calling Result().
     assert(_result != CHESSCOACH_VALUE_UNINITIALIZED);
     return _result;
 }
@@ -228,7 +226,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
         // Check for checkmate and stalemate.
         if (_expandAndEvaluate_moves == _expandAndEvaluate_endMoves)
         {
-            root->terminalValue = (_position.checkers() ? CHESSCOACH_VALUE_LOSE : CHESSCOACH_VALUE_DRAW);
+            root->terminalValue = (_position.checkers() ? CHESSCOACH_VALUE_LOSS : CHESSCOACH_VALUE_DRAW);
             return root->terminalValue;
         }
 
@@ -409,8 +407,6 @@ void SelfPlayGame::StoreSearchStatistics()
 
 void SelfPlayGame::Complete()
 {
-    assert(IsTerminal());
-
     // Save state that depends on nodes.
     _result = FlipValue(ToPlay(), TerminalValue());
 

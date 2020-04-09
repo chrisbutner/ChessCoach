@@ -9,7 +9,7 @@
 
 const static float CHESSCOACH_VALUE_WIN = 1.0f;
 const static float CHESSCOACH_VALUE_DRAW = 0.5f;
-const static float CHESSCOACH_VALUE_LOSE = 0.0f;
+const static float CHESSCOACH_VALUE_LOSS = 0.0f;
 const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
 
 class Game

@@ -43,16 +43,19 @@ Storage::Storage()
     _gamesPath = std::filesystem::path(rootEnvPath) / GamesPart;
     _networksPath = std::filesystem::path(rootEnvPath) / NetworksPart;
 
-    std::error_code error;
-    std::filesystem::create_directories(_gamesPath, error);
-    assert(!error);
+    std::filesystem::create_directories(_gamesPath);
+}
+
+Storage::Storage(const std::filesystem::path& gamesPath, const std::filesystem::path& networksPath)
+    : _latestGameNumber(0)
+    , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
+    , _gamesPath(gamesPath)
+    , _networksPath(networksPath)
+{
 }
 
 void Storage::LoadExistingGames()
 {
-#ifdef _DEBUG
-    std::cout << "Skipping game loading in debug" << std::endl;
-#else
     for (const auto& directory : std::filesystem::directory_iterator(_gamesPath))
     {
         AddGameWithoutSaving(LoadFromDisk(directory.path().string()));
@@ -62,7 +65,6 @@ void Storage::LoadExistingGames()
         }
     }
     std::cout << _latestGameNumber << " games loaded" << std::endl;
-#endif
 }
 
 int Storage::AddGame(StoredGame&& game)

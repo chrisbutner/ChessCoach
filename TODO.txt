@@ -1,5 +1,4 @@
 Test cases
-- Storage in temp directory?
 - Stockfish evaluation function
 - MCTS over hard-coded priors/values?
 - test plane mapping (image/policy)

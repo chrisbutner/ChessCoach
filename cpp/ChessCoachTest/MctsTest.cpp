@@ -39,6 +39,7 @@ TEST(Mcts, NodeLeaks)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
+    // Initialize the Node allocator.
     SelfPlayWorker selfPlayWorker;
     selfPlayWorker.Initialize(nullptr /* storage */);
 
@@ -46,7 +47,7 @@ TEST(Mcts, NodeLeaks)
     EXPECT_EQ(currentBefore, 0);
     EXPECT_EQ(peakBefore, 0);
 
-    SelfPlayGame& game = PlayGame(selfPlayWorker);
+    PlayGame(selfPlayWorker);
 
     auto [currentAfter, peakAfter] = Node::Allocator.DebugAllocations();
     EXPECT_EQ(currentAfter, 0);

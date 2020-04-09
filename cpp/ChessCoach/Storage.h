@@ -44,6 +44,7 @@ private:
 public:
 
     Storage();
+    Storage(const std::filesystem::path& gamesPath, const std::filesystem::path& networksPath);
 
     void LoadExistingGames();
     int AddGame(StoredGame&& game);
