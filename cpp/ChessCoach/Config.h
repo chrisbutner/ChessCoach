@@ -8,6 +8,11 @@ struct Config
     static const int InputPreviousMoveCount = 8;
     static const int MaxBranchMoves = 80;
 
+    // 8 GiB cache with 512-byte entries gives 16777216 entries.
+    // perft(5) is 4,865,609. perft(6) is 119,060,324.
+    static const int PredictionCacheSizeGb = 8;
+    static const int MaxPredictionCachePly = 6;
+
     static const int BatchSize = 2048; // OOM on GTX 1080 @ 4096;
     static const float TrainingFactor;
     static const int TrainingSteps;

@@ -216,8 +216,12 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
         float cachedValue;
         int cachedMoveCount;
         _imageKey = GenerateImageKey();
-        bool hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, &cacheStore, &cachedValue,
-            &cachedMoveCount, _cachedMoves.data(), _cachedPriors.data());
+        bool hitCached = false;
+        if (Ply() <= Config::MaxPredictionCachePly)
+        {
+            hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, &cacheStore, &cachedValue,
+                &cachedMoveCount, _cachedMoves.data(), _cachedPriors.data());
+        }
         if (hitCached)
         {
             // Expand child nodes with the cached priors.

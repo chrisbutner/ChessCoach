@@ -1,6 +1,4 @@
 Next
-- separate binary output paths
-- limit prediction caching to ply 6, perf(6) = 119,060,324
 - run some validation on policy loss - it's always so low
 	- print accuracy during training
 	- try to get tensorboard integrated - can probably just log from py training code
