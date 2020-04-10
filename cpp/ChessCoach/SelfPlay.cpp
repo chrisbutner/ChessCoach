@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <cmath>
+#include <limits>
 #include <chrono>
 #include <iostream>
 
@@ -265,7 +266,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
         // Prepare for a prediction from the network.
         *_image = GenerateImage();
         state = SelfPlayState::WaitingForPrediction;
-        return std::nanf("");
+        return std::numeric_limits<float>::quiet_NaN();
     }
 
     // Received a prediction from the network.
@@ -557,16 +558,16 @@ void SelfPlayWorker::DebugGame(INetwork* network, int index, const StoredGame& s
 
 void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
 {
-    for (int step = checkpoint - stepCount + 1; step <= checkpoint; step++)
+    auto startTrain = std::chrono::high_resolution_clock::now();
+    const int startStep = (checkpoint - stepCount + 1);
+    for (int step = startStep; step <= checkpoint; step++)
     {
-        auto startTrain = std::chrono::high_resolution_clock::now();
-
-        TrainingBatch* batch = _storage->SampleBatch();
+        TrainingBatch* batch = _storage->SampleBatch();        
         network->TrainBatch(step, batch->images.data(), batch->values.data(), batch->policies.data());
-
-        std::cout << "Train, step " << step << ", time " <<
-            std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count() << std::endl;
     }
+    const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
+    const float trainTimePerStep = (trainTime / stepCount);
+    std::cout << "Trained steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
 
     network->SaveNetwork(checkpoint);
 }

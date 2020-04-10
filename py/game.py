@@ -1,12 +1,6 @@
 import chess
 import chess.pgn
 
-def map_01_to_11(value):
-  return 2.0 * value - 1.0
-
-def map_11_to_01(value):
-  return (value + 1.0)/2.0
-
 def map_01_to_pgn(value):
   return {
     1.0: "1-0",

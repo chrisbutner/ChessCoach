@@ -1,12 +1,24 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import argparse
 import storage
 import os
 
-parser = argparse.ArgumentParser()
-args = parser.parse_args()
+def print_pgn(filename):
+  game = storage.load_game(os.path.join(storage.games_path, filename))
+  print(game.pgn())
+
+def test_train():
+  import network
+  from model import ChessCoachModel
+  import numpy
+  batch_size = 2
+  images = numpy.zeros((batch_size, ChessCoachModel.input_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
+  values = numpy.full((batch_size, 1), 0.123, dtype=numpy.float32)
+  policies = numpy.zeros((batch_size, ChessCoachModel.output_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
+  for i in range(batch_size):
+    policies[i][1][2][3] = 1.0
+  network.train_batch(step=1, images=images, values=values, policies=policies)
 
 print("Starting Python-ChessCoach")
-game = storage.load_game(os.path.join(storage.games_path, "game_000011385"))
-print(game.pgn())
+print_pgn("game_000000821")
+#test_train()

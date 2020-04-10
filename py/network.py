@@ -28,7 +28,7 @@ class AlphaZeroConfig(object):
 
     self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
-    self.chesscoach_slowdown_factor = 200
+    self.chesscoach_slowdown_factor = self.chesscoach_training_factor
     self.learning_rate_schedule = {
         int(0 * self.chesscoach_training_factor): 2e-1 / self.chesscoach_slowdown_factor,
         int(100e3 * self.chesscoach_training_factor): 2e-2 / self.chesscoach_slowdown_factor,
@@ -46,8 +46,13 @@ class KerasNetwork(Network):
   def __init__(self, model=None):
     self.model = model or ChessCoachModel().build()
     optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
-    losses = ["mean_squared_error", tf.keras.losses.CategoricalCrossentropy(from_logits=True)]
-    self.model.compile(optimizer=optimizer, loss=losses)
+    losses = ["mean_squared_error", self.flat_categorical_crossentropy_from_logits]
+    self.model.compile(optimizer=optimizer, loss=losses, metrics=[[], ["accuracy"]])
+
+  # This fixes an issue with categorical_crossentropy calculating incorrectly
+  # over our 73*8*8 output planes - loss ends up way too small.
+  def flat_categorical_crossentropy_from_logits(self, y_true, y_pred):
+    return tf.keras.losses.categorical_crossentropy(y_true=K.batch_flatten(y_true), y_pred=K.batch_flatten(y_pred), from_logits=True)
 
   def predict_batch(self, image):
     assert False
@@ -63,7 +68,7 @@ class UniformNetwork(Network):
     values = self.latest_values
     policies = self.latest_policies
     if ((values is None) or (len(image) != len(values))):
-      values = numpy.full((len(image)), 0.5, dtype=numpy.float32)
+      values = numpy.full((len(image)), 0.0, dtype=numpy.float32)
       self.latest_values = values
     if ((policies is None) or (len(image) != len(policies))):
       policies = numpy.zeros((len(image), ChessCoachModel.output_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
@@ -81,9 +86,7 @@ class TensorFlowNetwork(Network):
     image = tf.constant(image)
     prediction = self.function(image)
     value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
-    value = game.map_11_to_01(numpy.array(value))
-    policy = numpy.array(policy)
-    return value, policy
+    return numpy.array(value), numpy.array(policy)
 
 ##### End Helpers ########
 ##########################
@@ -140,7 +143,7 @@ def train_batch(step, images, values, policies):
     K.set_value(training_network.model.optimizer.lr, new_learning_rate)
 
   losses = training_network.model.train_on_batch(images, [values, policies])
-  print(f"Loss: {str(losses[0]).rjust(10)} (Value: {str(losses[1]).rjust(10)}, Policy: {str(losses[2]).rjust(10)})")
+  print(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f}")
 
 def save_network(checkpoint):
    global prediction_network

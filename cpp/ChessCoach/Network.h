@@ -3,8 +3,13 @@
 
 #include <array>
 #include <vector>
+#include <cassert>
 
 #include "Config.h"
+
+constexpr static const float NETWORK_VALUE_WIN = 1.f;
+constexpr static const float NETWORK_VALUE_DRAW = 0.f;
+constexpr static const float NETWORK_VALUE_LOSS = -1.f;
 
 struct INetwork
 {
@@ -19,6 +24,38 @@ struct INetwork
     typedef std::array <std::array<float, BoardSide>, BoardSide> Plane;
     typedef std::array<Plane, InputPlaneCount> InputPlanes;
     typedef std::array<Plane, OutputPlaneCount> OutputPlanes;
+
+    constexpr static float MapProbability01To11(float probability01)
+    {
+        return ((probability01 * 2.f) - 1.f);
+    }
+
+    constexpr static float MapProbability11To01(float probability11)
+    {
+        return ((probability11 + 1.f) / 2.f);
+    }
+
+    inline static void MapProbabilities01To11(size_t count, float* probabilities)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            // Check the more restrictive range before mapping.
+            assert((probabilities[i] >= 0.f) && (probabilities[i] <= 1.f));
+
+            probabilities[i] = MapProbability01To11(probabilities[i]);
+        }
+    }
+
+    inline static void MapProbabilities11To01(size_t count, float* probabilities)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            probabilities[i] = MapProbability11To01(probabilities[i]);
+
+            // Check the more restrictive range after mapping.
+            assert((probabilities[i] >= 0.f) && (probabilities[i] <= 1.f));
+        }
+    }
 
     virtual ~INetwork() {};
 

@@ -1,14 +1,22 @@
-Next
-- run some validation on policy loss - it's always so low
-	- print accuracy during training
-	- try to get tensorboard integrated - can probably just log from py training code
-- try squeeze/excite
-	- once data is better for convergence and tensorboard is up, compare
+Validate network training
+- try to get tensorboard integrated - can probably just log from py training code
+- sample cross-validation data for test_on_batch (20% of train batch size?)
+- do a supervised run like zeta/lc0 and make sure we converge at all with big data
+	- I think we just 1-hot the chosen move in the PGN for the policy, 0 for all others
+
+Network architecture/training data
+- try 32-filter value convolution once enough data to compare
+- try training value against lerped Z/Q a la Oracle blog
 - try v2 residuals
 - try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
 - try Wu improvements (accelerating go learning)
 - try deformable CNNs
 - experiment with endgame tablebases integrated
+- experiment with full curriculum learning, endgames backwards, slowly add piece types
+- revisit full Oracle blog series
+- @gcp saying MSE overfitting inevitable without 100ks of games; maybe look into pseudonegatives soon
+	- is it possible to filter them through an MCTS or something to ensure the data are still "chess"-y?
+- we could estimate duplication factors for positions in early plies and de-weight them in the sampling distribution slightly?
 
 Performance
 - break down MCTS timing details just in case anything's off (just use sampling)
@@ -16,11 +24,23 @@ Performance
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
 	- can always binary search Move-ints or something too, it's not mutated
-- load games faster - overlapped I/O?
 - check inlining once CPU tree is looking good
 - try Intel compiler in future
 
-Training quality
+UCI
+- Wrap the C++ with UCI now
+	- Need to make TF/etc. silent
+	- Work out own threading mechanism or piggyback on Stockfish's if possible
+- Implement infinite think, ponder, time controls
+- Implement endgame tablebases (invisible/external to the training loop?)
+- Switch from python-chess to own board, movegen, etc. (or be sure of GPLv3 static vs. dynamic)
+
+GUI for debugging
+- develop/use low-cost GUI for debugging MCTS, value, policy
+- look into helping-to-get-mated
+- also try better text printouts, e.g. at X simulations print Y% win probability and PV
+
+Training quality (lower priority)
 - turn down the stockfish eval blend factor as training progresses
 - run tournaments against stockfish or something known/lower to estimate Elo
 - Integrate Strategic Test Suite (STS) - wait for UCI first or no?
@@ -44,14 +64,6 @@ Improvements
 	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
 	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
 
-UCI
-- Wrap the C++ with UCI now
-	- Need to make TF/etc. silent
-	- Work out own threading mechanism or piggyback on Stockfish's if possible
-- Implement infinite think, ponder, time controls
-- Implement endgame tablebases (invisible/external to the training loop?)
-- Switch from python-chess to own board, movegen, etc. (or be sure of GPLv3 static vs. dynamic)
-
 Deployment
 - add linux support
 - installers, instructions, progress indicators, error handling, etc.
@@ -60,7 +72,9 @@ Low priority
 - see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
 - 80 cap on branched moves w/ cache may be a problem later; applies before d-noise, so limits exploration
 - structured binding, check all pairs
+- load games faster - overlapped I/O?
 
 Revisit
 - try batch renorm + ghost batch norm
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
+- try squeeze/excite off again, compare

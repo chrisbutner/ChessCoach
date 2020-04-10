@@ -206,7 +206,9 @@ StoredGame Storage::LoadFromDisk(const std::string& path) const
     file.read(reinterpret_cast<char*>(&result), sizeof(result));
     assert(version == 1);
     assert(moveCount >= 1);
-    assert((result >= 0.f) && (result <= 1.f));
+    assert((result == CHESSCOACH_VALUE_WIN) ||
+        (result == CHESSCOACH_VALUE_DRAW) ||
+        (result == CHESSCOACH_VALUE_LOSS));
 
     std::vector<uint16_t> moves(moveCount);
     file.read(reinterpret_cast<char*>(moves.data()), sizeof(uint16_t) * moveCount);

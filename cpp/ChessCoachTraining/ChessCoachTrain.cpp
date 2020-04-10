@@ -65,6 +65,9 @@ void ChessCoachTrain::TrainChessCoach()
         selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, &selfPlayWorkers[i], std::ref(workCoordinator), &storage, network.get());
     }
 
+    // Wait until all workers are initialized.
+    workCoordinator.WaitForWorkers();
+
     // If existing games found, resume progress.
     int existingNetworks = storage.CountNetworks();
     int bonusGames = std::max(0, storage.GamesPlayed() - gamesPerNetwork * existingNetworks);
@@ -86,7 +89,6 @@ void ChessCoachTrain::TrainChessCoach()
         // Clear the prediction cache to prepare for the new network.
         PredictionCache::Instance.PrintDebugInfo();
         PredictionCache::Instance.Clear();
-        PredictionCache::Instance.PrintDebugInfo();
     }
 }
 

@@ -9,10 +9,10 @@
 
 #include "Network.h"
 
-const static float CHESSCOACH_VALUE_WIN = 1.0f;
-const static float CHESSCOACH_VALUE_DRAW = 0.5f;
-const static float CHESSCOACH_VALUE_LOSS = 0.0f;
-const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
+constexpr const static float CHESSCOACH_VALUE_WIN = 1.0f;
+constexpr const static float CHESSCOACH_VALUE_DRAW = 0.5f;
+constexpr const static float CHESSCOACH_VALUE_LOSS = 0.0f;
+constexpr const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
 
 class Game
 {
@@ -23,18 +23,18 @@ public:
     constexpr static float CentipawnConversionPhase = 1.5620688421f;
     constexpr static float CentipawnConversionScale = 111.714640912f;
 
-    inline static float CentipawnsToProbability01(float centipawns)
+    inline static float CentipawnsToProbability(float centipawns)
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
         const float probability11 = (std::atanf(centipawns / CentipawnConversionScale) / CentipawnConversionPhase);
-        const float probability01 = ((probability11 + 1.f) / 2.f);
+        const float probability01 = INetwork::MapProbability11To01(probability11);
         return std::clamp(probability01, 0.f, 1.f);
     }
 
-    inline static float Probability01ToCentipawns(float probability01)
+    inline static float ProbabilityToCentipawns(float probability01)
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
-        const float probability11 = ((probability01 * 2.f) - 1.f);
+        const float probability11 = INetwork::MapProbability01To11(probability01);
         const float centipawns = (std::tanf(probability11 * CentipawnConversionPhase) * CentipawnConversionScale);
         return centipawns;
     }
@@ -148,5 +148,21 @@ protected:
     std::array<Move, Config::InputPreviousMoveCount> _previousMoves;
     int _previousMovesOldest;
 };
+
+static_assert(CHESSCOACH_VALUE_WIN > CHESSCOACH_VALUE_DRAW);
+static_assert(CHESSCOACH_VALUE_DRAW > CHESSCOACH_VALUE_LOSS);
+static_assert(CHESSCOACH_VALUE_UNINITIALIZED == CHESSCOACH_VALUE_UNINITIALIZED);
+
+static_assert(Game::FlipValue(CHESSCOACH_VALUE_WIN) == CHESSCOACH_VALUE_LOSS);
+static_assert(Game::FlipValue(CHESSCOACH_VALUE_LOSS) == CHESSCOACH_VALUE_WIN);
+static_assert(Game::FlipValue(CHESSCOACH_VALUE_DRAW) == CHESSCOACH_VALUE_DRAW);
+
+static_assert(INetwork::MapProbability01To11(CHESSCOACH_VALUE_WIN) == NETWORK_VALUE_WIN);
+static_assert(INetwork::MapProbability01To11(CHESSCOACH_VALUE_DRAW) == NETWORK_VALUE_DRAW);
+static_assert(INetwork::MapProbability01To11(CHESSCOACH_VALUE_LOSS) == NETWORK_VALUE_LOSS);
+
+static_assert(INetwork::MapProbability11To01(NETWORK_VALUE_WIN) == CHESSCOACH_VALUE_WIN);
+static_assert(INetwork::MapProbability11To01(NETWORK_VALUE_DRAW) == CHESSCOACH_VALUE_DRAW);
+static_assert(INetwork::MapProbability11To01(NETWORK_VALUE_LOSS) == CHESSCOACH_VALUE_LOSS);
 
 #endif // _GAME_H_

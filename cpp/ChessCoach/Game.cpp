@@ -268,8 +268,8 @@ bool Game::StockfishCanEvaluate() const
 float Game::StockfishEvaluation() const
 {
     const Value centipawns = Eval::evaluate(_position);
-    const float probability01 = CentipawnsToProbability01(static_cast<float>(centipawns));
-    return probability01;
+    const float probability = CentipawnsToProbability(static_cast<float>(centipawns));
+    return probability;
 }
 
 void Game::FillPlane(INetwork::Plane& plane, float value) const

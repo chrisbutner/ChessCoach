@@ -74,9 +74,7 @@ class ChessCoachModel:
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(tower)
     x = tf.keras.layers.BatchNormalization(axis=1)(x)
     x = tf.keras.layers.ReLU()(x)
-    # This Conv2D doesn't get BatchNormalized, so use bias. It follows many layers + ReLU, and gets softmaxed in code,
-    # so it may not need it? But leave it for now.
     policy = tf.keras.layers.Conv2D(filters=self.output_planes_count, kernel_size=(1,1), strides=1, data_format="channels_first",
-      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=self.output_policy_name)(x)
+      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=self.output_policy_name)(x)
 
     return tf.keras.Model(input, [value, policy])

@@ -39,9 +39,9 @@ TEST(Stockfish, CentipawnConversion)
 {
     const float epsilon = 0.001f;
 
-    EXPECT_NEAR(Game::CentipawnsToProbability01(0), 0.5f, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability01(12800), 1.f, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability01(-12800), 0.f, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability01(32000), 1.f, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability01(-32000), 0.f, epsilon);
+    EXPECT_NEAR(Game::CentipawnsToProbability(0), CHESSCOACH_VALUE_DRAW, epsilon);
+    EXPECT_NEAR(Game::CentipawnsToProbability(12800), CHESSCOACH_VALUE_WIN, epsilon);
+    EXPECT_NEAR(Game::CentipawnsToProbability(-12800), CHESSCOACH_VALUE_LOSS, epsilon);
+    EXPECT_NEAR(Game::CentipawnsToProbability(32000), CHESSCOACH_VALUE_WIN, epsilon);
+    EXPECT_NEAR(Game::CentipawnsToProbability(-32000), CHESSCOACH_VALUE_LOSS, epsilon);
 }

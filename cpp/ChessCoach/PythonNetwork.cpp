@@ -84,6 +84,9 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     const int valueCount = Config::PredictionBatchSize;
     std::copy(pythonValuesPtr, pythonValuesPtr + valueCount, values);
 
+    // Network deals with tanh outputs/targets in (-1, 1)/[-1, 1]. MCTS deals with probabilities in [0, 1].
+    MapProbabilities11To01(Config::PredictionBatchSize, values);
+
     // Extract the policies.
     PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
     assert(PyArray_Check(pythonPolicies));
@@ -101,6 +104,9 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
 void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     PythonContext context;
+
+    // MCTS deals with probabilities in [0, 1]. Network deals with tanh outputs/targets in (-1, 1)/[-1, 1].
+    MapProbabilities01To11(Config::BatchSize, values);
 
     PyObject* pythonStep = PyLong_FromLong(step);
     assert(pythonStep);
@@ -123,7 +129,7 @@ void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* valu
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainBatchFunction, pythonStep, pythonImages, pythonValues, pythonPolicies, nullptr);
     assert(tupleResult);
 
-    Py_XDECREF(tupleResult);
+    Py_DECREF(tupleResult);
     Py_DECREF(pythonPolicies);
     Py_DECREF(pythonValues);
     Py_DECREF(pythonImages);
