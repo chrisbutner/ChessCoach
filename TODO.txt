@@ -1,11 +1,10 @@
 Validate network training
-- try to get tensorboard integrated - can probably just log from py training code
-- sample cross-validation data for test_on_batch (20% of train batch size?)
+- sample lc0 test set for "expert" validation loss/accuracy
+	- need to write PGN/short-SAN parser
 - do a supervised run like zeta/lc0 and make sure we converge at all with big data
 	- I think we just 1-hot the chosen move in the PGN for the policy, 0 for all others
 
 Network architecture/training data
-- try 32-filter value convolution once enough data to compare
 - try training value against lerped Z/Q a la Oracle blog
 - try v2 residuals
 - try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
@@ -19,6 +18,8 @@ Network architecture/training data
 - we could estimate duplication factors for positions in early plies and de-weight them in the sampling distribution slightly?
 
 Performance
+- prediction cache is 4% used at 7 ply, but MCTS time drops from 22s to 26s when increased to 8 ply
+	- try linear probing or small buckets (rename current buckets to tables)
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try 16-bit for self-play - need to look up weight compatibility
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
@@ -78,3 +79,5 @@ Revisit
 - try batch renorm + ghost batch norm
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
 - try squeeze/excite off again, compare
+- try 32-filter value convolution once enough data to compare
+	- although, this may reduce reuse/regularization between value/policy - do it way later when it can play chess

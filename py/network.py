@@ -23,6 +23,7 @@ class AlphaZeroConfig(object):
 
   def __init__(self):
     ### Training
+    self.run_name = "run1"
     self.batch_size = 2048 # OOM on GTX 1080 @ 4096
     self.chesscoach_training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
 
@@ -142,8 +143,31 @@ def train_batch(step, images, values, policies):
   if (new_learning_rate is not None):
     K.set_value(training_network.model.optimizer.lr, new_learning_rate)
 
+  log_training_prepare(step)
   losses = training_network.model.train_on_batch(images, [values, policies])
+  log_training(step, losses)
+
+def should_log_graph(step):
+  return (step == 1)
+
+def log_training_prepare(step):
+  if (should_log_graph(step)):
+    tf.summary.trace_on(graph=True, profiler=False)
+
+def log_training(step, losses):
   print(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f}")
+  with tensorboard_writer_training.as_default():
+    tf.summary.experimental.set_step(step)
+    if (should_log_graph(step)):
+      tf.summary.trace_export("model")
+    with tf.name_scope("loss"):
+      tf.summary.scalar("overall loss", losses[0])
+      tf.summary.scalar("value loss", losses[1])
+      tf.summary.scalar("policy loss", losses[2])
+      tf.summary.scalar("L2 loss", losses[0] - losses[1] - losses[2])
+    with tf.name_scope("accuracy"):
+      tf.summary.scalar("policy accuracy", losses[3])
+    tensorboard_writer_training.flush()
 
 def save_network(checkpoint):
    global prediction_network
@@ -153,5 +177,7 @@ def save_network(checkpoint):
    prediction_network = update_network_for_predictions(path)
 
 config = AlphaZeroConfig()
+tensorboard_writer_training_path = os.path.join(storage.logs_path, config.run_name, "training")
+tensorboard_writer_training = tf.summary.create_file_writer(tensorboard_writer_training_path)
 prediction_network = prepare_predictions()
 training_network = prepare_training()
