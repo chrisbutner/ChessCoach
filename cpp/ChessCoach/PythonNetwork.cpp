@@ -38,19 +38,19 @@ BatchedPythonNetwork::BatchedPythonNetwork()
     PythonContext context;
 
     _module = PyImport_ImportModule("network");
-    assert(_module);
+    PyCallAssert(_module);
 
     _predictBatchFunction = PyObject_GetAttrString(_module, "predict_batch");
-    assert(_predictBatchFunction);
-    assert(PyCallable_Check(_predictBatchFunction));
+    PyCallAssert(_predictBatchFunction);
+    PyCallAssert(PyCallable_Check(_predictBatchFunction));
 
     _trainBatchFunction = PyObject_GetAttrString(_module, "train_batch");
-    assert(_trainBatchFunction);
-    assert(PyCallable_Check(_trainBatchFunction));
+    PyCallAssert(_trainBatchFunction);
+    PyCallAssert(PyCallable_Check(_trainBatchFunction));
 
     _saveNetworkFunction = PyObject_GetAttrString(_module, "save_network");
-    assert(_saveNetworkFunction);
-    assert(PyCallable_Check(_saveNetworkFunction));
+    PyCallAssert(_saveNetworkFunction);
+    PyCallAssert(PyCallable_Check(_saveNetworkFunction));
 }
 
 BatchedPythonNetwork::~BatchedPythonNetwork()
@@ -69,14 +69,14 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     npy_intp imageDims[4]{ Config::PredictionBatchSize, InputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
-    assert(pythonImages);
+    PyCallAssert(pythonImages);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction, pythonImages, nullptr);
-    assert(tupleResult);
+    PyCallAssert(tupleResult);
 
     // Extract the values.
     PyObject* pythonValues = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
-    assert(PyArray_Check(pythonValues));
+    PyCallAssert(PyArray_Check(pythonValues));
 
     PyArrayObject* pythonValuesArray = reinterpret_cast<PyArrayObject*>(pythonValues);
     float* pythonValuesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonValuesArray));
@@ -89,7 +89,7 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
 
     // Extract the policies.
     PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
-    assert(PyArray_Check(pythonPolicies));
+    PyCallAssert(PyArray_Check(pythonPolicies));
 
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
     float* pythonPoliciesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonPoliciesArray));
@@ -109,25 +109,25 @@ void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* valu
     MapProbabilities01To11(Config::BatchSize, values);
 
     PyObject* pythonStep = PyLong_FromLong(step);
-    assert(pythonStep);
+    PyCallAssert(pythonStep);
 
     npy_intp imageDims[4]{ Config::BatchSize, InputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
-    assert(pythonImages);
+    PyCallAssert(pythonImages);
 
     npy_intp valueDims[1]{ Config::BatchSize };
     PyObject* pythonValues = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
-    assert(pythonValues);
+    PyCallAssert(pythonValues);
 
     npy_intp policyDims[4]{ Config::BatchSize, OutputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonPolicies = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policies);
-    assert(pythonPolicies);
+    PyCallAssert(pythonPolicies);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainBatchFunction, pythonStep, pythonImages, pythonValues, pythonPolicies, nullptr);
-    assert(tupleResult);
+    PyCallAssert(tupleResult);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonPolicies);
@@ -141,11 +141,20 @@ void BatchedPythonNetwork::SaveNetwork(int checkpoint)
     PythonContext context;
 
     PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
-    assert(pythonCheckpoint);
+    PyCallAssert(pythonCheckpoint);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_saveNetworkFunction, pythonCheckpoint, nullptr);
-    assert(tupleResult);
+    PyCallAssert(tupleResult);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonCheckpoint);
+}
+
+void BatchedPythonNetwork::PyCallAssert(bool result)
+{
+    if (!result)
+    {
+        PyErr_Print();
+    }
+    assert(result);
 }

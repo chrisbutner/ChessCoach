@@ -16,10 +16,7 @@ import game
 
 K.set_image_data_format("channels_first")
 
-##########################
-####### Helpers ##########
-
-class AlphaZeroConfig(object):
+class Config(object):
 
   def __init__(self):
     ### Training
@@ -88,9 +85,6 @@ class TensorFlowNetwork(Network):
     prediction = self.function(image)
     value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
     return numpy.array(value), numpy.array(policy)
-
-##### End Helpers ########
-##########################
 
 def update_network_for_predictions(network_path):
   name = os.path.basename(os.path.normpath(network_path))
@@ -186,7 +180,7 @@ def save_network(checkpoint):
    print(f"Saved network ({checkpoint} steps)")
    prediction_network = update_network_for_predictions(path)
 
-config = AlphaZeroConfig()
+config = Config()
 tensorboard_writer_training_path = os.path.join(storage.logs_path, config.run_name, "training")
 tensorboard_writer_training = tf.summary.create_file_writer(tensorboard_writer_training_path)
 prediction_network = prepare_predictions()

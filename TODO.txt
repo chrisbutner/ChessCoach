@@ -5,6 +5,9 @@ Validate network training
 	- I think we just 1-hot the chosen move in the PGN for the policy, 0 for all others
 - try predictions using training network, see how different perf is now
 
+Next
+- Add tests for FlipMove, etc.
+
 Network architecture/training data
 - try training value against lerped Z/Q a la Oracle blog
 - try v2 residuals

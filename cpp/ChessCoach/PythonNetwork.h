@@ -41,6 +41,10 @@ public:
 
 private:
 
+    void PyCallAssert(bool result);
+
+private:
+
     PyObject* _module;
     PyObject* _predictBatchFunction;
     PyObject* _trainBatchFunction;

@@ -1,5 +1,3 @@
-import watchdog.observers
-import watchdog.events
 import os
 import struct
 import numpy
@@ -15,20 +13,6 @@ logs_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Logs
 os.makedirs(games_path, exist_ok=True)
 os.makedirs(networks_path, exist_ok=True)
 os.makedirs(logs_path, exist_ok=True)
-
-class Watcher(watchdog.events.FileSystemEventHandler):
-
-  def __init__(self, path, handler, files=True, directories=False):
-    self.handler = handler
-    self.files = files
-    self.directories = directories
-    self.observer = watchdog.observers.Observer()
-    self.observer.schedule(self, path, recursive=False)
-    self.observer.start()
-
-  def on_created(self, event):
-    if ((not event.is_directory and self.files) or (event.is_directory and self.directories)):
-      self.handler(event.src_path)
 
 def load_game(path):
   while True:
