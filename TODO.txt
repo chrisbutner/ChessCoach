@@ -3,6 +3,7 @@ Validate network training
 	- need to write PGN/short-SAN parser
 - do a supervised run like zeta/lc0 and make sure we converge at all with big data
 	- I think we just 1-hot the chosen move in the PGN for the policy, 0 for all others
+- try predictions using training network, see how different perf is now
 
 Network architecture/training data
 - try training value against lerped Z/Q a la Oracle blog
@@ -10,6 +11,8 @@ Network architecture/training data
 - try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
 - try Wu improvements (accelerating go learning)
 - try deformable CNNs
+- try 32-filter value convolution once enough data to compare
+	- although, this may reduce reuse/regularization between value/policy - do it way later when it can play chess
 - experiment with endgame tablebases integrated
 - experiment with full curriculum learning, endgames backwards, slowly add piece types
 - revisit full Oracle blog series
@@ -79,5 +82,3 @@ Revisit
 - try batch renorm + ghost batch norm
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
 - try squeeze/excite off again, compare
-- try 32-filter value convolution once enough data to compare
-	- although, this may reduce reuse/regularization between value/policy - do it way later when it can play chess

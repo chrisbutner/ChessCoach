@@ -160,14 +160,24 @@ def log_training(step, losses):
     tf.summary.experimental.set_step(step)
     if (should_log_graph(step)):
       tf.summary.trace_export("model")
-    with tf.name_scope("loss"):
-      tf.summary.scalar("overall loss", losses[0])
-      tf.summary.scalar("value loss", losses[1])
-      tf.summary.scalar("policy loss", losses[2])
-      tf.summary.scalar("L2 loss", losses[0] - losses[1] - losses[2])
-    with tf.name_scope("accuracy"):
-      tf.summary.scalar("policy accuracy", losses[3])
+    log_loss_accuracy(losses)
+    log_weights()
     tensorboard_writer_training.flush()
+
+def log_loss_accuracy(losses):
+  with tf.name_scope("loss"):
+    tf.summary.scalar("overall loss", losses[0])
+    tf.summary.scalar("value loss", losses[1])
+    tf.summary.scalar("policy loss", losses[2])
+    tf.summary.scalar("L2 loss", losses[0] - losses[1] - losses[2])
+  with tf.name_scope("accuracy"):
+    tf.summary.scalar("policy accuracy", losses[3])
+
+def log_weights():
+  for layer in training_network.model.layers:
+    for weight in layer.weights:
+      weight_name = weight.name.replace(':', '_')
+      tf.summary.histogram(weight_name, weight)
 
 def save_network(checkpoint):
    global prediction_network
