@@ -16,6 +16,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		..\TODO.txt = ..\TODO.txt
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachPgnToGames", "ChessCoachPgnToGames\ChessCoachPgnToGames.vcxproj", "{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -56,6 +58,14 @@ Global
 		{811C1C94-ED7C-4007-AF1F-BC16D2BFB906}.Release|x64.Build.0 = Release|x64
 		{811C1C94-ED7C-4007-AF1F-BC16D2BFB906}.Release|x86.ActiveCfg = Release|Win32
 		{811C1C94-ED7C-4007-AF1F-BC16D2BFB906}.Release|x86.Build.0 = Release|Win32
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Debug|x64.ActiveCfg = Debug|x64
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Debug|x64.Build.0 = Debug|x64
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Debug|x86.ActiveCfg = Debug|Win32
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Debug|x86.Build.0 = Debug|Win32
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Release|x64.ActiveCfg = Release|x64
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Release|x64.Build.0 = Release|x64
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Release|x86.ActiveCfg = Release|Win32
+		{6D6B02D4-B271-430A-9EB7-CF3DA75E44FB}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

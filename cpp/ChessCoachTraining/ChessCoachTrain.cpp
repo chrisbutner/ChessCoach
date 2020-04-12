@@ -1,5 +1,6 @@
 #include <iostream>
 #include <thread>
+#include <algorithm>
 
 #include <Stockfish/bitboard.h>
 #include <Stockfish/position.h>
@@ -47,7 +48,7 @@ void ChessCoachTrain::TrainChessCoach()
     std::unique_ptr<INetwork> network(CreateNetwork());
     Storage storage;
 
-    storage.LoadExistingGames();
+    storage.LoadExistingGames(GameType_Train);
 
     // Set up configuration for full training.
     const int networkCount = (Config::TrainingSteps / Config::CheckpointInterval);
@@ -70,7 +71,7 @@ void ChessCoachTrain::TrainChessCoach()
 
     // If existing games found, resume progress.
     int existingNetworks = storage.CountNetworks();
-    int bonusGames = std::max(0, storage.GamesPlayed() - gamesPerNetwork * existingNetworks);
+    int bonusGames = std::max(0, storage.GamesPlayed(GameType_Train) - gamesPerNetwork * existingNetworks);
 
     for (int n = existingNetworks; n < networkCount; n++)
     {
@@ -117,6 +118,6 @@ void ChessCoachTrain::DebugGame()
     SelfPlayWorker worker;
     worker.Initialize(&storage);
 
-    StoredGame stored = storage.LoadFromDisk("path_to_game");
-    worker.DebugGame(network.get(), 0, stored, 23);
+    SavedGame saved = storage.LoadFromDisk("path_to_game");
+    worker.DebugGame(network.get(), 0, saved, 23);
 }

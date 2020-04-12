@@ -12,6 +12,15 @@
 
 #include "Network.h"
 #include "Game.h"
+#include "SavedGame.h"
+
+enum GameType
+{
+    GameType_Train,
+    GameType_Test,
+
+    GameType_Count,
+};
 
 struct TrainingBatch
 {
@@ -20,56 +29,51 @@ struct TrainingBatch
     std::array<INetwork::OutputPlanes, Config::BatchSize> policies;
 };
 
-struct StoredGame
-{
-public:
-
-    StoredGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::map<Move, float>>& setChildVisits);
-    StoredGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::map<Move, float>>&& setChildVisits);
-
-    float result;
-    int moveCount;
-    std::vector<uint16_t> moves;
-    std::vector<std::map<Move, float>> childVisits;
-};
-
 class Storage
 {
 private:
 
     static constexpr const char* const RootEnvPath = "localappdata";
     static constexpr const char* const GamesPart = "ChessCoach/Training/Games";
+    static constexpr const char* const TrainPart = "Train";
+    static constexpr const char* const TestPart = "Test";
     static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
 
 public:
 
-    Storage();
-    Storage(const std::filesystem::path& gamesPath, const std::filesystem::path& networksPath);
+    static SavedGame LoadFromDisk(const std::filesystem::path& path);
+    static void SaveToDisk(const std::filesystem::path& path, const SavedGame& game);
+    static std::string GenerateGameName(int gameNumber);
 
-    void LoadExistingGames();
-    int AddGame(StoredGame&& game);
-    TrainingBatch* SampleBatch();
-    int GamesPlayed() const;
+public:
+
+    Storage();
+    Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath, const std::filesystem::path& networksPath);
+
+    void LoadExistingGames(GameType gameType);
+    void SkipExistingGames(GameType gameType);
+    int AddGame(GameType gameType, SavedGame&& game);
+    TrainingBatch* SampleBatch(GameType gameType);
+    int GamesPlayed(GameType gameType) const;
     int CountNetworks() const;
-    StoredGame LoadFromDisk(const std::string& path) const;
         
 private:
 
-    StoredGame& AddGameWithoutSaving(StoredGame&& game);
-    void SaveToDisk(const StoredGame& game, int gameNumber) const;
+    std::pair<const SavedGame*, int> AddGameWithoutSaving(GameType gameType, SavedGame&& game);
+    void SaveToDisk(GameType gameType, const SavedGame& game, int gameNumber) const;
 
 private:
 
     mutable std::mutex _mutex;
-    std::deque<StoredGame> _games;
-    int _latestGameNumber;
+    std::deque<SavedGame> _games;
+    std::array<int, GameType_Count> _latestGameNumbers;
 
     std::unique_ptr<TrainingBatch> _trainingBatch;
     Game _startingPosition;
 
     mutable std::default_random_engine _random;
 
-    std::filesystem::path _gamesPath;
+    std::array<std::filesystem::path, GameType_Count> _gamesPaths;
     std::filesystem::path _networksPath;
 };
 

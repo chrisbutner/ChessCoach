@@ -425,9 +425,9 @@ void SelfPlayGame::Complete()
     PruneAll();
 }
 
-StoredGame SelfPlayGame::Store() const
+SavedGame SelfPlayGame::Save() const
 {
-    return StoredGame(Result(), _history, _childVisits);
+    return SavedGame(Result(), _history, _childVisits);
 }
 
 void SelfPlayGame::PruneExcept(Node* root, Node* except)
@@ -538,14 +538,14 @@ void SelfPlayWorker::SetUpGame(int index)
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
 }
 
-void SelfPlayWorker::DebugGame(INetwork* network, int index, const StoredGame& stored, int startingPly)
+void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly)
 {
     SetUpGame(index);
 
     SelfPlayGame& game = _games[index];
     for (int i = 0; i < startingPly; i++)
     {
-        game.ApplyMove(Move(stored.moves[i]));
+        game.ApplyMove(Move(saved.moves[i]));
     }
 
     while (true)
@@ -562,7 +562,7 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     const int startStep = (checkpoint - stepCount + 1);
     for (int step = startStep; step <= checkpoint; step++)
     {
-        TrainingBatch* batch = _storage->SampleBatch();        
+        TrainingBatch* batch = _storage->SampleBatch(GameType_Train);        
         network->TrainBatch(step, batch->images.data(), batch->values.data(), batch->policies.data());
     }
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
@@ -613,7 +613,7 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
 
     const int ply = game.Ply();
     const float result = game.Result();
-    const int gameNumber = _storage->AddGame(game.Store());
+    const int gameNumber = _storage->AddGame(GameType_Train, game.Save());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);

@@ -36,7 +36,7 @@ TEST(Network, Policy)
     game.StoreSearchStatistics();
     game.ApplyMoveWithRootAndHistory(firstMove, game.Root()->children[firstMove]);
     game.Complete();
-    INetwork::OutputPlanes labels = game.GeneratePolicy(game.Store().childVisits[0]);
+    INetwork::OutputPlanes labels = game.GeneratePolicy(game.Save().childVisits[0]);
     
     for (Move move : legalMoves)
     {

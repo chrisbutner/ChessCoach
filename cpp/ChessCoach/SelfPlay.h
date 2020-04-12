@@ -12,6 +12,7 @@
 #include "Game.h"
 #include "Network.h"
 #include "Storage.h"
+#include "SavedGame.h"
 #include "Threading.h"
 #include "PredictionCache.h"
 #include "PoolAllocator.h"
@@ -87,7 +88,7 @@ public:
     std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
     void Complete();
-    StoredGame Store() const;
+    SavedGame Save() const;
     void PruneExcept(Node* root, Node* except);
     void PruneAll();
 
@@ -134,7 +135,7 @@ public:
     void PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network);
     void Initialize(Storage* storage);
     void SetUpGame(int index);
-    void DebugGame(INetwork* network, int index, const StoredGame& stored, int startingPly);
+    void DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint) const;
     void Play(int index);
     void SaveToStorageAndLog(int index);

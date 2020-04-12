@@ -9,7 +9,7 @@ public:
 
     INetwork* CreateNetwork() const;
 
-private:
+protected:
 
     int InitializePython();
     void InitializeStockfish();

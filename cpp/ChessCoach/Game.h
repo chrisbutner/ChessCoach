@@ -70,9 +70,6 @@ public:
     constexpr const static int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
     constexpr const static int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
 
-    constexpr const static CastlingRights KingsideRights[COLOR_NB] = { WHITE_OO, BLACK_OO };
-    constexpr const static CastlingRights QueensideRights[COLOR_NB] = { WHITE_OOO, BLACK_OOO };
-
     // TODO: Later optimization idea to benchmark: could allocate one extra plane,
     // let the -1s go in without branching, then pass [1] reinterpreted to consumers
     const static int NO_PLANE = -1;

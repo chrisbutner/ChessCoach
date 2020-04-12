@@ -223,19 +223,19 @@ INetwork::InputPlanes Game::GenerateImage() const
     }
 
     // Castling planes 20-23
-    if (_position.can_castle(KingsideRights[toPlay]))
+    if (_position.can_castle(toPlay & KING_SIDE))
     {
         FillPlane(image[20], 1.f);
     }
-    if (_position.can_castle(KingsideRights[~toPlay]))
+    if (_position.can_castle(~toPlay & KING_SIDE))
     {
         FillPlane(image[21], 1.f);
     }
-    if (_position.can_castle(QueensideRights[toPlay]))
+    if (_position.can_castle(toPlay & QUEEN_SIDE))
     {
         FillPlane(image[22], 1.f);
     }
-    if (_position.can_castle(QueensideRights[~toPlay]))
+    if (_position.can_castle(~toPlay & QUEEN_SIDE))
     {
         FillPlane(image[23], 1.f);
     }
