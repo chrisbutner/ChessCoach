@@ -1,9 +1,7 @@
 Validate network training
-- sample lc0 test set for "expert" validation loss/accuracy
-	- need to write PGN/short-SAN parser
+- faster game loading
 - do a supervised run like zeta/lc0 and make sure we converge at all with big data
 	- I think we just 1-hot the chosen move in the PGN for the policy, 0 for all others
-- try predictions using training network, see how different perf is now
 
 Next
 - Add tests for FlipMove, etc.
@@ -28,6 +26,9 @@ Performance
 	- try linear probing or small buckets (rename current buckets to tables)
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try 16-bit for self-play - need to look up weight compatibility
+- game loading/batch sampling
+	- try async game loading or memory mapping
+	- try multi-game files or indexing with lazy batch-gathering
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
 	- can always binary search Move-ints or something too, it's not mutated

@@ -139,7 +139,12 @@ def train_batch(step, images, values, policies):
 
   log_training_prepare(step)
   losses = training_network.model.train_on_batch(images, [values, policies])
-  log_training(step, losses)
+  log_training(tensorboard_writer_training, step, losses)
+
+def test_batch(step, images, values, policies):
+  log_training_prepare(step)
+  losses = training_network.model.test_on_batch(images, [values, policies])
+  log_training(tensorboard_writer_validation, step, losses)
 
 def should_log_graph(step):
   return (step == 1)
@@ -148,15 +153,15 @@ def log_training_prepare(step):
   if (should_log_graph(step)):
     tf.summary.trace_on(graph=True, profiler=False)
 
-def log_training(step, losses):
+def log_training(writer, step, losses):
   print(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f}")
-  with tensorboard_writer_training.as_default():
+  with writer.as_default():
     tf.summary.experimental.set_step(step)
     if (should_log_graph(step)):
       tf.summary.trace_export("model")
     log_loss_accuracy(losses)
     log_weights()
-    tensorboard_writer_training.flush()
+    writer.flush()
 
 def log_loss_accuracy(losses):
   with tf.name_scope("loss"):
@@ -183,5 +188,7 @@ def save_network(checkpoint):
 config = Config()
 tensorboard_writer_training_path = os.path.join(storage.logs_path, config.run_name, "training")
 tensorboard_writer_training = tf.summary.create_file_writer(tensorboard_writer_training_path)
+tensorboard_writer_validation_path = os.path.join(storage.logs_path, config.run_name, "validation")
+tensorboard_writer_validation = tf.summary.create_file_writer(tensorboard_writer_validation_path)
 prediction_network = prepare_predictions()
 training_network = prepare_training()

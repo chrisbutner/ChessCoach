@@ -39,6 +39,8 @@ private:
     static constexpr const char* const TestPart = "Test";
     static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
 
+    static constexpr const char* GameTypeNames[GameType_Count] = { "Train", "Test" };
+
 public:
 
     static SavedGame LoadFromDisk(const std::filesystem::path& path);
@@ -50,8 +52,7 @@ public:
     Storage();
     Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath, const std::filesystem::path& networksPath);
 
-    void LoadExistingGames(GameType gameType);
-    void SkipExistingGames(GameType gameType);
+    void LoadExistingGames(GameType gameType, int maxLoadCount);
     int AddGame(GameType gameType, SavedGame&& game);
     TrainingBatch* SampleBatch(GameType gameType);
     int GamesPlayed(GameType gameType) const;

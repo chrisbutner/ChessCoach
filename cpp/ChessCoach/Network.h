@@ -61,6 +61,7 @@ struct INetwork
 
     virtual void PredictBatch(InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual void TrainBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
+    virtual void TestBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual void SaveNetwork(int checkpoint) = 0;
 };
 

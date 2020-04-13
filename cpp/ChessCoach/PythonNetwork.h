@@ -37,10 +37,12 @@ public:
 
     virtual void PredictBatch(InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void TrainBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies);
+    virtual void TestBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void SaveNetwork(int checkpoint);
 
 private:
 
+    void TrainTestBatch(PyObject* function, int step, InputPlanes* images, float* values, OutputPlanes* policies);
     void PyCallAssert(bool result);
 
 private:
@@ -48,6 +50,7 @@ private:
     PyObject* _module;
     PyObject* _predictBatchFunction;
     PyObject* _trainBatchFunction;
+    PyObject* _testBatchFunction;
     PyObject* _saveNetworkFunction;
 };
 

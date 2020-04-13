@@ -558,6 +558,7 @@ void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& sa
 
 void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
 {
+    // Train for "stepCount" steps.
     auto startTrain = std::chrono::high_resolution_clock::now();
     const int startStep = (checkpoint - stepCount + 1);
     for (int step = startStep; step <= checkpoint; step++)
@@ -569,6 +570,13 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     const float trainTimePerStep = (trainTime / stepCount);
     std::cout << "Trained steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
 
+    // Test with one batch.
+    {
+        TrainingBatch* testBatch = _storage->SampleBatch(GameType_Test);
+        network->TestBatch(checkpoint, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
+    }
+
+    // Save the network and reload it for predictions.
     network->SaveNetwork(checkpoint);
 }
 

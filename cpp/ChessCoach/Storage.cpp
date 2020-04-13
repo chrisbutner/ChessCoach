@@ -34,30 +34,35 @@ Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesys
     static_assert(GameType_Count == 2);
 }
 
-void Storage::LoadExistingGames(GameType gameType)
+void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
 {
     // Accesses _latestGameNumbers without locking (avoids having to re-enter)
     // but only uses it to print the number of games loaded.
+    const int foundCount = static_cast<int>(std::distance(std::filesystem::directory_iterator(_gamesPaths[gameType]), std::filesystem::directory_iterator()));
+    int loadedCount = 0;
     for (const auto& entry : std::filesystem::directory_iterator(_gamesPaths[gameType]))
     {
         AddGameWithoutSaving(gameType, LoadFromDisk(entry.path().string()));
-        if ((_latestGameNumbers[gameType] % 1000) == 0)
+        loadedCount++;
+        if ((loadedCount % 1000) == 0)
         {
-            std::cout << _latestGameNumbers[gameType] << " games loaded" << std::endl;
+            std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
+        }
+        if (loadedCount >= maxLoadCount)
+        {
+            std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
+            std::cout << (foundCount - loadedCount) << " games skipped (" << GameTypeNames[gameType] << ")" << std::endl;
+
+            {
+                std::lock_guard lock(_mutex);
+
+                _latestGameNumbers[gameType] = foundCount;
+            }
+
+            return;
         }
     }
-    std::cout << _latestGameNumbers[gameType] << " games loaded" << std::endl;
-}
-
-void Storage::SkipExistingGames(GameType gameType)
-{
-    const int gameCount = static_cast<int>(std::distance(std::filesystem::directory_iterator(_gamesPaths[gameType].string()), std::filesystem::directory_iterator()));
-
-    {
-        std::lock_guard lock(_mutex);
-
-        _latestGameNumbers[gameType] += gameCount;
-    }
+    std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
 }
 
 int Storage::AddGame(GameType gameType, SavedGame&& game)

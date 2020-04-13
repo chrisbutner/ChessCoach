@@ -48,6 +48,10 @@ BatchedPythonNetwork::BatchedPythonNetwork()
     PyCallAssert(_trainBatchFunction);
     PyCallAssert(PyCallable_Check(_trainBatchFunction));
 
+    _testBatchFunction = PyObject_GetAttrString(_module, "test_batch");
+    PyCallAssert(_testBatchFunction);
+    PyCallAssert(PyCallable_Check(_testBatchFunction));
+
     _saveNetworkFunction = PyObject_GetAttrString(_module, "save_network");
     PyCallAssert(_saveNetworkFunction);
     PyCallAssert(PyCallable_Check(_saveNetworkFunction));
@@ -57,6 +61,7 @@ BatchedPythonNetwork::~BatchedPythonNetwork()
 {
     Py_XDECREF(_saveNetworkFunction);
     Py_XDECREF(_trainBatchFunction);
+    Py_XDECREF(_testBatchFunction);
     Py_XDECREF(_predictBatchFunction);
     Py_XDECREF(_module);
 }
@@ -101,7 +106,7 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     Py_DECREF(pythonImages);
 }
 
-void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies)
+void BatchedPythonNetwork::TrainTestBatch(PyObject* function, int step, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     PythonContext context;
 
@@ -126,7 +131,7 @@ void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* valu
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policies);
     PyCallAssert(pythonPolicies);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainBatchFunction, pythonStep, pythonImages, pythonValues, pythonPolicies, nullptr);
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(function, pythonStep, pythonImages, pythonValues, pythonPolicies, nullptr);
     PyCallAssert(tupleResult);
 
     Py_DECREF(tupleResult);
@@ -134,6 +139,16 @@ void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* valu
     Py_DECREF(pythonValues);
     Py_DECREF(pythonImages);
     Py_DECREF(pythonStep);
+}
+
+void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies)
+{
+    TrainTestBatch(_trainBatchFunction, step, images, values, policies);
+}
+
+void BatchedPythonNetwork::TestBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies)
+{
+    TrainTestBatch(_testBatchFunction, step, images, values, policies);
 }
 
 void BatchedPythonNetwork::SaveNetwork(int checkpoint)
