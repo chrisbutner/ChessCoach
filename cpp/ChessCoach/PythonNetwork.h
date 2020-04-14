@@ -35,14 +35,14 @@ public:
     BatchedPythonNetwork();
     virtual ~BatchedPythonNetwork();
 
-    virtual void PredictBatch(InputPlanes* images, float* values, OutputPlanes* policies);
-    virtual void TrainBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies);
-    virtual void TestBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies);
+    virtual void PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
+    virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
+    virtual void TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void SaveNetwork(int checkpoint);
 
 private:
 
-    void TrainTestBatch(PyObject* function, int step, InputPlanes* images, float* values, OutputPlanes* policies);
+    void TrainTestBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     void PyCallAssert(bool result);
 
 private:

@@ -113,7 +113,7 @@ public:
 public:
 
     Game();
-    explicit Game(const std::string& fen);
+    Game(const std::string& fen, const std::vector<Move>& moves);
 
     Game(const Game& other);
     Game& operator=(const Game& other);

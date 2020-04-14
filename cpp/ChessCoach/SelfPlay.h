@@ -5,6 +5,7 @@
 #include <vector>
 #include <random>
 #include <atomic>
+#include <functional>
 
 #include <Stockfish/Position.h>
 #include <Stockfish/movegen.h>
@@ -21,7 +22,8 @@ class Node
 {
 public:
 
-    thread_local static PoolAllocator<Node> Allocator;
+    static const size_t BlockSizeBytes = 256 * 1024 * 1024; // 256 MiB
+    thread_local static PoolAllocator<Node, BlockSizeBytes> Allocator;
 
 public:
 
@@ -32,20 +34,14 @@ public:
 
     bool IsExpanded() const;
     float Value() const;
-    int SumChildVisits() const;
 
     std::map<Move, Node*> children;
+    std::pair<Move, Node*> mostVisitedChild;
     float originalPrior;
     float prior;
     int visitCount;
     float valueSum;
     float terminalValue;
-
-private:
-
-    // Doesn't strictly follow "mutable" if SumChildVisits() is misused and
-    // called before children are changed while this node is still around.
-    mutable int _sumChildVisits;
 };
 
 enum class SelfPlayState
@@ -66,7 +62,7 @@ public:
 
     SelfPlayGame();
     SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
-    SelfPlayGame(const std::string& fen, INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
+    SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard, INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
 
     SelfPlayGame(const SelfPlayGame& other);
     SelfPlayGame& operator=(const SelfPlayGame& other);
@@ -79,6 +75,7 @@ public:
     float TerminalValue() const;
     float Result() const;
     
+    bool TryHard() const;
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore);
@@ -86,6 +83,7 @@ public:
     bool IsDrawByNoProgressOrRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
     std::pair<Move, Node*> SelectMove() const;
+    std::pair<Move, Node*> SelectMove(const Node* parent) const;
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
@@ -100,6 +98,7 @@ private:
 
     // Used for both real and scratch games.
     Node* _root;
+    bool _tryHard;
     INetwork::InputPlanes* _image;
     float* _value;
     INetwork::OutputPlanes* _policy;
@@ -120,6 +119,22 @@ private:
     std::array<float, MAX_MOVES> _cachedPriors;
 };
 
+struct SearchConfig
+{
+    std::atomic_bool search;
+    std::atomic_bool quit;
+    bool debug;
+    bool ready;
+
+    std::atomic_int positionNumber;
+    std::string positionFen;
+    std::vector<Move> positionMoves;
+
+    std::chrono::steady_clock::time_point searchStart;
+    int nodeCount;
+    bool principleVariationChanged;
+};
+
 class SelfPlayWorker
 {
 public:
@@ -135,18 +150,31 @@ public:
     void PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network);
     void Initialize(Storage* storage);
     void SetUpGame(int index);
+    void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
     void DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly);
     void TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint) const;
     void Play(int index);
     void SaveToStorageAndLog(int index);
     std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-        std::vector<Node*>& searchPath, PredictionCacheEntry*& cacheStore);
+        std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheEntry*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
-    void Backpropagate(const std::vector<Node*>& searchPath, float value) const;
+    void Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value);
 
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
+    SearchConfig& DebugSearchConfig();
+
+    void Search(std::function<INetwork* ()> networkFactory);
+    void CheckNewSearchPosition();
+    void CheckPrintInfo();
+    void CheckTimeControl();
+    void PrintPrincipleVariation();
+    void SignalConfig(std::function<void(SearchConfig&)> change);
+    void SignalSearch(bool search);
+    void SignalQuit();
+    void WaitUntilReady();
+    void SearchPlay(int index);
 
 private:
 
@@ -161,8 +189,14 @@ private:
     std::vector<SelfPlayGame> _scratchGames;
     std::vector<std::chrono::steady_clock::time_point> _gameStarts;
     std::vector<int> _mctsSimulations;
-    std::vector<std::vector<Node*>> _searchPaths;
+    std::vector<std::vector<std::pair<Move, Node*>>> _searchPaths;
     std::vector<PredictionCacheEntry*> _cacheStores;
+
+    SearchConfig _searchConfig;
+    int _searchPositionNumber;
+    std::mutex _mutexUci;
+    std::condition_variable _signalUci;
+    std::condition_variable _signalReady;
 };
 
 #endif // _SELFPLAY_H_

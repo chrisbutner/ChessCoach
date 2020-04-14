@@ -22,10 +22,6 @@ void Basic(GameType gameType)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    // Initialize the Node allocator.
-    SelfPlayWorker selfPlayWorker;
-    selfPlayWorker.Initialize(nullptr /* storage */);
-
     std::filesystem::path tempPath = std::filesystem::temp_directory_path();
     
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
@@ -83,10 +79,6 @@ void SampleBatch(GameType gameType)
 {
     ChessCoach chessCoach;
     chessCoach.Initialize();
-
-    // Initialize the Node allocator.
-    SelfPlayWorker selfPlayWorker;
-    selfPlayWorker.Initialize(nullptr /* storage */);
 
     std::filesystem::path tempPath = std::filesystem::temp_directory_path();
 

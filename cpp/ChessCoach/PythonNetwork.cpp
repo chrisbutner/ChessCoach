@@ -3,8 +3,6 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
-#include "Config.h"
-
 thread_local PyGILState_STATE PythonContext::GilState;
 thread_local PyThreadState* PythonContext::ThreadState = nullptr;
 
@@ -66,12 +64,12 @@ BatchedPythonNetwork::~BatchedPythonNetwork()
     Py_XDECREF(_module);
 }
 
-void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, OutputPlanes* policies)
+void BatchedPythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     PythonContext context;
 
     // Make the predict call.
-    npy_intp imageDims[4]{ Config::PredictionBatchSize, InputPlaneCount, BoardSide, BoardSide };
+    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
     PyCallAssert(pythonImages);
@@ -86,11 +84,11 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     PyArrayObject* pythonValuesArray = reinterpret_cast<PyArrayObject*>(pythonValues);
     float* pythonValuesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonValuesArray));
 
-    const int valueCount = Config::PredictionBatchSize;
+    const int valueCount = batchSize;
     std::copy(pythonValuesPtr, pythonValuesPtr + valueCount, values);
 
     // Network deals with tanh outputs/targets in (-1, 1)/[-1, 1]. MCTS deals with probabilities in [0, 1].
-    MapProbabilities11To01(Config::PredictionBatchSize, values);
+    MapProbabilities11To01(valueCount, values);
 
     // Extract the policies.
     PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
@@ -99,34 +97,34 @@ void BatchedPythonNetwork::PredictBatch(InputPlanes* images, float* values, Outp
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
     float* pythonPoliciesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonPoliciesArray));
 
-    const int policyCount = (Config::PredictionBatchSize * OutputPlanesFloatCount);
+    const int policyCount = (batchSize * OutputPlanesFloatCount);
     std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<float*>(policies));
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonImages);
 }
 
-void BatchedPythonNetwork::TrainTestBatch(PyObject* function, int step, InputPlanes* images, float* values, OutputPlanes* policies)
+void BatchedPythonNetwork::TrainTestBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     PythonContext context;
 
     // MCTS deals with probabilities in [0, 1]. Network deals with tanh outputs/targets in (-1, 1)/[-1, 1].
-    MapProbabilities01To11(Config::BatchSize, values);
+    MapProbabilities01To11(batchSize, values);
 
     PyObject* pythonStep = PyLong_FromLong(step);
     PyCallAssert(pythonStep);
 
-    npy_intp imageDims[4]{ Config::BatchSize, InputPlaneCount, BoardSide, BoardSide };
+    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
     PyCallAssert(pythonImages);
 
-    npy_intp valueDims[1]{ Config::BatchSize };
+    npy_intp valueDims[1]{ batchSize };
     PyObject* pythonValues = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
     PyCallAssert(pythonValues);
 
-    npy_intp policyDims[4]{ Config::BatchSize, OutputPlaneCount, BoardSide, BoardSide };
+    npy_intp policyDims[4]{ batchSize, OutputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonPolicies = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policies);
     PyCallAssert(pythonPolicies);
@@ -141,14 +139,14 @@ void BatchedPythonNetwork::TrainTestBatch(PyObject* function, int step, InputPla
     Py_DECREF(pythonStep);
 }
 
-void BatchedPythonNetwork::TrainBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies)
+void BatchedPythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
-    TrainTestBatch(_trainBatchFunction, step, images, values, policies);
+    TrainTestBatch(_trainBatchFunction, step, batchSize, images, values, policies);
 }
 
-void BatchedPythonNetwork::TestBatch(int step, InputPlanes* images, float* values, OutputPlanes* policies)
+void BatchedPythonNetwork::TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
-    TrainTestBatch(_testBatchFunction, step, images, values, policies);
+    TrainTestBatch(_testBatchFunction, step, batchSize, images, values, policies);
 }
 
 void BatchedPythonNetwork::SaveNetwork(int checkpoint)

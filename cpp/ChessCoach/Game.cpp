@@ -57,13 +57,18 @@ Game::Game()
     _position.set(Config::StartingPosition, false /* isChess960 */, &_positionStates->back(), Threads.main());
 }
 
-Game::Game(const std::string& fen)
+Game::Game(const std::string& fen, const std::vector<Move>& moves)
     : _positionStates(new std::deque<StateInfo>(1))
     , _previousMoves{} // Fills with MOVE_NONE == 0
     , _previousMovesOldest(0)
 
 {
     _position.set(fen, false /* isChess960 */, &_positionStates->back(), Threads.main());
+
+    for (Move move : moves)
+    {
+        ApplyMove(move);
+    }
 }
 
 Game::Game(const Game& other)

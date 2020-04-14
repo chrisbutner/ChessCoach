@@ -8,15 +8,11 @@ TEST(Network, Policy)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    // Initialize the Node allocator.
-    SelfPlayWorker selfPlayWorker;
-    selfPlayWorker.Initialize(nullptr /* storage */);
+    std::vector<INetwork::InputPlanes> images(Config::PredictionBatchSize);
+    std::vector<float> values(Config::PredictionBatchSize);
+    std::vector<INetwork::OutputPlanes> policies(Config::PredictionBatchSize);
 
-    std::array<INetwork::InputPlanes, Config::PredictionBatchSize> images;
-    std::array<float, Config::PredictionBatchSize> values;
-    std::array<INetwork::OutputPlanes, Config::PredictionBatchSize> policies;
-
-    SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", &images[0], &values[0], &policies[0]);
+    SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {}, false /* tryHard */, &images[0], &values[0], &policies[0]);
     
     MoveList legalMoves = MoveList<LEGAL>(game.DebugPosition());
     const int legalMoveCount = static_cast<int>(legalMoves.size());

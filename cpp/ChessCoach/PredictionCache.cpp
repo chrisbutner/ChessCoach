@@ -68,6 +68,11 @@ void PredictionCache::Free()
 // If returning false, valueOut, moveCountOut, movesOut and priorsOut are not populated; entryOut is populated only if the value/policy should be stored when available.
 bool PredictionCache::TryGetPrediction(Key key, PredictionCacheEntry** entryOut, float* valueOut, int* moveCountOut, Move* movesOut, float* priorsOut)
 {
+    if (_bucketEntryCount == 0)
+    {
+        return false;
+    }
+
     _probeCount++;
 
     // Use the high 16 bits to choose the bucket.

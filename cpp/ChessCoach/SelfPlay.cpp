@@ -5,12 +5,14 @@
 #include <limits>
 #include <chrono>
 #include <iostream>
+#include <numeric>
 
 #include <Stockfish/thread.h>
+#include <Stockfish/uci.h>
 
 #include "Config.h"
 
-thread_local PoolAllocator<Node> Node::Allocator;
+thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
 
 std::atomic_uint SelfPlayGame::ThreadSeed;
 thread_local std::default_random_engine SelfPlayGame::Random(
@@ -19,12 +21,12 @@ thread_local std::default_random_engine SelfPlayGame::Random(
     ++ThreadSeed);
 
 Node::Node(float setPrior)
-    : originalPrior(setPrior)
+    : mostVisitedChild(MOVE_NONE, nullptr)
+    , originalPrior(setPrior)
     , prior(setPrior)
     , visitCount(0)
     , valueSum(0.f)
     , terminalValue(CHESSCOACH_VALUE_UNINITIALIZED)
-    , _sumChildVisits(0)
 {
     assert(!std::isnan(setPrior));
 }
@@ -49,25 +51,13 @@ float Node::Value() const
     return (visitCount > 0) ? (valueSum / visitCount) : CHESSCOACH_VALUE_LOSS;
 }
 
-int Node::SumChildVisits() const
-{
-    if (_sumChildVisits == 0)
-    {
-        for (const auto& pair : children)
-        {
-            _sumChildVisits += pair.second->visitCount;
-        }
-        assert(_sumChildVisits > 0);
-    }
-    return _sumChildVisits;
-}
-
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
 // TODO: Also input/output planes? e.g. for StoredGames vector storage
 
 // Fast default-constructor with no resource ownership, used to size out vectors.
 SelfPlayGame::SelfPlayGame()
     : _root(nullptr)
+    , _tryHard(false)
     , _image(nullptr)
     , _value(nullptr)
     , _policy(nullptr)
@@ -79,6 +69,7 @@ SelfPlayGame::SelfPlayGame()
 SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
     : Game()
     , _root(new Node(0.f))
+    , _tryHard(false)
     , _image(image)
     , _value(value)
     , _policy(policy)
@@ -87,9 +78,11 @@ SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork:
 {
 }
 
-SelfPlayGame::SelfPlayGame(const std::string& fen, INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
-    : Game(fen)
+SelfPlayGame::SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard,
+    INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
+    : Game(fen, moves)
     , _root(new Node(0.f))
+    , _tryHard(tryHard)
     , _image(image)
     , _value(value)
     , _policy(policy)
@@ -101,6 +94,7 @@ SelfPlayGame::SelfPlayGame(const std::string& fen, INetwork::InputPlanes* image,
 SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     : Game(other)
     , _root(other._root)
+    , _tryHard(other._tryHard)
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
@@ -117,6 +111,7 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
     Game::operator=(other);
 
     _root = other._root;
+    _tryHard = other._tryHard;
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
@@ -129,6 +124,7 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
 SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
     : Game(other)
     , _root(other._root)
+    , _tryHard(other._tryHard)
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
@@ -147,6 +143,7 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
     Game::operator=(static_cast<Game&&>(other));
 
     _root = other._root;
+    _tryHard = other._tryHard;
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
@@ -185,16 +182,37 @@ float SelfPlayGame::Result() const
     return _result;
 }
 
+bool SelfPlayGame::TryHard() const
+{
+    return _tryHard;
+}
+
 void SelfPlayGame::ApplyMoveWithRoot(Move move, Node* newRoot)
 {
     ApplyMove(move);
     _root = newRoot;
+
+    // Don't adjust visit counts here because this is a common path; e.g. for scratch games also.
 }
 
 void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
 {
     ApplyMoveWithRoot(move, newRoot);
     _history.push_back(move);
+
+    // Adjust the visit count for the new root so that it matches the sum of child visits from now on.
+    // If the new root is a terminal node, reset to zero.
+    // Otherwise, decrement because the node was visited exactly once as a leaf before being expanded.
+    if (_root->children.empty())
+    {
+        _root->visitCount = 0;
+    }
+    else
+    {
+        _root->visitCount--;
+    }
+    assert(_root->visitCount == std::transform_reduce(_root->children.begin(), _root->children.end(),
+        0, std::plus<>(), [](auto pair) { return pair.second->visitCount; }));
 }
 
 float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore)
@@ -276,7 +294,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
     // The important thing here is that this helps guide the MCTS search and thus the policy training,
     // but doesn't train the value head: that is still based purely on game result, so the network isn't
     // trying to learn a linear human evaluation function.
-    if (StockfishCanEvaluate())
+    if (!TryHard() && StockfishCanEvaluate())
     {
         // TODO: Lerp based on training progress.
         const float stockfishProbability01 = StockfishEvaluation();
@@ -369,12 +387,17 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
 
 std::pair<Move, Node*> SelfPlayGame::SelectMove() const
 {
-    if (Ply() < Config::NumSampingMoves)
+    return SelectMove(_root);
+}
+
+std::pair<Move, Node*> SelfPlayGame::SelectMove(const Node* parent) const
+{
+    if (!TryHard() && (Ply() < Config::NumSampingMoves))
     {
         // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
-        const int sumChildVisits = _root->SumChildVisits();
+        const int sumChildVisits = parent->visitCount;
         int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random);
-        for (const auto& pair : _root->children)
+        for (const auto& pair : parent->children)
         {
             const int visitCount = pair.second->visitCount;
             if (sample < visitCount)
@@ -389,29 +412,18 @@ std::pair<Move, Node*> SelfPlayGame::SelectMove() const
     else
     {
         // Use temperature=inf; i.e., just select the most visited.
-        int maxVisitCount = std::numeric_limits<int>::min();
-        std::pair<Move, Node*> maxVisited;
-        for (const auto& pair : _root->children)
-        {
-            const int visitCount = pair.second->visitCount;
-            if (visitCount > maxVisitCount)
-            {
-                maxVisitCount = visitCount;
-                maxVisited = pair;
-            }
-        }
-        assert(maxVisited.second);
-        return maxVisited;
+        assert(parent->mostVisitedChild.second);
+        return parent->mostVisitedChild;
     }
 }
 
 void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float> visits;
-    const int sumVisits = _root->SumChildVisits();
+    const int sumChildVisits = _root->visitCount;
     for (const auto& pair : _root->children)
     {
-        visits[pair.first] = static_cast<float>(pair.second->visitCount) / sumVisits;
+        visits[pair.first] = static_cast<float>(pair.second->visitCount) / sumChildVisits;
     }
     _childVisits.emplace_back(std::move(visits));
 }
@@ -432,6 +444,11 @@ SavedGame SelfPlayGame::Save() const
 
 void SelfPlayGame::PruneExcept(Node* root, Node* except)
 {
+    if (!root)
+    {
+        return;
+    }
+
     // Rely on caller to already have updated the _root to the preserved subtree.
     assert(_root != root);
     assert(_root == except);
@@ -448,6 +465,11 @@ void SelfPlayGame::PruneExcept(Node* root, Node* except)
 
 void SelfPlayGame::PruneAll()
 {
+    if (!_root)
+    {
+        return;
+    }
+
     PruneAllInternal(_root);
 
     // All nodes in the related tree are gone, so don't leave _root dangling.
@@ -475,6 +497,8 @@ SelfPlayWorker::SelfPlayWorker()
     , _mctsSimulations(Config::PredictionBatchSize, 0)
     , _searchPaths(Config::PredictionBatchSize)
     , _cacheStores(Config::PredictionBatchSize)
+    , _searchConfig{}
+    , _searchPositionNumber(0)
 {
 }
 
@@ -520,7 +544,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storag
             }
 
             // GPU work
-            network->PredictBatch(_images.data(), _values.data(), _policies.data());
+            network->PredictBatch(Config::PredictionBatchSize, _images.data(), _values.data(), _policies.data());
         }
     }
 }
@@ -528,13 +552,19 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, Storage* storag
 void SelfPlayWorker::Initialize(Storage* storage)
 {
     _storage = storage;
-    Node::Allocator.Initialize(Config::MaxNodesPerThread);
 }
 
 void SelfPlayWorker::SetUpGame(int index)
 {
     _states[index] = SelfPlayState::Working;
     _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
+    _gameStarts[index] = std::chrono::high_resolution_clock::now();
+}
+
+void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard)
+{
+    _states[index] = SelfPlayState::Working;
+    _games[index] = SelfPlayGame(fen, moves, tryHard, &_images[index], &_values[index], &_policies[index]);
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
 }
 
@@ -552,7 +582,7 @@ void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& sa
     {
         Play(index);
         assert(_states[index] == SelfPlayState::WaitingForPrediction);
-        network->PredictBatch(_images.data(), _values.data(), _policies.data());
+        network->PredictBatch(index + 1, _images.data(), _values.data(), _policies.data());
     }
 }
 
@@ -564,13 +594,13 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int step
     for (int step = startStep; step <= checkpoint; step++)
     {
         TrainingBatch* batch = _storage->SampleBatch(gameType);
-        network->TrainBatch(step, batch->images.data(), batch->values.data(), batch->policies.data());
+        network->TrainBatch(step, Config::BatchSize, batch->images.data(), batch->values.data(), batch->policies.data());
 
         // Test with one batch every TrainingStepsPerTest.
         if ((step % Config::TrainingStepsPerTest) == 0)
         {
             TrainingBatch* testBatch = _storage->SampleBatch(GameType_Test);
-            network->TestBatch(step, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
+            network->TestBatch(step, Config::BatchSize, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
         }
     }
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
@@ -608,6 +638,7 @@ void SelfPlayWorker::Play(int index)
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(selected.first, selected.second);
         game.PruneExcept(root, selected.second /* == game.Root() */);
+        _searchConfig.principleVariationChanged = true; // First move in PV is now gone.
     }
 
     // Clean up resources in use and save the result.
@@ -631,16 +662,20 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
 }
 
 std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-    std::vector<Node*>& searchPath, PredictionCacheEntry*& cacheStore)
+    std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheEntry*& cacheStore)
 {
-    for (; mctsSimulation < Config::NumSimulations; mctsSimulation++)
+    const int numSimulations = (game.TryHard() ? std::numeric_limits<int>::max() : Config::NumSimulations);
+    for (; mctsSimulation < numSimulations; mctsSimulation++)
     {
         if (state == SelfPlayState::Working)
         {
             if (mctsSimulation == 0)
             {
 #if !DEBUG_MCTS
-                AddExplorationNoise(game);
+                if (!game.TryHard())
+                {
+                    AddExplorationNoise(game);
+                }
 #endif
 
 #if DEBUG_MCTS
@@ -652,13 +687,13 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
 
             scratchGame = game;
             searchPath.clear();
-            searchPath.push_back(scratchGame.Root());
+            searchPath.push_back(std::pair(MOVE_NONE, scratchGame.Root()));
 
             while (scratchGame.Root()->IsExpanded())
             {
                 std::pair<Move, Node*> selected = SelectChild(scratchGame.Root());
                 scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
-                searchPath.push_back(selected.second /* == scratchGame.Root() */);
+                searchPath.push_back(selected /* == scratchGame.Root() */);
 #if DEBUG_MCTS
                 std::cout << Game::SquareName[from_sq(selected.first)] << Game::SquareName[to_sq(selected.first)] << "(" << selected.second->visitCount << "), ";
 #endif
@@ -696,6 +731,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         assert(!std::isnan(value));
         value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ ~scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
+        _searchConfig.nodeCount++;
 
 #if DEBUG_MCTS
         std::cout << "prior " << scratchGame.Root()->originalPrior << ", noisy prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
@@ -742,15 +778,32 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     return priorScore + child->Value();
 }
 
-void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float value) const
+void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value)
 {
     // Each ply has a different player, so flip each time.
-    for (Node* node : searchPath)
+    for (auto [move, node] : searchPath)
     {
         node->visitCount++;
         node->valueSum += value;
         value = SelfPlayGame::FlipValue(value);
     }
+
+    // Adjust most-visited pointers (principle variation).
+    bool isPrincipleVariation = true;
+    for (int i = 0; i < searchPath.size() - 1; i++)
+    {
+        if (!searchPath[i].second->mostVisitedChild.second ||
+            (searchPath[i].second->mostVisitedChild.second->visitCount < searchPath[i + 1].second->visitCount))
+        {
+            searchPath[i].second->mostVisitedChild = searchPath[i + 1];
+            _searchConfig.principleVariationChanged |= isPrincipleVariation;
+        }
+        else
+        {
+            isPrincipleVariation &= (searchPath[i].second->mostVisitedChild == searchPath[i + 1]);
+        }
+    }
+
 }
 
 void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut)
@@ -759,4 +812,179 @@ void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState*
     *stateOut = &_states[index];
     *valuesOut = &_values[index];
     *policiesOut = &_policies[index];
+}
+
+SearchConfig& SelfPlayWorker::DebugSearchConfig()
+{
+    return _searchConfig;
+}
+
+void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
+{
+    // Create the network on the worker thread (slow).
+    std::unique_ptr<INetwork> network(networkFactory());
+
+    while (!_searchConfig.quit)
+    {
+        {
+            std::unique_lock lock(_mutexUci);
+
+            // Let UCI know we're ready.
+            if (!_searchConfig.ready)
+            {
+                _searchConfig.ready = true;
+                _signalReady.notify_all();
+            }
+
+            // Wait until told to search.
+            while (!_searchConfig.quit && !_searchConfig.search)
+            {
+                _signalUci.wait(lock);
+            }
+        }
+
+        while (!_searchConfig.quit && _searchConfig.search)
+        {
+            CheckNewSearchPosition();
+
+            SearchPlay(0);
+            network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
+
+            CheckPrintInfo();
+
+            // TODO: Only check every N times
+            CheckTimeControl();
+        }
+        // TODO: Send bestmove if stopped
+    }
+}
+
+void SelfPlayWorker::CheckNewSearchPosition()
+{
+    if (_searchConfig.positionNumber != _searchPositionNumber)
+    {
+        std::lock_guard lock(_mutexUci);
+
+        _games[0].PruneAll();
+        SetUpGame(0, _searchConfig.positionFen, _searchConfig.positionMoves, true /* tryHard */);
+        _searchPositionNumber = _searchConfig.positionNumber;
+    }
+}
+
+void SelfPlayWorker::CheckPrintInfo()
+{
+    // Print principle variation when it changes.
+    if (_searchConfig.principleVariationChanged)
+    {
+        PrintPrincipleVariation();
+        _searchConfig.principleVariationChanged = false;
+    }
+}
+
+void SelfPlayWorker::CheckTimeControl()
+{
+    const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _searchConfig.searchStart).count();
+
+    // TODO: Hard-code for now (can remove simulation check once isready doesn't lie about network)
+    if ((gameTime >= 5.f) && (_mctsSimulations[0] >= 800))
+    {
+        std::lock_guard lock(_mutexUci);
+
+        auto [move, node] = _games[0].SelectMove();
+
+        PrintPrincipleVariation();
+        std::cout << "bestmove " << UCI::move(move, false /* chess960 */) << std::endl;
+
+        _searchConfig.search = false;
+    }
+}
+
+void SelfPlayWorker::PrintPrincipleVariation()
+{
+    Node* node = _games[0].Root();
+    std::vector<Move> principleVariation;
+
+    assert(node->mostVisitedChild.second);
+    while (node->mostVisitedChild.second)
+    {
+        principleVariation.push_back(node->mostVisitedChild.first);
+        node = node->mostVisitedChild.second;
+    }
+
+    std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchConfig.searchStart);
+
+    // Value is from the parent's perspective, so that's already correct for the root perspective,
+    // but we need to flip from the root's color to white.
+    const int depth = static_cast<int>(principleVariation.size());
+    const float value = _games[0].Root()->mostVisitedChild.second->Value();
+    const float whiteValue = Game::FlipValue(_games[0].ToPlay(), value);
+    const int whiteScore = static_cast<int>(Game::ProbabilityToCentipawns(whiteValue));
+    const long long searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
+    const int nodeCount = _searchConfig.nodeCount;
+    const int nodesPerSecond = static_cast<int>(nodeCount / std::chrono::duration<float>(sinceSearchStart).count());
+
+    std::cout << "info depth " << depth << " score cp " << whiteScore << " nodes " << nodeCount << " nps " << nodesPerSecond << " time " << searchTimeMs << " pv";
+    for (Move move : principleVariation)
+    {
+        std::cout << " " << UCI::move(move, false /* chess960 */);
+    }
+    std::cout << std::endl;
+}
+
+void SelfPlayWorker::SignalConfig(std::function<void(SearchConfig&)> change)
+{
+    std::lock_guard lock(_mutexUci);
+    
+    change(_searchConfig);
+}
+
+void SelfPlayWorker::SignalSearch(bool search)
+{
+    std::lock_guard lock(_mutexUci);
+
+    _searchConfig.search = search;
+    
+    if (search)
+    {
+        _searchConfig.searchStart = std::chrono::high_resolution_clock::now();
+        _searchConfig.nodeCount = 0;
+        _searchConfig.principleVariationChanged = 0;
+        _signalUci.notify_all();
+    }
+}
+
+void SelfPlayWorker::SignalQuit()
+{
+    std::lock_guard lock(_mutexUci);
+
+    _searchConfig.quit = true;
+
+    _signalUci.notify_all();
+}
+
+void SelfPlayWorker::WaitUntilReady()
+{
+    std::unique_lock lock(_mutexUci);
+
+    while (!_searchConfig.ready)
+    {
+        _signalReady.wait(lock);
+    }
+}
+
+void SelfPlayWorker::SearchPlay(int index)
+{
+    SelfPlayState& state = _states[index];
+    SelfPlayGame& game = _games[index];
+
+    if (!game.Root()->IsExpanded())
+    {
+        game.ExpandAndEvaluate(state, _cacheStores[index]);
+        if (state == SelfPlayState::WaitingForPrediction)
+        {
+            return;
+        }
+    }
+
+    RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
 }

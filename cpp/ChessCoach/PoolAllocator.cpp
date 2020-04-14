@@ -4,8 +4,26 @@
 
 size_t LargePageAllocator::LargePageMinimum = 0;
 
+void* LargePageAllocator::Allocate(size_t byteCount)
+{
+    Initialize();
+
+    byteCount = ((byteCount + LargePageMinimum - 1) / LargePageMinimum) * LargePageMinimum;
+    return ::VirtualAlloc(nullptr, byteCount, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+}
+
+void LargePageAllocator::Free(void* memory)
+{
+    ::VirtualFree(memory, 0, MEM_RELEASE);
+}
+
 void LargePageAllocator::Initialize()
 {
+    if (LargePageMinimum > 0)
+    {
+        return;
+    }
+
     HANDLE hToken;
     TOKEN_PRIVILEGES tokenPrivileges;
 
@@ -22,15 +40,4 @@ void LargePageAllocator::Initialize()
     assert(adjusted);
 
     LargePageMinimum = ::GetLargePageMinimum();
-}
-
-void* LargePageAllocator::Allocate(size_t byteCount)
-{
-    byteCount = ((byteCount + LargePageMinimum - 1) / LargePageMinimum) * LargePageMinimum;
-    return ::VirtualAlloc(nullptr, byteCount, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
-}
-
-void LargePageAllocator::Free(void* memory)
-{
-    ::VirtualFree(memory, 0, MEM_RELEASE);
 }

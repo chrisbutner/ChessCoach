@@ -70,7 +70,7 @@ ChessCoachPgnToGames::ChessCoachPgnToGames(const std::filesystem::path& inputDir
 void ChessCoachPgnToGames::InitializeLight()
 {
     InitializeStockfish();
-    Game::Initialize();
+    InitializeChessCoach();
 }
 
 void ChessCoachPgnToGames::FinalizeLight()

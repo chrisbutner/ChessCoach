@@ -7,12 +7,10 @@
 
 TEST(PoolAllocator, Basic)
 {
-    LargePageAllocator::Initialize();
-
-    PoolAllocator<int> poolAllocator;
-
     const int itemCount = 3;
-    poolAllocator.Initialize(itemCount);
+    const size_t blockSizeBytes = (sizeof(std::tuple<int, int, int, int>) * 3);
+    const size_t maxBlocks = 1;
+    PoolAllocator<std::tuple<int, int, int, int>, blockSizeBytes, maxBlocks> poolAllocator;
 
     // Allocate all 3 items from the pool then expect it to be empty.
 
@@ -41,34 +39,18 @@ TEST(PoolAllocator, Basic)
 
 TEST(PoolAllocator, Node)
 {
-    LargePageAllocator::Initialize();
+    // This calculation ignores alignment, so aim for 1.5 plus overhead to fit within 2.
+    const int itemCount = Node::BlockSizeBytes * 3 / 2 / sizeof(Node);
 
-    const int itemCount = 3;
-    Node::Allocator.Initialize(itemCount);
+    // Create all nodes, expect the allocator to create new blocks as needed.
+    for (int i = 0; i < itemCount; i++)
+    {
+        Node* node = new Node(0.f);
+        EXPECT_NE(node, nullptr); // Just use the return value, expect std::bad_alloc on failure anyway.
+    }
 
-    // Create all 3 nodes then expect it to be empty.
-
-    Node* node1 = new Node(0.f);
-    EXPECT_NE(node1, nullptr);
-
-    Node* node2 = new Node(0.f);
-    EXPECT_NE(node2, nullptr);
-
-    Node* node3 = new Node(0.f);
-    EXPECT_NE(node3, nullptr);
-
-    EXPECT_THROW(new Node(0.f), std::bad_alloc);
-
-    // Delete 1, create 1 then expect it to be empty.
-
-    delete node3;
-
-    Node* node4 = new Node(0.f);
-    EXPECT_NE(node4, nullptr);
-
-    EXPECT_EQ(node3, node4);
-
-    EXPECT_THROW(new Node(0.f), std::bad_alloc);
+    // Expect 2 blocks allocated.
+    EXPECT_EQ(Node::Allocator.DebugBlockCount(), 2);
 }
 
 TEST(PoolAllocator, Alignment)
@@ -76,13 +58,10 @@ TEST(PoolAllocator, Alignment)
     const size_t alignment = std::max(__STDCPP_DEFAULT_NEW_ALIGNMENT__, alignof(int));
     EXPECT_GT(alignment, sizeof(int));
 
-    LargePageAllocator::Initialize();
-
-    PoolAllocator<int> poolAllocator;
-
     const int itemCount = 5;
-    poolAllocator.Initialize(itemCount);
-        
+    const size_t blockSizeBytes = 1024;
+    PoolAllocator<int, blockSizeBytes> poolAllocator;
+
     for (int i = 0; i < itemCount; i++)
     {
         uintptr_t item = reinterpret_cast<uintptr_t>(poolAllocator.Allocate());

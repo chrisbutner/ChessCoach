@@ -71,10 +71,12 @@ void ChessCoachTrain::TrainChessCoach()
     workCoordinator.WaitForWorkers();
 
         // (Temporarily testing supervised learning)
+        int existingSupervisedNetworks = storage.CountNetworks();
         storage.LoadExistingGames(GameType_Supervised, std::numeric_limits<int>::max());
         const int supervisedStepCount = static_cast<int>(Config::SampleBatchesPerGame * storage.GamesPlayed(GameType_Supervised));
         const int supervisedNetworkCount = (supervisedStepCount / Config::CheckpointInterval);
-        for (int n = 0; n < supervisedNetworkCount; n++)
+        const int overtrainMultiple = 2;
+        for (int n = existingSupervisedNetworks; n < overtrainMultiple * supervisedNetworkCount; n++)
         {
             const int checkpoint = (n + 1) * Config::CheckpointInterval;
             TrainNetwork(selfPlayWorkers.front(), network.get(), GameType_Supervised, Config::CheckpointInterval, checkpoint);

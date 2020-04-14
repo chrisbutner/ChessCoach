@@ -5,6 +5,10 @@ import numpy
 import time
 import os
 
+silent = bool(os.environ["CHESSCOACH_SILENT"])
+if (silent):
+  os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import tensorflow as tf
 from tensorflow.python.saved_model import signature_constants
 from tensorflow.keras import backend as K
@@ -15,6 +19,10 @@ import storage
 import game
 
 K.set_image_data_format("channels_first")
+
+def log(*args):
+  if (not silent):
+    print(*args)
 
 class Config(object):
 
@@ -93,44 +101,44 @@ class TensorFlowNetwork(Network):
 
 def update_network_for_predictions(network_path):
   name = os.path.basename(os.path.normpath(network_path))
-  print(f"Loading network (predictions): {name}...")
+  log(f"Loading network (predictions): {name}...")
   while True:
     try:
       tf_model = tf.saved_model.load(network_path)
       break
     except Exception as e:
-      print("Exception:", e)
+      log("Exception:", e)
       time.sleep(0.25)
   prediction_network = TensorFlowNetwork(tf_model)
-  print(f"Loaded network (predictions): {name}")
+  log(f"Loaded network (predictions): {name}")
   return prediction_network
 
 def update_network_for_training(network_path):
   name = os.path.basename(os.path.normpath(network_path))
-  print(f"Loading network (training): {name}...")
+  log(f"Loading network (training): {name}...")
   while True:
     try:
       # Work around bug: AttributeError: 'CategoricalCrossentropy' object has no attribute '__name__'
       keras_model = tf.keras.models.load_model(network_path, compile=False)
       break
     except Exception as e:
-      print("Exception:", e)
+      log("Exception:", e)
       time.sleep(0.25)
   training_network = KerasNetwork(keras_model)
-  print(f"Loaded network (training): {name}")
+  log(f"Loaded network (training): {name}")
   return training_network
 
 def prepare_predictions():
   prediction_network = storage.load_latest_network(update_network_for_predictions)
   if (not prediction_network):
     prediction_network = UniformNetwork()
-    print("Loaded uniform network (predictions)")
+    log("Loaded uniform network (predictions)")
   return prediction_network
 
 def prepare_training():
   training_network = storage.load_latest_network(update_network_for_training)
   if (not training_network):
-    print("Creating new network (training)")
+    log("Creating new network (training)")
     training_network = KerasNetwork()
   return training_network
 
@@ -164,7 +172,7 @@ def log_training_prepare(step):
     tf.summary.trace_on(graph=True, profiler=False)
 
 def log_training(type, writer, step, losses):
-  print(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f} ({type})")
+  log(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f} ({type})")
   with writer.as_default():
     tf.summary.experimental.set_step(step)
     if (should_log_graph(step)):
@@ -190,9 +198,9 @@ def log_weights():
 
 def save_network(checkpoint):
    global prediction_network
-   print(f"Saving network ({checkpoint} steps)...")
+   log(f"Saving network ({checkpoint} steps)...")
    path = storage.save_network(checkpoint, training_network)
-   print(f"Saved network ({checkpoint} steps)")
+   log(f"Saved network ({checkpoint} steps)")
    prediction_network = update_network_for_predictions(path)
 
 config = Config()

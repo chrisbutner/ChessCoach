@@ -1,6 +1,7 @@
 #ifndef _POOLALLOCATOR_H_
 #define _POOLALLOCATOR_H_
 
+#include <vector>
 #include <algorithm>
 #include <cassert>
 
@@ -12,10 +13,12 @@ private:
 
 public:
 
-    static void Initialize();
-
     static void* Allocate(size_t byteCount);
     static void Free(void* memory);
+
+private:
+
+    static void Initialize();
 };
 
 struct Chunk
@@ -23,14 +26,13 @@ struct Chunk
     Chunk* next;
 };
 
-template <class T>
+template <class T, size_t BlockSizeBytes, size_t MaxBlocks = std::numeric_limits<size_t>::max()>
 class PoolAllocator
 {
 public:
 
     PoolAllocator()
-        : _memory(nullptr)
-        , _next(nullptr)
+        : _next(nullptr)
         , _currentlyAllocatedCount(0)
         , _peakAllocatedCount(0)
     {
@@ -38,44 +40,12 @@ public:
 
     ~PoolAllocator()
     {
-        if (_memory)
+        for (void* block : _blocks)
         {
-            LargePageAllocator::Free(_memory);
-            _memory = nullptr;
+            LargePageAllocator::Free(block);
         }
+        _blocks.clear();
         _next = nullptr;
-    }
-
-    void Initialize(size_t itemCount)
-    {
-        if (_memory)
-        {
-            LargePageAllocator::Free(_memory);
-            _memory = nullptr;
-        }
-
-        // VirtualAlloc aligns to 64KiB, definitely covers base alignment.
-        const size_t alignment = std::max(__STDCPP_DEFAULT_NEW_ALIGNMENT__, alignof(T));
-        const size_t alignedSizeBytes = ((sizeof(T) + alignment - 1) / alignment) * alignment;
-        const size_t poolSizeBytes = alignedSizeBytes * itemCount;
-
-        _memory = LargePageAllocator::Allocate(poolSizeBytes);
-        assert(_memory);
-        if (!_memory)
-        {
-            throw std::bad_alloc();
-        }
-
-        Chunk* chunk = reinterpret_cast<Chunk*>(_memory);
-        _next = chunk;
-        
-        for (int i = 0; i < itemCount - 1; i++)
-        {
-            chunk->next = reinterpret_cast<Chunk*>(reinterpret_cast<char*>(chunk) + alignedSizeBytes);
-            chunk = chunk->next;
-        }
-
-        chunk->next = nullptr;
     }
     
 
@@ -83,7 +53,7 @@ public:
     {
         if (!_next)
         {
-            throw std::bad_alloc();
+            AllocateBlock();
         }
 
 #ifdef _DEBUG
@@ -119,9 +89,54 @@ public:
         return std::pair(_currentlyAllocatedCount, _peakAllocatedCount);
     }
 
+    int DebugBlockCount()
+    {
+        return static_cast<int>(_blocks.size());
+    }
+
 private:
 
-    void* _memory;
+    void AllocateBlock()
+    {
+        if (_blocks.size() >= MaxBlocks)
+        {
+            throw std::bad_alloc();
+        }
+
+        // VirtualAlloc aligns to 64KiB, definitely covers base alignment.
+        const size_t alignment = std::max(__STDCPP_DEFAULT_NEW_ALIGNMENT__, alignof(T));
+        const size_t alignedItemSizeBytes = ((sizeof(T) + alignment - 1) / alignment) * alignment;
+        const size_t itemCount = (BlockSizeBytes / alignedItemSizeBytes);
+        if (itemCount == 0)
+        {
+            throw std::bad_alloc();
+        }
+
+        void* block = LargePageAllocator::Allocate(BlockSizeBytes);
+        assert(block);
+        if (!block)
+        {
+            throw std::bad_alloc();
+        }
+        _blocks.push_back(block);
+
+        Chunk* first = reinterpret_cast<Chunk*>(block);
+        Chunk* chunk = first;
+
+        for (int i = 0; i < itemCount - 1; i++)
+        {
+            chunk->next = reinterpret_cast<Chunk*>(reinterpret_cast<char*>(chunk) + alignedItemSizeBytes);
+            chunk = chunk->next;
+        }
+
+        // Join the tail to any existing free chunks, then put this new block's chunks at the head.
+        chunk->next = _next;
+        _next = first;
+    }
+
+private:
+
+    std::vector<void*> _blocks;
     Chunk* _next;
     int _currentlyAllocatedCount;
     int _peakAllocatedCount;

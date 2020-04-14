@@ -1,18 +1,23 @@
 Next
 - fix any remaining PGN problems and finish 2m game extraction
-- keep training further until overfitting
-- wrap the C++ with UCI now
-	- need to make TF/etc. silent
-	- work out own threading mechanism or piggyback on Stockfish's if possible
 - log Elo + Test suite results to tensorboard
 	- Strategic Test Suite (STS)
 	- find a tactics suite
-	- tournament against another engine (cutechess-cli?)
+	- tournament against another engine/engines (cutechess-cli?)
+- once we're graphing strength, run more long supervised runs with e.g. 32-value head, different loss ratios, etc.
+	- see if we can get the value head to converge? still really high, policy compensates in games though
 - add tests for FlipMove, etc.
+- uci
+	- basic time controls, infinite think, test as kibitzer (may need .exe/conda workaround)
+	- don't throw away trees if new position is just a child? log received commands to file to debug
+
 
 Code quality
+- clean up prediction cache clear printing
 - unify config across C++/Python
 - privatize C++ methods (got too python-brained)
+- try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
+- try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
 - add Python type info everywhere - look up best practices for linting etc.
 
 Network architecture/training data
@@ -29,6 +34,7 @@ Network architecture/training data
 - @gcp saying MSE overfitting inevitable without 100ks of games; maybe look into pseudonegatives soon
 	- is it possible to filter them through an MCTS or something to ensure the data are still "chess"-y?
 - we could estimate duplication factors for positions in early plies and de-weight them in the sampling distribution slightly?
+- can always retry SE in future when solid architecture/visualization
 - turn down the stockfish eval blend factor as training progresses
 
 Performance
@@ -45,27 +51,26 @@ Performance
 - check inlining once CPU tree is looking good
 - try Intel compiler in future
 
-
 GUI for debugging
 - develop/use low-cost GUI for debugging MCTS, value, policy
 - look into helping-to-get-mated
 - also try better text printouts, e.g. at X simulations print Y% win probability and PV
 
 UCI
-- Implement infinite think, ponder, time controls
-- Implement endgame tablebases (invisible/external to the training loop?)
+- implement proper time controls/search options, ponder
+- multi-thread MCTS
+	- "On the scalability of parallel UCT"
+	- https://medium.com/oracledevs/lessons-from-alpha-zero-part-5-performance-optimization-664b38dc509e
+	- need to sync std::cout
+- "random move with eval within 1%"
+	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
+	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
+- implement multiPV (run/batch multiple games in a worker with path restrictions?)
+- implement endgame tablebases (invisible/external to the training loop?)
 
 Scalability
 - can't play enough self-play games, work on new ideas soon
 - can't afford 1 million games in the window (RAM or disk), work something out
-
-Improvements
-- Multi-thread MCTS, if not for self-play generation then for UCI play
-	- "On the scalability of parallel UCT"
-	- https://medium.com/oracledevs/lessons-from-alpha-zero-part-5-performance-optimization-664b38dc509e
-- "Random move with eval within 1%"
-	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
-	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
 
 Deployment
 - add linux support
@@ -80,4 +85,3 @@ Low priority
 Revisit
 - try batch renorm + ghost batch norm
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
-- try squeeze/excite off again, compare

@@ -14,6 +14,7 @@ protected:
     int InitializePython();
     void InitializeStockfish();
     void InitializeChessCoach();
+    void InitializePredictionCache();
 
     void FinalizePython();
     void FinalizeStockfish();

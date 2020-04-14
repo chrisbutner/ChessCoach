@@ -22,6 +22,7 @@ void ChessCoach::Initialize()
     InitializePython();
     InitializeStockfish();
     InitializeChessCoach();
+    InitializePredictionCache();
 }
 
 void ChessCoach::Finalize()
@@ -46,6 +47,10 @@ int ChessCoach::InitializePython()
     }
 
     Py_Initialize();
+
+    // Release the implicit main-thread GIL.
+    PythonContext context;
+
     return 0;
 }
 
@@ -70,11 +75,12 @@ void ChessCoach::InitializeStockfish()
 void ChessCoach::InitializeChessCoach()
 {
     Game::Initialize();
-
-    LargePageAllocator::Initialize();
-    PredictionCache::Instance.Allocate(Config::PredictionCacheSizeGb);
 }
 
+void ChessCoach::InitializePredictionCache()
+{
+    PredictionCache::Instance.Allocate(Config::PredictionCacheSizeGb);
+}
 void ChessCoach::FinalizePython()
 {
     PyGILState_Ensure();
