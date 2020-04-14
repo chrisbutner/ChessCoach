@@ -15,23 +15,27 @@ Storage::Storage()
     errno_t err = _dupenv_s(&rootEnvPath, nullptr, RootEnvPath);
     assert(!err && rootEnvPath);
 
-    static_assert(GameType_Count == 2);
+    static_assert(GameType_Count == 3);
     _gamesPaths[GameType_Train] = std::filesystem::path(rootEnvPath) / GamesPart / TrainPart;
     _gamesPaths[GameType_Test] = std::filesystem::path(rootEnvPath) / GamesPart / TestPart;
+    _gamesPaths[GameType_Supervised] = std::filesystem::path(rootEnvPath) / GamesPart / SupervisedPart;
     _networksPath = std::filesystem::path(rootEnvPath) / NetworksPart;
 
-    std::filesystem::create_directories(_gamesPaths[GameType_Train]);
-    std::filesystem::create_directories(_gamesPaths[GameType_Test]);
+    for (std::filesystem::path gamesPath : _gamesPaths)
+    {
+        std::filesystem::create_directories(gamesPath);
+    }
     std::filesystem::create_directories(_networksPath);
 }
 
-Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath, const std::filesystem::path& networksPath)
+Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
+    const std::filesystem::path& supervisedTestPath, const std::filesystem::path& networksPath)
     : _latestGameNumbers{}
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
-    , _gamesPaths{ gamesTrainPath, gamesTestPath }
+    , _gamesPaths{ gamesTrainPath, gamesTestPath, supervisedTestPath }
     , _networksPath(networksPath)
 {
-    static_assert(GameType_Count == 2);
+    static_assert(GameType_Count == 3);
 }
 
 void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
@@ -125,9 +129,19 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
 
     for (int i = 0; i < Config::BatchSize; i++)
     {
-        const SavedGame& game = _games[distribution(_random)];
+        const SavedGame& game =
+#if SAMPLE_BATCH_FIXED
+            _games[i];
+#else
+            _games[distribution(_random)];
+#endif
 
-        int positionIndex = std::uniform_int_distribution<int>(0, game.moveCount - 1)(_random);
+        int positionIndex =
+#if SAMPLE_BATCH_FIXED
+            i % game.moveCount;
+#else
+            std::uniform_int_distribution<int>(0, game.moveCount - 1)(_random);
+#endif
 
         Game scratchGame = _startingPosition;
         for (int m = 0; m < positionIndex; m++)

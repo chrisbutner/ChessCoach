@@ -18,9 +18,12 @@ enum GameType
 {
     GameType_Train,
     GameType_Test,
+    GameType_Supervised,
 
     GameType_Count,
 };
+
+constexpr const char* GameTypeNames[GameType_Count] = { "Train", "Test", "Supervised" };
 
 struct TrainingBatch
 {
@@ -37,9 +40,8 @@ private:
     static constexpr const char* const GamesPart = "ChessCoach/Training/Games";
     static constexpr const char* const TrainPart = "Train";
     static constexpr const char* const TestPart = "Test";
+    static constexpr const char* const SupervisedPart = "Supervised";
     static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
-
-    static constexpr const char* GameTypeNames[GameType_Count] = { "Train", "Test" };
 
 public:
 
@@ -50,7 +52,8 @@ public:
 public:
 
     Storage();
-    Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath, const std::filesystem::path& networksPath);
+    Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
+        const std::filesystem::path& supervisedTestPath, const std::filesystem::path& networksPath);
 
     void LoadExistingGames(GameType gameType, int maxLoadCount);
     int AddGame(GameType gameType, SavedGame&& game);

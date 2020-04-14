@@ -556,25 +556,26 @@ void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& sa
     }
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint) const
+void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint) const
 {
     // Train for "stepCount" steps.
     auto startTrain = std::chrono::high_resolution_clock::now();
     const int startStep = (checkpoint - stepCount + 1);
     for (int step = startStep; step <= checkpoint; step++)
     {
-        TrainingBatch* batch = _storage->SampleBatch(GameType_Train);        
+        TrainingBatch* batch = _storage->SampleBatch(gameType);
         network->TrainBatch(step, batch->images.data(), batch->values.data(), batch->policies.data());
+
+        // Test with one batch every TrainingStepsPerTest.
+        if ((step % Config::TrainingStepsPerTest) == 0)
+        {
+            TrainingBatch* testBatch = _storage->SampleBatch(GameType_Test);
+            network->TestBatch(step, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
+        }
     }
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
     const float trainTimePerStep = (trainTime / stepCount);
     std::cout << "Trained steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
-
-    // Test with one batch.
-    {
-        TrainingBatch* testBatch = _storage->SampleBatch(GameType_Test);
-        network->TestBatch(checkpoint, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
-    }
 
     // Save the network and reload it for predictions.
     network->SaveNetwork(checkpoint);

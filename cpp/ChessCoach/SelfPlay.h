@@ -136,7 +136,7 @@ public:
     void Initialize(Storage* storage);
     void SetUpGame(int index);
     void DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly);
-    void TrainNetwork(INetwork* network, int stepCount, int checkpoint) const;
+    void TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint) const;
     void Play(int index);
     void SaveToStorageAndLog(int index);
     std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,

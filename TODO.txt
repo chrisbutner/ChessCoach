@@ -1,10 +1,19 @@
-Validate network training
-- faster game loading
-- do a supervised run like zeta/lc0 and make sure we converge at all with big data
-	- I think we just 1-hot the chosen move in the PGN for the policy, 0 for all others
-
 Next
-- Add tests for FlipMove, etc.
+- fix any remaining PGN problems and finish 2m game extraction
+- keep training further until overfitting
+- wrap the C++ with UCI now
+	- need to make TF/etc. silent
+	- work out own threading mechanism or piggyback on Stockfish's if possible
+- log Elo + Test suite results to tensorboard
+	- Strategic Test Suite (STS)
+	- find a tactics suite
+	- tournament against another engine (cutechess-cli?)
+- add tests for FlipMove, etc.
+
+Code quality
+- unify config across C++/Python
+- privatize C++ methods (got too python-brained)
+- add Python type info everywhere - look up best practices for linting etc.
 
 Network architecture/training data
 - try training value against lerped Z/Q a la Oracle blog
@@ -20,6 +29,7 @@ Network architecture/training data
 - @gcp saying MSE overfitting inevitable without 100ks of games; maybe look into pseudonegatives soon
 	- is it possible to filter them through an MCTS or something to ensure the data are still "chess"-y?
 - we could estimate duplication factors for positions in early plies and de-weight them in the sampling distribution slightly?
+- turn down the stockfish eval blend factor as training progresses
 
 Performance
 - prediction cache is 4% used at 7 ply, but MCTS time drops from 22s to 26s when increased to 8 ply
@@ -27,7 +37,7 @@ Performance
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try 16-bit for self-play - need to look up weight compatibility
 - game loading/batch sampling
-	- try async game loading or memory mapping
+	- try async game loading or memory mapping or overlapped IO
 	- try multi-game files or indexing with lazy batch-gathering
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
@@ -35,34 +45,19 @@ Performance
 - check inlining once CPU tree is looking good
 - try Intel compiler in future
 
-UCI
-- Wrap the C++ with UCI now
-	- Need to make TF/etc. silent
-	- Work out own threading mechanism or piggyback on Stockfish's if possible
-- Implement infinite think, ponder, time controls
-- Implement endgame tablebases (invisible/external to the training loop?)
-- Switch from python-chess to own board, movegen, etc. (or be sure of GPLv3 static vs. dynamic)
 
 GUI for debugging
 - develop/use low-cost GUI for debugging MCTS, value, policy
 - look into helping-to-get-mated
 - also try better text printouts, e.g. at X simulations print Y% win probability and PV
 
-Training quality (lower priority)
-- turn down the stockfish eval blend factor as training progresses
-- run tournaments against stockfish or something known/lower to estimate Elo
-- Integrate Strategic Test Suite (STS) - wait for UCI first or no?
-
-Code quality
-- unify config across C++/Python
-- privatize C++ methods (got too python-brained)
+UCI
+- Implement infinite think, ponder, time controls
+- Implement endgame tablebases (invisible/external to the training loop?)
 
 Scalability
 - can't play enough self-play games, work on new ideas soon
 - can't afford 1 million games in the window (RAM or disk), work something out
-
-Python
-- Add type info everywhere - look up best practices for linting etc.
 
 Improvements
 - Multi-thread MCTS, if not for self-play generation then for UCI play
@@ -80,7 +75,7 @@ Low priority
 - see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
 - 80 cap on branched moves w/ cache may be a problem later; applies before d-noise, so limits exploration
 - structured binding, check all pairs
-- load games faster - overlapped I/O?
+- implement write-to-pgn in C++, stop depending on python-chess (just stockfish)
 
 Revisit
 - try batch renorm + ghost batch norm

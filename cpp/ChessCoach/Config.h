@@ -2,6 +2,7 @@
 #define _CONFIG_H_
 
 #define DEBUG_MCTS 0
+#define SAMPLE_BATCH_FIXED 0
 
 struct Config
 {
@@ -22,6 +23,9 @@ struct Config
     static const int CheckpointInterval;
     static const int WindowSize;
     static const int SelfPlayGames;
+
+    static const float SampleBatchesPerGame;
+    static const int TrainingStepsPerTest;
 
     static const int NumSampingMoves;
     static const int MaxMoves = 512;

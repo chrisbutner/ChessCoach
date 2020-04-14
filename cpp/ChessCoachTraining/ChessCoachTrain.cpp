@@ -23,7 +23,7 @@ public:
 private:
 
     void PlayGames(WorkCoordinator& workCoordinator, int gamesPerNetwork);
-    void TrainNetwork(const SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
+    void TrainNetwork(const SelfPlayWorker& worker, INetwork* network, GameType gameType, int stepCount, int checkpoint);
 };
 
 int main(int argc, char* argv[])
@@ -49,7 +49,7 @@ void ChessCoachTrain::TrainChessCoach()
     Storage storage;
 
     storage.LoadExistingGames(GameType_Train, std::numeric_limits<int>::max());
-    storage.LoadExistingGames(GameType_Test, 1234);
+    storage.LoadExistingGames(GameType_Test, 20000);
 
     // Set up configuration for full training.
     const int networkCount = (Config::TrainingSteps / Config::CheckpointInterval);
@@ -70,6 +70,17 @@ void ChessCoachTrain::TrainChessCoach()
     // Wait until all workers are initialized.
     workCoordinator.WaitForWorkers();
 
+        // (Temporarily testing supervised learning)
+        storage.LoadExistingGames(GameType_Supervised, std::numeric_limits<int>::max());
+        const int supervisedStepCount = static_cast<int>(Config::SampleBatchesPerGame * storage.GamesPlayed(GameType_Supervised));
+        const int supervisedNetworkCount = (supervisedStepCount / Config::CheckpointInterval);
+        for (int n = 0; n < supervisedNetworkCount; n++)
+        {
+            const int checkpoint = (n + 1) * Config::CheckpointInterval;
+            TrainNetwork(selfPlayWorkers.front(), network.get(), GameType_Supervised, Config::CheckpointInterval, checkpoint);
+        }
+        return;
+
     // If existing games found, resume progress.
     int existingNetworks = storage.CountNetworks();
     int bonusGames = std::max(0, storage.GamesPlayed(GameType_Train) - gamesPerNetwork * existingNetworks);
@@ -86,7 +97,7 @@ void ChessCoachTrain::TrainChessCoach()
 
         // Train the network.
         const int checkpoint = (n + 1) * Config::CheckpointInterval;
-        TrainNetwork(selfPlayWorkers.front(), network.get(), Config::CheckpointInterval, checkpoint);
+        TrainNetwork(selfPlayWorkers.front(), network.get(), GameType_Train, Config::CheckpointInterval, checkpoint);
 
         // Clear the prediction cache to prepare for the new network.
         PredictionCache::Instance.PrintDebugInfo();
@@ -104,11 +115,11 @@ void ChessCoachTrain::PlayGames(WorkCoordinator& workCoordinator, int gamesPerNe
     workCoordinator.WaitForWorkers();
 }
 
-void ChessCoachTrain::TrainNetwork(const SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
+void ChessCoachTrain::TrainNetwork(const SelfPlayWorker& selfPlayWorker, INetwork* network, GameType gameType, int stepCount, int checkpoint)
 {
-    std::cout << "Training..." << std::endl;
+    std::cout << "Training (" << GameTypeNames[gameType] << ")..." << std::endl;
 
-    selfPlayWorker.TrainNetwork(network, stepCount, checkpoint);
+    selfPlayWorker.TrainNetwork(network, gameType, stepCount, checkpoint);
 }
 
 void ChessCoachTrain::DebugGame()

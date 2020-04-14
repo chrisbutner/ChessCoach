@@ -20,9 +20,10 @@ class Config(object):
 
   def __init__(self):
     ### Training
-    self.run_name = "run1"
+    self.run_name = "supervised1"
     self.batch_size = 2048 # OOM on GTX 1080 @ 4096
     self.chesscoach_training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
+    self.log_next_train = False
 
     self.momentum = 0.9
     # Schedule for chess and shogi, Go starts at 2e-2 immediately.
@@ -45,12 +46,16 @@ class KerasNetwork(Network):
     self.model = model or ChessCoachModel().build()
     optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
     losses = ["mean_squared_error", self.flat_categorical_crossentropy_from_logits]
-    self.model.compile(optimizer=optimizer, loss=losses, metrics=[[], ["accuracy"]])
+    self.model.compile(optimizer=optimizer, loss=losses, loss_weights=[1.0, 1.0], metrics=[[], [self.flat_categorical_accuracy]])
 
   # This fixes an issue with categorical_crossentropy calculating incorrectly
   # over our 73*8*8 output planes - loss ends up way too small.
   def flat_categorical_crossentropy_from_logits(self, y_true, y_pred):
     return tf.keras.losses.categorical_crossentropy(y_true=K.batch_flatten(y_true), y_pred=K.batch_flatten(y_pred), from_logits=True)
+
+  # This fixes the same issue with categorical_accuracy. No point doing softmax on logits for argmax.
+  def flat_categorical_accuracy(self, y_true, y_pred):
+    return tf.keras.metrics.categorical_accuracy(y_true=K.batch_flatten(y_true), y_pred=K.batch_flatten(y_pred))
 
   def predict_batch(self, image):
     assert False
@@ -137,14 +142,19 @@ def train_batch(step, images, values, policies):
   if (new_learning_rate is not None):
     K.set_value(training_network.model.optimizer.lr, new_learning_rate)
 
-  log_training_prepare(step)
+  if (config.log_next_train):
+    log_training_prepare(step)
   losses = training_network.model.train_on_batch(images, [values, policies])
-  log_training(tensorboard_writer_training, step, losses)
+  if (config.log_next_train):
+    log_training("training", tensorboard_writer_training, step, losses)
+    config.log_next_train = False
+
 
 def test_batch(step, images, values, policies):
   log_training_prepare(step)
   losses = training_network.model.test_on_batch(images, [values, policies])
-  log_training(tensorboard_writer_validation, step, losses)
+  log_training("validation", tensorboard_writer_validation, step, losses)
+  config.log_next_train = True
 
 def should_log_graph(step):
   return (step == 1)
@@ -153,8 +163,8 @@ def log_training_prepare(step):
   if (should_log_graph(step)):
     tf.summary.trace_on(graph=True, profiler=False)
 
-def log_training(writer, step, losses):
-  print(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f}")
+def log_training(type, writer, step, losses):
+  print(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f} ({type})")
   with writer.as_default():
     tf.summary.experimental.set_step(step)
     if (should_log_graph(step)):
