@@ -42,6 +42,7 @@ private:
     static constexpr const char* const TestPart = "Test";
     static constexpr const char* const SupervisedPart = "Supervised";
     static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
+    static constexpr const char* const LogsPart = "ChessCoach/Training/Logs";
 
 public:
 
@@ -60,6 +61,7 @@ public:
     TrainingBatch* SampleBatch(GameType gameType);
     int GamesPlayed(GameType gameType) const;
     int CountNetworks() const;
+    std::filesystem::path LogPath() const;
         
 private:
 
@@ -79,6 +81,7 @@ private:
 
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
     std::filesystem::path _networksPath;
+    std::filesystem::path _logsPath;
 };
 
 #endif // _STORAGE_H_

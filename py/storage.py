@@ -8,11 +8,11 @@ from game import Game
 # These need to be backslashes on Windows for TensorFlow's recursive creation code.
 games_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Games\\Train")
 networks_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Networks")
-logs_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\Logs")
+tensorboard_path = os.path.join(os.environ["localappdata"], "ChessCoach\\Training\\TensorBoard")
 
 os.makedirs(games_path, exist_ok=True)
 os.makedirs(networks_path, exist_ok=True)
-os.makedirs(logs_path, exist_ok=True)
+os.makedirs(tensorboard_path, exist_ok=True)
 
 def load_game(path):
   while True:

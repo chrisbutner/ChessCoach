@@ -1,24 +1,24 @@
 Next
-- fix any remaining PGN problems and finish 2m game extraction
 - log Elo + Test suite results to tensorboard
 	- Strategic Test Suite (STS)
-	- find a tactics suite
+	- ERET?
+	- find a tactics suite (Arasan-20?)
 	- tournament against another engine/engines (cutechess-cli?)
 - once we're graphing strength, run more long supervised runs with e.g. 32-value head, different loss ratios, etc.
+	- fix any remaining PGN problems and finish 2m game extraction
 	- see if we can get the value head to converge? still really high, policy compensates in games though
+	- try smaller batch size until ghost batches works or I reimplement
 - add tests for FlipMove, etc.
 - uci
 	- don't throw away trees if new position is just a child? log received commands to file to debug
 	- work out what lc0 reports for NPS, numbers are way off
 	- multithreading, virtual loss, any in-thread multiplexing?
-
-Code quality
-- clean up prediction cache clear printing
+- prediction cache
+	- clean up prediction cache clear printing
+	- more LRU
+		- try linear probing or small buckets (rename current buckets to tables)
+	- use during UCI (options?)
 - unify config across C++/Python
-- privatize C++ methods (got too python-brained)
-- try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
-- try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
-- add Python type info everywhere - look up best practices for linting etc.
 
 Network architecture/training data
 - try training value against lerped Z/Q a la Oracle blog
@@ -38,8 +38,6 @@ Network architecture/training data
 - turn down the stockfish eval blend factor as training progresses
 
 Performance
-- prediction cache is 4% used at 7 ply, but MCTS time drops from 22s to 26s when increased to 8 ply
-	- try linear probing or small buckets (rename current buckets to tables)
 - break down MCTS timing details just in case anything's off (just use sampling)
 - game loading/batch sampling
 	- try async game loading or memory mapping or overlapped IO
@@ -49,6 +47,12 @@ Performance
 	- can always binary search Move-ints or something too, it's not mutated
 - check inlining once CPU tree is looking good
 - try Intel compiler in future
+
+Code quality
+- privatize C++ methods (got too python-brained)
+- try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
+- try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
+- add Python type info everywhere - look up best practices for linting etc.
 
 GUI for debugging
 - develop/use low-cost GUI for debugging MCTS, value, policy

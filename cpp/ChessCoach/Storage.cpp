@@ -20,12 +20,14 @@ Storage::Storage()
     _gamesPaths[GameType_Test] = std::filesystem::path(rootEnvPath) / GamesPart / TestPart;
     _gamesPaths[GameType_Supervised] = std::filesystem::path(rootEnvPath) / GamesPart / SupervisedPart;
     _networksPath = std::filesystem::path(rootEnvPath) / NetworksPart;
+    _logsPath = std::filesystem::path(rootEnvPath) / LogsPart;
 
     for (std::filesystem::path gamesPath : _gamesPaths)
     {
         std::filesystem::create_directories(gamesPath);
     }
     std::filesystem::create_directories(_networksPath);
+    std::filesystem::create_directories(_logsPath);
 }
 
 Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
@@ -248,4 +250,9 @@ std::string Storage::GenerateGameName(int gameNumber)
     suffix << std::setfill('0') << std::setw(9) << gameNumber;
 
     return "game_" + suffix.str();
+}
+
+std::filesystem::path Storage::LogPath() const
+{
+    return _logsPath;
 }

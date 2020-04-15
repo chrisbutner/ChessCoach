@@ -5,7 +5,7 @@ import numpy
 import time
 import os
 
-silent = bool(os.environ["CHESSCOACH_SILENT"])
+silent = bool(os.environ.get("CHESSCOACH_SILENT"))
 if (silent):
   os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -204,9 +204,9 @@ def save_network(checkpoint):
    prediction_network = update_network_for_predictions(path)
 
 config = Config()
-tensorboard_writer_training_path = os.path.join(storage.logs_path, config.run_name, "training")
+tensorboard_writer_training_path = os.path.join(storage.tensorboard_path, config.run_name, "training")
 tensorboard_writer_training = tf.summary.create_file_writer(tensorboard_writer_training_path)
-tensorboard_writer_validation_path = os.path.join(storage.logs_path, config.run_name, "validation")
+tensorboard_writer_validation_path = os.path.join(storage.tensorboard_path, config.run_name, "validation")
 tensorboard_writer_validation = tf.summary.create_file_writer(tensorboard_writer_validation_path)
 prediction_network = prepare_predictions()
 training_network = prepare_training()

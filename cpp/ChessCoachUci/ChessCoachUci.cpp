@@ -5,6 +5,8 @@
 #include <vector>
 #include <thread>
 #include <cstdlib>
+#include <ctime>
+#include <fstream>
 
 #include <Stockfish/thread.h>
 #include <Stockfish/uci.h>
@@ -66,6 +68,7 @@ private:
     bool _quit = false;
     bool _debug = false;
 
+    std::ofstream _commandLog;
     std::vector<CommandHandlerEntry> _commandHandlers;
 
     std::unique_ptr<SelfPlayWorker> _selfPlayWorker;
@@ -105,6 +108,16 @@ void ChessCoachUci::Initialize()
     _commandHandlers.emplace_back("stop", std::bind(&ChessCoachUci::HandleStop, this, std::placeholders::_1));
     _commandHandlers.emplace_back("ponderhit", std::bind(&ChessCoachUci::HandlePonderHit, this, std::placeholders::_1));
     _commandHandlers.emplace_back("quit", std::bind(&ChessCoachUci::HandleQuit, this, std::placeholders::_1));
+
+    std::stringstream commandLogFilename;
+
+    std::time_t time = std::time(nullptr);
+#pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
+    commandLogFilename << std::put_time(std::localtime(&time), "ChessCoachUci_%Y%m%d_%H%M%S.log");
+#pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
+
+    std::filesystem::path commandLogPath = (Storage().LogPath() / commandLogFilename.str());
+    _commandLog = std::ofstream(commandLogPath, std::ios::out);
 }
 
 void ChessCoachUci::Finalize()
@@ -118,6 +131,8 @@ void ChessCoachUci::Work()
     std::string line;
     while (!_quit && std::getline(std::cin, line))
     {
+        _commandLog << line << std::endl;
+
         std::stringstream commands(line);
         std::string token;
         do
@@ -144,7 +159,7 @@ bool ChessCoachUci::HandleCommand(std::stringstream& commands, std::string comma
 void ChessCoachUci::HandleUci(std::stringstream& commands)
 {
     Reply("id name ChessCoach",
-        "id author C. Butner, T. Li",
+        "id author C. Butner",
         // Options are listed here when they exist.
         "uciok");
 }

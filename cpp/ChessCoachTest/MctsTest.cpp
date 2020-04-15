@@ -96,16 +96,16 @@ TEST(Mcts, PrincipleVariation)
     chessCoach.Initialize();
 
     SelfPlayWorker selfPlayWorker;
-    SearchConfig& searchConfig = selfPlayWorker.DebugSearchConfig();
+    SearchState& searchState = selfPlayWorker.DebugSearchState();
 
     std::vector<Node*> latestPrincipleVariation;
     PlayGame(selfPlayWorker, [&](SelfPlayGame& game)
         {
             std::vector<Node*> principleVariation = GeneratePrincipleVariation(game);
-            if (searchConfig.principleVariationChanged)
+            if (searchState.principleVariationChanged)
             {
                 EXPECT_NE(principleVariation, latestPrincipleVariation);
-                searchConfig.principleVariationChanged = false;
+                searchState.principleVariationChanged = false;
             }
             else
             {

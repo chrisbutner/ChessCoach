@@ -809,9 +809,9 @@ void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState*
     *policiesOut = &_policies[index];
 }
 
-SearchConfig& SelfPlayWorker::DebugSearchConfig()
+SearchState& SelfPlayWorker::DebugSearchState()
 {
-    return _searchConfig;
+    return _searchState;
 }
 
 void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
@@ -842,71 +842,27 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
         }
 
         UpdatePosition();
-        StartSearch();
-        while (!_searchConfig.quit && _searchState.searching &&
-            !_searchConfig.searchUpdated && !_searchConfig.positionUpdated)
+        UpdateSearch();
+        if (_searchState.searching)
         {
-            SearchPlay(0);
-            network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
+            while (!_searchConfig.quit && !_searchConfig.positionUpdated && _searchState.searching)
+            {
+                SearchPlay(0);
+                network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
 
-            CheckPrintInfo();
+                CheckPrintInfo();
 
-            // TODO: Only check every N times
-            CheckTimeControl();
+                // TODO: Only check every N times
+                CheckTimeControl();
+
+                UpdateSearch();
+            }
+            OnSearchFinished();
         }
-        StopSearch();
     }
 
     // Clean up.
     _games[0].PruneAll();
-}
-
-// Lock _mutexUci before entering.
-void SelfPlayWorker::StartSearch()
-{
-    assert(_searchConfig.searchUpdated);
-    assert(!_searchState.searching);
-
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    // Lock around both (a) using the search/time control info, and (b) clearing the flag.
-    // If the GUI does two updates very quickly, either (i) we grabbed the second one's
-    // search/time control info and cleared, or (ii) the flag gets set again after we unlock.
-    // Either way we're good.
-
-    _searchState.searching = true;
-    _searchState.searchStart = std::chrono::high_resolution_clock::now();
-    _searchState.timeControl = _searchConfig.searchTimeControl;
-    _searchState.nodeCount = 0;
-    _searchState.principleVariationChanged = 0;
-
-    _searchConfig.searchUpdated = false;
-}
-
-void SelfPlayWorker::StopSearch()
-{
-    if (!_searchState.searching)
-    {
-        return;
-    }
-
-    auto [move, node] = _games[0].SelectMove();
-
-    PrintPrincipleVariation();
-    std::cout << "bestmove " << UCI::move(move, false /* chess960 */) << std::endl;
-
-    _searchState.searching = false;
-
-    // Lock around (a) checking "searchUpdated" and (b) clearing "search". We want to clear
-    // "search" in order to go back to sleep but only if it's still the existing search.
-    {
-        std::lock_guard lock(_searchConfig.mutexUci);
-
-        if (!_searchConfig.searchUpdated)
-        {
-            _searchConfig.search = false;
-        }
-    }
 }
 
 void SelfPlayWorker::UpdatePosition()
@@ -926,6 +882,59 @@ void SelfPlayWorker::UpdatePosition()
         SetUpGame(0, _searchConfig.positionFen, _searchConfig.positionMoves, true /* tryHard */);
 
         _searchConfig.positionUpdated = false;
+    }
+}
+
+void SelfPlayWorker::UpdateSearch()
+{
+    if (_searchConfig.searchUpdated)
+    {
+        std::lock_guard lock(_searchConfig.mutexUci);
+
+        // Lock around both (a) using the search/time control info, and (b) clearing the flag.
+        // If the GUI does two updates very quickly, either (i) we grabbed the second one's
+        // search/time control info and cleared, or (ii) the flag gets set again after we unlock.
+        // Either way we're good.
+
+        _searchState.searching = _searchConfig.search;
+
+        if (_searchState.searching)
+        {
+            _searchState.searchStart = std::chrono::high_resolution_clock::now();
+            _searchState.timeControl = _searchConfig.searchTimeControl;
+            _searchState.nodeCount = 0;
+            _searchState.principleVariationChanged = 0;
+        }
+
+        // Set the "search" instruction to false now so that when this search finishes
+        // the worker can go back to sleep, unless instructed to search again.
+        // A stop command will still cause the "searchUpdated" flag to call in here and
+        // set the "searching" state to false.
+        _searchConfig.search = false;
+
+        _searchConfig.searchUpdated = false;
+    }
+}
+
+void SelfPlayWorker::OnSearchFinished()
+{
+    // We may have finished via position update or quit, so update our state.
+    _searchState.searching = false;
+
+    // Print the final PV info and bestmove.
+    auto [move, node] = _games[0].SelectMove();
+    PrintPrincipleVariation();
+    std::cout << "bestmove " << UCI::move(move, false /* chess960 */) << std::endl;
+
+    // Lock around (a) checking "searchUpdated" and (b) clearing "search". We want to clear
+    // "search" in order to go back to sleep but only if it's still the existing search.
+    {
+        std::lock_guard lock(_searchConfig.mutexUci);
+
+        if (!_searchConfig.searchUpdated)
+        {
+            _searchConfig.search = false;
+        }
     }
 }
 
@@ -957,9 +966,13 @@ void SelfPlayWorker::CheckTimeControl()
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
 
     // Specified think time takes second priority.
-    if ((_searchState.timeControl.moveTimeMs > 0) && (searchTimeMs >= _searchState.timeControl.moveTimeMs))
+    if (_searchState.timeControl.moveTimeMs > 0)
     {
-        StopSearch();
+        if (searchTimeMs >= _searchState.timeControl.moveTimeMs)
+        {
+            _searchState.searching = false;
+        }
+        return;
     }
 
     // Game clock takes third priority. Use a simple strategy like AlphaZero for now.
@@ -968,15 +981,19 @@ void SelfPlayWorker::CheckTimeControl()
         (_searchState.timeControl.timeRemainingMs[toPlay] / Config::TimeControl_FractionOfRemaining)
         + _searchState.timeControl.incrementMs[toPlay]
         - Config::TimeControl_SafetyBufferMs;
-    if ((timeAllowed > 0) && (searchTimeMs >= timeAllowed))
+    if (timeAllowed > 0)
     {
-        StopSearch();
+        if (searchTimeMs >= timeAllowed)
+        {
+            _searchState.searching = false;
+        }
+        return;
     }
 
     // No time allowed at all: defy the system and just make a quick training-style move.
     if (_mctsSimulations[0] >= Config::NumSimulations)
     {
-        StopSearch();
+        _searchState.searching = false;
     }
 }
 

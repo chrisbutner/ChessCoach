@@ -183,7 +183,7 @@ public:
     void Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value);
 
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
-    SearchConfig& DebugSearchConfig();
+    SearchState& DebugSearchState();
 
     void Search(std::function<INetwork* ()> networkFactory);
     void SignalDebug(bool debug);
@@ -195,9 +195,9 @@ public:
 
 private:
 
-    void StartSearch();
-    void StopSearch();
     void UpdatePosition();
+    void UpdateSearch();
+    void OnSearchFinished();
     void CheckPrintInfo();
     void CheckTimeControl();
     void PrintPrincipleVariation();
