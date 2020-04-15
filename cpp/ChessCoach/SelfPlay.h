@@ -83,7 +83,6 @@ public:
     bool IsDrawByNoProgressOrRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
     std::pair<Move, Node*> SelectMove() const;
-    std::pair<Move, Node*> SelectMove(const Node* parent) const;
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
@@ -119,18 +118,39 @@ private:
     std::array<float, MAX_MOVES> _cachedPriors;
 };
 
+struct TimeControl
+{
+    bool infinite;
+    int64_t moveTimeMs;
+
+    int64_t timeRemainingMs[COLOR_NB];
+    int64_t incrementMs[COLOR_NB];
+};
+
 struct SearchConfig
 {
-    std::atomic_bool search;
+    std::mutex mutexUci;
+    std::condition_variable signalUci;
+    std::condition_variable signalReady;
+
     std::atomic_bool quit;
-    bool debug;
+    std::atomic_bool debug;
     bool ready;
 
-    std::atomic_int positionNumber;
+    std::atomic_bool searchUpdated;
+    std::atomic_bool search;
+    TimeControl searchTimeControl;
+
+    std::atomic_bool positionUpdated;
     std::string positionFen;
     std::vector<Move> positionMoves;
+};
 
+struct SearchState
+{
+    bool searching;
     std::chrono::steady_clock::time_point searchStart;
+    TimeControl timeControl;
     int nodeCount;
     bool principleVariationChanged;
 };
@@ -166,14 +186,21 @@ public:
     SearchConfig& DebugSearchConfig();
 
     void Search(std::function<INetwork* ()> networkFactory);
-    void CheckNewSearchPosition();
+    void SignalDebug(bool debug);
+    void SignalPosition(std::string&& fen, std::vector<Move>&& moves);
+    void SignalSearchGo(const TimeControl& timeControl);
+    void SignalSearchStop();
+    void SignalQuit();
+    void WaitUntilReady();
+
+private:
+
+    void StartSearch();
+    void StopSearch();
+    void UpdatePosition();
     void CheckPrintInfo();
     void CheckTimeControl();
     void PrintPrincipleVariation();
-    void SignalConfig(std::function<void(SearchConfig&)> change);
-    void SignalSearch(bool search);
-    void SignalQuit();
-    void WaitUntilReady();
     void SearchPlay(int index);
 
 private:
@@ -193,10 +220,7 @@ private:
     std::vector<PredictionCacheEntry*> _cacheStores;
 
     SearchConfig _searchConfig;
-    int _searchPositionNumber;
-    std::mutex _mutexUci;
-    std::condition_variable _signalUci;
-    std::condition_variable _signalReady;
+    SearchState _searchState;
 };
 
 #endif // _SELFPLAY_H_

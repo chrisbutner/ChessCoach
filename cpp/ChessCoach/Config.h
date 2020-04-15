@@ -53,7 +53,8 @@ struct Config
         128;
 #endif
 
-    static const int MaxNodesPerThread = (2 * MaxMoves * MaxBranchMoves * PredictionBatchSize);
+    static const int TimeControl_SafetyBufferMs = 500;
+    static const int TimeControl_FractionOfRemaining = 20;
 };
 
 #endif // _CONFIG_H_

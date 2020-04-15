@@ -8,9 +8,9 @@ Next
 	- see if we can get the value head to converge? still really high, policy compensates in games though
 - add tests for FlipMove, etc.
 - uci
-	- basic time controls, infinite think, test as kibitzer (may need .exe/conda workaround)
 	- don't throw away trees if new position is just a child? log received commands to file to debug
-
+	- work out what lc0 reports for NPS, numbers are way off
+	- multithreading, virtual loss, any in-thread multiplexing?
 
 Code quality
 - clean up prediction cache clear printing
@@ -41,7 +41,6 @@ Performance
 - prediction cache is 4% used at 7 ply, but MCTS time drops from 22s to 26s when increased to 8 ply
 	- try linear probing or small buckets (rename current buckets to tables)
 - break down MCTS timing details just in case anything's off (just use sampling)
-- try 16-bit for self-play - need to look up weight compatibility
 - game loading/batch sampling
 	- try async game loading or memory mapping or overlapped IO
 	- try multi-game files or indexing with lazy batch-gathering
@@ -57,6 +56,7 @@ GUI for debugging
 - also try better text printouts, e.g. at X simulations print Y% win probability and PV
 
 UCI
+- workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
 - multi-thread MCTS
 	- "On the scalability of parallel UCT"

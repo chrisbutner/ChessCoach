@@ -387,17 +387,12 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
 
 std::pair<Move, Node*> SelfPlayGame::SelectMove() const
 {
-    return SelectMove(_root);
-}
-
-std::pair<Move, Node*> SelfPlayGame::SelectMove(const Node* parent) const
-{
     if (!TryHard() && (Ply() < Config::NumSampingMoves))
     {
         // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
-        const int sumChildVisits = parent->visitCount;
+        const int sumChildVisits = _root->visitCount;
         int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random);
-        for (const auto& pair : parent->children)
+        for (const auto& pair : _root->children)
         {
             const int visitCount = pair.second->visitCount;
             if (sample < visitCount)
@@ -412,8 +407,8 @@ std::pair<Move, Node*> SelfPlayGame::SelectMove(const Node* parent) const
     else
     {
         // Use temperature=inf; i.e., just select the most visited.
-        assert(parent->mostVisitedChild.second);
-        return parent->mostVisitedChild;
+        assert(_root->mostVisitedChild.second);
+        return _root->mostVisitedChild;
     }
 }
 
@@ -498,7 +493,7 @@ SelfPlayWorker::SelfPlayWorker()
     , _searchPaths(Config::PredictionBatchSize)
     , _cacheStores(Config::PredictionBatchSize)
     , _searchConfig{}
-    , _searchPositionNumber(0)
+    , _searchState{}
 {
 }
 
@@ -638,7 +633,7 @@ void SelfPlayWorker::Play(int index)
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(selected.first, selected.second);
         game.PruneExcept(root, selected.second /* == game.Root() */);
-        _searchConfig.principleVariationChanged = true; // First move in PV is now gone.
+        _searchState.principleVariationChanged = true; // First move in PV is now gone.
     }
 
     // Clean up resources in use and save the result.
@@ -731,7 +726,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         assert(!std::isnan(value));
         value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ ~scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
-        _searchConfig.nodeCount++;
+        _searchState.nodeCount++;
 
 #if DEBUG_MCTS
         std::cout << "prior " << scratchGame.Root()->originalPrior << ", noisy prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
@@ -796,7 +791,7 @@ void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& se
             (searchPath[i].second->mostVisitedChild.second->visitCount < searchPath[i + 1].second->visitCount))
         {
             searchPath[i].second->mostVisitedChild = searchPath[i + 1];
-            _searchConfig.principleVariationChanged |= isPrincipleVariation;
+            _searchState.principleVariationChanged |= isPrincipleVariation;
         }
         else
         {
@@ -824,29 +819,33 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     // Create the network on the worker thread (slow).
     std::unique_ptr<INetwork> network(networkFactory());
 
+    // Warm up the GIL and predictions.
+    network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
+
     while (!_searchConfig.quit)
     {
         {
-            std::unique_lock lock(_mutexUci);
+            std::unique_lock lock(_searchConfig.mutexUci);
 
             // Let UCI know we're ready.
             if (!_searchConfig.ready)
             {
                 _searchConfig.ready = true;
-                _signalReady.notify_all();
+                _searchConfig.signalReady.notify_all();
             }
 
             // Wait until told to search.
             while (!_searchConfig.quit && !_searchConfig.search)
             {
-                _signalUci.wait(lock);
+                _searchConfig.signalUci.wait(lock);
             }
         }
 
-        while (!_searchConfig.quit && _searchConfig.search)
+        UpdatePosition();
+        StartSearch();
+        while (!_searchConfig.quit && _searchState.searching &&
+            !_searchConfig.searchUpdated && !_searchConfig.positionUpdated)
         {
-            CheckNewSearchPosition();
-
             SearchPlay(0);
             network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
 
@@ -855,47 +854,129 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
             // TODO: Only check every N times
             CheckTimeControl();
         }
-        // TODO: Send bestmove if stopped
+        StopSearch();
+    }
+
+    // Clean up.
+    _games[0].PruneAll();
+}
+
+// Lock _mutexUci before entering.
+void SelfPlayWorker::StartSearch()
+{
+    assert(_searchConfig.searchUpdated);
+    assert(!_searchState.searching);
+
+    std::lock_guard lock(_searchConfig.mutexUci);
+
+    // Lock around both (a) using the search/time control info, and (b) clearing the flag.
+    // If the GUI does two updates very quickly, either (i) we grabbed the second one's
+    // search/time control info and cleared, or (ii) the flag gets set again after we unlock.
+    // Either way we're good.
+
+    _searchState.searching = true;
+    _searchState.searchStart = std::chrono::high_resolution_clock::now();
+    _searchState.timeControl = _searchConfig.searchTimeControl;
+    _searchState.nodeCount = 0;
+    _searchState.principleVariationChanged = 0;
+
+    _searchConfig.searchUpdated = false;
+}
+
+void SelfPlayWorker::StopSearch()
+{
+    if (!_searchState.searching)
+    {
+        return;
+    }
+
+    auto [move, node] = _games[0].SelectMove();
+
+    PrintPrincipleVariation();
+    std::cout << "bestmove " << UCI::move(move, false /* chess960 */) << std::endl;
+
+    _searchState.searching = false;
+
+    // Lock around (a) checking "searchUpdated" and (b) clearing "search". We want to clear
+    // "search" in order to go back to sleep but only if it's still the existing search.
+    {
+        std::lock_guard lock(_searchConfig.mutexUci);
+
+        if (!_searchConfig.searchUpdated)
+        {
+            _searchConfig.search = false;
+        }
     }
 }
 
-void SelfPlayWorker::CheckNewSearchPosition()
+void SelfPlayWorker::UpdatePosition()
 {
-    if (_searchConfig.positionNumber != _searchPositionNumber)
+    assert(!_searchState.searching);
+
+    if (_searchConfig.positionUpdated)
     {
-        std::lock_guard lock(_mutexUci);
+        std::lock_guard lock(_searchConfig.mutexUci);
+
+        // Lock around both (a) using the position info, and (b) clearing the flag.
+        // If the GUI does two updates very quickly, either (i) we grabbed the second one's
+        // position info and cleared, or (ii) the flag gets set again after we unlock. Either way
+        // we're good.
 
         _games[0].PruneAll();
         SetUpGame(0, _searchConfig.positionFen, _searchConfig.positionMoves, true /* tryHard */);
-        _searchPositionNumber = _searchConfig.positionNumber;
+
+        _searchConfig.positionUpdated = false;
     }
 }
 
 void SelfPlayWorker::CheckPrintInfo()
 {
     // Print principle variation when it changes.
-    if (_searchConfig.principleVariationChanged)
+    if (_searchState.principleVariationChanged)
     {
         PrintPrincipleVariation();
-        _searchConfig.principleVariationChanged = false;
+        _searchState.principleVariationChanged = false;
     }
 }
 
 void SelfPlayWorker::CheckTimeControl()
 {
-    const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _searchConfig.searchStart).count();
-
-    // TODO: Hard-code for now (can remove simulation check once isready doesn't lie about network)
-    if ((gameTime >= 5.f) && (_mctsSimulations[0] >= 800))
+    // Always do at least 1-2 simulations so that a "best" move exists.
+    if (!_games[0].Root()->mostVisitedChild.second)
     {
-        std::lock_guard lock(_mutexUci);
+        return;
+    }
 
-        auto [move, node] = _games[0].SelectMove();
+    // Infinite think takes first priority.
+    if (_searchState.timeControl.infinite)
+    {
+        return;
+    }
 
-        PrintPrincipleVariation();
-        std::cout << "bestmove " << UCI::move(move, false /* chess960 */) << std::endl;
+    const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState.searchStart);
+    const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
 
-        _searchConfig.search = false;
+    // Specified think time takes second priority.
+    if ((_searchState.timeControl.moveTimeMs > 0) && (searchTimeMs >= _searchState.timeControl.moveTimeMs))
+    {
+        StopSearch();
+    }
+
+    // Game clock takes third priority. Use a simple strategy like AlphaZero for now.
+    const Color toPlay = _games[0].ToPlay();
+    const int64_t timeAllowed =
+        (_searchState.timeControl.timeRemainingMs[toPlay] / Config::TimeControl_FractionOfRemaining)
+        + _searchState.timeControl.incrementMs[toPlay]
+        - Config::TimeControl_SafetyBufferMs;
+    if ((timeAllowed > 0) && (searchTimeMs >= timeAllowed))
+    {
+        StopSearch();
+    }
+
+    // No time allowed at all: defy the system and just make a quick training-style move.
+    if (_mctsSimulations[0] >= Config::NumSimulations)
+    {
+        StopSearch();
     }
 }
 
@@ -911,7 +992,7 @@ void SelfPlayWorker::PrintPrincipleVariation()
         node = node->mostVisitedChild.second;
     }
 
-    std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchConfig.searchStart);
+    const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState.searchStart);
 
     // Value is from the parent's perspective, so that's already correct for the root perspective,
     // but we need to flip from the root's color to white.
@@ -919,8 +1000,8 @@ void SelfPlayWorker::PrintPrincipleVariation()
     const float value = _games[0].Root()->mostVisitedChild.second->Value();
     const float whiteValue = Game::FlipValue(_games[0].ToPlay(), value);
     const int whiteScore = static_cast<int>(Game::ProbabilityToCentipawns(whiteValue));
-    const long long searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
-    const int nodeCount = _searchConfig.nodeCount;
+    const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
+    const int nodeCount = _searchState.nodeCount;
     const int nodesPerSecond = static_cast<int>(nodeCount / std::chrono::duration<float>(sinceSearchStart).count());
 
     std::cout << "info depth " << depth << " score cp " << whiteScore << " nodes " << nodeCount << " nps " << nodesPerSecond << " time " << searchTimeMs << " pv";
@@ -931,44 +1012,57 @@ void SelfPlayWorker::PrintPrincipleVariation()
     std::cout << std::endl;
 }
 
-void SelfPlayWorker::SignalConfig(std::function<void(SearchConfig&)> change)
+void SelfPlayWorker::SignalDebug(bool debug)
 {
-    std::lock_guard lock(_mutexUci);
-    
-    change(_searchConfig);
+    std::lock_guard lock(_searchConfig.mutexUci);
+
+    _searchConfig.debug = debug;
 }
 
-void SelfPlayWorker::SignalSearch(bool search)
+void SelfPlayWorker::SignalPosition(std::string&& fen, std::vector<Move>&& moves)
 {
-    std::lock_guard lock(_mutexUci);
+    std::lock_guard lock(_searchConfig.mutexUci);
 
-    _searchConfig.search = search;
-    
-    if (search)
-    {
-        _searchConfig.searchStart = std::chrono::high_resolution_clock::now();
-        _searchConfig.nodeCount = 0;
-        _searchConfig.principleVariationChanged = 0;
-        _signalUci.notify_all();
-    }
+    _searchConfig.positionUpdated = true;
+    _searchConfig.positionFen = std::move(fen);
+    _searchConfig.positionMoves = std::move(moves);
+}
+
+void SelfPlayWorker::SignalSearchGo(const TimeControl& timeControl)
+{
+    std::lock_guard lock(_searchConfig.mutexUci);
+
+    _searchConfig.searchUpdated = true;
+    _searchConfig.search = true;
+    _searchConfig.searchTimeControl = timeControl;
+
+    _searchConfig.signalUci.notify_all();
+}
+
+void SelfPlayWorker::SignalSearchStop()
+{
+    std::lock_guard lock(_searchConfig.mutexUci);
+
+    _searchConfig.searchUpdated = true;
+    _searchConfig.search = false;
 }
 
 void SelfPlayWorker::SignalQuit()
 {
-    std::lock_guard lock(_mutexUci);
+    std::lock_guard lock(_searchConfig.mutexUci);
 
     _searchConfig.quit = true;
 
-    _signalUci.notify_all();
+    _searchConfig.signalUci.notify_all();
 }
 
 void SelfPlayWorker::WaitUntilReady()
 {
-    std::unique_lock lock(_mutexUci);
+    std::unique_lock lock(_searchConfig.mutexUci);
 
     while (!_searchConfig.ready)
     {
-        _signalReady.wait(lock);
+        _searchConfig.signalReady.wait(lock);
     }
 }
 

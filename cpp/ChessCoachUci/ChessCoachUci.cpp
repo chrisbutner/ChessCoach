@@ -165,10 +165,7 @@ void ChessCoachUci::HandleDebug(std::stringstream& commands)
     }
 
     InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalConfig([&](SearchConfig& config)
-        {
-            config.debug = _debug;
-        });
+    _selfPlayWorker->SignalDebug(_debug);
 }
 
 void ChessCoachUci::HandleIsReady(std::stringstream& commands)
@@ -200,56 +197,93 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
     Position position;
 
     commands >> token;
-    if ((token == "fen") && (commands >> fen))
+    if (token == "fen")
     {
         // Trust the provided FEN.
+        fen.reserve(128);
+        while ((commands >> token) && (token != "moves"))
+        {
+            fen += token + " ";
+        }
     }
     else
     {
-        // Instead of "fen" we got "startpos" or something invalid,
-        // or the FEN was missing after "fen".
+        // Instead of "fen" we got "startpos" or something invalid.
         fen = Config::StartingPosition;
+        while ((commands >> token) && (token != "moves"))
+        {
+        }
     }
 
     position.set(fen, false /* isChess960 */, &positionStates->back(), Threads.main());
 
-    if ((commands >> token) && (token == "moves"))
+    // If "moves" wasn't seen then we already consumed the rest of the line.
+    while (commands >> token)
     {
-        while (commands >> token)
+        Move move = UCI::to_move(position, token);
+        if (move == MOVE_NONE)
         {
-            Move move = UCI::to_move(position, token);
-            if (move == MOVE_NONE)
-            {
-                break;
-            }
-
-            positionStates->emplace_back();
-            position.do_move(move, positionStates->back());
-
-            moves.push_back(move);
+            break;
         }
+
+        positionStates->emplace_back();
+        position.do_move(move, positionStates->back());
+
+        moves.push_back(move);
     }
 
     InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalConfig([&](SearchConfig& config)
-        {
-            config.positionNumber++;
-            config.positionFen = fen;
-            config.positionMoves = std::move(moves);
-        });
+    _selfPlayWorker->SignalPosition(std::move(fen), std::move(moves));
 }
 
 void ChessCoachUci::HandleGo(std::stringstream& commands)
 {
-    // TODO: Treat it as either infinite or 5s for now
+    // TODO: searchmoves
+    // TODO: ponder
+    // TODO: movestogo
+    // TODO: depth
+    // TODO: nodes
+    // TODO: mate
+
+    TimeControl timeControl = {};
+
+    std::string token;
+    while (commands >> token)
+    {
+        if (token == "infinite")
+        {
+            timeControl.infinite = true;
+        }
+        else if (token == "movetime")
+        {
+            commands >> timeControl.moveTimeMs;
+        }
+        else if (token == "wtime")
+        {
+            commands >> timeControl.timeRemainingMs[WHITE];
+        }
+        else if (token == "btime")
+        {
+            commands >> timeControl.timeRemainingMs[BLACK];
+        }
+        else if (token == "winc")
+        {
+            commands >> timeControl.incrementMs[WHITE];
+        }
+        else if (token == "binc")
+        {
+            commands >> timeControl.incrementMs[BLACK];
+        }
+    }
+
     InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalSearch(true);
+    _selfPlayWorker->SignalSearchGo(timeControl);
 }
 
 void ChessCoachUci::HandleStop(std::stringstream& commands)
 {
     InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalSearch(false);
+    _selfPlayWorker->SignalSearchStop();
 }
 
 void ChessCoachUci::HandlePonderHit(std::stringstream& commands)
