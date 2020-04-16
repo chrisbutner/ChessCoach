@@ -1,5 +1,11 @@
 #include "SavedGame.h"
 
+SavedGame::SavedGame()
+    : result(-1.0f)
+    , moveCount(0)
+{
+}
+
 SavedGame::SavedGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::map<Move, float>>& setChildVisits)
     : result(setResult)
     , moves(setMoves.size())

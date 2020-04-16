@@ -7,6 +7,7 @@
 #include <random>
 #include <map>
 #include <vector>
+#include <functional>
 
 #include <Stockfish/Position.h>
 
@@ -48,7 +49,14 @@ public:
 
     static SavedGame LoadFromDisk(const std::filesystem::path& path);
     static void SaveToDisk(const std::filesystem::path& path, const SavedGame& game);
-    static std::string GenerateGameName(int gameNumber);
+    static void SaveToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games);
+    static std::string GenerateGamesFilename(int gamesNumber);
+
+private:
+
+    static int LoadFromDiskInternal(const std::filesystem::path& path,
+        std::function<void(SavedGame&&)> gameHandler, int maxLoadCount);
+    static void SaveToDiskInternal(std::ofstream& file, const SavedGame& game);
 
 public:
 

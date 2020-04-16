@@ -1,5 +1,10 @@
 #include <functional>
 #include <fstream>
+#include <thread>
+#include <mutex>
+#include <queue>
+#include <filesystem>
+#include <atomic>
 
 #include <Stockfish/position.h>
 #include <tclap/CmdLine.h>
@@ -8,11 +13,13 @@
 #include <ChessCoach/Storage.h>
 #include <ChessCoach/Pgn.h>
 
+// ~13k-15k games per second on i7-6700, Samsung SSD 950 PRO 512GB
+// Could probably be trivially improved by lessening PGN queue mutex contention.
 class ChessCoachPgnToGames : public ChessCoach
 {
 public:
 
-    ChessCoachPgnToGames(const std::filesystem::path& inputDirectory, const std::filesystem::path& outputDirectory);
+    ChessCoachPgnToGames(const std::filesystem::path& inputDirectory, const std::filesystem::path& outputDirectory, int threadCount);
 
     void InitializeLight();
     void FinalizeLight();
@@ -20,14 +27,29 @@ public:
 
 private:
 
+    void ConvertPgns();
+
+private:
+
     std::filesystem::path _inputDirectory;
     std::filesystem::path _outputDirectory;
+    int _threadCount;
+
+    std::mutex _pgnQueueMutex;
+    std::queue<std::filesystem::path> _pgnQueue;
+
+    std::mutex _coutMutex;
+    std::atomic_int _latestGamesNumber;
+
+    std::atomic_int _totalFileCount;
+    std::atomic_int _totalGameCount;
 };
 
 int main(int argc, char* argv[])
 {
     std::string inputDirectory;
     std::string outputDirectory;
+    int threadCount;
 
     try
     {
@@ -35,8 +57,10 @@ int main(int argc, char* argv[])
 
         TCLAP::ValueArg<std::string> inputDirectoryArg("i", "input", "Input directory where PGN files are located", true /* req */, "", "string");
         TCLAP::ValueArg<std::string> outputDirectoryArg("o", "output", "Output directory where game files should be placed", true /* req */, "", "string");
+        TCLAP::ValueArg<int> threadCountArg("t", "threads", "Number of threads to use (0 = autodetect)", false /* req */, 0, "number");
 
         // Usage/help seems to reverse this order.
+        cmd.add(threadCountArg);
         cmd.add(outputDirectoryArg);
         cmd.add(inputDirectoryArg);
 
@@ -44,13 +68,14 @@ int main(int argc, char* argv[])
 
         inputDirectory = inputDirectoryArg.getValue();
         outputDirectory = outputDirectoryArg.getValue();
+        threadCount = threadCountArg.getValue();
     }
     catch (TCLAP::ArgException& e)
     {
         std::cerr << "Error: " << e.error() << " for argument " << e.argId() << std::endl;
     }
 
-    ChessCoachPgnToGames pgnToGames(inputDirectory, outputDirectory);
+    ChessCoachPgnToGames pgnToGames(inputDirectory, outputDirectory, threadCount);
 
     pgnToGames.InitializeLight();
 
@@ -61,10 +86,19 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-ChessCoachPgnToGames::ChessCoachPgnToGames(const std::filesystem::path& inputDirectory, const std::filesystem::path& outputDirectory)
+ChessCoachPgnToGames::ChessCoachPgnToGames(const std::filesystem::path& inputDirectory,
+    const std::filesystem::path& outputDirectory, int threadCount)
     : _inputDirectory(inputDirectory)
     , _outputDirectory(outputDirectory)
+    , _threadCount(threadCount)
+    , _latestGamesNumber(0)
+    , _totalFileCount(0)
+    , _totalGameCount(0)
 {
+    if (_threadCount <= 0)
+    {
+        _threadCount = std::thread::hardware_concurrency();
+    }
 }
 
 void ChessCoachPgnToGames::InitializeLight()
@@ -80,27 +114,105 @@ void ChessCoachPgnToGames::FinalizeLight()
 
 void ChessCoachPgnToGames::ConvertAll()
 {
-    int latestGameNumber = 0;
+    const auto start = std::chrono::high_resolution_clock::now();
+    std::vector<std::thread> threads;
 
-    for (const auto& entry : std::filesystem::directory_iterator(_inputDirectory))
+    // Start the converter threads.
+    for (int i = 0; i < _threadCount; i++)
+    {
+        threads.emplace_back(&ChessCoachPgnToGames::ConvertPgns, this);
+    }
+
+    // Distribute PGN paths.
+    for (auto&& entry : std::filesystem::directory_iterator(_inputDirectory))
     {
         if (entry.path().extension().string() == ".pgn")
         {
-            std::ifstream pgnFile = std::ifstream(entry.path(), std::ios::in);
-         
-            std::cout << "Converting " << entry.path().filename() << ": ";
-            int gamesConverted = 0;
+            {
+                std::lock_guard lock(_pgnQueueMutex);
 
-            Pgn::ParsePgn(pgnFile, [&](const SavedGame& game)
-                {
-                    const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGameName(++latestGameNumber));
-
-                    Storage::SaveToDisk(gamePath, game);
-                    gamesConverted++;
-                });
-
-            std::cout << gamesConverted << " games" << std::endl;
+                _pgnQueue.emplace(std::move(entry));
+            }
+            _totalFileCount++;
         }
     }
-    std::cout << "Finished" << std::endl;
+
+    // Poison the converter threads.
+    for (int i = 0; i < _threadCount; i++)
+    {
+        std::lock_guard lock(_pgnQueueMutex);
+
+        _pgnQueue.emplace(std::filesystem::path());
+    }
+
+    // Wait for the converter threads to finish.
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+
+    const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();
+    const float filesPerSecond = (_totalFileCount / secondsTaken);
+    const float gamesPerSecond = (_totalGameCount / secondsTaken);
+    std::cout << "Converted " << _totalGameCount << " games in " << _totalFileCount << " files." << std::endl;
+    std::cout << "(" << secondsTaken << " seconds total, " << filesPerSecond << " files per second, " << gamesPerSecond << " games per second)" << std::endl;
+}
+
+void ChessCoachPgnToGames::ConvertPgns()
+{
+    const int gamesPerSave = 2000; // TODO: Move this somewhere better when we have a reason.
+    std::vector<SavedGame> games;
+
+    while (true)
+    {
+        std::filesystem::path pgnPath;
+        int pgnGamesConverted = 0;
+
+        // Spin waiting for a PGN.
+        while (true)
+        {
+            std::lock_guard lock(_pgnQueueMutex);
+
+            if (!_pgnQueue.empty())
+            {
+                pgnPath = _pgnQueue.front();
+                _pgnQueue.pop();
+                break;
+            }
+        }
+
+        // Check for poison.
+        if (pgnPath.empty())
+        {
+            break;
+        }
+
+        std::ifstream pgnFile = std::ifstream(pgnPath, std::ios::in);
+        Pgn::ParsePgn(pgnFile, [&](SavedGame&& game)
+            {
+                games.emplace_back(std::move(game));
+                pgnGamesConverted++;
+
+                if (games.size() >= gamesPerSave)
+                {
+                    const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGamesFilename(++_latestGamesNumber));
+                    Storage::SaveToDisk(gamePath, games);
+                    games.clear();
+                }
+            });
+
+        {
+            std::lock_guard lock(_coutMutex);
+
+            _totalGameCount += pgnGamesConverted;
+            std::cout << "Converted " << pgnPath.filename() << ": " << pgnGamesConverted << " games" << std::endl;
+        }
+    }
+
+    if (!games.empty())
+    {
+        const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGamesFilename(++_latestGamesNumber));
+        Storage::SaveToDisk(gamePath, games);
+        games.clear();
+    }
 }

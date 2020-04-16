@@ -49,7 +49,7 @@ void ChessCoachTrain::TrainChessCoach()
     Storage storage;
 
     storage.LoadExistingGames(GameType_Train, std::numeric_limits<int>::max());
-    storage.LoadExistingGames(GameType_Test, 20000);
+    storage.LoadExistingGames(GameType_Test, std::numeric_limits<int>::max());
 
     // Set up configuration for full training.
     const int networkCount = (Config::TrainingSteps / Config::CheckpointInterval);

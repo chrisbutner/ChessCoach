@@ -48,9 +48,12 @@ void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
     int loadedCount = 0;
     for (const auto& entry : std::filesystem::directory_iterator(_gamesPaths[gameType]))
     {
-        AddGameWithoutSaving(gameType, LoadFromDisk(entry.path().string()));
-        loadedCount++;
-        if ((loadedCount % 1000) == 0)
+        const int maxAdditionalCount = (maxLoadCount - loadedCount);
+        const int justLoadedCount = LoadFromDiskInternal(entry.path(),
+            std::bind(&Storage::AddGameWithoutSaving, this,gameType, std::placeholders::_1),
+            maxAdditionalCount);
+        loadedCount += justLoadedCount;
+        if (((loadedCount % 1000) == 0) || (justLoadedCount > 1))
         {
             std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
         }
@@ -175,47 +178,65 @@ int Storage::CountNetworks() const
 void Storage::SaveToDisk(GameType gameType, const SavedGame& game, int gameNumber) const
 {
     std::filesystem::path gamePath = _gamesPaths[gameType];
-    gamePath /= GenerateGameName(gameNumber);
+    gamePath /= GenerateGamesFilename(gameNumber);
 
     SaveToDisk(gamePath, game);
 }
 
 SavedGame Storage::LoadFromDisk(const std::filesystem::path& path)
 {
+    SavedGame game;
+    LoadFromDiskInternal(path, [&](SavedGame&& loaded) { game = std::move(loaded); }, 1);
+    return game;
+}
+
+int Storage::LoadFromDiskInternal(const std::filesystem::path& path, std::function<void(SavedGame&&)> gameHandler, int maxLoadCount)
+{
     std::ifstream file = std::ifstream(path, std::ios::in | std::ios::binary);
 
     uint16_t version;
-    uint16_t moveCount;
-    float result;
+    uint16_t gameCount;
 
     file.read(reinterpret_cast<char*>(&version), sizeof(version));
-    file.read(reinterpret_cast<char*>(&moveCount), sizeof(moveCount));
-    file.read(reinterpret_cast<char*>(&result), sizeof(result));
+    file.read(reinterpret_cast<char*>(&gameCount), sizeof(gameCount));
     assert(version == 1);
-    assert(moveCount >= 1);
-    assert((result == CHESSCOACH_VALUE_WIN) ||
-        (result == CHESSCOACH_VALUE_DRAW) ||
-        (result == CHESSCOACH_VALUE_LOSS));
+    assert(gameCount >= 1);
 
-    std::vector<uint16_t> moves(moveCount);
-    file.read(reinterpret_cast<char*>(moves.data()), sizeof(uint16_t) * moveCount);
-
-    std::vector<std::map<Move, float>> childVisits(moveCount);
-    for (int i = 0; i < moveCount; i++)
+    const int loadCount = std::min(maxLoadCount, static_cast<int>(gameCount));
+    for (int i = 0; i < loadCount; i++)
     {
-        int mapSize;
-        file.read(reinterpret_cast<char*>(&mapSize), sizeof(mapSize));
-        for (int j = 0; j < mapSize; j++)
+        uint16_t moveCount;
+        float result;
+
+        file.read(reinterpret_cast<char*>(&moveCount), sizeof(moveCount));
+        file.read(reinterpret_cast<char*>(&result), sizeof(result));
+        assert(moveCount >= 1);
+        assert((result == CHESSCOACH_VALUE_WIN) ||
+            (result == CHESSCOACH_VALUE_DRAW) ||
+            (result == CHESSCOACH_VALUE_LOSS));
+
+        std::vector<uint16_t> moves(moveCount);
+        file.read(reinterpret_cast<char*>(moves.data()), sizeof(uint16_t) * moveCount);
+
+        std::vector<std::map<Move, float>> childVisits(moveCount);
+        for (int i = 0; i < moveCount; i++)
         {
-            Move key;
-            float value;
-            file.read(reinterpret_cast<char*>(&key), sizeof(key));
-            file.read(reinterpret_cast<char*>(&value), sizeof(value));
-            childVisits[i][key] = value;
+            int mapSize;
+            file.read(reinterpret_cast<char*>(&mapSize), sizeof(mapSize));
+            for (int j = 0; j < mapSize; j++)
+            {
+                Move key;
+                float value;
+                file.read(reinterpret_cast<char*>(&key), sizeof(key));
+                file.read(reinterpret_cast<char*>(&value), sizeof(value));
+                childVisits[i][key] = value;
+            }
         }
+
+        gameHandler(SavedGame(result, std::move(moves), std::move(childVisits)));
     }
 
-    return SavedGame(result, std::move(moves), std::move(childVisits));
+    return loadCount;
 }
 
 void Storage::SaveToDisk(const std::filesystem::path& path, const SavedGame& game)
@@ -223,9 +244,35 @@ void Storage::SaveToDisk(const std::filesystem::path& path, const SavedGame& gam
     std::ofstream file = std::ofstream(path, std::ios::out | std::ios::binary);
 
     const uint16_t version = 1;
-    const uint16_t moveCount = static_cast<int>(game.moves.size());
+    const uint16_t gameCount = 1;
 
     file.write(reinterpret_cast<const char*>(&version), sizeof(version));
+    file.write(reinterpret_cast<const char*>(&gameCount), sizeof(gameCount));
+
+    SaveToDiskInternal(file, game);
+}
+
+void Storage::SaveToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games)
+{
+    std::ofstream file = std::ofstream(path, std::ios::out | std::ios::binary);
+
+    const uint16_t version = 1;
+    const uint16_t gameCount = static_cast<uint16_t>(games.size());
+    assert(games.size() <= std::numeric_limits<uint16_t>::max());
+
+    file.write(reinterpret_cast<const char*>(&version), sizeof(version));
+    file.write(reinterpret_cast<const char*>(&gameCount), sizeof(gameCount));
+
+    for (const SavedGame& game : games)
+    {
+        SaveToDiskInternal(file, game);
+    }
+}
+
+void Storage::SaveToDiskInternal(std::ofstream& file, const SavedGame& game)
+{
+    const uint16_t moveCount = static_cast<int>(game.moves.size());
+
     file.write(reinterpret_cast<const char*>(&moveCount), sizeof(moveCount));
     file.write(reinterpret_cast<const char*>(&game.result), sizeof(game.result));
 
@@ -244,12 +291,12 @@ void Storage::SaveToDisk(const std::filesystem::path& path, const SavedGame& gam
     }
 }
 
-std::string Storage::GenerateGameName(int gameNumber)
+std::string Storage::GenerateGamesFilename(int gamesNumber)
 {
     std::stringstream suffix;
-    suffix << std::setfill('0') << std::setw(9) << gameNumber;
+    suffix << std::setfill('0') << std::setw(9) << gamesNumber;
 
-    return "game_" + suffix.str();
+    return "games_" + suffix.str();
 }
 
 std::filesystem::path Storage::LogPath() const

@@ -10,6 +10,7 @@ struct SavedGame
 {
 public:
 
+    SavedGame();
     SavedGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::map<Move, float>>& setChildVisits);
     SavedGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::map<Move, float>>&& setChildVisits);
 

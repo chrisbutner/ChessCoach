@@ -196,12 +196,14 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
     const Color toPlay = position.side_to_move();
     const size_t capture = san.find('x', 1);
     Square targetSquare;
-    bool hasDisambiguation;
+    bool hasPartialDisambiguation = false;
+    bool hasFullDisambiguation = false;
 
     if (capture != std::string::npos)
     {
         targetSquare = ParseSquare(san, static_cast<int>(capture) + 1);
-        hasDisambiguation = (capture >= 2);
+        hasFullDisambiguation = (capture >= 3);
+        hasPartialDisambiguation = (!hasFullDisambiguation && (capture >= 2));
     }
     else
     {
@@ -215,18 +217,17 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
                 (maybeRank <= RANK_8))
             {
                 targetSquare = ParseSquare(san, 3);
-                hasDisambiguation = true;
+                hasFullDisambiguation = true;
             }
             else
             {
                 targetSquare = ParseSquare(san, 1);
-                hasDisambiguation = false;
             }
         }
         else
         {
             targetSquare = ParseSquare(san, 2);
-            hasDisambiguation = true;
+            hasPartialDisambiguation = true;
         }
     }
 
@@ -237,23 +238,12 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
     
     if (more_than_one(fromPieces))
     {
-        if (!hasDisambiguation)
+        if (hasFullDisambiguation)
         {
-            // Easier example: knights on c3 (pinned), g1, move is Ne2
-            // More difficult example: king on H8, rooks on E8 and G7, both pinned, move is Rg8.
-            Move legal = MOVE_NONE;
-            while (fromPieces)
-            {
-                Move candidate = make_move(pop_lsb(&fromPieces), targetSquare);
-                if (position.legal(candidate))
-                {
-                    assert(legal == MOVE_NONE);
-                    legal = candidate;
-                }
-            }
-            return legal;
+            Square disambiguationSquare = ParseSquare(san, 1);
+            fromPieces &= square_bb(disambiguationSquare);
         }
-        else
+        else if (hasPartialDisambiguation)
         {
             // E.g. "Nfd7"
             File disambiguationFile = ParseFile(san, 1);
@@ -270,7 +260,30 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
                 fromPieces &= rank_bb(disambiguationRank);
             }
         }
+        else
+        {
+            // Easier example: knights on c3 (pinned), g1, move is Ne2
+            // More difficult example: king on H8, rooks on E8 and G7, both pinned, move is Rg8.
+            Move legal = MOVE_NONE;
+            while (fromPieces)
+            {
+                Move candidate = make_move(pop_lsb(&fromPieces), targetSquare);
+                if (position.legal(candidate))
+                {
+                    assert(legal == MOVE_NONE);
+                    legal = candidate;
+                }
+            }
+            return legal;
+        }
 
+#ifdef _DEBUG
+        if (!fromPieces || more_than_one(fromPieces))
+        {
+            std::cout << position.fen() << std::endl;
+            std::cout << san << std::endl;
+        }
+#endif
         assert(fromPieces);
         assert(!more_than_one(fromPieces));
     }

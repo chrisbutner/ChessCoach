@@ -1,9 +1,10 @@
 Next
 - once we're graphing strength, run more long supervised runs with e.g. 32-value head, different loss ratios, etc.
-	- fix any remaining PGN problems and finish 2m game extraction
 	- see if we can get the value head to converge? still really high, policy compensates in games though
 	- try smaller batch size until ghost batches works or I reimplement
 	- try AZ history planes instead of mine
+- self-play
+	- work out multi-game writing to disk (maybe just open rw, update count, append?)
 - add tests for FlipMove, etc.
 - uci
 	- don't throw away trees if new position is just a child? log received commands to file to debug
@@ -38,9 +39,6 @@ Network architecture/training data
 Performance
 - try more lookup tables for plane mappings, e.g. byte/short slices of float rows
 - break down MCTS timing details just in case anything's off (just use sampling)
-- game loading/batch sampling
-	- try async game loading or memory mapping or overlapped IO
-	- try multi-game files or indexing with lazy batch-gathering
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
 	- can always binary search Move-ints or something too, it's not mutated
@@ -48,6 +46,7 @@ Performance
 - try Intel compiler in future
 
 Code quality
+- rename NN "test" to "validate" to avoid confusion with unit tests and keep consistent with tensorboard
 - privatize C++ methods (got too python-brained)
 - try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
 - try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
