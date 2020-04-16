@@ -24,7 +24,6 @@ public:
 private:
 
     static std::vector<std::string> ReadMoves(std::istream& tokenizer, std::string& token);
-    static void Expect(std::istream& tokenizer, std::string& token, const std::string& expected);
     static void Expect(std::istream& tokenizer, const unsigned char expected);
     static bool Find(std::istream& tokenizer, std::string& token, const std::string& find);
     static std::string StripLeft(const std::string& string, char expected);

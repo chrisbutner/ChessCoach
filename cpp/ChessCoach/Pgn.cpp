@@ -11,7 +11,6 @@
 
 // Parsing is quite minimal and brittle, intended to parse very-well-formed PGNs with minimal dev time and improved only as needed.
 // E.g. assume that pawn capture squares are fully specified
-// Assume UTF-8-ish encoding.
 void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&)> gameHandler)
 {
     while (true)
@@ -216,6 +215,7 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
                 (maybeRank <= RANK_8))
             {
                 targetSquare = ParseSquare(san, 3);
+                hasDisambiguation = true;
             }
             else
             {
@@ -283,8 +283,8 @@ Move Pgn::ParsePawnSan(Position& position, const std::string& san)
     const Color toPlay = position.side_to_move();
     const bool capture = (san[1] == 'x');
     const Square targetSquare = ParseSquare(san, capture ? 2 : 0);
-    const Direction up = ((toPlay == WHITE) ? NORTH : SOUTH);
-    Square fromSquare = (targetSquare - up);
+    const Direction advance = ((toPlay == WHITE) ? NORTH : SOUTH);
+    Square fromSquare = (targetSquare - advance);
     const size_t promotion = san.find('=', 2);
 
     if (capture)
@@ -293,7 +293,7 @@ Move Pgn::ParsePawnSan(Position& position, const std::string& san)
     }
     else if (position.piece_on(fromSquare) != make_piece(toPlay, PAWN))
     {
-        fromSquare -= up;
+        fromSquare -= advance;
     }
 
     if (promotion != std::string::npos)

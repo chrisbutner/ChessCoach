@@ -18,7 +18,7 @@ std::vector<StrengthTestSpec> Epd::ParseEpds(const std::filesystem::path& path)
 
 // This is a really quick-and-dirty .epd "parser" written specifically for STS, ERET and Arasan20 test suites.
 // It's basically trying hard not to be an actual parser. Now that it's done I'm thinking that was the wrong choice.
-// Too-many-dashes in ERET is fixed in the .epd file rather than handled here in code.
+// Too-many-dashes in ERET is fixed in the .epd file rather than handled here in code (two instances IIRC).
 StrengthTestSpec Epd::ParseEpd(const std::string& epd)
 {
     StrengthTestSpec spec;
@@ -35,7 +35,7 @@ StrengthTestSpec Epd::ParseEpd(const std::string& epd)
         spec.fen += token + " ";
     }
     assert(tokenizer);
-    spec.fen += "0 1"; // Move clocks are missing from EPDs, usually 0/1 for test suites.
+    spec.fen += "0 1"; // Move clocks are optional in EPDs, usually 0/1 for test suites.
 
     // Parse the best move(s) or avoid move(s).
     tokenizer >> token;
@@ -86,10 +86,7 @@ StrengthTestSpec Epd::ParseEpd(const std::string& epd)
     {
         spec.pointSans = std::move(bestMoveSans);
         spec.points.resize(spec.pointSans.size());
-        for (int& points : spec.points)
-        {
-            points = 1;
-        }
+        std::fill(spec.points.begin(), spec.points.end(), 1);
     }
 
     return spec;
@@ -123,13 +120,6 @@ std::vector<std::string> Epd::ReadMoves(std::istream& tokenizer, std::string& to
     }
 
     return moves;
-}
-
-void Epd::Expect(std::istream& tokenizer, std::string& token, const std::string& expected)
-{
-    tokenizer >> token;
-    assert(tokenizer);
-    assert(token == expected);
 }
 
 void Epd::Expect(std::istream& tokenizer, const unsigned char expected)
