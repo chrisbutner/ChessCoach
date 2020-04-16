@@ -26,6 +26,7 @@ struct Config
 
     static const float SampleBatchesPerGame;
     static const int TrainingStepsPerTest;
+    static const int TrainingStepsPerStrengthTest;
 
     static const int NumSampingMoves;
     static const int MaxMoves = 512;

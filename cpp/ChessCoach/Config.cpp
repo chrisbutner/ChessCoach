@@ -8,6 +8,7 @@ const int Config::SelfPlayGames = 44000000;
 
 const float Config::SampleBatchesPerGame = static_cast<float>(TrainingSteps) / SelfPlayGames;
 const int Config::TrainingStepsPerTest = 100;
+const int Config::TrainingStepsPerStrengthTest = 5000;
 
 const int Config::NumSampingMoves = 30;
 const int Config::NumSimulations = 800;

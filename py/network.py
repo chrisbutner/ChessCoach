@@ -164,6 +164,12 @@ def test_batch(step, images, values, policies):
   log_training("validation", tensorboard_writer_validation, step, losses)
   config.log_next_train = True
 
+def log_scalars(step, names, values):
+  with tensorboard_writer_validation.as_default():
+    tf.summary.experimental.set_step(step)
+    for name, value in zip(names, values):
+      tf.summary.scalar(name.decode("utf-8"), value)
+
 def should_log_graph(step):
   return (step == 1)
 

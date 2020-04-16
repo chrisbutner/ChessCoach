@@ -209,8 +209,19 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
         Rank maybeRank = ParseRank(san, 2);
         if ((maybeRank >= RANK_1) && (maybeRank <= RANK_8))
         {
-            targetSquare = ParseSquare(san, 1);
-            hasDisambiguation = false;
+            // Check for full disambiguation.
+            if ((san.size() >= 5) &&
+                (maybeRank = ParseRank(san, 4)) && // Intentionally assigning, not comparing
+                (maybeRank >= RANK_1) &&
+                (maybeRank <= RANK_8))
+            {
+                targetSquare = ParseSquare(san, 3);
+            }
+            else
+            {
+                targetSquare = ParseSquare(san, 1);
+                hasDisambiguation = false;
+            }
         }
         else
         {

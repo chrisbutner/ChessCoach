@@ -190,6 +190,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ChessCoach.cpp" />
+    <ClCompile Include="Epd.cpp" />
     <ClCompile Include="Pgn.cpp" />
     <ClCompile Include="PoolAllocator.cpp" />
     <ClCompile Include="PredictionCache.cpp" />
@@ -208,6 +209,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ChessCoach.h" />
+    <ClInclude Include="Epd.h" />
     <ClInclude Include="Pgn.h" />
     <ClInclude Include="PoolAllocator.h" />
     <ClInclude Include="PredictionCache.h" />

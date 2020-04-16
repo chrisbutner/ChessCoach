@@ -38,6 +38,7 @@ public:
     virtual void PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
+    virtual void LogScalars(int step, int scalarCount, std::string* names, float* values);
     virtual void SaveNetwork(int checkpoint);
 
 private:
@@ -51,6 +52,7 @@ private:
     PyObject* _predictBatchFunction;
     PyObject* _trainBatchFunction;
     PyObject* _testBatchFunction;
+    PyObject* _logScalarsFunction;
     PyObject* _saveNetworkFunction;
 };
 

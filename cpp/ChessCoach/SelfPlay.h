@@ -17,6 +17,7 @@
 #include "Threading.h"
 #include "PredictionCache.h"
 #include "PoolAllocator.h"
+#include "Epd.h"
 
 class Node
 {
@@ -49,6 +50,43 @@ enum class SelfPlayState
     Working,
     WaitingForPrediction,
     Finished,
+};
+
+struct TimeControl
+{
+    bool infinite;
+    int64_t moveTimeMs;
+
+    int64_t timeRemainingMs[COLOR_NB];
+    int64_t incrementMs[COLOR_NB];
+};
+
+struct SearchConfig
+{
+    std::mutex mutexUci;
+    std::condition_variable signalUci;
+    std::condition_variable signalReady;
+
+    std::atomic_bool quit;
+    std::atomic_bool debug;
+    bool ready;
+
+    std::atomic_bool searchUpdated;
+    std::atomic_bool search;
+    TimeControl searchTimeControl;
+
+    std::atomic_bool positionUpdated;
+    std::string positionFen;
+    std::vector<Move> positionMoves;
+};
+
+struct SearchState
+{
+    bool searching;
+    std::chrono::steady_clock::time_point searchStart;
+    TimeControl timeControl;
+    int nodeCount;
+    bool principleVariationChanged;
 };
 
 class SelfPlayGame : public Game
@@ -89,6 +127,8 @@ public:
     void PruneExcept(Node* root, Node* except);
     void PruneAll();
 
+    Move ParseSan(const std::string& san);
+
 private:
 
     void PruneAllInternal(Node* root);
@@ -118,43 +158,6 @@ private:
     std::array<float, MAX_MOVES> _cachedPriors;
 };
 
-struct TimeControl
-{
-    bool infinite;
-    int64_t moveTimeMs;
-
-    int64_t timeRemainingMs[COLOR_NB];
-    int64_t incrementMs[COLOR_NB];
-};
-
-struct SearchConfig
-{
-    std::mutex mutexUci;
-    std::condition_variable signalUci;
-    std::condition_variable signalReady;
-
-    std::atomic_bool quit;
-    std::atomic_bool debug;
-    bool ready;
-
-    std::atomic_bool searchUpdated;
-    std::atomic_bool search;
-    TimeControl searchTimeControl;
-
-    std::atomic_bool positionUpdated;
-    std::string positionFen;
-    std::vector<Move> positionMoves;
-};
-
-struct SearchState
-{
-    bool searching;
-    std::chrono::steady_clock::time_point searchStart;
-    TimeControl timeControl;
-    int nodeCount;
-    bool principleVariationChanged;
-};
-
 class SelfPlayWorker
 {
 public:
@@ -172,7 +175,8 @@ public:
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
     void DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly);
-    void TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint) const;
+    void TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint);
+    void TestNetwork(INetwork* network, int step);
     void Play(int index);
     void SaveToStorageAndLog(int index);
     std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
@@ -186,12 +190,15 @@ public:
     SearchState& DebugSearchState();
 
     void Search(std::function<INetwork* ()> networkFactory);
+    void WarmUpPredictions(INetwork* network, int batchSize);
     void SignalDebug(bool debug);
     void SignalPosition(std::string&& fen, std::vector<Move>&& moves);
     void SignalSearchGo(const TimeControl& timeControl);
     void SignalSearchStop();
     void SignalQuit();
     void WaitUntilReady();
+
+    void StrengthTest(INetwork* network, int step);
 
 private:
 
@@ -202,6 +209,9 @@ private:
     void CheckTimeControl();
     void PrintPrincipleVariation();
     void SearchPlay(int index);
+
+    int StrengthTestPosition(INetwork* network, const StrengthTestSpec& spec, int moveTimeMs);
+    int JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move);
 
 private:
 

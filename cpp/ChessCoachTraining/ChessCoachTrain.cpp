@@ -23,7 +23,7 @@ public:
 private:
 
     void PlayGames(WorkCoordinator& workCoordinator, int gamesPerNetwork);
-    void TrainNetwork(const SelfPlayWorker& worker, INetwork* network, GameType gameType, int stepCount, int checkpoint);
+    void TrainNetwork(SelfPlayWorker& worker, INetwork* network, GameType gameType, int stepCount, int checkpoint);
 };
 
 int main(int argc, char* argv[])
@@ -117,7 +117,7 @@ void ChessCoachTrain::PlayGames(WorkCoordinator& workCoordinator, int gamesPerNe
     workCoordinator.WaitForWorkers();
 }
 
-void ChessCoachTrain::TrainNetwork(const SelfPlayWorker& selfPlayWorker, INetwork* network, GameType gameType, int stepCount, int checkpoint)
+void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* network, GameType gameType, int stepCount, int checkpoint)
 {
     std::cout << "Training (" << GameTypeNames[gameType] << ")..." << std::endl;
 

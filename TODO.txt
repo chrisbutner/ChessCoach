@@ -1,13 +1,9 @@
 Next
-- log Elo + Test suite results to tensorboard
-	- Strategic Test Suite (STS)
-	- ERET?
-	- find a tactics suite (Arasan-20?)
-	- tournament against another engine/engines (cutechess-cli?)
 - once we're graphing strength, run more long supervised runs with e.g. 32-value head, different loss ratios, etc.
 	- fix any remaining PGN problems and finish 2m game extraction
 	- see if we can get the value head to converge? still really high, policy compensates in games though
 	- try smaller batch size until ghost batches works or I reimplement
+	- try AZ history planes instead of mine
 - add tests for FlipMove, etc.
 - uci
 	- don't throw away trees if new position is just a child? log received commands to file to debug
@@ -19,6 +15,8 @@ Next
 		- try linear probing or small buckets (rename current buckets to tables)
 	- use during UCI (options?)
 - unify config across C++/Python
+- initial tournament really shows we need mate proving or more nodes/forced breadth, keeps getting mated in one
+  even when winning vs. other engines
 
 Network architecture/training data
 - try training value against lerped Z/Q a la Oracle blog
@@ -38,6 +36,7 @@ Network architecture/training data
 - turn down the stockfish eval blend factor as training progresses
 
 Performance
+- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
 - break down MCTS timing details just in case anything's off (just use sampling)
 - game loading/batch sampling
 	- try async game loading or memory mapping or overlapped IO

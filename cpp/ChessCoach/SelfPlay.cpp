@@ -11,6 +11,7 @@
 #include <Stockfish/uci.h>
 
 #include "Config.h"
+#include "Pgn.h"
 
 thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
 
@@ -480,6 +481,11 @@ void SelfPlayGame::PruneAllInternal(Node* root)
     delete root;
 }
 
+Move SelfPlayGame::ParseSan(const std::string& san)
+{
+    return Pgn::ParseSan(_position, san);
+}
+
 SelfPlayWorker::SelfPlayWorker()
     : _storage(nullptr)
     , _states(Config::PredictionBatchSize)
@@ -581,7 +587,7 @@ void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& sa
     }
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint) const
+void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint)
 {
     // Train for "stepCount" steps.
     auto startTrain = std::chrono::high_resolution_clock::now();
@@ -591,11 +597,10 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int step
         TrainingBatch* batch = _storage->SampleBatch(gameType);
         network->TrainBatch(step, Config::BatchSize, batch->images.data(), batch->values.data(), batch->policies.data());
 
-        // Test with one batch every TrainingStepsPerTest.
+        // Test the network every TrainingStepsPerTest.
         if ((step % Config::TrainingStepsPerTest) == 0)
         {
-            TrainingBatch* testBatch = _storage->SampleBatch(GameType_Test);
-            network->TestBatch(step, Config::BatchSize, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
+            TestNetwork(network, step);
         }
     }
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
@@ -604,6 +609,140 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int step
 
     // Save the network and reload it for predictions.
     network->SaveNetwork(checkpoint);
+
+    // Strength-test the engine every TrainingStepsPerStrengthTest.
+    assert((Config::CheckpointInterval % Config::TrainingStepsPerStrengthTest) == 0);
+    if ((checkpoint % Config::TrainingStepsPerStrengthTest) == 0)
+    {
+        StrengthTest(network, checkpoint);
+    }
+}
+
+void SelfPlayWorker::TestNetwork(INetwork* network, int step)
+{
+    // Measure validation loss/accuracy using one batch.
+    TrainingBatch* testBatch = _storage->SampleBatch(GameType_Test);
+    network->TestBatch(step, Config::BatchSize, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
+}
+
+void SelfPlayWorker::StrengthTest(INetwork* network, int step)
+{
+    std::map<std::string, int> results;
+    std::map<std::string, int> positions;
+
+    // STS gets special treatment.
+    const std::string stsName = "STS";
+
+    // Warm up the GIL and predictions.
+    WarmUpPredictions(network, 1);
+
+    // Find strength test .epd files.
+    const std::filesystem::path testPath = (std::filesystem::current_path() / "StrengthTests");
+    for (const auto& entry : std::filesystem::directory_iterator(testPath))
+    {
+        if (entry.path().extension().string() == ".epd")
+        {
+            // Hard-coding move times in an ugly way here. They should really be 10-15 seconds for ERET and Arasan20,
+            // not 1 second, but this can show some level of progress during training without taking forever.
+            // However, only STS results will be comparable to other tested engines.
+            const std::string testName = entry.path().stem().string();
+            const int moveTimeMs = ((testName == stsName) ? 200 : 1000);
+            int totalPoints = 0;
+
+            const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(entry.path());
+            positions[testName] = static_cast<int>(specs.size());
+
+            for (const StrengthTestSpec& spec : specs)
+            {
+                const int points = StrengthTestPosition(network, spec, moveTimeMs);
+                totalPoints += points;
+            }
+
+            results[testName] = totalPoints;
+        }
+    }
+
+    // Estimate an Elo rating using logic here: https://github.com/fsmosca/STS-Rating/blob/master/sts_rating.py
+    const float slope = 44.523f;
+    const float intercept = -242.85f;
+    const float stsRating = (10.f * slope * results[stsName] / positions[stsName]) + intercept;
+
+    // Log to TensorBoard.
+    std::vector<std::string> names;
+    std::vector<float> values;
+    for (const auto [testName, totalPoints] : results)
+    {
+        names.emplace_back("strength/" + testName + "_score");
+        values.push_back(static_cast<float>(totalPoints));
+    }
+    names.emplace_back("strength/" + stsName + "_rating");
+    values.push_back(stsRating);
+    network->LogScalars(step, static_cast<int>(names.size()), names.data(), values.data());
+}
+
+// For best-move tests returns 1 if correct or 0 if incorrect.
+// For points/alternative tests returns N points or 0 if incorrect.
+int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSpec& spec, int moveTimeMs)
+{
+    // Set up the position.
+    _games[0].PruneAll();
+    SetUpGame(0, spec.fen, {}, true /* tryHard */);
+
+    // Set up search and time control.
+    TimeControl timeControl = {};
+    timeControl.moveTimeMs = moveTimeMs;
+
+    _searchState.searching = true;
+    _searchState.searchStart = std::chrono::high_resolution_clock::now();
+    _searchState.timeControl = timeControl;
+    _searchState.nodeCount = 0;
+    _searchState.principleVariationChanged = 0;
+
+    // Run the search.
+    while (_searchState.searching)
+    {
+        SearchPlay(0);
+        network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
+
+        // TODO: Only check every N times
+        CheckTimeControl();
+    }
+
+    // Pick a best move and judge points.
+    const auto [bestMove, _] = _games[0].SelectMove();
+    return JudgeStrengthTestPosition(spec, bestMove);
+}
+
+int SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move)
+{
+    assert(spec.pointSans.empty() ^ spec.avoidSans.empty());
+    assert(spec.pointSans.size() == spec.points.size());
+
+    for (const std::string avoidSan : spec.avoidSans)
+    {
+        const Move avoid = _games[0].ParseSan(avoidSan);
+        assert(avoid != MOVE_NONE);
+        if (avoid == move)
+        {
+            return 0;
+        }
+    }
+
+    for (int i = 0; i < spec.pointSans.size(); i++)
+    {
+        const Move bestOrAlternative = _games[0].ParseSan(spec.pointSans[i]);
+        assert(bestOrAlternative != MOVE_NONE);
+        if (bestOrAlternative == move)
+        {
+            return spec.points[i];
+        }
+    }
+
+    if (spec.pointSans.empty() && !spec.avoidSans.empty())
+    {
+        return 1;
+    }
+    return 0;
 }
 
 void SelfPlayWorker::Play(int index)
@@ -820,7 +959,7 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     std::unique_ptr<INetwork> network(networkFactory());
 
     // Warm up the GIL and predictions.
-    network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
+    WarmUpPredictions(network.get(), 1);
 
     while (!_searchConfig.quit)
     {
@@ -865,6 +1004,11 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     _games[0].PruneAll();
 }
 
+void SelfPlayWorker::WarmUpPredictions(INetwork* network, int batchSize)
+{
+    network->PredictBatch(batchSize, _images.data(), _values.data(), _policies.data());
+}
+
 void SelfPlayWorker::UpdatePosition()
 {
     assert(!_searchState.searching);
@@ -903,7 +1047,7 @@ void SelfPlayWorker::UpdateSearch()
             _searchState.searchStart = std::chrono::high_resolution_clock::now();
             _searchState.timeControl = _searchConfig.searchTimeControl;
             _searchState.nodeCount = 0;
-            _searchState.principleVariationChanged = 0;
+            _searchState.principleVariationChanged = false;
         }
 
         // Set the "search" instruction to false now so that when this search finishes

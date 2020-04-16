@@ -1,5 +1,7 @@
 #include "PythonNetwork.h"
 
+#include <algorithm>
+
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
@@ -50,6 +52,10 @@ BatchedPythonNetwork::BatchedPythonNetwork()
     PyCallAssert(_testBatchFunction);
     PyCallAssert(PyCallable_Check(_testBatchFunction));
 
+    _logScalarsFunction = PyObject_GetAttrString(_module, "log_scalars");
+    PyCallAssert(_logScalarsFunction);
+    PyCallAssert(PyCallable_Check(_logScalarsFunction));
+
     _saveNetworkFunction = PyObject_GetAttrString(_module, "save_network");
     PyCallAssert(_saveNetworkFunction);
     PyCallAssert(PyCallable_Check(_saveNetworkFunction));
@@ -58,6 +64,7 @@ BatchedPythonNetwork::BatchedPythonNetwork()
 BatchedPythonNetwork::~BatchedPythonNetwork()
 {
     Py_XDECREF(_saveNetworkFunction);
+    Py_XDECREF(_logScalarsFunction);
     Py_XDECREF(_trainBatchFunction);
     Py_XDECREF(_testBatchFunction);
     Py_XDECREF(_predictBatchFunction);
@@ -147,6 +154,48 @@ void BatchedPythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* imag
 void BatchedPythonNetwork::TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     TrainTestBatch(_testBatchFunction, step, batchSize, images, values, policies);
+}
+
+void BatchedPythonNetwork::LogScalars(int step, int scalarCount, std::string* names, float* values)
+{
+    PythonContext context;
+
+    PyObject* pythonStep = PyLong_FromLong(step);
+    PyCallAssert(pythonStep);
+
+    // Pack the strings contiguously.
+    int longestString = 0;
+    for (int i = 0; i < scalarCount; i++)
+    {
+        longestString = std::max(longestString, static_cast<int>(names[i].size()));
+    }
+    void* memory = PyDataMem_NEW(longestString * scalarCount);
+    assert(memory);
+    char* packedStrings = reinterpret_cast<char*>(memory);
+    for (int i = 0; i < scalarCount; i++)
+    {
+        char* packedString = (packedStrings + (i * longestString));
+        std::copy(&names[i][0], &names[i][0] + names[i].size(), packedString);
+        std::fill(packedString + names[i].size(), packedString + longestString, '\0');
+    }
+
+    npy_intp nameDims[1]{ scalarCount };
+    PyObject* pythonNames = PyArray_New(&PyArray_Type, Py_ARRAY_LENGTH(nameDims), nameDims,
+        NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
+    PyCallAssert(pythonNames);
+
+    npy_intp valueDims[1]{ scalarCount };
+    PyObject* pythonValues = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
+    PyCallAssert(pythonValues);
+
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_logScalarsFunction, pythonStep, pythonNames, pythonValues, nullptr);
+    PyCallAssert(tupleResult);
+
+    Py_DECREF(tupleResult);
+    Py_DECREF(pythonValues);
+    Py_DECREF(pythonNames);
+    Py_DECREF(pythonStep);
 }
 
 void BatchedPythonNetwork::SaveNetwork(int checkpoint)
