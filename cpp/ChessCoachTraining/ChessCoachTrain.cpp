@@ -30,6 +30,7 @@ int main(int argc, char* argv[])
 {
     ChessCoachTrain chessCoachTrain;
 
+    chessCoachTrain.PrintExceptions();
     chessCoachTrain.Initialize();
 
 #if DEBUG_MCTS

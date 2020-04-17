@@ -79,6 +79,7 @@ int main(int argc, char* argv[])
 {
     ChessCoachUci chessCoachUci;
 
+    chessCoachUci.PrintExceptions();
     chessCoachUci.Initialize();
 
     chessCoachUci.Work();

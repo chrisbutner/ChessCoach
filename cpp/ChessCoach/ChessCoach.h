@@ -4,6 +4,7 @@ class ChessCoach
 {
 public:
 
+    void PrintExceptions();
     void Initialize();
     void Finalize();
 

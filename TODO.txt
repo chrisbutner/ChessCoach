@@ -1,6 +1,4 @@
 Next
-- parse step count from network folder names
-- catch exceptions or w/e in uci main and log?
 - make sure killing uci.cmd kills exe
 - add tests for FlipMove, etc.
 - work out multi-game writing to disk (maybe just open rw, update count, append?)
@@ -14,6 +12,7 @@ Next
 	- work out what lc0 reports for NPS, numbers are way off
 	- multithreading, virtual loss, any in-thread multiplexing?
 - unify config across C++/Python
+	- parse step count from network folder names (name = run name?)
 - implement endgame tablebases (for both UCI and self-play, but don't cut game short, let NN learn)
 
 Self-play performance

@@ -1,6 +1,8 @@
 #include "ChessCoach.h"
 
 #include <cstdlib>
+#include <exception>
+#include <iostream>
 
 #include <Stockfish/bitboard.h>
 #include <Stockfish/position.h>
@@ -15,6 +17,30 @@
 namespace PSQT
 {
     void init();
+}
+
+void ChessCoach::PrintExceptions()
+{
+    std::set_terminate([]
+        {
+            auto exception = std::current_exception();
+            if (exception)
+            {
+                try
+                {
+                    std::rethrow_exception(exception);
+                }
+                catch (const std::exception& e)
+                {
+                    std::cout << "Unhandled exception: " << e.what() << std::endl;
+                }
+                catch (...)
+                {
+                    std::cout << "Unhandled exception (unknown type)" << std::endl;
+                }
+            }
+            std::abort();
+        });
 }
 
 void ChessCoach::Initialize()

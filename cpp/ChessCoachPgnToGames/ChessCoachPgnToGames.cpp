@@ -77,6 +77,7 @@ int main(int argc, char* argv[])
 
     ChessCoachPgnToGames pgnToGames(inputDirectory, outputDirectory, threadCount);
 
+    pgnToGames.PrintExceptions();
     pgnToGames.InitializeLight();
 
     pgnToGames.ConvertAll();
