@@ -1,6 +1,4 @@
 Next
-- make sure killing uci.cmd kills exe
-- add tests for FlipMove, etc.
 - work out multi-game writing to disk (maybe just open rw, update count, append?)
 - prediction cache
 	- clean up prediction cache clear printing
@@ -86,6 +84,7 @@ Low priority
 - 80 cap on branched moves w/ cache may be a problem later; applies before d-noise, so limits exploration
 - structured binding, check all pairs
 - implement write-to-pgn in C++, stop depending on python-chess (just stockfish)
+- make sure killing uci.cmd kills exe (it's complicated - killing cmd.exe doesn't, but closing its window does - need to test programmatically)
 
 Revisit
 - try batch renorm + ghost batch norm
