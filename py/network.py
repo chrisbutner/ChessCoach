@@ -28,14 +28,13 @@ class Config(object):
 
   def __init__(self):
     ### Training
-    self.run_name = "supervised1"
-    self.batch_size = 2048 # OOM on GTX 1080 @ 4096
+    self.run_name = "selfplay1"
+    self.batch_size = 512 # OOM on GTX 1080 @ 4096
     self.chesscoach_training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
     self.log_next_train = False
 
     self.momentum = 0.9
-    # Schedule for chess and shogi, Go starts at 2e-2 immediately.
-    self.chesscoach_slowdown_factor = self.chesscoach_training_factor
+    self.chesscoach_slowdown_factor = 200
     self.learning_rate_schedule = {
         int(0 * self.chesscoach_training_factor): 2e-1 / self.chesscoach_slowdown_factor,
         int(100e3 * self.chesscoach_training_factor): 2e-2 / self.chesscoach_slowdown_factor,

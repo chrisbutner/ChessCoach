@@ -630,6 +630,8 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
     std::map<std::string, int> results;
     std::map<std::string, int> positions;
 
+    std::cout << "Running strength tests..." << std::endl;
+
     // STS gets special treatment.
     const std::string stsName = "STS";
 
@@ -663,9 +665,9 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
     }
 
     // Estimate an Elo rating using logic here: https://github.com/fsmosca/STS-Rating/blob/master/sts_rating.py
-    const float slope = 44.523f;
+    const float slope = 445.23f;
     const float intercept = -242.85f;
-    const float stsRating = (10.f * slope * results[stsName] / positions[stsName]) + intercept;
+    const float stsRating = (slope * results[stsName] / positions[stsName]) + intercept;
 
     // Log to TensorBoard.
     std::vector<std::string> names;
@@ -674,9 +676,11 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
     {
         names.emplace_back("strength/" + testName + "_score");
         values.push_back(static_cast<float>(totalPoints));
+        std::cout << names.back() << ": " << values.back() << std::endl;
     }
     names.emplace_back("strength/" + stsName + "_rating");
     values.push_back(stsRating);
+    std::cout << names.back() << ": " << values.back() << std::endl;
     network->LogScalars(step, static_cast<int>(names.size()), names.data(), values.data());
 }
 

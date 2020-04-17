@@ -105,7 +105,7 @@ std::vector<std::string> Epd::ReadMoves(std::istream& tokenizer, std::string& to
             quoted = true;
         }
 
-        if (token[token.size() - 1] == ';')
+        if (token.back() == ';')
         {
             moves.emplace_back(quoted ?
                 StripRight(StripRight(token, ';'), '"') :
@@ -150,6 +150,6 @@ std::string Epd::StripLeft(const std::string& string, char expected)
 
 std::string Epd::StripRight(const std::string& string, char expected)
 {
-    assert(!string.empty() && (string[string.size() - 1] == expected));
+    assert(!string.empty() && (string.back() == expected));
     return string.substr(0, string.size() - 1);
 }

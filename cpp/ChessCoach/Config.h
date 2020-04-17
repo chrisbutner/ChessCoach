@@ -17,8 +17,9 @@ struct Config
     static const int PredictionCacheSizeGb = 8;
     static const int MaxPredictionCachePly = 7;
 
-    static const int BatchSize = 2048; // OOM on GTX 1080 @ 4096;
-    static const float TrainingFactor;
+    static const int AlphaZeroBatchSize = 4096;
+    static const int BatchSize = 512; // OOM on GTX 1080 @ 4096;
+    static const int TrainingFactor;
     static const int TrainingSteps;
     static const int CheckpointInterval;
     static const int WindowSize;
