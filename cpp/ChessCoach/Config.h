@@ -30,7 +30,7 @@ struct Config
     static const int TrainingStepsPerStrengthTest;
 
     static const int NumSampingMoves;
-    static const int MaxMoves = 6;
+    static const int MaxMoves = 512;
     static const int NumSimulations;
 
     static const float RootDirichletAlpha;
@@ -58,7 +58,7 @@ struct Config
     static const int TimeControl_SafetyBufferMs = 500;
     static const int TimeControl_FractionOfRemaining = 20;
 
-    static const int MaxGamesPerFile = 20;
+    static const int MaxGamesPerFile = 2000;
 };
 
 #endif // _CONFIG_H_
