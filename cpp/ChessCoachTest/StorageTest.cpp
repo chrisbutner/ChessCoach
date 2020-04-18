@@ -40,7 +40,7 @@ void Basic(GameType gameType)
     // Expect zero games in a new, temporary directory.
 
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
-    EXPECT_EQ(storage1->CountNetworks(), 0);
+    EXPECT_EQ(storage1->NetworkStepCount(), 0);
 
     storage1->LoadExistingGames(gameType, std::numeric_limits<int>::max());
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
@@ -72,7 +72,7 @@ void Basic(GameType gameType)
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
-    EXPECT_EQ(storage2->CountNetworks(), 0);
+    EXPECT_EQ(storage2->NetworkStepCount(), 0);
 }
 
 void SampleBatch(GameType gameType)
@@ -98,7 +98,7 @@ void SampleBatch(GameType gameType)
     // Expect zero games in a new, temporary directory.
 
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
-    EXPECT_EQ(storage1->CountNetworks(), 0);
+    EXPECT_EQ(storage1->NetworkStepCount(), 0);
 
     storage1->LoadExistingGames(gameType, std::numeric_limits<int>::max());
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
@@ -134,7 +134,7 @@ void SampleBatch(GameType gameType)
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
-    EXPECT_EQ(storage2->CountNetworks(), 0);
+    EXPECT_EQ(storage2->NetworkStepCount(), 0);
 
     // Sample a batch from the second Storage and make sure that the data is consistent.
 

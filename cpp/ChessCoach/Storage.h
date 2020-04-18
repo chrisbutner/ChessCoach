@@ -76,7 +76,7 @@ public:
     int AddGame(GameType gameType, SavedGame&& game);
     TrainingBatch* SampleBatch(GameType gameType);
     int GamesPlayed(GameType gameType) const;
-    int CountNetworks() const;
+    int NetworkStepCount() const;
     std::filesystem::path LogPath() const;
         
 private:

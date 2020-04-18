@@ -12,17 +12,17 @@ struct Config
     static const int PredictionCacheSizeGb = 8;
     static const int MaxPredictionCachePly = 12;
 
+    static const int WindowSize;
+    static const int SelfPlayGames;
+    static const float SampleBatchesPerGame;
     static const int AlphaZeroBatchSize = 4096;
     static const int BatchSize = 512; // OOM on GTX 1080 @ 4096;
     static const int TrainingFactor;
     static const int TrainingSteps;
-    static const int CheckpointInterval;
-    static const int WindowSize;
-    static const int SelfPlayGames;
 
-    static const float SampleBatchesPerGame;
-    static const int TrainingStepsPerTest;
-    static const int TrainingStepsPerStrengthTest;
+    static const int CheckpointInterval[3];
+    static const int TrainingStepsPerTest[3];
+    static const int TrainingStepsPerStrengthTest[3];
 
     static const int NumSampingMoves;
     static const int MaxMoves = 512;

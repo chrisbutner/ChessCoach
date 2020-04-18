@@ -8,16 +8,16 @@
 
 bool TryGetPrediction(Key key)
 {
-    PredictionCacheEntry* entry;
+    PredictionCacheChunk* chunk;
     float value;
     int moveCount;
-    std::array<Move, Config::MaxBranchMoves> moves;
+    std::array<uint16_t, Config::MaxBranchMoves> moves;
     std::array<float, Config::MaxBranchMoves> priors;
 
-    bool hit = PredictionCache::Instance.TryGetPrediction(key, &entry, &value, &moveCount, moves.data(), priors.data());
+    bool hit = PredictionCache::Instance.TryGetPrediction(key, &chunk, &value, &moveCount, moves.data(), priors.data());
     if (!hit)
     {
-        entry->Set(key, 0.f, 0, moves.data(), priors.data());
+        chunk->Put(key, 0.f, 0, moves.data(), priors.data());
     }
     return hit;
 }

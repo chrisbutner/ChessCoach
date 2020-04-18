@@ -92,7 +92,8 @@ int Storage::AddGame(GameType gameType, SavedGame&& game)
     
     AddGameWithoutSaving(gameType, std::move(game));
 
-    const SavedGame& emplaced = _games[gameType].back();
+    const std::deque<SavedGame>& games = _games[gameType];
+    const SavedGame& emplaced = games.back();
     SaveToDisk(gameType, emplaced);
 
     const int gameNumber = _loadedGameCount[gameType];
@@ -102,6 +103,8 @@ int Storage::AddGame(GameType gameType, SavedGame&& game)
 // Requires caller to lock.
 void Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
 {
+    std::deque<SavedGame>& games = _games[gameType];
+
     for (auto map : game.childVisits)
     {
         for (auto [move, prior] : map)
@@ -110,33 +113,34 @@ void Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
         }
     }
 
-    _games[gameType].emplace_back(std::move(game));
+    games.emplace_back(std::move(game));
     ++_loadedGameCount[gameType];
 
-    while (_games.size() > Config::WindowSize)
+    while (games.size() > Config::WindowSize)
     {
-        _games[gameType].pop_front();
+        games.pop_front();
     }
 }
 
 TrainingBatch* Storage::SampleBatch(GameType gameType)
 {
     int positionSum = 0;
+    const std::deque<SavedGame>& games = _games[gameType];
 
     if (!_trainingBatch)
     {
         _trainingBatch.reset(new TrainingBatch());
     }
 
-    for (const SavedGame& game : _games[gameType])
+    for (const SavedGame& game : games)
     {
         positionSum += game.moveCount;
     }
 
-    std::vector<float> probabilities(_games.size());
-    for (int i = 0; i < _games.size(); i++)
+    std::vector<float> probabilities(games.size());
+    for (int i = 0; i < games.size(); i++)
     {
-        probabilities[i] = static_cast<float>(_games[gameType][i].moveCount) / positionSum;
+        probabilities[i] = static_cast<float>(games[i].moveCount) / positionSum;
     }
 
     std::discrete_distribution distribution(probabilities.begin(), probabilities.end());
@@ -145,9 +149,9 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
     {
         const SavedGame& game =
 #if SAMPLE_BATCH_FIXED
-            _games[i];
+            games[i];
 #else
-            _games[gameType][distribution(_random)];
+            games[distribution(_random)];
 #endif
 
         int positionIndex =
@@ -178,9 +182,26 @@ int Storage::GamesPlayed(GameType gameType) const
     return _loadedGameCount[gameType];
 }
 
-int Storage::CountNetworks() const
+int Storage::NetworkStepCount() const
 {
-    return static_cast<int>(std::distance(std::filesystem::directory_iterator(_networksPath.string()), std::filesystem::directory_iterator()));
+    std::filesystem::directory_entry lastEntry;
+    for (const auto& entry : std::filesystem::directory_iterator(_networksPath))
+    {
+        lastEntry = entry;
+    }
+
+    if (lastEntry.path().empty())
+    {
+        return 0;
+    }
+
+    std::stringstream tokenizer(lastEntry.path().filename().string());
+    std::string networkName;
+    int networkStepCount;
+    std::getline(tokenizer, networkName, '_');
+    tokenizer >> networkStepCount;
+
+    return networkStepCount;
 }
 
 // Requires caller to lock.

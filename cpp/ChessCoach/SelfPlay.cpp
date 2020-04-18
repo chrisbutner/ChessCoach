@@ -598,7 +598,7 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int step
         network->TrainBatch(step, Config::BatchSize, batch->images.data(), batch->values.data(), batch->policies.data());
 
         // Test the network every TrainingStepsPerTest.
-        if ((step % Config::TrainingStepsPerTest) == 0)
+        if ((step % Config::TrainingStepsPerTest[gameType]) == 0)
         {
             TestNetwork(network, step);
         }
@@ -611,8 +611,8 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int step
     network->SaveNetwork(checkpoint);
 
     // Strength-test the engine every TrainingStepsPerStrengthTest.
-    assert((Config::CheckpointInterval % Config::TrainingStepsPerStrengthTest) == 0);
-    if ((checkpoint % Config::TrainingStepsPerStrengthTest) == 0)
+    assert((Config::CheckpointInterval[gameType] % Config::TrainingStepsPerStrengthTest[gameType]) == 0);
+    if ((checkpoint % Config::TrainingStepsPerStrengthTest[gameType]) == 0)
     {
         StrengthTest(network, checkpoint);
     }

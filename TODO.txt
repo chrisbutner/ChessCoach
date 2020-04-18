@@ -1,6 +1,4 @@
 Next
-- tune cache - seem to still get 10% full 33% hit rate at 12 ply max
-- parse step count from network folder names
 - uci
 	- don't throw away trees if new position is just a child? log received commands to file to debug
 	- work out what lc0 reports for NPS, numbers are way off
@@ -11,6 +9,8 @@ Next
 	- see if we can reuse stockfish probing
 - implement write-to-pgn in C++, stop depending on python-chess (just stockfish)
 	- python code is already broken with multi-game files
+- add "other" param to storage tests, make sure games don't bleed between types
+- tune cache - seem to still get 10% full 33% hit rate at 12 ply max
 
 Self-play performance
 - try different architecture like attention/transformer
@@ -43,6 +43,7 @@ Performance
 	- can always binary search Move-ints or something too, it's not mutated
 - check inlining once CPU tree is looking good
 - try Intel compiler in future
+- image key for prediction cache can be incrementally updated if it helps enough
 
 Code quality
 - rename NN "test" to "validate" to avoid confusion with unit tests and keep consistent with tensorboard
