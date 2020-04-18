@@ -1,5 +1,4 @@
 Next
-- work out multi-game writing to disk (maybe just open rw, update count, append?)
 - prediction cache
 	- clean up prediction cache clear printing
 	- more LRU

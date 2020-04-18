@@ -8,6 +8,7 @@
 #include <map>
 #include <vector>
 #include <functional>
+#include <fstream>
 
 #include <Stockfish/Position.h>
 
@@ -45,17 +46,24 @@ private:
     static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
     static constexpr const char* const LogsPart = "ChessCoach/Training/Logs";
 
+    using Version = uint16_t;
+    using GameCount = uint16_t;
+    using MoveCount = uint16_t;
+
+    static const Version Version1 = 1;
+
 public:
 
-    static SavedGame LoadFromDisk(const std::filesystem::path& path);
-    static void SaveToDisk(const std::filesystem::path& path, const SavedGame& game);
-    static void SaveToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games);
+    static SavedGame LoadSingleGameFromDisk(const std::filesystem::path& path);
+    static void SaveSingleGameToDisk(const std::filesystem::path& path, const SavedGame& game);
+    static void SaveMultipleGamesToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games);
     static std::string GenerateGamesFilename(int gamesNumber);
 
 private:
 
     static int LoadFromDiskInternal(const std::filesystem::path& path,
         std::function<void(SavedGame&&)> gameHandler, int maxLoadCount);
+    static void SaveToDiskInternal(std::ofstream& file, const SavedGame& game, GameCount newGameCountInFile);
     static void SaveToDiskInternal(std::ofstream& file, const SavedGame& game);
 
 public:
@@ -73,14 +81,18 @@ public:
         
 private:
 
-    std::pair<const SavedGame*, int> AddGameWithoutSaving(GameType gameType, SavedGame&& game);
-    void SaveToDisk(GameType gameType, const SavedGame& game, int gameNumber) const;
+    void AddGameWithoutSaving(GameType gameType, SavedGame&& game);
+    void SaveToDisk(GameType gameType, const SavedGame& game);
 
 private:
 
     mutable std::mutex _mutex;
-    std::deque<SavedGame> _games;
-    std::array<int, GameType_Count> _latestGameNumbers;
+    std::array<std::deque<SavedGame>, GameType_Count> _games;
+    std::array<int, GameType_Count> _gameFileCount;
+    std::array<int, GameType_Count> _loadedGameCount;
+
+    std::array<std::ofstream, GameType_Count> _currentSaveFile;
+    std::array<int, GameType_Count> _currentSaveGameCount;
 
     std::unique_ptr<TrainingBatch> _trainingBatch;
     Game _startingPosition;

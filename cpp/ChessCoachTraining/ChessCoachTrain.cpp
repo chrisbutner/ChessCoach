@@ -71,18 +71,18 @@ void ChessCoachTrain::TrainChessCoach()
     // Wait until all workers are initialized.
     workCoordinator.WaitForWorkers();
 
-        // (Temporarily testing supervised learning)
-        int existingSupervisedNetworks = storage.CountNetworks();
-        storage.LoadExistingGames(GameType_Supervised, std::numeric_limits<int>::max());
-        const int supervisedStepCount = static_cast<int>(Config::SampleBatchesPerGame * storage.GamesPlayed(GameType_Supervised));
-        const int supervisedNetworkCount = (supervisedStepCount / Config::CheckpointInterval);
-        const int overtrainMultiple = 2;
-        for (int n = existingSupervisedNetworks; n < overtrainMultiple * supervisedNetworkCount; n++)
-        {
-            const int checkpoint = (n + 1) * Config::CheckpointInterval;
-            TrainNetwork(selfPlayWorkers.front(), network.get(), GameType_Supervised, Config::CheckpointInterval, checkpoint);
-        }
-        return;
+        //// (Temporarily testing supervised learning)
+        //int existingSupervisedNetworks = storage.CountNetworks();
+        //storage.LoadExistingGames(GameType_Supervised, std::numeric_limits<int>::max());
+        //const int supervisedStepCount = static_cast<int>(Config::SampleBatchesPerGame * storage.GamesPlayed(GameType_Supervised));
+        //const int supervisedNetworkCount = (supervisedStepCount / Config::CheckpointInterval);
+        //const int overtrainMultiple = 2;
+        //for (int n = existingSupervisedNetworks; n < overtrainMultiple * supervisedNetworkCount; n++)
+        //{
+        //    const int checkpoint = (n + 1) * Config::CheckpointInterval;
+        //    TrainNetwork(selfPlayWorkers.front(), network.get(), GameType_Supervised, Config::CheckpointInterval, checkpoint);
+        //}
+        //return;
 
     // If existing games found, resume progress.
     int existingNetworks = storage.CountNetworks();
@@ -133,6 +133,6 @@ void ChessCoachTrain::DebugGame()
     SelfPlayWorker worker;
     worker.Initialize(&storage);
 
-    SavedGame saved = storage.LoadFromDisk("path_to_game");
+    SavedGame saved = storage.LoadSingleGameFromDisk("path_to_game");
     worker.DebugGame(network.get(), 0, saved, 23);
 }

@@ -161,7 +161,6 @@ void ChessCoachPgnToGames::ConvertAll()
 
 void ChessCoachPgnToGames::ConvertPgns()
 {
-    const int gamesPerSave = 2000; // TODO: Move this somewhere better when we have a reason.
     std::vector<SavedGame> games;
 
     while (true)
@@ -194,10 +193,10 @@ void ChessCoachPgnToGames::ConvertPgns()
                 games.emplace_back(std::move(game));
                 pgnGamesConverted++;
 
-                if (games.size() >= gamesPerSave)
+                if (games.size() >= Config::MaxGamesPerFile)
                 {
                     const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGamesFilename(++_latestGamesNumber));
-                    Storage::SaveToDisk(gamePath, games);
+                    Storage::SaveMultipleGamesToDisk(gamePath, games);
                     games.clear();
                 }
             });
@@ -213,7 +212,7 @@ void ChessCoachPgnToGames::ConvertPgns()
     if (!games.empty())
     {
         const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGamesFilename(++_latestGamesNumber));
-        Storage::SaveToDisk(gamePath, games);
+        Storage::SaveMultipleGamesToDisk(gamePath, games);
         games.clear();
     }
 }

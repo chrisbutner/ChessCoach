@@ -1,6 +1,5 @@
 #include "Storage.h"
 
-#include <fstream>
 #include <string>
 #include <sstream>
 #include <iostream>
@@ -8,7 +7,10 @@
 #include "Config.h"
 
 Storage::Storage()
-    : _latestGameNumbers{}
+    : _gameFileCount{}
+    , _loadedGameCount{}
+    , _currentSaveFile{}
+    , _currentSaveGameCount{}
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
 {
     char* rootEnvPath;
@@ -30,9 +32,13 @@ Storage::Storage()
     std::filesystem::create_directories(_logsPath);
 }
 
+// Used for testing
 Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
     const std::filesystem::path& supervisedTestPath, const std::filesystem::path& networksPath)
-    : _latestGameNumbers{}
+    : _gameFileCount{}
+    , _loadedGameCount{}
+    , _currentSaveFile{}
+    , _currentSaveGameCount{}
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
     , _gamesPaths{ gamesTrainPath, gamesTestPath, supervisedTestPath }
     , _networksPath(networksPath)
@@ -42,48 +48,59 @@ Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesys
 
 void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
 {
-    // Accesses _latestGameNumbers without locking (avoids having to re-enter)
-    // but only uses it to print the number of games loaded.
-    const int foundCount = static_cast<int>(std::distance(std::filesystem::directory_iterator(_gamesPaths[gameType]), std::filesystem::directory_iterator()));
+    // Should be no contention at initialization time. Just bulk lock around
+    // (a) AddGameWithoutSaving, and (b) setting _gameFileCount/_loadedGameCount.
+    std::lock_guard lock(_mutex);
+
+    const int gameFileCount = static_cast<int>(std::distance(std::filesystem::directory_iterator(_gamesPaths[gameType]), std::filesystem::directory_iterator()));
+
+    int lastPrintedCount = 0;
     int loadedCount = 0;
     for (const auto& entry : std::filesystem::directory_iterator(_gamesPaths[gameType]))
     {
         const int maxAdditionalCount = (maxLoadCount - loadedCount);
         const int justLoadedCount = LoadFromDiskInternal(entry.path(),
-            std::bind(&Storage::AddGameWithoutSaving, this,gameType, std::placeholders::_1),
+            std::bind(&Storage::AddGameWithoutSaving, this, gameType, std::placeholders::_1),
             maxAdditionalCount);
         loadedCount += justLoadedCount;
-        if (((loadedCount % 1000) == 0) || (justLoadedCount > 1))
+
+        const int printCount = (loadedCount - (loadedCount % 1000));
+        if (printCount > lastPrintedCount)
         {
-            std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
+            std::cout << printCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
+            lastPrintedCount = printCount;
         }
         if (loadedCount >= maxLoadCount)
         {
-            std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
-            std::cout << (foundCount - loadedCount) << " games skipped (" << GameTypeNames[gameType] << ")" << std::endl;
-
-            {
-                std::lock_guard lock(_mutex);
-
-                _latestGameNumbers[gameType] = foundCount;
-            }
-
-            return;
+            break;
         }
     }
-    std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
+
+    if (loadedCount > lastPrintedCount)
+    {
+        std::cout << loadedCount << " games loaded (" << GameTypeNames[gameType] << ")" << std::endl;
+        lastPrintedCount = loadedCount;
+    }
+
+    _gameFileCount[gameType] = gameFileCount;
+    _loadedGameCount[gameType] = loadedCount;
 }
 
 int Storage::AddGame(GameType gameType, SavedGame&& game)
 {
-    auto [emplaced, gameNumber] = AddGameWithoutSaving(gameType, std::move(game));
+    std::lock_guard lock(_mutex);
+    
+    AddGameWithoutSaving(gameType, std::move(game));
 
-    SaveToDisk(gameType, *emplaced, gameNumber);
+    const SavedGame& emplaced = _games[gameType].back();
+    SaveToDisk(gameType, emplaced);
 
+    const int gameNumber = _loadedGameCount[gameType];
     return gameNumber;
 }
 
-std::pair<const SavedGame*, int> Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
+// Requires caller to lock.
+void Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
 {
     for (auto map : game.childVisits)
     {
@@ -93,20 +110,12 @@ std::pair<const SavedGame*, int> Storage::AddGameWithoutSaving(GameType gameType
         }
     }
 
+    _games[gameType].emplace_back(std::move(game));
+    ++_loadedGameCount[gameType];
+
+    while (_games.size() > Config::WindowSize)
     {
-        std::lock_guard lock(_mutex);
-
-        SavedGame* emplaced = &_games.emplace_back(std::move(game));
-
-        // It would be nice to use _games.size() but we pop_front() beyond the window size.
-        const int gameNumber = ++_latestGameNumbers[gameType];
-
-        while (_games.size() > Config::WindowSize)
-        {
-            _games.pop_front();
-        }
-
-        return std::pair(emplaced, gameNumber);
+        _games[gameType].pop_front();
     }
 }
 
@@ -119,7 +128,7 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
         _trainingBatch.reset(new TrainingBatch());
     }
 
-    for (const SavedGame& game : _games)
+    for (const SavedGame& game : _games[gameType])
     {
         positionSum += game.moveCount;
     }
@@ -127,7 +136,7 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
     std::vector<float> probabilities(_games.size());
     for (int i = 0; i < _games.size(); i++)
     {
-        probabilities[i] = static_cast<float>(_games[i].moveCount) / positionSum;
+        probabilities[i] = static_cast<float>(_games[gameType][i].moveCount) / positionSum;
     }
 
     std::discrete_distribution distribution(probabilities.begin(), probabilities.end());
@@ -138,7 +147,7 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
 #if SAMPLE_BATCH_FIXED
             _games[i];
 #else
-            _games[distribution(_random)];
+            _games[gameType][distribution(_random)];
 #endif
 
         int positionIndex =
@@ -166,8 +175,7 @@ int Storage::GamesPlayed(GameType gameType) const
 {
     std::lock_guard lock(_mutex);
 
-    // Starts at 0, incremented with each game added.
-    return _latestGameNumbers[gameType];
+    return _loadedGameCount[gameType];
 }
 
 int Storage::CountNetworks() const
@@ -175,15 +183,70 @@ int Storage::CountNetworks() const
     return static_cast<int>(std::distance(std::filesystem::directory_iterator(_networksPath.string()), std::filesystem::directory_iterator()));
 }
 
-void Storage::SaveToDisk(GameType gameType, const SavedGame& game, int gameNumber) const
+// Requires caller to lock.
+void Storage::SaveToDisk(GameType gameType, const SavedGame& game)
 {
-    std::filesystem::path gamePath = _gamesPaths[gameType];
-    gamePath /= GenerateGamesFilename(gameNumber);
+    bool startNewFile = false;
 
-    SaveToDisk(gamePath, game);
+    // Check whether the current save file has run out of room.
+    if (_currentSaveFile[gameType].is_open())
+    {
+        if (_currentSaveGameCount[gameType] >= Config::MaxGamesPerFile)
+        {
+            _currentSaveFile[gameType] = {};
+            _currentSaveGameCount[gameType] = 0;
+        }
+    }
+    // Try to continue from a previous run, but only add to the final file, not any "inside" gaps.
+    // This should only run once; future SaveToDisk calls should always see an open _currentSaveFile[gameType].
+    else
+    {
+        std::filesystem::directory_entry lastEntry;
+        for (const auto& entry : std::filesystem::directory_iterator(_gamesPaths[gameType]))
+        {
+            lastEntry = entry;
+        }
+
+        std::ifstream lastFile;
+        if (!lastEntry.path().empty() && (lastFile = std::ifstream(lastEntry.path(), std::ios::in | std::ios::binary)))
+        {
+            Version version;
+            GameCount gameCount;
+
+            lastFile.read(reinterpret_cast<char*>(&version), sizeof(version));
+            lastFile.read(reinterpret_cast<char*>(&gameCount), sizeof(gameCount));
+            assert(version == Version1);
+
+            if (gameCount < Config::MaxGamesPerFile)
+            {
+                lastFile.close();
+                _currentSaveFile[gameType] = std::ofstream(lastEntry.path(), std::ios::in | std::ios::out | std::ios::binary);
+                _currentSaveGameCount[gameType] = gameCount;
+            }
+        }
+    }
+
+    // We may need to start a new file.
+    if (!_currentSaveFile[gameType].is_open())
+    {
+        const int newGameFileNumber = ++_gameFileCount[gameType];
+        std::filesystem::path gamesPath = _gamesPaths[gameType] / GenerateGamesFilename(newGameFileNumber);
+        _currentSaveFile[gameType] = std::ofstream(gamesPath, std::ios::out | std::ios::binary);
+        _currentSaveGameCount[gameType] = 0;
+
+        const Version version = Version1;
+        const GameCount initialGameCount = 0;
+        _currentSaveFile[gameType].write(reinterpret_cast<const char*>(&version), sizeof(version));
+        _currentSaveFile[gameType].write(reinterpret_cast<const char*>(&initialGameCount), sizeof(initialGameCount));
+    }
+
+    // Save the game and flush to disk.
+    const GameCount newGameCountInFile = ++_currentSaveGameCount[gameType];
+    SaveToDiskInternal(_currentSaveFile[gameType], game, newGameCountInFile);
+    _currentSaveFile[gameType].flush();
 }
 
-SavedGame Storage::LoadFromDisk(const std::filesystem::path& path)
+SavedGame Storage::LoadSingleGameFromDisk(const std::filesystem::path& path)
 {
     SavedGame game;
     LoadFromDiskInternal(path, [&](SavedGame&& loaded) { game = std::move(loaded); }, 1);
@@ -194,18 +257,17 @@ int Storage::LoadFromDiskInternal(const std::filesystem::path& path, std::functi
 {
     std::ifstream file = std::ifstream(path, std::ios::in | std::ios::binary);
 
-    uint16_t version;
-    uint16_t gameCount;
+    Version version;
+    GameCount gameCount;
 
     file.read(reinterpret_cast<char*>(&version), sizeof(version));
     file.read(reinterpret_cast<char*>(&gameCount), sizeof(gameCount));
-    assert(version == 1);
-    assert(gameCount >= 1);
+    assert(version == Version1);
 
     const int loadCount = std::min(maxLoadCount, static_cast<int>(gameCount));
     for (int i = 0; i < loadCount; i++)
     {
-        uint16_t moveCount;
+        MoveCount moveCount;
         float result;
 
         file.read(reinterpret_cast<char*>(&moveCount), sizeof(moveCount));
@@ -239,12 +301,12 @@ int Storage::LoadFromDiskInternal(const std::filesystem::path& path, std::functi
     return loadCount;
 }
 
-void Storage::SaveToDisk(const std::filesystem::path& path, const SavedGame& game)
+void Storage::SaveSingleGameToDisk(const std::filesystem::path& path, const SavedGame& game)
 {
     std::ofstream file = std::ofstream(path, std::ios::out | std::ios::binary);
 
-    const uint16_t version = 1;
-    const uint16_t gameCount = 1;
+    const Version version = Version1;
+    const GameCount gameCount = 1;
 
     file.write(reinterpret_cast<const char*>(&version), sizeof(version));
     file.write(reinterpret_cast<const char*>(&gameCount), sizeof(gameCount));
@@ -252,13 +314,13 @@ void Storage::SaveToDisk(const std::filesystem::path& path, const SavedGame& gam
     SaveToDiskInternal(file, game);
 }
 
-void Storage::SaveToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games)
+void Storage::SaveMultipleGamesToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games)
 {
     std::ofstream file = std::ofstream(path, std::ios::out | std::ios::binary);
 
-    const uint16_t version = 1;
-    const uint16_t gameCount = static_cast<uint16_t>(games.size());
-    assert(games.size() <= std::numeric_limits<uint16_t>::max());
+    const Version version = 1;
+    const GameCount gameCount = static_cast<GameCount>(games.size());
+    assert(games.size() <= std::numeric_limits<GameCount>::max());
 
     file.write(reinterpret_cast<const char*>(&version), sizeof(version));
     file.write(reinterpret_cast<const char*>(&gameCount), sizeof(gameCount));
@@ -269,9 +331,24 @@ void Storage::SaveToDisk(const std::filesystem::path& path, const std::vector<Sa
     }
 }
 
+void Storage::SaveToDiskInternal(std::ofstream& file, const SavedGame& game, GameCount newGameCountInFile)
+{
+    assert(newGameCountInFile <= std::numeric_limits<GameCount>::max());
+
+    // Update the game count.
+    file.seekp(sizeof(Version), file.beg);
+    file.write(reinterpret_cast<const char*>(&newGameCountInFile), sizeof(newGameCountInFile));
+    file.seekp(0, file.end);
+
+    // Write the game.
+    SaveToDiskInternal(file, game);
+}
+
+
 void Storage::SaveToDiskInternal(std::ofstream& file, const SavedGame& game)
 {
-    const uint16_t moveCount = static_cast<int>(game.moves.size());
+    // Write the game.
+    const MoveCount moveCount = static_cast<int>(game.moves.size());
 
     file.write(reinterpret_cast<const char*>(&moveCount), sizeof(moveCount));
     file.write(reinterpret_cast<const char*>(&game.result), sizeof(game.result));
