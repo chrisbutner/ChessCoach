@@ -6,7 +6,8 @@
 #include "Config.h"
 
 int Game::QueenKnightPlane[SQUARE_NB];
-Key Game::PredictionCache_PreviousMoveSquare[Config::InputPreviousMoveCount][SQUARE_NB];
+Key Game::PredictionCache_PreviousMoveFromSquare[Config::InputPreviousMoveCount][SQUARE_NB];
+Key Game::PredictionCache_PreviousMoveToSquare[Config::InputPreviousMoveCount][SQUARE_NB];
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 
 void Game::Initialize()
@@ -39,7 +40,8 @@ void Game::Initialize()
     {
         for (Square square = SQ_A1; square <= SQ_H8; ++square)
         {
-            PredictionCache_PreviousMoveSquare[i][square] = rng.rand<Key>();
+            PredictionCache_PreviousMoveFromSquare[i][square] = rng.rand<Key>();
+            PredictionCache_PreviousMoveToSquare[i][square] = rng.rand<Key>();
         }
     }
     for (int i = 0; i <= NoProgressSaturationCount; i++)
@@ -176,8 +178,8 @@ Key Game::GenerateImageKey() const
             move = FlipMove(toPlay, move);
             Square from = from_sq(move);
             Square to = to_sq(move);
-            key ^= PredictionCache_PreviousMoveSquare[i][from];
-            key ^= PredictionCache_PreviousMoveSquare[i][to];
+            key ^= PredictionCache_PreviousMoveFromSquare[i][from];
+            key ^= PredictionCache_PreviousMoveToSquare[i][to];
         }
         previousMoveIndex = (previousMoveIndex + 1) % Config::InputPreviousMoveCount;
     }

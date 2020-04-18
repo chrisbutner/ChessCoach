@@ -116,8 +116,8 @@ public:
     bool TryHard() const;
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
-    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore);
-    void LimitBranchingToBest(int moveCount, Move* moves, float* priors);
+    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore);
+    void LimitBranchingToBest(int moveCount, uint16_t* moves, float* priors);
     bool IsDrawByNoProgressOrRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
     std::pair<Move, Node*> SelectMove() const;
@@ -154,7 +154,7 @@ private:
     ExtMove _expandAndEvaluate_moves[MAX_MOVES];
     ExtMove* _expandAndEvaluate_endMoves;
     Key _imageKey;
-    std::array<Move, MAX_MOVES> _cachedMoves;
+    std::array<uint16_t, MAX_MOVES> _cachedMoves;
     std::array<float, MAX_MOVES> _cachedPriors;
 };
 
@@ -180,7 +180,7 @@ public:
     void Play(int index);
     void SaveToStorageAndLog(int index);
     std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-        std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheEntry*& cacheStore);
+        std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
@@ -227,7 +227,7 @@ private:
     std::vector<std::chrono::steady_clock::time_point> _gameStarts;
     std::vector<int> _mctsSimulations;
     std::vector<std::vector<std::pair<Move, Node*>>> _searchPaths;
-    std::vector<PredictionCacheEntry*> _cacheStores;
+    std::vector<PredictionCacheChunk*> _cacheStores;
 
     SearchConfig _searchConfig;
     SearchState _searchState;

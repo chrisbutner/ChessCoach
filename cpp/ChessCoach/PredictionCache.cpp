@@ -7,10 +7,65 @@
 
 PredictionCache PredictionCache::Instance;
 
+void PredictionCacheChunk::Clear()
+{
+    // Don't lock here, assume it's a quiet single-threaded section.
+    for (int i = 0; i < EntryCount; i++)
+    {
+        _entries[i].key = 0;
+        _ages[i] = 0;
+    }
+}
+
+bool PredictionCacheChunk::TryGet(Key key, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut)
+{
+    // Only ages are mutated and the operations are atomic on basically all hardware, so use a shared_lock.
+    std::shared_lock lock(_mutex);
+
+    for (int& age : _ages)
+    {
+        age++;
+    }
+
+    for (int i = 0; i < EntryCount; i++)
+    {
+        if (_entries[i].key == key)
+        {
+            _ages[i] = std::numeric_limits<int>::min();
+            *valueOut = _entries[i].value;
+            *moveCountOut = _entries[i].moveCount;
+            std::copy(_entries[i].policyMoves, _entries[i].policyMoves + _entries[i].moveCount, movesOut);
+            std::copy(_entries[i].policyPriors, _entries[i].policyPriors + _entries[i].moveCount, priorsOut);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void PredictionCacheChunk::Put(Key key, float value, int moveCount, uint16_t* moves, float* priors)
+{
+    std::unique_lock lock(_mutex);
+
+    int oldestIndex = 0;
+    for (int i = 1; i < EntryCount; i++)
+    {
+        if (_ages[i] > _ages[oldestIndex])
+        {
+            oldestIndex = i;
+        }
+    }
+
+    _ages[oldestIndex] = std::numeric_limits<int>::min();
+    _entries[oldestIndex].key = key;
+    _entries[oldestIndex].value = value;
+    _entries[oldestIndex].moveCount = moveCount;
+    std::copy(moves, moves + moveCount, _entries[oldestIndex].policyMoves);
+    std::copy(priors, priors + moveCount, _entries[oldestIndex].policyPriors);
+}
+
 PredictionCache::PredictionCache()
-    : _bucketEntryCount(0)
-    , _hitCount(0)
-    , _collisionCount(0)
+    : _hitCount(0)
     , _probeCount(0)
 {
 }
@@ -24,30 +79,27 @@ void PredictionCache::Allocate(int sizeGb)
 {
     Free();
 
-    const int bucketCount = sizeGb;
-    const int bucketBytes = (1024 * 1024 * 1024);
-    _bucketEntryCount = (bucketBytes / sizeof(PredictionCacheEntry));
+    const int tableCount = sizeGb;
 
-    _bucketMemory.reserve(bucketCount);
-    _bucketEntries.reserve(bucketCount);
+    _tables.reserve(tableCount);
 
-    for (int i = 0; i < bucketCount; i++)
+    for (int i = 0; i < tableCount; i++)
     {
-        void* memory = LargePageAllocator::Allocate(bucketBytes);
+        // Memory is already zero-filled, so no need to clear chunks.
+        void* memory = LargePageAllocator::Allocate(TableBytes);
         assert(memory);
         if (!memory)
         {
             throw std::bad_alloc();
         }
 
-        _bucketMemory.push_back(memory);
-        _bucketEntries.push_back(static_cast<PredictionCacheEntry*>(memory));
+        _tables.push_back(reinterpret_cast<PredictionCacheChunk*>(memory));
     }
 }
 
 void PredictionCache::Free()
 {
-    for (void* memory : _bucketMemory)
+    for (void* memory : _tables)
     {
         if (memory)
         {
@@ -55,101 +107,71 @@ void PredictionCache::Free()
         }
     }
 
-    _bucketEntryCount = 0;
-    _bucketMemory.clear();
-    _bucketEntries.clear();
+    _tables.clear();
 
     _hitCount = 0;
-    _collisionCount = 0;
     _probeCount = 0;
 }
 
-// If returning true, valueOut, moveCountOut, movesOut and priorsOut are populated.
-// If returning false, valueOut, moveCountOut, movesOut and priorsOut are not populated; entryOut is populated only if the value/policy should be stored when available.
-bool PredictionCache::TryGetPrediction(Key key, PredictionCacheEntry** entryOut, float* valueOut, int* moveCountOut, Move* movesOut, float* priorsOut)
+// If returning true, valueOut, moveCountOut, movesOut and priorsOut are populated; chunkOut is not populated.
+// If returning false, valueOut, moveCountOut, movesOut and priorsOut are not populated; chunkOut is populated only if the value/policy should be stored when available.
+bool PredictionCache::TryGetPrediction(Key key, PredictionCacheChunk** chunkOut, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut)
 {
-    if (_bucketEntryCount == 0)
+    if (_tables.empty())
     {
         return false;
     }
 
     _probeCount++;
 
-    // Use the high 16 bits to choose the bucket.
-    const uint16_t bucketKey = (key >> 48);
-    PredictionCacheEntry* bucket = _bucketEntries[bucketKey % _bucketEntries.size()];
+    // Use the high 16 bits to choose the table.
+    const uint16_t tableKey = (key >> 48);
+    PredictionCacheChunk* table = _tables[tableKey % _tables.size()];
 
-    // Use the low 48 bits to choose the entry.
-    const uint64_t entryKey = (key & 0xFFFFFFFFFFFF);
-    PredictionCacheEntry& entry = bucket[entryKey % _bucketEntryCount];
+    // Use the low 48 bits to choose the chunk.
+    const uint64_t chunkKey = (key & 0xFFFFFFFFFFFF);
+    PredictionCacheChunk& chunk = table[chunkKey % ChunksPerTable];
 
-    bool outerHit = (entry._key == key);
-    if (!outerHit)
+    if (chunk.TryGet(key, valueOut, moveCountOut, movesOut, priorsOut))
     {
-        if (entry._key)
-        {
-            _collisionCount++;
-        }
-        *entryOut = &entry;
-        return false;
+        _hitCount++;
+        return true;
     }
 
-    {
-        std::shared_lock lock(entry._mutex);
-
-        bool hit = (entry._key == key);
-        if (hit)
-        {
-            _hitCount++;
-            *valueOut = entry._value;
-            *moveCountOut = entry._moveCount;
-            for (int i = 0; i < entry._moveCount; i++)
-            {
-                movesOut[i] = Move(entry._policyMoves[i]);
-                priorsOut[i] = entry._policyPriors[i];
-            }
-        }
-        else
-        {
-            if (entry._key)
-            {
-                _collisionCount++;
-            }
-            *entryOut = &entry;
-        }
-        return hit;
-    }
+    *chunkOut = &chunk;
+    return false;
 }
 
 void PredictionCache::Clear()
 {
-    for (PredictionCacheEntry* bucket : _bucketEntries)
+    for (PredictionCacheChunk* table : _tables)
     {
-        for (int i = 0; i < _bucketEntryCount; i++)
+        for (int i = 0; i < ChunksPerTable; i++)
         {
-            bucket[i].Clear();
+            table[i].Clear();
         }
     }
 
     _hitCount = 0;
-    _collisionCount = 0;
     _probeCount = 0;
 }
 
 void PredictionCache::PrintDebugInfo()
 {
-    std::cout << "Cache hit rate: " << (static_cast<float>(_hitCount) / _probeCount) << std::endl;
-    std::cout << "Cache collision/evict rate: " << (static_cast<float>(_collisionCount) / _probeCount) << std::endl;
-    for (PredictionCacheEntry* bucket : _bucketEntries)
+    int fullCount = 0;
+    for (PredictionCacheChunk* table : _tables)
     {
-        int fullCount = 0;
-        for (int i = 0; i < _bucketEntryCount; i++)
+        for (int i = 0; i < ChunksPerTable; i++)
         {
-            if (bucket[i]._key)
+            for (const PredictionCacheEntry& entry : table[i]._entries)
             {
-                fullCount++;
+                if (entry.key)
+                {
+                    fullCount++;
+                }
             }
         }
-        std::cout << "Bucket filled: " << (static_cast<float>(fullCount) / _bucketEntryCount) << std::endl;
     }
+    std::cout << "Prediction cache full: " << (static_cast<float>(fullCount) / (PredictionCacheChunk::EntryCount * ChunksPerTable * _tables.size()))
+        << ", hit rate: " << (static_cast<float>(_hitCount) / _probeCount) << std::endl;
 }

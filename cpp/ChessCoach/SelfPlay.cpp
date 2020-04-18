@@ -216,7 +216,7 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
         0, std::plus<>(), [](auto pair) { return pair.second->visitCount; }));
 }
 
-float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry*& cacheStore)
+float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
@@ -248,7 +248,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
             int i = 0;
             for (int i = 0; i < cachedMoveCount; i++)
             {
-                root->children[_cachedMoves[i]] = new Node(_cachedPriors[i]);
+                root->children[Move(_cachedMoves[i])] = new Node(_cachedPriors[i]);
             }
 
             return cachedValue;
@@ -323,20 +323,20 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheEntry
             LimitBranchingToBest(moveCount, _cachedMoves.data(), _cachedPriors.data());
             moveCount = Config::MaxBranchMoves;
         }
-        cacheStore->Set(_imageKey, *_value, moveCount, _cachedMoves.data(), _cachedPriors.data());
+        cacheStore->Put(_imageKey, *_value, moveCount, _cachedMoves.data(), _cachedPriors.data());
     }
 
     // Expand child nodes with the calculated priors.
     for (int i = 0; i < moveCount; i++)
     {
-        root->children[_cachedMoves[i]] = new Node(_cachedPriors[i]);
+        root->children[Move(_cachedMoves[i])] = new Node(_cachedPriors[i]);
     }
 
     state = SelfPlayState::Working;
     return *_value;
 }
 
-void SelfPlayGame::LimitBranchingToBest(int moveCount, Move* moves, float* priors)
+void SelfPlayGame::LimitBranchingToBest(int moveCount, uint16_t* moves, float* priors)
 {
     assert(moveCount > Config::MaxBranchMoves);
 
@@ -800,7 +800,7 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
 }
 
 std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-    std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheEntry*& cacheStore)
+    std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheChunk*& cacheStore)
 {
     const int numSimulations = (game.TryHard() ? std::numeric_limits<int>::max() : Config::NumSimulations);
     for (; mctsSimulation < numSimulations; mctsSimulation++)

@@ -1,16 +1,16 @@
 Next
-- prediction cache
-	- clean up prediction cache clear printing
-	- more LRU
-		- try linear probing or small buckets (rename current buckets to tables)
-	- use during UCI (options?)
+- tune cache - seem to still get 10% full 33% hit rate at 12 ply max
+- parse step count from network folder names
 - uci
 	- don't throw away trees if new position is just a child? log received commands to file to debug
 	- work out what lc0 reports for NPS, numbers are way off
-	- multithreading, virtual loss, any in-thread multiplexing?
+	- multithreading, virtual loss, any in-thread multiplexing?, prediction cache, prefetching/widening
 - unify config across C++/Python
-	- parse step count from network folder names (name = run name?)
+	- match run name to network folder names, selectively load
 - implement endgame tablebases (for both UCI and self-play, but don't cut game short, let NN learn)
+	- see if we can reuse stockfish probing
+- implement write-to-pgn in C++, stop depending on python-chess (just stockfish)
+	- python code is already broken with multi-game files
 
 Self-play performance
 - try different architecture like attention/transformer
@@ -57,6 +57,7 @@ GUI for debugging
 - also try better text printouts, e.g. at X simulations print Y% win probability and PV
 
 UCI
+- implement worthwhile options (work out hash, TT vs. prediction cache)
 - initial tournament really shows we need mate proving or more nodes/forced breadth, keeps getting mated in one
   even when winning vs. other engines
 - workaround for .exe vs. non in ChessBase, test as kibitzer
@@ -82,7 +83,6 @@ Low priority
 - see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
 - 80 cap on branched moves w/ cache may be a problem later; applies before d-noise, so limits exploration
 - structured binding, check all pairs
-- implement write-to-pgn in C++, stop depending on python-chess (just stockfish)
 - make sure killing uci.cmd kills exe (it's complicated - killing cmd.exe doesn't, but closing its window does - need to test programmatically)
 
 Revisit

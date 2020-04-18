@@ -10,50 +10,45 @@
 
 struct PredictionCacheEntry
 {
-public:
-
-    template <typename MIter, typename PIter>
-    void Set(Key key, float value, int moveCount, MIter policyMovesBegin, PIter policyPriorsBegin)
-    {
-        assert(moveCount <= Config::MaxBranchMoves);
-
-        std::unique_lock lock(_mutex);
-
-        _key = key;
-        _value = value;
-        _moveCount = moveCount;
-        std::copy(policyMovesBegin, policyMovesBegin + moveCount, _policyMoves);
-        std::copy(policyPriorsBegin, policyPriorsBegin + moveCount, _policyPriors);
-    }
-
-    void Clear()
-    {
-        _key = 0;
-    }
-
-private:
-
-    // pad to 512 bytes, 8 * 64
-
-    std::shared_mutex _mutex;                               // 8 bytes
-    Key _key;                                               // 8 bytes
-    float _value;                                           // 4 bytes
-    int _moveCount;                                         // 4 bytes
-    char _padding[8];                                       // 8 bytes
-    uint16_t _policyMoves[Config::MaxBranchMoves];        // 160 bytes
-    float _policyPriors[Config::MaxBranchMoves];          // 320 bytes
-
-    friend class PredictionCache;
+    Key key;                                        // 8 bytes
+    float value;                                    // 4 bytes
+    int moveCount;                                  // 4 bytes
+    uint16_t policyMoves[Config::MaxBranchMoves];   // 160 bytes
+    float policyPriors[Config::MaxBranchMoves];     // 320 bytes
 };
 static_assert(sizeof(std::shared_mutex) == 8);
 static_assert(Config::MaxBranchMoves == 80);
-static_assert(sizeof(PredictionCacheEntry) == 8 * 64);
+static_assert(sizeof(PredictionCacheEntry) == 496);
+
+struct PredictionCacheChunk
+{
+    void Clear();
+    bool TryGet(Key key, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut);
+    void Put(Key key, float value, int moveCount, uint16_t* moves, float* priors);
+
+private:
+
+    static const int EntryCount = 8;
+
+    std::array<PredictionCacheEntry, EntryCount> _entries;  // 3968 bytes
+    std::array<int, EntryCount> _ages;                      // 32 bytes
+    std::shared_mutex _mutex;                               // 8 bytes
+    char padding[88];                                       // 88 bytes
+
+    friend class PredictionCache;
+};
+static_assert(sizeof(PredictionCacheChunk) == 4096);
 
 class PredictionCache
 {
 public:
 
     static PredictionCache Instance;
+
+private:
+
+    static const int TableBytes = 1024 * 1024 * 1024;
+    static const int ChunksPerTable = (TableBytes / sizeof(PredictionCacheChunk));
 
 public:
 
@@ -63,19 +58,16 @@ public:
     void Allocate(int sizeGb);
     void Free();
 
-    bool TryGetPrediction(Key key, PredictionCacheEntry** entryOut, float* valueOut, int* moveCountOut, Move* movesOut, float* priorsOut);
+    bool TryGetPrediction(Key key, PredictionCacheChunk** chunkOut, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut);
     void Clear();
 
     void PrintDebugInfo();
 
 private:
 
-    int _bucketEntryCount;
-    std::vector<void*> _bucketMemory;
-    std::vector<PredictionCacheEntry*> _bucketEntries;
+    std::vector<PredictionCacheChunk*> _tables;
 
     uint64_t _hitCount;
-    uint64_t _collisionCount;
     uint64_t _probeCount;
 };
 
