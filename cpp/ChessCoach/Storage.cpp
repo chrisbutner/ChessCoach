@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include "Config.h"
+#include "Pgn.h"
 
 Storage::Storage()
     : _gameFileCount{}
@@ -21,6 +22,7 @@ Storage::Storage()
     _gamesPaths[GameType_Train] = std::filesystem::path(rootEnvPath) / GamesPart / TrainPart;
     _gamesPaths[GameType_Test] = std::filesystem::path(rootEnvPath) / GamesPart / TestPart;
     _gamesPaths[GameType_Supervised] = std::filesystem::path(rootEnvPath) / GamesPart / SupervisedPart;
+    _pgnsPath = std::filesystem::path(rootEnvPath) / PgnsPart;
     _networksPath = std::filesystem::path(rootEnvPath) / NetworksPart;
     _logsPath = std::filesystem::path(rootEnvPath) / LogsPart;
 
@@ -28,19 +30,22 @@ Storage::Storage()
     {
         std::filesystem::create_directories(gamesPath);
     }
+    std::filesystem::create_directories(_pgnsPath);
     std::filesystem::create_directories(_networksPath);
     std::filesystem::create_directories(_logsPath);
 }
 
 // Used for testing
 Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
-    const std::filesystem::path& supervisedTestPath, const std::filesystem::path& networksPath)
+    const std::filesystem::path& supervisedTestPath, const std::filesystem::path& pgnsPath,
+    const std::filesystem::path& networksPath)
     : _gameFileCount{}
     , _loadedGameCount{}
     , _currentSaveFile{}
     , _currentSaveGameCount{}
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
     , _gamesPaths{ gamesTrainPath, gamesTestPath, supervisedTestPath }
+    , _pgnsPath(pgnsPath)
     , _networksPath(networksPath)
 {
     static_assert(GameType_Count == 3);
@@ -97,6 +102,18 @@ int Storage::AddGame(GameType gameType, SavedGame&& game)
     SaveToDisk(gameType, emplaced);
 
     const int gameNumber = _loadedGameCount[gameType];
+    
+    if ((gameNumber % Config::GamesPerPgn) == 0)
+    {
+        std::stringstream suffix;
+        suffix << std::setfill('0') << std::setw(9) << gameNumber;
+        const std::string& filename = ("game_" + suffix.str() + ".pgn");
+        const std::filesystem::path pgnPath = _pgnsPath / filename;
+
+        std::ofstream pgnFile = std::ofstream(pgnPath, std::ios::out);
+        Pgn::GeneratePgn(pgnFile, emplaced);
+    }
+
     return gameNumber;
 }
 

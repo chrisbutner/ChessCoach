@@ -43,6 +43,7 @@ private:
     static constexpr const char* const TrainPart = "Train";
     static constexpr const char* const TestPart = "Test";
     static constexpr const char* const SupervisedPart = "Supervised";
+    static constexpr const char* const PgnsPart = "ChessCoach/Training/Pgns";
     static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
     static constexpr const char* const LogsPart = "ChessCoach/Training/Logs";
 
@@ -70,7 +71,8 @@ public:
 
     Storage();
     Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
-        const std::filesystem::path& supervisedTestPath, const std::filesystem::path& networksPath);
+        const std::filesystem::path& supervisedTestPath, const std::filesystem::path& pgnsPath,
+        const std::filesystem::path& networksPath);
 
     void LoadExistingGames(GameType gameType, int maxLoadCount);
     int AddGame(GameType gameType, SavedGame&& game);
@@ -100,6 +102,7 @@ private:
     mutable std::default_random_engine _random;
 
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
+    std::filesystem::path _pgnsPath;
     std::filesystem::path _networksPath;
     std::filesystem::path _logsPath;
 };

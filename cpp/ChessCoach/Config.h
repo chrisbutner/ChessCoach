@@ -24,6 +24,8 @@ struct Config
     static const int TrainingStepsPerTest[3];
     static const int TrainingStepsPerStrengthTest[3];
 
+    static const int GamesPerPgn;
+
     static const int NumSampingMoves;
     static const int MaxMoves = 512;
     static const int NumSimulations;
@@ -47,7 +49,7 @@ struct Config
 #ifdef _DEBUG
         1;
 #else
-        128;
+        256;
 #endif
 
     static const int TimeControl_SafetyBufferMs = 500;

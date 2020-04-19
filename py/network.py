@@ -14,9 +14,7 @@ from tensorflow.python.saved_model import signature_constants
 from tensorflow.keras import backend as K
 
 from model import ChessCoachModel
-from profiler import Profiler
 import storage
-import game
 
 K.set_image_data_format("channels_first")
 

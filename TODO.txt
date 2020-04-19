@@ -7,13 +7,16 @@ Next
 	- match run name to network folder names, selectively load
 - implement endgame tablebases (for both UCI and self-play, but don't cut game short, let NN learn)
 	- see if we can reuse stockfish probing
-- implement write-to-pgn in C++, stop depending on python-chess (just stockfish)
-	- python code is already broken with multi-game files
 - add "other" param to storage tests, make sure games don't bleed between types
-- tune cache - seem to still get 10% full 33% hit rate at 12 ply max
+- fixes
+	- crash starting selfplay right after strength tests?
+	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
+- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
+	- while not full hit rate should be higher? add some new metrics
 
 Self-play performance
-- try different architecture like attention/transformer
+- try shrink Node memory
+- try different NN architecture like attention/transformer
 - try distilling to a smaller network for self-play predictions
 
 Value head convergence:
@@ -44,6 +47,11 @@ Performance
 - check inlining once CPU tree is looking good
 - try Intel compiler in future
 - image key for prediction cache can be incrementally updated if it helps enough
+- do some timeline charting for CPU vs. GPU use
+	- it may make sense to keep shared images/values/policies but have separate CPU worker threads
+	  drop in/pick up there, using a GPU worker like very beginning, and maybe oversubscribe
+	  like double-buffer games? might just be equivalent to doubling threads though. seem to be
+	  limited by Node memory use now. anyway, think about it.
 
 Code quality
 - rename NN "test" to "validate" to avoid confusion with unit tests and keep consistent with tensorboard

@@ -3,10 +3,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import storage
 import os
 
-def print_pgn(filename):
-  game = storage.load_game(os.path.join(storage.games_path, filename))
-  print(game.pgn())
-
 def test_train():
   import network
   from model import ChessCoachModel
@@ -20,5 +16,4 @@ def test_train():
   network.train_batch(step=1, images=images, values=values, policies=policies)
 
 print("Starting Python-ChessCoach")
-print_pgn("game_000000821")
-#test_train()
+test_train()

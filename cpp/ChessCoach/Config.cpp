@@ -11,6 +11,8 @@ const int Config::CheckpointInterval[] = { 50 * TrainingFactor /* Train == SelfP
 const int Config::TrainingStepsPerTest[] = { CheckpointInterval[0] / 10, -1, CheckpointInterval[2] / 10 };
 const int Config::TrainingStepsPerStrengthTest[] = { CheckpointInterval[0] * 5, -1, CheckpointInterval[2] * 5 };
 
+const int Config::GamesPerPgn = 100;
+
 const int Config::NumSampingMoves = 30;
 const int Config::NumSimulations = 800;
 

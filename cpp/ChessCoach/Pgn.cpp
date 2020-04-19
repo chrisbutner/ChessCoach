@@ -126,7 +126,7 @@ void Pgn::ParseMoves(std::istream& content, std::vector<uint16_t>& moves, float 
 }
 
 // Returns MOVE_NONE for failure.
-Move Pgn::ParseSan(Position& position, const std::string& san)
+Move Pgn::ParseSan(const Position& position, const std::string& san)
 {
     const std::string queenside = "O-O-O";
     
@@ -161,6 +161,198 @@ Move Pgn::ParseSan(Position& position, const std::string& san)
     }
 }
 
+// Always writes 1/2-1/2 rather than * in the context of ChessCoach, where games are technically
+// adjudicated as drawn at 512 moves rather than undetermined.
+void Pgn::GeneratePgn(std::ostream& content, const SavedGame& game)
+{
+    std::string result;
+    if (game.result == CHESSCOACH_VALUE_WIN)
+    {
+        result = "1-0";
+    }
+    else if (game.result == CHESSCOACH_VALUE_LOSS)
+    {
+        result = "0-1";
+    }
+    else
+    {
+        result = "1/2-1/2";
+    }
+
+    content << "[Event \"\"]" << std::endl
+        << "[Site \"\"]" << std::endl
+        << "[Date \"\"]" << std::endl
+        << "[Round \"\"]" << std::endl
+        << "[White \"\"]" << std::endl
+        << "[Black \"\"]" << std::endl
+        << "[Result \"" << result << "\"]" << std::endl
+        << std::endl;
+
+    StateListPtr positionStates(new std::deque<StateInfo>(1));
+    Position position;
+    position.set(Config::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
+
+    for (int i = 0; i < game.moveCount; i++)
+    {
+        if ((i % 2) == 0)
+        {
+            content << ((i / 2) + 1) << ". ";
+        }
+
+        const Move move = Move(game.moves[i]);
+        content << San(position, move, (i == (game.moveCount - 1))) << " ";
+        ApplyMove(positionStates, position, move);
+    }
+
+    content << result << std::endl
+        << std::endl;
+}
+
+std::string Pgn::San(const Position& position, Move move, bool showCheckmate)
+{
+    if (move == MOVE_NONE)
+    {
+        return "none";
+    }
+    if (move == MOVE_NULL)
+    {
+        return "null";
+    }
+
+    std::string san;
+    const Square from = from_sq(move);
+    const Square to = to_sq(move);
+    const Piece piece = position.piece_on(from);
+    const PieceType pieceType = type_of(piece);
+
+    // Castling/pawn/piece
+    if (type_of(move) == CASTLING)
+    {
+        const bool kingside = (to > from);
+        san = (kingside ? "O-O" : "O-O-O");
+    }
+    else if (pieceType == PAWN)
+    {
+        san = SanPawn(position, move);
+    }
+    else
+    {
+        san = SanPiece(position, move, piece);
+    }
+
+    // Suffix
+    if (position.gives_check(move))
+    {
+        bool checkmate = false;
+
+        if (showCheckmate)
+        {
+            StateInfo state;
+            Position& mutablePosition = const_cast<Position&>(position);
+            mutablePosition.do_move(move, state, true /* givesCheck */);
+            checkmate = (MoveList<LEGAL>(mutablePosition).size() == 0);
+            mutablePosition.undo_move(move);
+        }
+
+        if (checkmate)
+        {
+            san += '#';
+        }
+        else
+        {
+            san += '+';
+        }
+    }
+
+    return san;
+}
+
+std::string Pgn::SanPawn(const Position& position, Move move)
+{
+    std::string san;
+    san.reserve(8);
+
+    const Square from = from_sq(move);
+    const Square to = to_sq(move);
+
+    // Capture
+    const bool capture = ((type_of(move) == ENPASSANT) || (position.piece_on(to) != NO_PIECE));
+    if (capture)
+    {
+        san += FileSymbol(file_of(from));
+        san += 'x';
+    }
+
+    // Target square
+    san += FileSymbol(file_of(to));
+    san += RankSymbol(rank_of(to));
+
+    // Promotion
+    if (type_of(move) == PROMOTION)
+    {
+        san += '=';
+        san += PieceSymbol[promotion_type(move)];
+    }
+
+    return san;
+}
+
+std::string Pgn::SanPiece(const Position& position, Move move, Piece piece)
+{
+    std::string san;
+    san.reserve(8);
+
+    const Square from = from_sq(move);
+    const Square to = to_sq(move);
+    const PieceType pieceType = type_of(piece);
+
+    // Piece type
+    san += PieceSymbol[pieceType];
+
+    const Bitboard fromPieces = Attacks(position, type_of(piece), to);
+    assert(fromPieces);
+
+    // Disambiguation
+    const Bitboard otherPieces = (fromPieces & ~square_bb(from));
+    const Bitboard otherPiecesLegal = Legal(position, otherPieces, to);
+    if (otherPiecesLegal)
+    {
+        const File fromFile = file_of(from);
+        const Rank fromRank = rank_of(from);
+        const Bitboard fromFileMask = file_bb(fromFile);
+        const Bitboard fromRankMask = rank_bb(fromRank);
+        
+        // Prefer file->rank->both.
+        if (!(otherPiecesLegal & fromFileMask))
+        {
+            san += FileSymbol(fromFile);
+        }
+        else if (!(otherPiecesLegal & fromRankMask))
+        {
+            san += RankSymbol(fromRank);
+        }
+        else
+        {
+            // Tautology with "& ~square_bb(from)" but check variable flow.
+            assert(!(otherPiecesLegal & fromFileMask & fromRankMask));
+            san += FileSymbol(fromFile);
+            san += RankSymbol(fromRank);
+        }
+    }
+
+    // Capture
+    if (position.piece_on(to) != NO_PIECE)
+    {
+        san += 'x';
+    }
+
+    // Target square
+    san += FileSymbol(file_of(to));
+    san += RankSymbol(rank_of(to));
+
+    return san;
+}
+
 void Pgn::ApplyMove(StateListPtr& positionStates, Position& position, Move move)
 {
     positionStates->emplace_back();
@@ -191,7 +383,7 @@ float Pgn::ParseResultPrecise(const std::string& text)
     }
 }
 
-Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fromPieceType)
+Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceType fromPieceType)
 {
     const Color toPlay = position.side_to_move();
     const size_t capture = san.find('x', 1);
@@ -231,9 +423,7 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
         }
     }
 
-    const Bitboard from = position.pieces(toPlay, fromPieceType);
-    const Bitboard attackers = position.attacks_from(fromPieceType, targetSquare);
-    Bitboard fromPieces = (attackers & from);
+    Bitboard fromPieces = Attacks(position, fromPieceType, targetSquare);
     assert(fromPieces);
     
     if (more_than_one(fromPieces))
@@ -291,7 +481,7 @@ Move Pgn::ParsePieceSan(Position& position, const std::string& san, PieceType fr
     return make_move(lsb(fromPieces), targetSquare);
 }
 
-Move Pgn::ParsePawnSan(Position& position, const std::string& san)
+Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
 {
     const Color toPlay = position.side_to_move();
     const bool capture = (san[1] == 'x');
@@ -353,4 +543,27 @@ PieceType Pgn::ParsePieceType(const std::string& text, int offset)
         assert((text[offset] >= 'a') && (text[offset] <= 'h'));
         return PAWN;
     }
+}
+
+Bitboard Pgn::Attacks(const Position& position, PieceType pieceType, Square targetSquare)
+{
+    const Bitboard from = position.pieces(position.side_to_move(), pieceType);
+    const Bitboard attackers = position.attacks_from(pieceType, targetSquare);
+    const Bitboard fromPieces = (attackers & from);
+    return fromPieces;
+}
+
+Bitboard Pgn::Legal(const Position& position, Bitboard fromPieces, Square targetSquare)
+{
+    Bitboard legal = fromPieces;
+    while (fromPieces)
+    {
+        const Square from = pop_lsb(&fromPieces);
+        const Move candidate = make_move(from, targetSquare);
+        if (!position.legal(candidate))
+        {
+            legal ^= square_bb(from);
+        }
+    }
+    return legal;
 }

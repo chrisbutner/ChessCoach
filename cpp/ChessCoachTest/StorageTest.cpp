@@ -31,11 +31,13 @@ void Basic(GameType gameType)
     std::filesystem::create_directory(gamesTestPath);
     std::filesystem::path gamesSupervisedPath = tempPath / std::tmpnam(nullptr);
     std::filesystem::create_directory(gamesSupervisedPath);
+    std::filesystem::path pgnsPath = tempPath / std::tmpnam(nullptr);
+    std::filesystem::create_directory(pgnsPath);
     std::filesystem::path networksPath = tempPath / std::tmpnam(nullptr);
     std::filesystem::create_directory(networksPath);
 #pragma warning(default:4996) // Internal buffer is immediately consumed and detached.
 
-    std::unique_ptr<Storage> storage1(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, networksPath));
+    std::unique_ptr<Storage> storage1(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, pgnsPath, networksPath));
 
     // Expect zero games in a new, temporary directory.
 
@@ -68,7 +70,7 @@ void Basic(GameType gameType)
 
     // Load a second Storage over the same directories and check that game loads.
 
-    std::unique_ptr<Storage> storage2(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, networksPath));
+    std::unique_ptr<Storage> storage2(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, pgnsPath, networksPath));
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
@@ -89,11 +91,13 @@ void SampleBatch(GameType gameType)
     std::filesystem::create_directory(gamesTestPath);
     std::filesystem::path gamesSupervisedPath = tempPath / std::tmpnam(nullptr);
     std::filesystem::create_directory(gamesSupervisedPath);
+    std::filesystem::path pgnsPath = tempPath / std::tmpnam(nullptr);
+    std::filesystem::create_directory(pgnsPath);
     std::filesystem::path networksPath = tempPath / std::tmpnam(nullptr);
     std::filesystem::create_directory(networksPath);
 #pragma warning(default:4996) // Internal buffer is immediately consumed and detached.
 
-    std::unique_ptr<Storage> storage1(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, networksPath));
+    std::unique_ptr<Storage> storage1(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, pgnsPath, networksPath));
 
     // Expect zero games in a new, temporary directory.
 
@@ -130,7 +134,7 @@ void SampleBatch(GameType gameType)
 
     // Load a second Storage over the same directories and check that game loads.
 
-    std::unique_ptr<Storage> storage2(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, networksPath));
+    std::unique_ptr<Storage> storage2(new Storage(gamesTrainPath, gamesTestPath, gamesSupervisedPath, pgnsPath, networksPath));
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
