@@ -82,6 +82,8 @@ struct SearchConfig
 
 struct SearchState
 {
+    std::string positionFen;
+    std::vector<Move> positionMoves;
     bool searching;
     std::chrono::steady_clock::time_point searchStart;
     TimeControl timeControl;
@@ -174,6 +176,7 @@ public:
     void Initialize(Storage* storage);
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
+    void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset, bool tryHard);
     void DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly);
     void TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint);
     void TestNetwork(INetwork* network, int step);

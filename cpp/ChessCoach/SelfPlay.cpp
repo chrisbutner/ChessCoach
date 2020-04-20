@@ -569,6 +569,34 @@ void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vec
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
 }
 
+void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset, bool tryHard)
+{
+    _states[index] = SelfPlayState::Working;
+    _gameStarts[index] = std::chrono::high_resolution_clock::now();
+
+    SelfPlayGame& game = _games[index];
+
+    for (int i = applyNewMovesOffset; i < moves.size(); i++)
+    {
+        const Move move = moves[i];
+        Node* root = game.Root();
+
+        std::map<Move, Node*>::iterator child;
+        if (root && ((child = root->children.find(move)) != root->children.end()))
+        {
+            // Preserve the existing sub-tree.
+            game.ApplyMoveWithRoot(move, child->second);
+            game.PruneExcept(root, child->second);
+        }
+        else
+        {
+            Node* newRoot = ((i == (moves.size() - 1)) ? new Node(0.f) : nullptr);
+            game.PruneAll();
+            game.ApplyMoveWithRoot(move, newRoot);
+        }
+    }
+}
+
 void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly)
 {
     SetUpGame(index);
@@ -700,7 +728,7 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSp
     _searchState.searchStart = std::chrono::high_resolution_clock::now();
     _searchState.timeControl = timeControl;
     _searchState.nodeCount = 0;
-    _searchState.principleVariationChanged = 0;
+    _searchState.principleVariationChanged = false;
 
     // Run the search.
     while (_searchState.searching)
@@ -1026,8 +1054,34 @@ void SelfPlayWorker::UpdatePosition()
         // position info and cleared, or (ii) the flag gets set again after we unlock. Either way
         // we're good.
 
-        _games[0].PruneAll();
-        SetUpGame(0, _searchConfig.positionFen, _searchConfig.positionMoves, true /* tryHard */);
+        // If the new position is the previous position plus some number of moves,
+        // just play out the moves rather than throwing away search results.
+        if ((_searchState.positionFen == _searchConfig.positionFen) &&
+            (_searchConfig.positionMoves.size() >= _searchState.positionMoves.size()) &&
+            (std::equal(_searchState.positionMoves.begin(), _searchState.positionMoves.end(), _searchConfig.positionMoves.begin())))
+        {
+            if (_searchConfig.debug)
+            {
+                std::cout << "info string [position] Reusing existing position with "
+                    << (_searchConfig.positionMoves.size() - _searchState.positionMoves.size()) << " additional moves" << std::endl;
+            }
+            SetUpGameExisting(0, _searchConfig.positionMoves, static_cast<int>(_searchState.positionMoves.size()), true /* tryHard */);
+        }
+        else
+        {
+            if (_searchConfig.debug)
+            {
+                std::cout << "info string [position] Creating new position" << std::endl;
+            }
+            _games[0].PruneAll();
+            SetUpGame(0, _searchConfig.positionFen, _searchConfig.positionMoves, true /* tryHard */);
+        }
+
+        _searchState.positionFen = std::move(_searchConfig.positionFen);
+        _searchConfig.positionFen = "";
+
+        _searchState.positionMoves = std::move(_searchConfig.positionMoves);
+        _searchConfig.positionMoves = {};
 
         _searchConfig.positionUpdated = false;
     }
@@ -1051,7 +1105,7 @@ void SelfPlayWorker::UpdateSearch()
             _searchState.searchStart = std::chrono::high_resolution_clock::now();
             _searchState.timeControl = _searchConfig.searchTimeControl;
             _searchState.nodeCount = 0;
-            _searchState.principleVariationChanged = false;
+            _searchState.principleVariationChanged = true; // Print out initial PV.
         }
 
         // Set the "search" instruction to false now so that when this search finishes
@@ -1150,7 +1204,11 @@ void SelfPlayWorker::PrintPrincipleVariation()
     Node* node = _games[0].Root();
     std::vector<Move> principleVariation;
 
-    assert(node->mostVisitedChild.second);
+    if (!node->mostVisitedChild.second)
+    {
+        return;
+    }
+
     while (node->mostVisitedChild.second)
     {
         principleVariation.push_back(node->mostVisitedChild.first);

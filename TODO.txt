@@ -1,6 +1,5 @@
 Next
 - uci
-	- don't throw away trees if new position is just a child? log received commands to file to debug
 	- work out what lc0 reports for NPS, numbers are way off
 	- multithreading, virtual loss, any in-thread multiplexing?, prediction cache, prefetching/widening
 - unify config across C++/Python
