@@ -993,6 +993,11 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     // Warm up the GIL and predictions.
     WarmUpPredictions(network.get(), 1);
 
+    // Start with the position "updated" to the starting position in case of a naked "go" command.
+    _searchConfig.positionUpdated = true;
+    _searchConfig.positionFen = Config::StartingPosition;
+    _searchConfig.positionMoves = {};
+
     while (!_searchConfig.quit)
     {
         {
@@ -1226,8 +1231,11 @@ void SelfPlayWorker::PrintPrincipleVariation()
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState.nodeCount;
     const int nodesPerSecond = static_cast<int>(nodeCount / std::chrono::duration<float>(sinceSearchStart).count());
+    const int hashfullPermille = PredictionCache::Instance.PermilleFull();
 
-    std::cout << "info depth " << depth << " score cp " << whiteScore << " nodes " << nodeCount << " nps " << nodesPerSecond << " time " << searchTimeMs << " pv";
+    std::cout << "info depth " << depth << " score cp " << whiteScore
+        << " nodes " << nodeCount << " nps " << nodesPerSecond << " time " << searchTimeMs
+        << " hashfull " << hashfullPermille << " pv";
     for (Move move : principleVariation)
     {
         std::cout << " " << UCI::move(move, false /* chess960 */);

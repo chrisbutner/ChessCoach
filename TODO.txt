@@ -1,7 +1,7 @@
 Next
 - uci
-	- work out what lc0 reports for NPS, numbers are way off
-	- multithreading, virtual loss, any in-thread multiplexing?, prediction cache, prefetching/widening
+	- start with prefetching/parallelizing on the tree "horizon" - think about good ways to select without blowing up Node size
+	- write out pv every N seconds if no updates
 - unify config across C++/Python
 	- match run name to network folder names, selectively load
 - implement endgame tablebases (for both UCI and self-play, but don't cut game short, let NN learn)
@@ -77,6 +77,7 @@ UCI
 - "random move with eval within 1%"
 	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
 	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
+- any other in-thread parallelizing of MCTS beyond just prefetching?
 - implement multiPV (run/batch multiple games in a worker with path restrictions?)
 
 Scalability

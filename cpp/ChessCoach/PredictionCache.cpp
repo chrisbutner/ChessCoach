@@ -56,6 +56,16 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, uint16_t* mo
         }
     }
 
+    // Hackily reach into the singleton PredictionCache to update metrics.
+    if (_entries[oldestIndex].key)
+    {
+        PredictionCache::Instance._evictionCount++;
+    }
+    else
+    {
+        PredictionCache::Instance._entryCount++;
+    }
+
     _ages[oldestIndex] = std::numeric_limits<int>::min();
     _entries[oldestIndex].key = key;
     _entries[oldestIndex].value = value;
@@ -66,7 +76,10 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, uint16_t* mo
 
 PredictionCache::PredictionCache()
     : _hitCount(0)
+    , _evictionCount(0)
     , _probeCount(0)
+    , _entryCount(0)
+    , _entryCapacity(0)
 {
 }
 
@@ -95,6 +108,8 @@ void PredictionCache::Allocate(int sizeGb)
 
         _tables.push_back(reinterpret_cast<PredictionCacheChunk*>(memory));
     }
+
+    _entryCapacity = (static_cast<uint64_t>(tableCount) * ChunksPerTable * PredictionCacheChunk::EntryCount);
 }
 
 void PredictionCache::Free()
@@ -111,6 +126,9 @@ void PredictionCache::Free()
 
     _hitCount = 0;
     _probeCount = 0;
+
+    _entryCount = 0;
+    _entryCapacity = 0;
 }
 
 // If returning true, valueOut, moveCountOut, movesOut and priorsOut are populated; chunkOut is not populated.
@@ -172,6 +190,12 @@ void PredictionCache::PrintDebugInfo()
             }
         }
     }
-    std::cout << "Prediction cache full: " << (static_cast<float>(fullCount) / (PredictionCacheChunk::EntryCount * ChunksPerTable * _tables.size()))
-        << ", hit rate: " << (static_cast<float>(_hitCount) / _probeCount) << std::endl;
+    std::cout << "Prediction cache full: " << (static_cast<float>(_entryCount) / _entryCapacity)
+        << ", hit rate: " << (static_cast<float>(_hitCount) / _probeCount) 
+        << ", evict rate: " << (static_cast<float>(_evictionCount) / _probeCount) << std::endl;
+}
+
+int PredictionCache::PermilleFull()
+{
+    return static_cast<int>(_entryCount * 1000 / _entryCapacity);
 }

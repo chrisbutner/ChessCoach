@@ -62,13 +62,20 @@ public:
     void Clear();
 
     void PrintDebugInfo();
+    int PermilleFull();
 
 private:
 
     std::vector<PredictionCacheChunk*> _tables;
 
     uint64_t _hitCount;
+    uint64_t _evictionCount;
     uint64_t _probeCount;
+
+    uint64_t _entryCount;
+    uint64_t _entryCapacity;
+
+    friend struct PredictionCacheChunk;
 };
 
 #endif // _PREDICTIONCACHE_H_

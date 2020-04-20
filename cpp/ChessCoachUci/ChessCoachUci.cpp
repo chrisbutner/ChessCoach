@@ -98,6 +98,9 @@ void ChessCoachUci::Initialize()
     InitializeStockfish();
     InitializeChessCoach();
 
+    // Use an 8 GB prediction cache for now. In future, should be configurable per MB by UCI options.
+    PredictionCache::Instance.Allocate(8 /* sizeGb */);
+
     _commandHandlers.emplace_back("uci", std::bind(&ChessCoachUci::HandleUci, this, std::placeholders::_1));
     _commandHandlers.emplace_back("debug", std::bind(&ChessCoachUci::HandleDebug, this, std::placeholders::_1));
     _commandHandlers.emplace_back("isready", std::bind(&ChessCoachUci::HandleIsReady, this, std::placeholders::_1));
