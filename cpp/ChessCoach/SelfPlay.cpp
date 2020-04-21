@@ -766,8 +766,11 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSp
     _searchState.failedNodeCount = 0;
     _searchState.principleVariationChanged = false;
 
-    // Run the search.
+    // Initialize the search.
     const int mctsParallelism = std::min(static_cast<int>(_games.size()), Config::SearchMctsParallelism);
+    SearchInitialize(mctsParallelism);
+
+    // Run the search.
     while (_searchState.searching)
     {
         SearchPlay(mctsParallelism);
@@ -1105,6 +1108,10 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
         UpdateSearch();
         if (_searchState.searching)
         {
+            // Initialize the search.
+            SearchInitialize(mctsParallelism);
+
+            // Run the search.
             while (!_searchConfig.quit && !_searchConfig.positionUpdated && _searchState.searching)
             {
                 SearchPlay(mctsParallelism);
@@ -1382,10 +1389,21 @@ void SelfPlayWorker::WaitUntilReady()
     }
 }
 
+void SelfPlayWorker::SearchInitialize(int mctsParallelism)
+{
+    // Set up parallelism. Make N games share a tree but have their own image/value/policy slots.
+    for (int i = 1; i < mctsParallelism; i++)
+    {
+        ClearGame(i);
+        _states[i] = _states[0];
+        _gameStarts[i] = _gameStarts[0];
+        _games[i] = _games[0].SpawnShadow(&_images[i], &_values[i], &_policies[i]);
+    }
+}
+
 void SelfPlayWorker::SearchPlay(int mctsParallelism)
 {
-    // Get an initial expansion of moves/children and set up parallelism.
-    // Make N games share a tree but have their own image/value/policy slots.
+    // Get an initial expansion of moves/children.
     SelfPlayState& primaryState = _states[0];
     SelfPlayGame& primaryGame = _games[0];
 
@@ -1395,14 +1413,6 @@ void SelfPlayWorker::SearchPlay(int mctsParallelism)
         if (primaryState == SelfPlayState::WaitingForPrediction)
         {
             return;
-        }
-
-        for (int i = 1; i < mctsParallelism; i++)
-        {
-            ClearGame(i);
-            _states[i] = primaryState;
-            _gameStarts[i] = _gameStarts[0];
-            _games[i] = primaryGame.SpawnShadow(&_images[i], &_values[i], &_policies[i]);
         }
     }
 

@@ -220,6 +220,7 @@ private:
     void CheckPrintInfo();
     void CheckTimeControl();
     void PrintPrincipleVariation();
+    void SearchInitialize(int mctsParallelism);
     void SearchPlay(int mctsParallelism);
 
     int StrengthTestPosition(INetwork* network, const StrengthTestSpec& spec, int moveTimeMs);
