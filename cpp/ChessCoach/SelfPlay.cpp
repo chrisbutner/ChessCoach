@@ -265,13 +265,15 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
 
     if (state == SelfPlayState::Working)
     {
-        // Try get a cached prediction.
+        // Try get a cached prediction. Only hit the cache up to a max ply for self-play since we
+        // see enough unique positions/paths to fill the cache no matter what, and it saves on time
+        // to evict less. However, in search (TryHard) it's better to keep everything recent.
         cacheStore = nullptr;
         float cachedValue;
         int cachedMoveCount;
         _imageKey = GenerateImageKey();
         bool hitCached = false;
-        if (Ply() <= Config::MaxPredictionCachePly)
+        if (TryHard() || (Ply() <= Config::MaxPredictionCachePly))
         {
             hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, &cacheStore, &cachedValue,
                 &cachedMoveCount, _cachedMoves.data(), _cachedPriors.data());
@@ -892,8 +894,9 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
     std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheChunk*& cacheStore)
 {
     // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
-    // We need to break out and check for PV changes, search stopping, etc. Max out at 10 for now.
-    const int numSimulations = (game.TryHard() ? (mctsSimulation + 10) : Config::NumSimulations);
+    // We need to break out and check for PV changes, search stopping, etc. However, need to keep number
+    // high enough to get good speed-up from prediction cache hits. Go with 1000 for now.
+    const int numSimulations = (game.TryHard() ? (mctsSimulation + 1000) : Config::NumSimulations);
     for (; mctsSimulation < numSimulations; mctsSimulation++)
     {
         if (state == SelfPlayState::Working)
@@ -1340,7 +1343,6 @@ void SelfPlayWorker::PrintPrincipleVariation()
     // Value is from the parent's perspective, so that's already correct for the root perspective.
     const int depth = static_cast<int>(principleVariation.size());
     const float value = _games[0].Root()->mostVisitedChild.second->Value();
-    const int score = static_cast<int>(Game::ProbabilityToCentipawns(value));
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState.nodeCount;
     const int nodesPerSecond = static_cast<int>(nodeCount / std::chrono::duration<float>(sinceSearchStart).count());
@@ -1358,6 +1360,7 @@ void SelfPlayWorker::PrintPrincipleVariation()
     }
     else
     {
+        const int score = static_cast<int>(Game::ProbabilityToCentipawns(value));
         std::cout << " score cp " << score;
     }
 
@@ -1368,6 +1371,13 @@ void SelfPlayWorker::PrintPrincipleVariation()
         std::cout << " " << UCI::move(move, false /* chess960 */);
     }
     std::cout << std::endl;
+
+    // Debug: print cache info.
+    if (_searchConfig.debug)
+    {
+        std::cout << "info string [cache] hitrate " << PredictionCache::Instance.PermilleHits() <<
+            " evictionrate " << PredictionCache::Instance.PermilleEvictions() << std::endl;
+    }
 }
 
 void SelfPlayWorker::SignalDebug(bool debug)
@@ -1436,6 +1446,8 @@ void SelfPlayWorker::SearchInitialize(int mctsParallelism)
         _gameStarts[i] = _gameStarts[0];
         _games[i] = _games[0].SpawnShadow(&_images[i], &_values[i], &_policies[i]);
     }
+
+    PredictionCache::Instance.ResetProbeMetrics();
 }
 
 void SelfPlayWorker::SearchPlay(int mctsParallelism)

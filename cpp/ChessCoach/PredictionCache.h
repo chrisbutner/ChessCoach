@@ -60,9 +60,12 @@ public:
 
     bool TryGetPrediction(Key key, PredictionCacheChunk** chunkOut, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut);
     void Clear();
+    void ResetProbeMetrics();
 
     void PrintDebugInfo();
     int PermilleFull();
+    int PermilleHits();
+    int PermilleEvictions();
 
 private:
 

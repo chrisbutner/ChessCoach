@@ -1,6 +1,5 @@
 Next
 - uci
-	- remove ply<=12 for UCI
 	- work on faster/forced mates
 	- write out pv every N seconds if no updates
 	- write out best move (@ arena)

@@ -124,9 +124,8 @@ void PredictionCache::Free()
 
     _tables.clear();
 
-    _hitCount = 0;
-    _evictionCount = 0;
-    _probeCount = 0;
+    ResetProbeMetrics();
+
     _entryCount = 0;
     _entryCapacity = 0;
 }
@@ -170,21 +169,37 @@ void PredictionCache::Clear()
         }
     }
 
+    ResetProbeMetrics();
+
+    _entryCount = 0;
+    _entryCapacity = 0;
+}
+
+void PredictionCache::ResetProbeMetrics()
+{
     _hitCount = 0;
     _evictionCount = 0;
     _probeCount = 0;
-    _entryCount = 0;
-    _entryCapacity = 0;
 }
 
 void PredictionCache::PrintDebugInfo()
 {
     std::cout << "Prediction cache full: " << (static_cast<float>(_entryCount) / _entryCapacity)
         << ", hit rate: " << (static_cast<float>(_hitCount) / _probeCount) 
-        << ", evict rate: " << (static_cast<float>(_evictionCount) / _probeCount) << std::endl;
+        << ", eviction rate: " << (static_cast<float>(_evictionCount) / _probeCount) << std::endl;
 }
 
 int PredictionCache::PermilleFull()
 {
-    return static_cast<int>(_entryCount * 1000 / _entryCapacity);
+    return ((_entryCapacity == 0) ? 0 : static_cast<int>(_entryCount * 1000 / _entryCapacity));
+}
+
+int PredictionCache::PermilleHits()
+{
+    return ((_probeCount == 0) ? 0 : static_cast<int>(_hitCount * 1000 / _probeCount));
+}
+
+int PredictionCache::PermilleEvictions()
+{
+    return ((_probeCount == 0) ? 0 : static_cast<int>(_evictionCount * 1000 / _probeCount));
 }
