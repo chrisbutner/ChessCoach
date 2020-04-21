@@ -26,8 +26,10 @@ Node::Node(float setPrior)
     , originalPrior(setPrior)
     , prior(setPrior)
     , visitCount(0)
+    , visitingCount(0)
     , valueSum(0.f)
     , terminalValue(CHESSCOACH_VALUE_UNINITIALIZED)
+    , expanding(false)
 {
     assert(!std::isnan(setPrior));
 }
@@ -158,6 +160,17 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
 
 SelfPlayGame::~SelfPlayGame()
 {
+}
+
+SelfPlayGame SelfPlayGame::SpawnShadow(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
+{
+    SelfPlayGame shadow(*this);
+
+    shadow._image = image;
+    shadow._value = value;
+    shadow._policy = policy;
+
+    return shadow;
 }
 
 Node* SelfPlayGame::Root() const
@@ -555,24 +568,31 @@ void SelfPlayWorker::Initialize(Storage* storage)
     _storage = storage;
 }
 
-void SelfPlayWorker::SetUpGame(int index)
+void SelfPlayWorker::ClearGame(int index)
 {
     _states[index] = SelfPlayState::Working;
-    _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
+    _mctsSimulations[index] = 0;
+    _searchPaths[index].clear();
+    _cacheStores[index] = nullptr;
+}
+
+void SelfPlayWorker::SetUpGame(int index)
+{
+    ClearGame(index);
+    _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
+
 }
 
 void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard)
 {
-    _states[index] = SelfPlayState::Working;
+    ClearGame(index);
     _games[index] = SelfPlayGame(fen, moves, tryHard, &_images[index], &_values[index], &_policies[index]);
-    _gameStarts[index] = std::chrono::high_resolution_clock::now();
 }
 
 void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset, bool tryHard)
 {
-    _states[index] = SelfPlayState::Working;
-    _gameStarts[index] = std::chrono::high_resolution_clock::now();
+    ClearGame(index);
 
     SelfPlayGame& game = _games[index];
 
@@ -655,16 +675,13 @@ void SelfPlayWorker::TestNetwork(INetwork* network, int step)
 
 void SelfPlayWorker::StrengthTest(INetwork* network, int step)
 {
-    std::map<std::string, int> results;
-    std::map<std::string, int> positions;
+    std::map<std::string, int> testResults;
+    std::map<std::string, int> testPositions;
 
     std::cout << "Running strength tests..." << std::endl;
 
     // STS gets special treatment.
     const std::string stsName = "STS";
-
-    // Warm up the GIL and predictions.
-    WarmUpPredictions(network, 1);
 
     // Find strength test .epd files.
     const std::filesystem::path testPath = (std::filesystem::current_path() / "StrengthTests");
@@ -677,39 +694,57 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
             // However, only STS results will be comparable to other tested engines.
             const std::string testName = entry.path().stem().string();
             const int moveTimeMs = ((testName == stsName) ? 200 : 1000);
-            int totalPoints = 0;
 
-            const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(entry.path());
-            positions[testName] = static_cast<int>(specs.size());
-
-            for (const StrengthTestSpec& spec : specs)
-            {
-                const int points = StrengthTestPosition(network, spec, moveTimeMs);
-                totalPoints += points;
-            }
-
-            results[testName] = totalPoints;
+            const auto [score, total, positions] = StrengthTest(network, entry.path(), moveTimeMs);
+            testResults[testName] = score;
+            testPositions[testName] = positions;
         }
     }
 
     // Estimate an Elo rating using logic here: https://github.com/fsmosca/STS-Rating/blob/master/sts_rating.py
     const float slope = 445.23f;
     const float intercept = -242.85f;
-    const float stsRating = (slope * results[stsName] / positions[stsName]) + intercept;
+    const float stsRating = (slope * testResults[stsName] / testPositions[stsName]) + intercept;
 
     // Log to TensorBoard.
     std::vector<std::string> names;
     std::vector<float> values;
-    for (const auto [testName, totalPoints] : results)
+    for (const auto [testName, score] : testResults)
     {
         names.emplace_back("strength/" + testName + "_score");
-        values.push_back(static_cast<float>(totalPoints));
+        values.push_back(static_cast<float>(score));
         std::cout << names.back() << ": " << values.back() << std::endl;
     }
     names.emplace_back("strength/" + stsName + "_rating");
     values.push_back(stsRating);
     std::cout << names.back() << ": " << values.back() << std::endl;
     network->LogScalars(step, static_cast<int>(names.size()), names.data(), values.data());
+}
+
+// Returns (score, total, positions).
+std::tuple<int, int, int> SelfPlayWorker::StrengthTest(INetwork* network, const std::filesystem::path& epdPath, int moveTimeMs)
+{
+    int score = 0;
+    int total = 0;
+    int positions = 0;
+
+    // Clear the prediction cache for consistent results.
+    PredictionCache::Instance.Clear();
+
+    // Warm up the GIL and predictions.
+    WarmUpPredictions(network, 1);
+
+    const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
+    positions = static_cast<int>(specs.size());
+
+    for (const StrengthTestSpec& spec : specs)
+    {
+        const int points = StrengthTestPosition(network, spec, moveTimeMs);
+        score += points;
+        total += (spec.points.empty() ? 1 : *std::max_element(spec.points.begin(), spec.points.end()));
+    }
+
+    return std::tuple(score, total, positions);
 }
 
 // For best-move tests returns 1 if correct or 0 if incorrect.
@@ -728,13 +763,15 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSp
     _searchState.searchStart = std::chrono::high_resolution_clock::now();
     _searchState.timeControl = timeControl;
     _searchState.nodeCount = 0;
+    _searchState.failedNodeCount = 0;
     _searchState.principleVariationChanged = false;
 
     // Run the search.
+    const int mctsParallelism = std::min(static_cast<int>(_games.size()), Config::SearchMctsParallelism);
     while (_searchState.searching)
     {
-        SearchPlay(0);
-        network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
+        SearchPlay(mctsParallelism);
+        network->PredictBatch(mctsParallelism, _images.data(), _values.data(), _policies.data());
 
         // TODO: Only check every N times
         CheckTimeControl();
@@ -851,15 +888,37 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
 #endif
             }
 
+            // MCTS tree parallelism - enabled when searching, not when training - needs some guidance
+            // to avoid repeating the same deterministic child selections:
+            // - Avoid branches + leaves by incrementing "visitingCount" while selecting a search path,
+            //   lowering the exploration incentive in the UCB score.
+            // - However, let searches override this when it's important enough; e.g. going down the
+            //   same deep line to explore sibling leaves, or revisiting a checkmate.
+
             scratchGame = game;
             searchPath.clear();
             searchPath.push_back(std::pair(MOVE_NONE, scratchGame.Root()));
+            scratchGame.Root()->visitingCount++;
 
             while (scratchGame.Root()->IsExpanded())
             {
+                // If we can't select a child it's because parallel MCTS is already expanding all
+                // children. Give up on this one until next iteration, just fix up visitingCounts.
                 std::pair<Move, Node*> selected = SelectChild(scratchGame.Root());
+                if (!selected.second)
+                {
+                    assert(game.TryHard());
+                    for (auto [move, node] : searchPath)
+                    {
+                        node->visitingCount--;
+                    }
+                    _searchState.failedNodeCount++;
+                    return std::pair(MOVE_NONE, nullptr);
+                }
+
                 scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
                 searchPath.push_back(selected /* == scratchGame.Root() */);
+                selected.second->visitingCount++;
 #if DEBUG_MCTS
                 std::cout << Game::SquareName[from_sq(selected.first)] << Game::SquareName[to_sq(selected.first)] << "(" << selected.second->visitCount << "), ";
 #endif
@@ -869,7 +928,17 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         float value = scratchGame.ExpandAndEvaluate(state, cacheStore);
         if (state == SelfPlayState::WaitingForPrediction)
         {
+            // This is now a dangerous time when searching because this leaf is going to be expanded
+            // once the network evaluation/priors come back, but is not yet seen as expanded by
+            // parallel searches. Set "expanding" to mark it off-limits.
+            scratchGame.Root()->expanding = true;
             return std::pair(MOVE_NONE, nullptr);
+        }
+        else
+        {
+            // Finished actually expanding children, or never needed to wait for an evaluation/priors
+            // (e.g. prediction cache hit) or no children possible (terminal node).
+            scratchGame.Root()->expanding = false;
         }
 
         // The value we get is from the final node of the scratch game (could be WHITE or BLACK)
@@ -919,17 +988,22 @@ void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
     }
 }
 
+// It's possible because of nodes marked off-limits via "expanding"
+// that this method cannot select a child, instead returning NONE/nullptr.
 std::pair<Move, Node*> SelfPlayWorker::SelectChild(const Node* parent) const
 {
     float maxUcbScore = -std::numeric_limits<float>::infinity();
-    std::pair<Move, Node*> max;
+    std::pair<Move, Node*> max = std::pair(MOVE_NONE, nullptr);
     for (const auto& pair : parent->children)
     {
-        const float ucbScore = CalculateUcbScore(parent, pair.second);
-        if (ucbScore > maxUcbScore)
+        if (!pair.second->expanding)
         {
-            maxUcbScore = ucbScore;
-            max = pair;
+            const float ucbScore = CalculateUcbScore(parent, pair.second);
+            if (ucbScore > maxUcbScore)
+            {
+                maxUcbScore = ucbScore;
+                max = pair;
+            }
         }
     }
     return max;
@@ -938,8 +1012,12 @@ std::pair<Move, Node*> SelfPlayWorker::SelectChild(const Node* parent) const
 // TODO: Profile, see if significant, whether vectorizing is viable/worth it
 float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) const
 {
-    const float pbC = (std::logf((parent->visitCount + Config::PbCBase + 1.f) / Config::PbCBase) + Config::PbCInit) *
-        std::sqrtf(static_cast<float>(parent->visitCount)) / (child->visitCount + 1.f);
+    // Include "visitingCount" to help parallel searches diverge.
+    const float parentVirtualExploration = static_cast<float>(parent->visitCount + parent->visitingCount);
+    const float childVirtualExploration = static_cast<float>(child->visitCount + child->visitingCount);
+
+    const float pbC = (std::logf((parentVirtualExploration + Config::PbCBase + 1.f) / Config::PbCBase) + Config::PbCInit) *
+        std::sqrtf(parentVirtualExploration) / (childVirtualExploration + 1.f);
     const float priorScore = pbC * child->prior;
     return priorScore + child->Value();
 }
@@ -949,6 +1027,7 @@ void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& se
     // Each ply has a different player, so flip each time.
     for (auto [move, node] : searchPath)
     {
+        node->visitingCount--;
         node->visitCount++;
         node->valueSum += value;
         value = SelfPlayGame::FlipValue(value);
@@ -969,7 +1048,6 @@ void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& se
             isPrincipleVariation &= (searchPath[i].second->mostVisitedChild == searchPath[i + 1]);
         }
     }
-
 }
 
 void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut)
@@ -994,9 +1072,15 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     WarmUpPredictions(network.get(), 1);
 
     // Start with the position "updated" to the starting position in case of a naked "go" command.
-    _searchConfig.positionUpdated = true;
-    _searchConfig.positionFen = Config::StartingPosition;
-    _searchConfig.positionMoves = {};
+    if (!_searchConfig.positionUpdated)
+    {
+        _searchConfig.positionUpdated = true;
+        _searchConfig.positionFen = Config::StartingPosition;
+        _searchConfig.positionMoves = {};
+    }
+
+    // Determine config.
+    const int mctsParallelism = std::min(static_cast<int>(_games.size()), Config::SearchMctsParallelism);
 
     while (!_searchConfig.quit)
     {
@@ -1023,8 +1107,8 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
         {
             while (!_searchConfig.quit && !_searchConfig.positionUpdated && _searchState.searching)
             {
-                SearchPlay(0);
-                network->PredictBatch(1, _images.data(), _values.data(), _policies.data());
+                SearchPlay(mctsParallelism);
+                network->PredictBatch(mctsParallelism, _images.data(), _values.data(), _policies.data());
 
                 CheckPrintInfo();
 
@@ -1110,6 +1194,7 @@ void SelfPlayWorker::UpdateSearch()
             _searchState.searchStart = std::chrono::high_resolution_clock::now();
             _searchState.timeControl = _searchConfig.searchTimeControl;
             _searchState.nodeCount = 0;
+            _searchState.failedNodeCount = 0;
             _searchState.principleVariationChanged = true; // Print out initial PV.
         }
 
@@ -1297,19 +1382,32 @@ void SelfPlayWorker::WaitUntilReady()
     }
 }
 
-void SelfPlayWorker::SearchPlay(int index)
+void SelfPlayWorker::SearchPlay(int mctsParallelism)
 {
-    SelfPlayState& state = _states[index];
-    SelfPlayGame& game = _games[index];
+    // Get an initial expansion of moves/children and set up parallelism.
+    // Make N games share a tree but have their own image/value/policy slots.
+    SelfPlayState& primaryState = _states[0];
+    SelfPlayGame& primaryGame = _games[0];
 
-    if (!game.Root()->IsExpanded())
+    if (!primaryGame.Root()->IsExpanded())
     {
-        game.ExpandAndEvaluate(state, _cacheStores[index]);
-        if (state == SelfPlayState::WaitingForPrediction)
+        primaryGame.ExpandAndEvaluate(primaryState, _cacheStores[0]);
+        if (primaryState == SelfPlayState::WaitingForPrediction)
         {
             return;
         }
+
+        for (int i = 1; i < mctsParallelism; i++)
+        {
+            ClearGame(i);
+            _states[i] = primaryState;
+            _gameStarts[i] = _gameStarts[0];
+            _games[i] = primaryGame.SpawnShadow(&_images[i], &_values[i], &_policies[i]);
+        }
     }
 
-    RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
+    for (int i = 0; i < mctsParallelism; i++)
+    {
+        RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _searchPaths[i], _cacheStores[i]);
+    }
 }

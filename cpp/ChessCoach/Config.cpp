@@ -22,4 +22,6 @@ const float Config::RootExplorationFraction = 0.25f;
 const float Config::PbCBase = 19652.f;
 const float Config::PbCInit = 1.25f;
 
+const int Config::SearchMctsParallelism = 16;
+
 const char* Config::StartingPosition = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

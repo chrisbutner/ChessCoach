@@ -36,6 +36,8 @@ struct Config
     static const float PbCBase;
     static const float PbCInit;
 
+    static const int SearchMctsParallelism;
+
     static const char* StartingPosition;
 
     static const int SelfPlayWorkerCount =

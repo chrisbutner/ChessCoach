@@ -23,7 +23,7 @@ class Node
 {
 public:
 
-    static const size_t BlockSizeBytes = 256 * 1024 * 1024; // 256 MiB
+    static const size_t BlockSizeBytes = 64 * 1024 * 1024; // 64 MiB
     thread_local static PoolAllocator<Node, BlockSizeBytes> Allocator;
 
 public:
@@ -36,13 +36,17 @@ public:
     bool IsExpanded() const;
     float Value() const;
 
+public:
+
     std::map<Move, Node*> children;
     std::pair<Move, Node*> mostVisitedChild;
     float originalPrior;
     float prior;
     int visitCount;
+    int visitingCount;
     float valueSum;
     float terminalValue;
+    bool expanding;
 };
 
 enum class SelfPlayState
@@ -88,6 +92,7 @@ struct SearchState
     std::chrono::steady_clock::time_point searchStart;
     TimeControl timeControl;
     int nodeCount;
+    int failedNodeCount;
     bool principleVariationChanged;
 };
 
@@ -109,6 +114,8 @@ public:
     SelfPlayGame(SelfPlayGame&& other) noexcept;
     SelfPlayGame& operator=(SelfPlayGame&& other) noexcept;
     ~SelfPlayGame();
+
+    SelfPlayGame SpawnShadow(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
 
     Node* Root() const;
     bool IsTerminal() const;
@@ -174,6 +181,7 @@ public:
     void ResetGames();
     void PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network);
     void Initialize(Storage* storage);
+    void ClearGame(int index);
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
     void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset, bool tryHard);
@@ -202,6 +210,7 @@ public:
     void WaitUntilReady();
 
     void StrengthTest(INetwork* network, int step);
+    std::tuple<int, int, int> StrengthTest(INetwork* network, const std::filesystem::path& epdPath, int moveTimeMs);
 
 private:
 
@@ -211,7 +220,7 @@ private:
     void CheckPrintInfo();
     void CheckTimeControl();
     void PrintPrincipleVariation();
-    void SearchPlay(int index);
+    void SearchPlay(int mctsParallelism);
 
     int StrengthTestPosition(INetwork* network, const StrengthTestSpec& spec, int moveTimeMs);
     int JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move);

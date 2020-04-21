@@ -1,11 +1,20 @@
 Next
+- fix - when clearing prediction cache it was logging full > 1
 - uci
-	- start with prefetching/parallelizing on the tree "horizon" - think about good ways to select without blowing up Node size
+	- debug mate-in-one with MCTS parallelism: 6B1/k7/3pP2P/5p2/p2R4/P1N5/8/1RK2N2 w - - 0 47
+	- work on faster/forced mates
 	- write out pv every N seconds if no updates
+	- try to increase in-thread parallelism without sacrificing STS strength
+		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
+		- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
+	- also test different FPU schemes for strength, but care, and def. don't change training
+	- try multi-thread
+		- need to sync std::cout - use Reply() everywhere
 - unify config across C++/Python
 	- match run name to network folder names, selectively load
 - implement endgame tablebases (for both UCI and self-play, but don't cut game short, let NN learn)
 	- see if we can reuse stockfish probing
+	- actually we need it to make mistakes in the endgame to learn, best play isn't enough - need noise or temperature
 - add "other" param to storage tests, make sure games don't bleed between types
 - fixes
 	- crash starting selfplay right after strength tests?
@@ -70,14 +79,9 @@ UCI
   even when winning vs. other engines
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
-- multi-thread MCTS
-	- "On the scalability of parallel UCT"
-	- https://medium.com/oracledevs/lessons-from-alpha-zero-part-5-performance-optimization-664b38dc509e
-	- need to sync std::cout
 - "random move with eval within 1%"
 	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
 	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
-- any other in-thread parallelizing of MCTS beyond just prefetching?
 - implement multiPV (run/batch multiple games in a worker with path restrictions?)
 
 Scalability
