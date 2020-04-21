@@ -1,6 +1,6 @@
 Next
 - uci
-	- debug mate-in-one with MCTS parallelism: 6B1/k7/3pP2P/5p2/p2R4/P1N5/8/1RK2N2 w - - 0 47
+	- remove ply<=12 for UCI
 	- work on faster/forced mates
 	- write out pv every N seconds if no updates
 	- write out best move (@ arena)

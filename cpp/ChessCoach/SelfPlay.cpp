@@ -51,7 +51,28 @@ bool Node::IsExpanded() const
 
 float Node::Value() const
 {
-    return (visitCount > 0) ? (valueSum / visitCount) : CHESSCOACH_VALUE_LOSS;
+    // Value()/valueSum/priors are from the parent's perspective, but terminal loss
+    // is from the node/position's perspective.
+    //
+    // So, a terminal loss is a checkmating move, and terminal wins don't exist.
+    //
+    // If mate-in-one is an option, it doesn't help to explore other options, and it
+    // can hurt; e.g. if a possible-mate-in-4 has a higher prior it would take over as best.
+    //
+    // Value() is only used for UCB scores and UCI printing, not anything like backpropagation,
+    // so this is safe.
+    if (terminalValue == CHESSCOACH_VALUE_LOSS)
+    {
+        return std::numeric_limits<float>::infinity();
+    }
+
+    // First-play urgency (FPU) is zero, a loss.
+    if (visitCount <= 0)
+    {
+        return CHESSCOACH_VALUE_LOSS;
+    }
+
+    return (valueSum / visitCount);
 }
 
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
@@ -870,7 +891,9 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
 std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
     std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheChunk*& cacheStore)
 {
-    const int numSimulations = (game.TryHard() ? std::numeric_limits<int>::max() : Config::NumSimulations);
+    // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
+    // We need to break out and check for PV changes, search stopping, etc. Max out at 10 for now.
+    const int numSimulations = (game.TryHard() ? (mctsSimulation + 10) : Config::NumSimulations);
     for (; mctsSimulation < numSimulations; mctsSimulation++)
     {
         if (state == SelfPlayState::Working)
@@ -1314,19 +1337,31 @@ void SelfPlayWorker::PrintPrincipleVariation()
 
     const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState.searchStart);
 
-    // Value is from the parent's perspective, so that's already correct for the root perspective,
-    // but we need to flip from the root's color to white.
+    // Value is from the parent's perspective, so that's already correct for the root perspective.
     const int depth = static_cast<int>(principleVariation.size());
     const float value = _games[0].Root()->mostVisitedChild.second->Value();
-    const float whiteValue = Game::FlipValue(_games[0].ToPlay(), value);
-    const int whiteScore = static_cast<int>(Game::ProbabilityToCentipawns(whiteValue));
+    const int score = static_cast<int>(Game::ProbabilityToCentipawns(value));
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState.nodeCount;
     const int nodesPerSecond = static_cast<int>(nodeCount / std::chrono::duration<float>(sinceSearchStart).count());
     const int hashfullPermille = PredictionCache::Instance.PermilleFull();
 
-    std::cout << "info depth " << depth << " score cp " << whiteScore
-        << " nodes " << nodeCount << " nps " << nodesPerSecond << " time " << searchTimeMs
+    std::cout << "info depth " << depth;
+
+    if (value == std::numeric_limits<float>::infinity())
+    {
+        std::cout << " mate 1";
+    }
+    else if (value == -std::numeric_limits<float>::infinity())
+    {
+        std::cout << " mate -1";
+    }
+    else
+    {
+        std::cout << " score cp " << score;
+    }
+
+    std::cout << " nodes " << nodeCount << " nps " << nodesPerSecond << " time " << searchTimeMs
         << " hashfull " << hashfullPermille << " pv";
     for (Move move : principleVariation)
     {
@@ -1391,6 +1426,8 @@ void SelfPlayWorker::WaitUntilReady()
 
 void SelfPlayWorker::SearchInitialize(int mctsParallelism)
 {
+    ClearGame(0);
+
     // Set up parallelism. Make N games share a tree but have their own image/value/policy slots.
     for (int i = 1; i < mctsParallelism; i++)
     {
