@@ -125,8 +125,8 @@ void PredictionCache::Free()
     _tables.clear();
 
     _hitCount = 0;
+    _evictionCount = 0;
     _probeCount = 0;
-
     _entryCount = 0;
     _entryCapacity = 0;
 }
@@ -171,25 +171,14 @@ void PredictionCache::Clear()
     }
 
     _hitCount = 0;
+    _evictionCount = 0;
     _probeCount = 0;
+    _entryCount = 0;
+    _entryCapacity = 0;
 }
 
 void PredictionCache::PrintDebugInfo()
 {
-    int fullCount = 0;
-    for (PredictionCacheChunk* table : _tables)
-    {
-        for (int i = 0; i < ChunksPerTable; i++)
-        {
-            for (const PredictionCacheEntry& entry : table[i]._entries)
-            {
-                if (entry.key)
-                {
-                    fullCount++;
-                }
-            }
-        }
-    }
     std::cout << "Prediction cache full: " << (static_cast<float>(_entryCount) / _entryCapacity)
         << ", hit rate: " << (static_cast<float>(_hitCount) / _probeCount) 
         << ", evict rate: " << (static_cast<float>(_evictionCount) / _probeCount) << std::endl;

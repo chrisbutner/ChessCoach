@@ -1,9 +1,11 @@
 Next
-- fix - when clearing prediction cache it was logging full > 1
 - uci
+	- crash in UCI game when reusing position + parallelism? debug latest uci log
 	- debug mate-in-one with MCTS parallelism: 6B1/k7/3pP2P/5p2/p2R4/P1N5/8/1RK2N2 w - - 0 47
 	- work on faster/forced mates
 	- write out pv every N seconds if no updates
+	- write out best move (@ arena)
+	- make training network loading lazy for faster uci?
 	- try to increase in-thread parallelism without sacrificing STS strength
 		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
 		- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
