@@ -90,6 +90,7 @@ struct SearchState
     std::vector<Move> positionMoves;
     bool searching;
     std::chrono::steady_clock::time_point searchStart;
+    std::chrono::steady_clock::time_point lastPrincipleVariationPrint;
     TimeControl timeControl;
     int nodeCount;
     int failedNodeCount;

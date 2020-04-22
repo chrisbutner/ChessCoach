@@ -139,10 +139,16 @@ def prepare_training():
     training_network = KerasNetwork()
   return training_network
 
+def ensure_training():
+  global training_network
+  if (not training_network):
+    training_network = prepare_training()
+
 def predict_batch(image):
   return prediction_network.predict_batch(image)
 
 def train_batch(step, images, values, policies):
+  ensure_training()
   new_learning_rate = config.learning_rate_schedule.get(step)
   if (new_learning_rate is not None):
     K.set_value(training_network.model.optimizer.lr, new_learning_rate)
@@ -156,6 +162,7 @@ def train_batch(step, images, values, policies):
 
 
 def test_batch(step, images, values, policies):
+  ensure_training()
   log_training_prepare(step)
   losses = training_network.model.test_on_batch(images, [values, policies])
   log_training("validation", tensorboard_writer_validation, step, losses)
@@ -200,11 +207,12 @@ def log_weights():
       tf.summary.histogram(weight_name, weight)
 
 def save_network(checkpoint):
-   global prediction_network
-   log(f"Saving network ({checkpoint} steps)...")
-   path = storage.save_network(checkpoint, training_network)
-   log(f"Saved network ({checkpoint} steps)")
-   prediction_network = update_network_for_predictions(path)
+  ensure_training()
+  global prediction_network
+  log(f"Saving network ({checkpoint} steps)...")
+  path = storage.save_network(checkpoint, training_network)
+  log(f"Saved network ({checkpoint} steps)")
+  prediction_network = update_network_for_predictions(path)
 
 config = Config()
 tensorboard_writer_training_path = os.path.join(storage.tensorboard_path, config.run_name, "training")
@@ -212,4 +220,4 @@ tensorboard_writer_training = tf.summary.create_file_writer(tensorboard_writer_t
 tensorboard_writer_validation_path = os.path.join(storage.tensorboard_path, config.run_name, "validation")
 tensorboard_writer_validation = tf.summary.create_file_writer(tensorboard_writer_validation_path)
 prediction_network = prepare_predictions()
-training_network = prepare_training()
+training_network = None

@@ -784,6 +784,7 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSp
 
     _searchState.searching = true;
     _searchState.searchStart = std::chrono::high_resolution_clock::now();
+    _searchState.lastPrincipleVariationPrint = _searchState.searchStart;
     _searchState.timeControl = timeControl;
     _searchState.nodeCount = 0;
     _searchState.failedNodeCount = 0;
@@ -1101,11 +1102,15 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     WarmUpPredictions(network.get(), 1);
 
     // Start with the position "updated" to the starting position in case of a naked "go" command.
-    if (!_searchConfig.positionUpdated)
     {
-        _searchConfig.positionUpdated = true;
-        _searchConfig.positionFen = Config::StartingPosition;
-        _searchConfig.positionMoves = {};
+        std::unique_lock lock(_searchConfig.mutexUci);
+
+        if (!_searchConfig.positionUpdated)
+        {
+            _searchConfig.positionUpdated = true;
+            _searchConfig.positionFen = Config::StartingPosition;
+            _searchConfig.positionMoves = {};
+        }
     }
 
     // Determine config.
@@ -1225,6 +1230,7 @@ void SelfPlayWorker::UpdateSearch()
         if (_searchState.searching)
         {
             _searchState.searchStart = std::chrono::high_resolution_clock::now();
+            _searchState.lastPrincipleVariationPrint = _searchState.searchStart;
             _searchState.timeControl = _searchConfig.searchTimeControl;
             _searchState.nodeCount = 0;
             _searchState.failedNodeCount = 0;
@@ -1265,8 +1271,9 @@ void SelfPlayWorker::OnSearchFinished()
 
 void SelfPlayWorker::CheckPrintInfo()
 {
-    // Print principle variation when it changes.
-    if (_searchState.principleVariationChanged)
+    // Print principle variation when it changes, or at least every 5 seconds.
+    if (_searchState.principleVariationChanged ||
+        (std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _searchState.lastPrincipleVariationPrint).count() >= 5.f))
     {
         PrintPrincipleVariation();
         _searchState.principleVariationChanged = false;
@@ -1338,7 +1345,9 @@ void SelfPlayWorker::PrintPrincipleVariation()
         node = node->mostVisitedChild.second;
     }
 
-    const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState.searchStart);
+    auto now = std::chrono::high_resolution_clock::now();
+    const std::chrono::duration sinceSearchStart = (now - _searchState.searchStart);
+    _searchState.lastPrincipleVariationPrint = now;
 
     // Value is from the parent's perspective, so that's already correct for the root perspective.
     const int depth = static_cast<int>(principleVariation.size());

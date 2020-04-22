@@ -1,9 +1,6 @@
 Next
 - uci
 	- work on faster/forced mates
-	- write out pv every N seconds if no updates
-	- write out best move (@ arena)
-	- make training network loading lazy for faster uci?
 	- try to increase in-thread parallelism without sacrificing STS strength
 		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
 		- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
@@ -82,6 +79,7 @@ UCI
 - "random move with eval within 1%"
 	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
 	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
+- write out currmove et al (e.g. for Arena)
 - implement multiPV (run/batch multiple games in a worker with path restrictions?)
 
 Scalability
