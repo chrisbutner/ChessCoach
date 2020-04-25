@@ -1,8 +1,7 @@
 Next
 - mate
-	- add tests (raw nodes for prover?)
 	- make PV choose best mate despite visits
-	- add global depth cut-off
+	- do we need opponent-mate-avoidance scaled by exploration? test
 - uci
 	- try to increase in-thread parallelism without sacrificing STS strength
 		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
@@ -78,14 +77,19 @@ GUI for debugging
 - also try better text printouts, e.g. at X simulations print Y% win probability and PV
 
 UCI
+- "random move with eval within 1%"
+	- if best is value N, softmax sample with temperature 10 among (value >= N - 0.01), where 0.01 = (win-loss)/100
+	- "best" I'm assuming is the otherwise usual selection, i.e. most visited
+	- code for shorter mates, etc., should override this behavior (no diversity needed then)
+- mate
+	- add global depth cut-off (a little tricky, need to allow MCTS to "back up" and ban paths that don't reach a leaf in time)
+	- add killer heuristic (needs to vanish quickly with exploration)
+		- test with M1 position with M1 prior artifically set low for ply 0
+		- also strength-test
+	- forced draw propagation if it'll help
 - implement worthwhile options (work out hash, TT vs. prediction cache)
-- initial tournament really shows we need mate proving or more nodes/forced breadth, keeps getting mated in one
-  even when winning vs. other engines
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
-- "random move with eval within 1%"
-	- http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html?m=1
-	- https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd
 - write out currmove et al (e.g. for Arena)
 - implement multiPV (run/batch multiple games in a worker with path restrictions?)
 

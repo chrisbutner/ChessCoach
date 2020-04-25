@@ -26,7 +26,7 @@ class Config(object):
 
   def __init__(self):
     ### Training
-    self.run_name = "selfplay1"
+    self.run_name = "selfplay2"
     self.batch_size = 512 # OOM on GTX 1080 @ 4096
     self.chesscoach_training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
     self.log_next_train = False
