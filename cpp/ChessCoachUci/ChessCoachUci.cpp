@@ -13,6 +13,7 @@
 
 #include <ChessCoach/ChessCoach.h>
 #include <ChessCoach/SelfPlay.h>
+#include <ChessCoach/Pgn.h>
 
 typedef std::function<void(std::stringstream&)> CommandHandler;
 typedef std::pair<std::string, CommandHandler> CommandHandlerEntry;
@@ -40,6 +41,9 @@ private:
     void HandleStop(std::stringstream& commands);
     void HandlePonderHit(std::stringstream& commands);
     void HandleQuit(std::stringstream& commands);
+
+    // Custom commands
+    void HandleConsole(std::stringstream& commands);
 
     void InitializeSelfPlayWorker();
 
@@ -112,6 +116,10 @@ void ChessCoachUci::Initialize()
     _commandHandlers.emplace_back("stop", std::bind(&ChessCoachUci::HandleStop, this, std::placeholders::_1));
     _commandHandlers.emplace_back("ponderhit", std::bind(&ChessCoachUci::HandlePonderHit, this, std::placeholders::_1));
     _commandHandlers.emplace_back("quit", std::bind(&ChessCoachUci::HandleQuit, this, std::placeholders::_1));
+
+    // Custom commands
+    _commandHandlers.emplace_back("`", std::bind(&ChessCoachUci::HandleConsole, this, std::placeholders::_1));
+    _commandHandlers.emplace_back("~", std::bind(&ChessCoachUci::HandleConsole, this, std::placeholders::_1));
 
     std::stringstream commandLogFilename;
 
@@ -318,6 +326,30 @@ void ChessCoachUci::HandleQuit(std::stringstream& commands)
         _selfPlayThread->join();
     }
     _quit = true;
+}
+
+void ChessCoachUci::HandleConsole(std::stringstream& commands)
+{
+    std::string token;
+    while (commands >> token)
+    {
+        if (token == "ucb")
+        {
+            SelfPlayGame* game;
+            _selfPlayWorker->DebugGame(0, &game, nullptr, nullptr, nullptr);
+
+            Node* root = game->Root();
+            for (auto& [move, child] : root->children)
+            {
+                std::cout << Pgn::San(game->DebugPosition(), move, true /* showCheckmate */)
+                    << " prior=" << child->prior
+                    << " value=" << child->Value()
+                    << " ucb=" << _selfPlayWorker->CalculateUcbScore(root, child)
+                    << " visits=" << (child->visitCount + child->visitingCount)
+                    << std::endl;
+            }
+        }
+    }
 }
 
 void ChessCoachUci::InitializeSelfPlayWorker()

@@ -37,17 +37,40 @@ int TerminalValue::OpponentMateIn(int n)
 
 TerminalValue::TerminalValue()
     : _value()
+    , _mateScore([](float) { return 0.f; })
 {
 }
 
 TerminalValue::TerminalValue(const int value)
-    : _value(value)
 {
+    operator=(value);
 }
 
 TerminalValue& TerminalValue::operator=(const int value)
 {
     _value = value;
+
+    if (value > 0)
+    {
+        const int mateNSaturated = std::min(static_cast<int>(Config::UcbMateTerm.size() - 1), value);
+        const float mateTerm = Config::UcbMateTerm[mateNSaturated];
+        _mateScore = [mateTerm](float explorationRate) { return explorationRate * mateTerm; };
+    }
+    else
+    {
+        // No adjustment for opponent-mate-in-N. The goal of the search in that situation is already
+        // to go wide rather than deep and find some paths with value. Adding disincentives (with some
+        // variation of inverse exploration rate coefficient) can help exhaustive searches finish in
+        // fewer nodes in opponent-mate-in-N trees; however, the calculations slow down the search to
+        // more processing time overall despite fewer nodes, and worse principle variations are preferred
+        // before the exhaustive search finishes, because better priors get searched and disincentivized
+        // sooner. So, rely on every-other-step mate-in-N incentives to help guide search, and SelectMove
+        // preferring slower opponent mates (in the worst case).
+        //
+        // Also, no adjustment for draws at the moment.
+        _mateScore = [](float) { return 0.f; };
+    }
+
     return *this;
 }
 
@@ -95,6 +118,11 @@ int TerminalValue::OpponentMateN() const
 int TerminalValue::EitherMateN() const
 {
     return (_value ? *_value : 0);
+}
+
+float TerminalValue::MateScore(float explorationRate) const
+{
+    return _mateScore(explorationRate);
 }
 
 thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
@@ -1153,9 +1181,7 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     const float priorScore = explorationRate * child->prior;
 
     // (b) mate-in-N score
-    float mateScore = 0.f;
-    const int mateNSaturated = std::min(static_cast<int>(Config::UcbMateTerm.size() - 1), child->terminalValue.MateN());
-    mateScore = explorationRate * Config::UcbMateTerm[mateNSaturated];
+    const float mateScore = child->terminalValue.MateScore(explorationRate);
 
     return (child->Value() + priorScore + mateScore);
 }
@@ -1251,10 +1277,10 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>
 
 void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut)
 {
-    *gameOut = &_games[index];
-    *stateOut = &_states[index];
-    *valuesOut = &_values[index];
-    *policiesOut = &_policies[index];
+    if (gameOut) *gameOut = &_games[index];
+    if (stateOut) *stateOut = &_states[index];
+    if (valuesOut) *valuesOut = &_values[index];
+    if (policiesOut) *policiesOut = &_policies[index];
 }
 
 SearchState& SelfPlayWorker::DebugSearchState()

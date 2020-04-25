@@ -66,9 +66,12 @@ public:
     int OpponentMateN() const;
     int EitherMateN() const;
 
+    float MateScore(float explorationRate) const;
+
 private:
 
     std::optional<int> _value;
+    std::function<float(float)> _mateScore;
 };
 
 class Node

@@ -182,14 +182,8 @@ TEST(Mcts, Mate)
     SearchState& searchState = selfPlayWorker.DebugSearchState();
 
     SelfPlayGame* game;
-    {
-        SelfPlayState* state;
-        float* values;
-        INetwork::OutputPlanes* policies;
-
-        selfPlayWorker.SetUpGame(0);
-        selfPlayWorker.DebugGame(0, &game, &state, &values, &policies);
-    }
+    selfPlayWorker.SetUpGame(0);
+    selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Expand a small tree (1 root, 3 ply1, 9 ply2).
     MockExpand(game->Root(), 3);
