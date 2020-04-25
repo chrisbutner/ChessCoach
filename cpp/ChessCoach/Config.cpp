@@ -22,6 +22,18 @@ const float Config::RootExplorationFraction = 0.25f;
 const float Config::PbCBase = 19652.f;
 const float Config::PbCInit = 1.25f;
 
+constexpr float UcbMateN(int mateN)
+{
+    return (1.f / (1 << mateN));
+}
+static_assert(UcbMateN(2) == 0.25f);
+static_assert(UcbMateN(3) == 0.125f);
+const std::array<float, 25> Config::UcbMateTerm = { 0.f, 1.f, UcbMateN(2), UcbMateN(3), UcbMateN(4),
+                                      UcbMateN(5), UcbMateN(6), UcbMateN(7), UcbMateN(8), UcbMateN(9),
+                                      UcbMateN(10), UcbMateN(11), UcbMateN(12), UcbMateN(13), UcbMateN(14),
+                                      UcbMateN(15), UcbMateN(16), UcbMateN(17), UcbMateN(18), UcbMateN(19),
+                                      UcbMateN(20), UcbMateN(21), UcbMateN(22), UcbMateN(23), UcbMateN(24), };
+
 const int Config::SearchMctsParallelism = 16;
 
 const char* Config::StartingPosition = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

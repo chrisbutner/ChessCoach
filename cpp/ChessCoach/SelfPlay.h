@@ -6,6 +6,7 @@
 #include <random>
 #include <atomic>
 #include <functional>
+#include <optional>
 
 #include <Stockfish/Position.h>
 #include <Stockfish/movegen.h>
@@ -18,6 +19,57 @@
 #include "PredictionCache.h"
 #include "PoolAllocator.h"
 #include "Epd.h"
+
+class TerminalValue
+{
+public:
+
+    static TerminalValue NonTerminal();
+
+    static int Draw();
+
+    // Mate in N fullmoves, not halfmoves/ply.
+    static int MateIn(int n);
+
+    // Opponent mate in N fullmoves, not halfmoves/ply.
+    static int OpponentMateIn(int n);
+
+    // Mate in N fullmoves, not halfmoves/ply.
+    template <int N>
+    static constexpr int MateIn()
+    {
+        return N;
+    }
+
+    // Opponent mate in N fullmoves, not halfmoves/ply.
+    template <int N>
+    static constexpr int OpponentMateIn()
+    {
+        return -N;
+    }
+
+public:
+
+    TerminalValue();
+    TerminalValue(const int value);
+    
+    TerminalValue& operator=(const int value);
+    bool operator==(const int other) const;
+
+    bool IsImmediate() const;
+    float ImmediateValue() const;
+
+    bool IsMateInN() const;
+    bool IsOpponentMateInN() const;
+
+    int MateN() const;
+    int OpponentMateN() const;
+    int EitherMateN() const;
+
+private:
+
+    std::optional<int> _value;
+};
 
 class Node
 {
@@ -45,7 +97,7 @@ public:
     int visitCount;
     int visitingCount;
     float valueSum;
-    float terminalValue;
+    TerminalValue terminalValue;
     bool expanding;
 };
 
@@ -197,6 +249,7 @@ public:
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
     void Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value);
+    void BackpropagateMate(const std::vector<std::pair<Move, Node*>>& searchPath);
 
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
     SearchState& DebugSearchState();

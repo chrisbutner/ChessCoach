@@ -1,6 +1,8 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
+#include <array>
+
 #define DEBUG_MCTS 0
 #define SAMPLE_BATCH_FIXED 0
 
@@ -35,6 +37,8 @@ struct Config
 
     static const float PbCBase;
     static const float PbCInit;
+
+    static const std::array<float, 25> UcbMateTerm;
 
     static const int SearchMctsParallelism;
 

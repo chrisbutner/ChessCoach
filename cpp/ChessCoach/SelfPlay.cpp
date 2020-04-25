@@ -13,6 +13,90 @@
 #include "Config.h"
 #include "Pgn.h"
 
+TerminalValue TerminalValue::NonTerminal()
+{
+    return {};
+}
+
+int TerminalValue::Draw()
+{
+    return 0;
+}
+
+// Mate in N fullmoves, not halfmoves/ply.
+int TerminalValue::MateIn(int n)
+{
+    return n;
+}
+
+// Opponent mate in N fullmoves, not halfmoves/ply.
+int TerminalValue::OpponentMateIn(int n)
+{
+    return -n;
+}
+
+TerminalValue::TerminalValue()
+    : _value()
+{
+}
+
+TerminalValue::TerminalValue(const int value)
+    : _value(value)
+{
+}
+
+TerminalValue& TerminalValue::operator=(const int value)
+{
+    _value = value;
+    return *this;
+}
+
+bool TerminalValue::operator==(const int other) const
+{
+    return (_value == other);
+}
+
+bool TerminalValue::IsImmediate() const
+{
+    return (_value &&
+        ((*_value == Draw()) || (*_value == MateIn<1>())));
+}
+
+float TerminalValue::ImmediateValue() const
+{
+    // Coalesce a draw for the (Ply >= MaxMoves) and other undetermined/unfinished cases.
+    if (_value == TerminalValue::MateIn<1>())
+    {
+        return CHESSCOACH_VALUE_WIN;
+    }
+    return CHESSCOACH_VALUE_DRAW;
+}
+
+bool TerminalValue::IsMateInN() const
+{
+    return (_value && (*_value > 0));
+}
+
+bool TerminalValue::IsOpponentMateInN() const
+{
+    return (_value && (*_value < 0));
+}
+
+int TerminalValue::MateN() const
+{
+    return (_value ? std::max(0, *_value) : 0);
+}
+
+int TerminalValue::OpponentMateN() const
+{
+    return (_value ? std::max(0, -*_value) : 0);
+}
+
+int TerminalValue::EitherMateN() const
+{
+    return (_value ? *_value : 0);
+}
+
 thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
 
 std::atomic_uint SelfPlayGame::ThreadSeed;
@@ -28,7 +112,7 @@ Node::Node(float setPrior)
     , visitCount(0)
     , visitingCount(0)
     , valueSum(0.f)
-    , terminalValue(CHESSCOACH_VALUE_UNINITIALIZED)
+    , terminalValue{}
     , expanding(false)
 {
     assert(!std::isnan(setPrior));
@@ -51,21 +135,6 @@ bool Node::IsExpanded() const
 
 float Node::Value() const
 {
-    // Value()/valueSum/priors are from the parent's perspective, but terminal loss
-    // is from the node/position's perspective.
-    //
-    // So, a terminal loss is a checkmating move, and terminal wins don't exist.
-    //
-    // If mate-in-one is an option, it doesn't help to explore other options, and it
-    // can hurt; e.g. if a possible-mate-in-4 has a higher prior it would take over as best.
-    //
-    // Value() is only used for UCB scores and UCI printing, not anything like backpropagation,
-    // so this is safe.
-    if (terminalValue == CHESSCOACH_VALUE_LOSS)
-    {
-        return std::numeric_limits<float>::infinity();
-    }
-
     // First-play urgency (FPU) is zero, a loss.
     if (visitCount <= 0)
     {
@@ -201,13 +270,12 @@ Node* SelfPlayGame::Root() const
 
 bool SelfPlayGame::IsTerminal() const
 {
-    return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) || (Ply() >= Config::MaxMoves);
+    return (_root->terminalValue.IsImmediate() || (Ply() >= Config::MaxMoves));
 }
 
 float SelfPlayGame::TerminalValue() const
 {
-    // Coalesce a draw for the (Ply >= MaxMoves) and other undetermined/unfinished cases.
-    return (_root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED) ? _root->terminalValue : CHESSCOACH_VALUE_DRAW;
+    return _root->terminalValue.ImmediateValue();
 }
 
 float SelfPlayGame::Result() const
@@ -257,11 +325,35 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
 
     // A known-terminal leaf will remain a leaf, so be prepared to
     // quickly return its terminal value on repeated visits.
-    if (root->terminalValue != CHESSCOACH_VALUE_UNINITIALIZED)
+    if (root->terminalValue.IsImmediate())
     {
         state = SelfPlayState::Working;
-        return root->terminalValue;
+        return root->terminalValue.ImmediateValue();
     }
+
+    // It's very important in this method to always value a node from the parent's to-play perspective, so:
+    // - flip network evaluations
+    // - value checkmate as a win
+    //
+    // This seems a little counter-intuitive, but it's an artifact of storing priors/values/visits on
+    // the child nodes themselves instead of on "edges" belonging to the parent.
+    //
+    // E.g. imagine it's white to play (game.ToPlay()) and white makes the move a4,
+    // which results in a new position with black to play (scratchGame.ToPlay()).
+    // The network values this position as very bad for black (say 0.1). This means
+    // it's very good for white (0.9), so white should continue visiting this child node.
+    //
+    // Or, imagine it's white to play and they have a mate-in-one. From black's perspective,
+    // in the resulting position, it's a loss (0.0) because they're in check and have no moves,
+    // thus no child nodes. This is a win for white (1.0), so white should continue visiting this
+    // child node.
+    //
+    // It's important to keep the following values in sign/direction parity, for a single child position
+    // (all should tend to be high, or all should tend to be low):
+    // - visits
+    // - network policy prediction (prior)
+    // - network value prediction (valueSum / visitCount, back-propagated)
+    // - terminal valuation (valueSum / visitCount, back-propagated)
 
     if (state == SelfPlayState::Working)
     {
@@ -296,8 +388,9 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         // Check for checkmate and stalemate.
         if (_expandAndEvaluate_moves == _expandAndEvaluate_endMoves)
         {
-            root->terminalValue = (_position.checkers() ? CHESSCOACH_VALUE_LOSS : CHESSCOACH_VALUE_DRAW);
-            return root->terminalValue;
+            // Value from the parent's perspective.
+            root->terminalValue = (_position.checkers() ? TerminalValue::MateIn<1>() : TerminalValue::Draw());
+            return root->terminalValue.ImmediateValue();
         }
 
         // Check for draw by 50-move or 3-repetition.
@@ -314,8 +407,9 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         const int plyToSearchRoot = (Ply() - _searchRootPly);
         if (IsDrawByNoProgressOrRepetition(plyToSearchRoot))
         {
-            root->terminalValue = CHESSCOACH_VALUE_DRAW;
-            return root->terminalValue;
+            // Value from the parent's perspective (easy, it's a draw).
+            root->terminalValue = TerminalValue::Draw();
+            return root->terminalValue.ImmediateValue();
         }
 
         // Prepare for a prediction from the network.
@@ -325,6 +419,9 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     }
 
     // Received a prediction from the network.
+
+    // Value from the parent's perspective.
+    float value = FlipValue(*_value);
 
     // Mix in the Stockfish evaluation when available.
     //
@@ -336,7 +433,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         // TODO: Lerp based on training progress.
         const float stockfishProbability01 = StockfishEvaluation();
         const float stockfishiness = 0.5f;
-        *_value = (*_value * (1.f - stockfishiness)) + (stockfishProbability01 * stockfishiness);
+        value = (value * (1.f - stockfishiness)) + (stockfishProbability01 * stockfishiness);
     }
 
     // Index legal moves into the policy output planes to get logits,
@@ -359,7 +456,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
             LimitBranchingToBest(moveCount, _cachedMoves.data(), _cachedPriors.data());
             moveCount = Config::MaxBranchMoves;
         }
-        cacheStore->Put(_imageKey, *_value, moveCount, _cachedMoves.data(), _cachedPriors.data());
+        cacheStore->Put(_imageKey, value, moveCount, _cachedMoves.data(), _cachedPriors.data());
     }
 
     // Expand child nodes with the calculated priors.
@@ -369,7 +466,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     }
 
     state = SelfPlayState::Working;
-    return *_value;
+    return value;
 }
 
 void SelfPlayGame::LimitBranchingToBest(int moveCount, uint16_t* moves, float* priors)
@@ -463,7 +560,9 @@ void SelfPlayGame::StoreSearchStatistics()
 void SelfPlayGame::Complete()
 {
     // Save state that depends on nodes.
-    _result = FlipValue(ToPlay(), TerminalValue());
+    // Terminal value is from the parent's perspective, so unconditionally flip (~)
+    // from *parent* to *self* before flipping from ToPlay() to white's perspective.
+    _result = FlipValue(~ToPlay(), TerminalValue());
 
     // Clear and detach from all nodes.
     PruneAll();
@@ -955,6 +1054,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             }
         }
 
+        const bool wasImmediateMate = (scratchGame.Root()->terminalValue == TerminalValue::MateIn<1>());
         float value = scratchGame.ExpandAndEvaluate(state, cacheStore);
         if (state == SelfPlayState::WaitingForPrediction)
         {
@@ -971,32 +1071,21 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             scratchGame.Root()->expanding = false;
         }
 
-        // The value we get is from the final node of the scratch game (could be WHITE or BLACK)
-        // and we start applying it at the current position of the actual game (could again be WHITE or BLACK),
-        // so flip it if they differ (the ^).
-        //
-        // Also though, always value a node from the parent's to-play perspective (the ~).
-        //
-        // E.g. imagine it's white to play (game.ToPlay()) and white makes the move a4,
-        // which results in a new position with black to play (scratchGame.ToPlay()).
-        // The network values this position as very bad for black (say 0.1). This means
-        // it's very good for white (0.9), so white should continue visiting this child node.
-        //
-        // Or, imagine it's white to play and they have a mate-in-one. From black's perspective,
-        // in the resulting position, it's a loss (0.0) because they're in check and have no moves,
-        // thus no child nodes. This is a win for white (1.0), so white should continue visiting this
-        // child node.
-        //
-        // It's important to keep the following values in sign/direction parity, for a single child position
-        // (all should tend to be high, or all should tend to be low):
-        // - visits
-        // - network policy prediction (prior)
-        // - network value prediction (valueSum / visitCount, back-propagated)
-        // - terminal valuation (valueSum / visitCount, back-propagated)
+        // The value we get is from the final node of the scratch game (could be WHITE or BLACK),
+        // from its parent's perspective, and we start applying it at the current position of
+        // the actual game (could again be WHITE or BLACK), again from its parent's perspective,
+        // so flip it if they differ (the ^). This seems a little strange for the root node, because
+        // it doesn't really have a parent in the game, but that is why its value doesn't really matter.
         assert(!std::isnan(value));
-        value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ ~scratchGame.ToPlay()), value);
+        value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
         _searchState.nodeCount++;
+
+        // If we *just found out* that this leaf is a checkmate, prove it backwards as far as possible.
+        if (!wasImmediateMate && scratchGame.Root()->terminalValue.IsMateInN())
+        {
+            BackpropagateMate(searchPath);
+        }
 
 #if DEBUG_MCTS
         std::cout << "prior " << scratchGame.Root()->originalPrior << ", noisy prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
@@ -1042,14 +1131,23 @@ std::pair<Move, Node*> SelfPlayWorker::SelectChild(const Node* parent) const
 // TODO: Profile, see if significant, whether vectorizing is viable/worth it
 float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) const
 {
+    // Calculate the exploration rate, which is multiplied by (a) the prior to incentivize exploration,
+    // and (b) a mate-in-N lookup to incentivize sufficient exploitation of forced mates, dependent on depth.
     // Include "visitingCount" to help parallel searches diverge.
     const float parentVirtualExploration = static_cast<float>(parent->visitCount + parent->visitingCount);
     const float childVirtualExploration = static_cast<float>(child->visitCount + child->visitingCount);
-
-    const float pbC = (std::logf((parentVirtualExploration + Config::PbCBase + 1.f) / Config::PbCBase) + Config::PbCInit) *
+    const float explorationRate = (std::logf((parentVirtualExploration + Config::PbCBase + 1.f) / Config::PbCBase) + Config::PbCInit) *
         std::sqrtf(parentVirtualExploration) / (childVirtualExploration + 1.f);
-    const float priorScore = pbC * child->prior;
-    return priorScore + child->Value();
+
+    // (a) prior score
+    const float priorScore = explorationRate * child->prior;
+
+    // (b) mate-in-N score
+    float mateScore = 0.f;
+    const int mateNSaturated = std::min(static_cast<int>(Config::UcbMateTerm.size() - 1), child->terminalValue.MateN());
+    mateScore = explorationRate * Config::UcbMateTerm[mateNSaturated];
+
+    return (child->Value() + priorScore + mateScore);
 }
 
 void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value)
@@ -1077,6 +1175,67 @@ void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& se
         {
             isPrincipleVariation &= (searchPath[i].second->mostVisitedChild == searchPath[i + 1]);
         }
+    }
+}
+
+void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>& searchPath)
+{
+    // We know that searchPath[-1] just became a mate-in-1 so we know that searchPath[-2]
+    // just became an opponent mate-in-1.
+    if (searchPath.size() >= 2)
+    {
+        searchPath[searchPath.size() - 2].second->terminalValue = TerminalValue::OpponentMateIn<1>();
+    }
+
+    // To calculate mate values for the tree from scratch we'd need to follow two rules:
+    // - If *any* children are a MateIn<N...M> then the parent is an OpponentMateIn<N> (prefer to mate faster).
+    // - If *all* children are an OpponentMateIn<N...M> then the parent is a MateIn<M+1> (prefer to get mated slower).
+    //
+    // However, knowing that values were already correct before, we can just do odd/even checks and stop when nothing changes.
+    bool childIsMate = false;
+    for (int i = static_cast<int>(searchPath.size()) - 3; i >= 0; i--)
+    {
+        Node* parent = searchPath[i].second;
+
+        if (childIsMate)
+        {
+            // The child in the searchPath just became a mate, or a faster mate.
+            // Does this make the parent an opponent mate or faster opponent mate?
+            const Node* child = searchPath[i + 1].second;
+            const int newMateN = child->terminalValue.MateN();
+            assert(newMateN > 0);
+            if (!parent->terminalValue.IsOpponentMateInN() ||
+                (newMateN < parent->terminalValue.OpponentMateN()))
+            {
+                parent->terminalValue = TerminalValue::OpponentMateIn(newMateN);
+            }
+            else
+            {
+                return;
+            }
+        }
+        else
+        {
+            // The child in the searchPath just became an opponent mate or faster opponent mate.
+            // Always check all children. This could do nothing, make the parent a new mate, or
+            // make the parent a faster mate, depending on which child just got updated.
+            int longestChildOpponentMateN = std::numeric_limits<int>::min();
+            for (const auto& [move, child] : parent->children)
+            {
+                const int childOpponentMateN = child->terminalValue.OpponentMateN();
+                if (childOpponentMateN <= 0)
+                {
+                    return;
+                }
+
+                longestChildOpponentMateN = std::max(longestChildOpponentMateN, childOpponentMateN);
+            }
+
+            assert(longestChildOpponentMateN > 0);
+            parent->terminalValue = TerminalValue::MateIn(longestChildOpponentMateN + 1);
+        }
+
+        childIsMate = !childIsMate;
     }
 }
 
@@ -1349,9 +1508,11 @@ void SelfPlayWorker::PrintPrincipleVariation()
     const std::chrono::duration sinceSearchStart = (now - _searchState.searchStart);
     _searchState.lastPrincipleVariationPrint = now;
 
-    // Value is from the parent's perspective, so that's already correct for the root perspective.
+    // Value is from the parent's perspective, so that's already correct for the root perspective
+    const Node* pvFirst = _games[0].Root()->mostVisitedChild.second;
+    const int eitherMateN = pvFirst->terminalValue.EitherMateN();
+    const float value = pvFirst->Value();
     const int depth = static_cast<int>(principleVariation.size());
-    const float value = _games[0].Root()->mostVisitedChild.second->Value();
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState.nodeCount;
     const int nodesPerSecond = static_cast<int>(nodeCount / std::chrono::duration<float>(sinceSearchStart).count());
@@ -1359,13 +1520,9 @@ void SelfPlayWorker::PrintPrincipleVariation()
 
     std::cout << "info depth " << depth;
 
-    if (value == std::numeric_limits<float>::infinity())
+    if (eitherMateN != 0)
     {
-        std::cout << " mate 1";
-    }
-    else if (value == -std::numeric_limits<float>::infinity())
-    {
-        std::cout << " mate -1";
+        std::cout << " score mate " << eitherMateN;
     }
     else
     {

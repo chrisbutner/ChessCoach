@@ -1,6 +1,11 @@
 Next
+- mate
+	- add tests (raw nodes for prover?)
+	- make PV choose best mate despite visits
+	- add global depth cut-off
+- fix Dirichlet noise - normalization
+- no need for original priors - dumb mistake from original python code
 - uci
-	- work on faster/forced mates
 	- try to increase in-thread parallelism without sacrificing STS strength
 		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
 		- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
@@ -16,8 +21,6 @@ Next
 - fixes
 	- crash starting selfplay right after strength tests?
 	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
-- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
-	- while not full hit rate should be higher? add some new metrics
 
 Self-play performance
 - try shrink Node memory
@@ -27,6 +30,9 @@ Self-play performance
 Value head convergence:
 - try AZ history planes instead of mine
 	- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
+
+General architecture validation
+- try to train on some lc0 games or something to make sure everything's working/bug-free
 
 Network architecture/training data
 - try training value against lerped Z/Q a la Oracle blog
@@ -99,3 +105,5 @@ Low priority
 Revisit
 - try batch renorm + ghost batch norm
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
+- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
+	- while not full hit rate should be higher? add some new metrics

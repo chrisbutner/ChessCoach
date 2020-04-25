@@ -269,7 +269,7 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
     std::string token;
     while (commands >> token)
     {
-        if (token == "infinite")
+        if ((token == "infinite") || (token == "inf"))
         {
             timeControl.infinite = true;
         }
