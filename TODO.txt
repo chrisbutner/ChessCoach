@@ -3,8 +3,6 @@ Next
 	- add tests (raw nodes for prover?)
 	- make PV choose best mate despite visits
 	- add global depth cut-off
-- fix Dirichlet noise - normalization
-- no need for original priors - dumb mistake from original python code
 - uci
 	- try to increase in-thread parallelism without sacrificing STS strength
 		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
@@ -22,19 +20,22 @@ Next
 	- crash starting selfplay right after strength tests?
 	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
 
-Self-play performance
-- try shrink Node memory
-- try different NN architecture like attention/transformer
-- try distilling to a smaller network for self-play predictions
-
-Value head convergence:
+Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
 - try AZ history planes instead of mine
 	- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
-
-General architecture validation
 - try to train on some lc0 games or something to make sure everything's working/bug-free
+- try different NN architecture like attention/transformer (focus on strength)
 
-Network architecture/training data
+Self-play performance
+- try shrink Node memory
+- try different NN architecture like attention/transformer (focus on speed)
+- try distilling to a smaller network for self-play predictions
+
+Try linux/TF C++ API
+- add Linux support (use v1 subsystem?)
+- use TF C++ API and benchmark
+
+Improve convergence speed
 - try training value against lerped Z/Q a la Oracle blog
 - try v2 residuals
 - try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
@@ -50,7 +51,7 @@ Network architecture/training data
 - can always retry SE in future when solid architecture/visualization
 - turn down the stockfish eval blend factor as training progresses
 
-Performance
+CPU/integration performance:
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
@@ -93,7 +94,6 @@ Scalability
 - can't afford 1 million games in the window (RAM or disk), work something out
 
 Deployment
-- add linux support
 - installers, instructions, progress indicators, error handling, etc.
 
 Low priority

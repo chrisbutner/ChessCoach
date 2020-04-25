@@ -92,7 +92,6 @@ public:
 
     std::map<Move, Node*> children;
     std::pair<Move, Node*> mostVisitedChild;
-    float originalPrior;
     float prior;
     int visitCount;
     int visitingCount;

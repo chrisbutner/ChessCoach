@@ -107,7 +107,6 @@ thread_local std::default_random_engine SelfPlayGame::Random(
 
 Node::Node(float setPrior)
     : mostVisitedChild(MOVE_NONE, nullptr)
-    , originalPrior(setPrior)
     , prior(setPrior)
     , visitCount(0)
     , visitingCount(0)
@@ -831,7 +830,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
     // Log to TensorBoard.
     std::vector<std::string> names;
     std::vector<float> values;
-    for (const auto [testName, score] : testResults)
+    for (const auto& [testName, score] : testResults)
     {
         names.emplace_back("strength/" + testName + "_score");
         values.push_back(static_cast<float>(score));
@@ -1037,7 +1036,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
                 if (!selected.second)
                 {
                     assert(game.TryHard());
-                    for (auto [move, node] : searchPath)
+                    for (auto& [move, node] : searchPath)
                     {
                         node->visitingCount--;
                     }
@@ -1088,7 +1087,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         }
 
 #if DEBUG_MCTS
-        std::cout << "prior " << scratchGame.Root()->originalPrior << ", noisy prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
+        std::cout << "prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
 #endif
     }
 
@@ -1098,12 +1097,23 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
 
 void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
 {
-    std::gamma_distribution<float> noise(Config::RootDirichletAlpha, 1.f);
-    for (const auto& pair : game.Root()->children)
+    std::gamma_distribution<float> gamma(Config::RootDirichletAlpha, 1.f);
+    std::vector<float> noise(game.Root()->children.size());
+
+    float noiseSum = 0.f;
+    for (int i = 0; i < noise.size(); i++)
     {
-        Node* child = pair.second;
-        const float childNoise = noise(SelfPlayGame::Random);
-        child->prior = child->originalPrior * (1 - Config::RootExplorationFraction) + childNoise * Config::RootExplorationFraction;
+        noise[i] = gamma(SelfPlayGame::Random);
+        noiseSum += noise[i];
+    }
+
+    int childIndex = 0;
+    for (auto& [move, child] : game.Root()->children)
+    {
+        const float normalized = (noise[childIndex++] / noiseSum);
+        assert(!std::isnan(normalized));
+        assert(!std::isinf(normalized));
+        child->prior = (child->prior * (1 - Config::RootExplorationFraction) + normalized * Config::RootExplorationFraction);
     }
 }
 
@@ -1153,7 +1163,7 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
 void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value)
 {
     // Each ply has a different player, so flip each time.
-    for (auto [move, node] : searchPath)
+    for (auto& [move, node] : searchPath)
     {
         node->visitingCount--;
         node->visitCount++;
