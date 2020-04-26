@@ -134,7 +134,7 @@ thread_local std::default_random_engine SelfPlayGame::Random(
     ++ThreadSeed);
 
 Node::Node(float setPrior)
-    : mostVisitedChild(MOVE_NONE, nullptr)
+    : bestChild(MOVE_NONE, nullptr)
     , prior(setPrior)
     , visitCount(0)
     , visitingCount(0)
@@ -567,9 +567,9 @@ std::pair<Move, Node*> SelfPlayGame::SelectMove() const
     }
     else
     {
-        // Use temperature=inf; i.e., just select the most visited.
-        assert(_root->mostVisitedChild.second);
-        return _root->mostVisitedChild;
+        // Use temperature=inf; i.e., just select the best (most-visited, overridden by mates).
+        assert(_root->bestChild.second);
+        return _root->bestChild;
     }
 }
 
@@ -1114,6 +1114,10 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             BackpropagateMate(searchPath);
         }
 
+        // Adjust best-child pointers (principle variation) now that visits and mates have propagated.
+        UpdatePrincipleVariation(searchPath);
+        ValidatePrincipleVariation(scratchGame.Root());
+
 #if DEBUG_MCTS
         std::cout << "prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
 #endif
@@ -1196,40 +1200,17 @@ void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& se
         node->valueSum += value;
         value = SelfPlayGame::FlipValue(value);
     }
-
-    // Adjust most-visited pointers (principle variation).
-    bool isPrincipleVariation = true;
-    for (int i = 0; i < searchPath.size() - 1; i++)
-    {
-        if (!searchPath[i].second->mostVisitedChild.second ||
-            (searchPath[i].second->mostVisitedChild.second->visitCount < searchPath[i + 1].second->visitCount))
-        {
-            searchPath[i].second->mostVisitedChild = searchPath[i + 1];
-            _searchState.principleVariationChanged |= isPrincipleVariation;
-        }
-        else
-        {
-            isPrincipleVariation &= (searchPath[i].second->mostVisitedChild == searchPath[i + 1]);
-        }
-    }
 }
 
 void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>& searchPath)
 {
-    // We know that searchPath[-1] just became a mate-in-1 so we know that searchPath[-2]
-    // just became an opponent mate-in-1.
-    if (searchPath.size() >= 2)
-    {
-        searchPath[searchPath.size() - 2].second->terminalValue = TerminalValue::OpponentMateIn<1>();
-    }
-
     // To calculate mate values for the tree from scratch we'd need to follow two rules:
     // - If *any* children are a MateIn<N...M> then the parent is an OpponentMateIn<N> (prefer to mate faster).
     // - If *all* children are an OpponentMateIn<N...M> then the parent is a MateIn<M+1> (prefer to get mated slower).
     //
     // However, knowing that values were already correct before, we can just do odd/even checks and stop when nothing changes.
-    bool childIsMate = false;
-    for (int i = static_cast<int>(searchPath.size()) - 3; i >= 0; i--)
+    bool childIsMate = true;
+    for (int i = static_cast<int>(searchPath.size()) - 2; i >= 0; i--)
     {
         Node* parent = searchPath[i].second;
 
@@ -1244,6 +1225,18 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>
                 (newMateN < parent->terminalValue.OpponentMateN()))
             {
                 parent->terminalValue = TerminalValue::OpponentMateIn(newMateN);
+
+                // The parent just became worse, so the grandparent may need a different best-child.
+                // The regular principle variation update isn't sufficient because it assumes that
+                // the search path can only become better than it was.
+                const int grandparentIndex = (i - 1);
+                if (grandparentIndex >= 0)
+                {
+                    // It's tempting to try validate the principle variation after this fix, but we
+                    // may still be waiting to update it after backpropagating visit counts and mates.
+                    // This is only a local fix that ensures that the overall update will be valid.
+                    FixPrincipleVariation(searchPath, searchPath[grandparentIndex].second);
+                }
             }
             else
             {
@@ -1273,6 +1266,94 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>
 
         childIsMate = !childIsMate;
     }
+}
+
+void SelfPlayWorker::FixPrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath, Node* parent)
+{
+    bool updatedBestChild = false;
+    for (const auto& pair : parent->children)
+    {
+        if (WorseThan(parent->bestChild.second, pair.second))
+        {
+            parent->bestChild = pair;
+            updatedBestChild = true;
+        }
+    }
+
+    // We updated a best-child, but that only changed the principle variation if this parent was part of it.
+    if (updatedBestChild)
+    {
+        for (int i = 0; i < searchPath.size() - 1; i++)
+        {
+            if (searchPath[i].second == parent)
+            {
+                _searchState.principleVariationChanged = true;
+                break;
+            }
+            if (searchPath[i].second->bestChild.second != searchPath[i + 1].second)
+            {
+                break;
+            }
+        }
+    }
+}
+
+void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath)
+{
+    bool isPrincipleVariation = true;
+    for (int i = 0; i < searchPath.size() - 1; i++)
+    {
+        if (WorseThan(searchPath[i].second->bestChild.second, searchPath[i + 1].second))
+        {
+            searchPath[i].second->bestChild = searchPath[i + 1];
+            _searchState.principleVariationChanged |= isPrincipleVariation;
+        }
+        else
+        {
+            isPrincipleVariation &= (searchPath[i].second->bestChild.second == searchPath[i + 1].second);
+        }
+    }
+}
+
+void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
+{
+    while (root)
+    {
+        for (const auto& pair : root->children)
+        {
+            if (pair.second->visitCount > 0)
+            {
+                assert(!WorseThan(root->bestChild.second, pair.second));
+            }
+        }
+        root = root->bestChild.second;
+    }
+}
+
+bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
+{
+    // Expect RHS to be defined, so if no LHS then it's better.
+    assert(rhs);
+    if (!lhs)
+    {
+        return true;
+    }
+
+    // Prefer faster mates and slower opponent mates.
+    int lhsEitherMateN = lhs->terminalValue.EitherMateN();
+    int rhsEitherMateN = rhs->terminalValue.EitherMateN();
+    if (lhsEitherMateN != rhsEitherMateN)
+    {
+        // For categories (>0, 0, <0), bigger is better.
+        // Within categories (1 vs. 3, -2 vs. -4), smaller is better.
+        // Add a large term opposing the category sign, then say smaller is better overall.
+        lhsEitherMateN += ((lhsEitherMateN < 0) - (lhsEitherMateN > 0)) * 2 * Config::MaxMoves;
+        rhsEitherMateN += ((rhsEitherMateN < 0) - (rhsEitherMateN > 0)) * 2 * Config::MaxMoves;
+        return (lhsEitherMateN > rhsEitherMateN);
+    }
+
+    // Prefer more visits.
+    return (lhs->visitCount < rhs->visitCount);
 }
 
 void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut)
@@ -1478,7 +1559,7 @@ void SelfPlayWorker::CheckPrintInfo()
 void SelfPlayWorker::CheckTimeControl()
 {
     // Always do at least 1-2 simulations so that a "best" move exists.
-    if (!_games[0].Root()->mostVisitedChild.second)
+    if (!_games[0].Root()->bestChild.second)
     {
         return;
     }
@@ -1529,15 +1610,15 @@ void SelfPlayWorker::PrintPrincipleVariation()
     Node* node = _games[0].Root();
     std::vector<Move> principleVariation;
 
-    if (!node->mostVisitedChild.second)
+    if (!node->bestChild.second)
     {
         return;
     }
 
-    while (node->mostVisitedChild.second)
+    while (node->bestChild.second)
     {
-        principleVariation.push_back(node->mostVisitedChild.first);
-        node = node->mostVisitedChild.second;
+        principleVariation.push_back(node->bestChild.first);
+        node = node->bestChild.second;
     }
 
     auto now = std::chrono::high_resolution_clock::now();
@@ -1545,7 +1626,7 @@ void SelfPlayWorker::PrintPrincipleVariation()
     _searchState.lastPrincipleVariationPrint = now;
 
     // Value is from the parent's perspective, so that's already correct for the root perspective
-    const Node* pvFirst = _games[0].Root()->mostVisitedChild.second;
+    const Node* pvFirst = _games[0].Root()->bestChild.second;
     const int eitherMateN = pvFirst->terminalValue.EitherMateN();
     const float value = pvFirst->Value();
     const int depth = static_cast<int>(principleVariation.size());

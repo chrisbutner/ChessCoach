@@ -94,7 +94,7 @@ public:
 public:
 
     std::map<Move, Node*> children;
-    std::pair<Move, Node*> mostVisitedChild;
+    std::pair<Move, Node*> bestChild;
     float prior;
     int visitCount;
     int visitingCount;
@@ -252,7 +252,10 @@ public:
     float CalculateUcbScore(const Node* parent, const Node* child) const;
     void Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value);
     void BackpropagateMate(const std::vector<std::pair<Move, Node*>>& searchPath);
-
+    void FixPrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath, Node* node);
+    void UpdatePrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath);
+    void ValidatePrincipleVariation(const Node* root);
+    bool WorseThan(const Node* lhs, const Node* rhs) const;
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
     SearchState& DebugSearchState();
 

@@ -38,36 +38,27 @@ SelfPlayGame& PlayGame(SelfPlayWorker& selfPlayWorker, std::function<void (SelfP
     }
 }
 
-std::vector<Node*> GeneratePrincipleVariation(const SelfPlayGame& game)
+std::vector<Node*> GeneratePrincipleVariation(const SelfPlayWorker& selfPlayWorker, const SelfPlayGame& game)
 {
     Node* node = game.Root();
     std::vector<Node*> principleVariation;
 
-    while (!node->children.empty())
+    while (node)
     {
-        int maxVisitCount = std::numeric_limits<int>::min();
-        std::pair<Move, Node*> maxVisited;
         for (const auto& pair : node->children)
         {
-            // node->mostVisitedChild needs to win ties.
-            const int visitCount = pair.second->visitCount;
-            if ((visitCount > maxVisitCount) ||
-                ((visitCount == maxVisitCount) && node->mostVisitedChild.second && (pair.second == node->mostVisitedChild.second)))
+            if (pair.second->visitCount > 0)
             {
-                maxVisitCount = visitCount;
-                maxVisited = pair;
+                const bool bestIsNotBest = selfPlayWorker.WorseThan(node->bestChild.second, pair.second);
+                if (bestIsNotBest) throw std::exception("bestIsNotBest false");
             }
         }
-        EXPECT_NE(maxVisited.second, nullptr);
-        if (maxVisited.second->visitCount > 0)
+        if (node->bestChild.second)
         {
-            EXPECT_EQ(maxVisited.second, node->mostVisitedChild.second);
-            principleVariation.push_back(maxVisited.second);
+            principleVariation.push_back(node->bestChild.second);
         }
-        node = maxVisited.second;
+        node = node->bestChild.second;
     }
-
-    EXPECT_EQ(node->mostVisitedChild.second, nullptr);
 
     return principleVariation;
 }
@@ -159,7 +150,7 @@ TEST(Mcts, PrincipleVariation)
     std::vector<Node*> latestPrincipleVariation;
     PlayGame(selfPlayWorker, [&](SelfPlayGame& game)
         {
-            std::vector<Node*> principleVariation = GeneratePrincipleVariation(game);
+            std::vector<Node*> principleVariation = GeneratePrincipleVariation(selfPlayWorker, game);
             if (searchState.principleVariationChanged)
             {
                 EXPECT_NE(principleVariation, latestPrincipleVariation);
@@ -173,14 +164,47 @@ TEST(Mcts, PrincipleVariation)
         });
 }
 
-TEST(Mcts, Mate)
+TEST(Mcts, MateComparisons)
 {
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
     SelfPlayWorker selfPlayWorker;
-    SearchState& searchState = selfPlayWorker.DebugSearchState();
+    SelfPlayGame* game;
+    selfPlayWorker.SetUpGame(0);
+    selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
+    // Set up nodes from expected worst to best.
+    const int nodeCount = 7;
+    Node nodes[nodeCount] = { {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f} };
+    nodes[0].terminalValue = TerminalValue::OpponentMateIn<2>();
+    nodes[1].terminalValue = TerminalValue::OpponentMateIn<4>();
+    nodes[2].visitCount = 10;
+    nodes[3].terminalValue = TerminalValue::Draw();
+    nodes[3].visitCount = 15;
+    nodes[4].visitCount = 100;
+    nodes[5].terminalValue = TerminalValue::MateIn<3>();
+    nodes[6].terminalValue = TerminalValue::MateIn<1>();
+
+    // Check all pairs.
+    for (int i = 0; i < nodeCount - 1; i++)
+    {
+        EXPECT_FALSE(selfPlayWorker.WorseThan(&nodes[i], &nodes[i]));
+
+        for (int j = i + 1; j < nodeCount; j++)
+        {
+            EXPECT_TRUE(selfPlayWorker.WorseThan(&nodes[i], &nodes[j]));
+            EXPECT_FALSE(selfPlayWorker.WorseThan(&nodes[j], &nodes[i]));
+        }
+    }
+}
+
+TEST(Mcts, MateProving)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayWorker selfPlayWorker;
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0);
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);

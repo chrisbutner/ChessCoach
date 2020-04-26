@@ -1,7 +1,4 @@
 Next
-- mate
-	- make PV choose best mate despite visits
-	- do we need opponent-mate-avoidance scaled by exploration? test
 - uci
 	- try to increase in-thread parallelism without sacrificing STS strength
 		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
@@ -20,6 +17,8 @@ Next
 	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
 
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
+- examine 2-repetitions again rigorously, write a test case, etc. - some good example positions online
+	- was-terminal-now-isn't actually isn't just about path dependence, more complicated
 - try AZ history planes instead of mine
 	- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
 - try to train on some lc0 games or something to make sure everything's working/bug-free
