@@ -37,14 +37,14 @@ public:
 
     virtual void PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
-    virtual void TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
+    virtual void ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void LogScalars(int step, int scalarCount, std::string* names, float* values);
     virtual void LoadNetwork(const char* networkName);
     virtual void SaveNetwork(int checkpoint);
 
 private:
 
-    void TrainTestBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
+    void TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     PyObject* LoadFunction(PyObject* module, const char* name);
     void PyCallAssert(bool result);
 
@@ -52,7 +52,7 @@ private:
 
     PyObject* _predictBatchFunction;
     PyObject* _trainBatchFunction;
-    PyObject* _testBatchFunction;
+    PyObject* _validateBatchFunction;
     PyObject* _logScalarsFunction;
     PyObject* _loadNetworkFunction;
     PyObject* _saveNetworkFunction;

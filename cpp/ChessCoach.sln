@@ -13,6 +13,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTrain", "ChessCoa
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2F83C3F3-96F3-4B3A-80B6-ED446C68D0DC}"
 	ProjectSection(SolutionItems) = preProject
+		..\config.toml = ..\config.toml
 		..\TODO.txt = ..\TODO.txt
 	EndProjectSection
 EndProject

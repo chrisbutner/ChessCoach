@@ -238,8 +238,8 @@ public:
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
     void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset, bool tryHard);
     void DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly);
-    void TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint);
-    void TestNetwork(INetwork* network, int step);
+    void TrainNetwork(INetwork* network, int stepCount, int checkpoint);
+    void ValidateNetwork(INetwork* network, int step);
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(int index);

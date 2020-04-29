@@ -9,9 +9,12 @@ int Game::QueenKnightPlane[SQUARE_NB];
 Key Game::PredictionCache_PreviousMoveFromSquare[Config::InputPreviousMoveCount][SQUARE_NB];
 Key Game::PredictionCache_PreviousMoveToSquare[Config::InputPreviousMoveCount][SQUARE_NB];
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
+std::array<float, 25> Game::UcbMateTerm;
 
 void Game::Initialize()
 {
+    // Set up mappings for queen and knight moves to index into policy planes.
+
     for (int& plane : QueenKnightPlane)
     {
         plane = NO_PLANE;
@@ -35,6 +38,7 @@ void Game::Initialize()
         QueenKnightPlane[(SQUARE_NB + delta) % SQUARE_NB] = nextPlane++;
     }
 
+    // Set up additional Zobrist hash keys for prediction caching (additional info beyond position).
     PRNG rng(7607098); // Arbitrary seed
     for (int i = 0; i < Config::InputPreviousMoveCount; i++)
     {
@@ -48,6 +52,16 @@ void Game::Initialize()
     {
         PredictionCache_NoProgressCount[i] = rng.rand<Key>();
     }
+
+    // Set up scores for various mate-in-N to encourage visits and differentiate depths.
+    UcbMateTerm[0] = 0.f;
+    UcbMateTerm[1] = 1.f;
+    for (int n = 2; n < UcbMateTerm.size(); n++)
+    {
+        UcbMateTerm[n] = (1.f / (1 << n));
+    }
+    assert(UcbMateTerm[2] == 0.25f);
+    assert(UcbMateTerm[3] == 0.125f);
 }
 
 Game::Game()

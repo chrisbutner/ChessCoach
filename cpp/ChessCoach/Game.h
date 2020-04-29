@@ -4,6 +4,7 @@
 #include <map>
 #include <cmath>
 #include <algorithm>
+#include <array>
 
 #include <Stockfish/Position.h>
 
@@ -109,7 +110,7 @@ public:
         "A8", "B8", "C8", "D8", "E8", "F8", "G8", "H8",
     };
 
-    
+    static std::array<float, 25> UcbMateTerm;
 
 public:
 

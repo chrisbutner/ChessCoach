@@ -39,6 +39,8 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     training.StrengthTestInterval = policy.Find<int>(config, "strength_test_interval", defaults.StrengthTestInterval);
     training.NumGames = policy.Find<int>(config, "num_games", defaults.NumGames);
     training.WindowSize = policy.Find<int>(config, "window_size", defaults.WindowSize);
+    training.GamesPathTraining = policy.Find<std::string>(config, "games_path_training", defaults.GamesPathTraining);
+    training.GamesPathValidation = policy.Find<std::string>(config, "games_path_validation", defaults.GamesPathValidation);
 
     return training;
 }
@@ -81,6 +83,11 @@ MiscConfig ParseMisc(const TomlValue& config)
 
     misc.Storage_MaxGamesPerFile = toml::find<int>(config, "storage", "max_games_per_file");
 
+    misc.Paths_Networks = toml::find<std::string>(config, "paths", "networks");
+    misc.Paths_TensorBoard = toml::find<std::string>(config, "paths", "tensorboard");
+    misc.Paths_Logs = toml::find<std::string>(config, "paths", "logs");
+    misc.Paths_Pgns = toml::find<std::string>(config, "paths", "pgns");
+
     return misc;
 }
 
@@ -114,7 +121,7 @@ void Config::Initialize()
         }
     }
 
-    // Parse miscellanous config.
+    // Parse miscellaneous config.
     Misc = ParseMisc(config);
 
     // Apply debug overrides.
@@ -123,7 +130,6 @@ void Config::Initialize()
     {
         network->SelfPlay.NumWorkers = 1;
         network->SelfPlay.PredictionBatchSize = 1;
-
     }
 #endif
 }

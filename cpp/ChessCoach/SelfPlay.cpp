@@ -52,8 +52,8 @@ TerminalValue& TerminalValue::operator=(const int value)
 
     if (value > 0)
     {
-        const int mateNSaturated = std::min(static_cast<int>(Config::UcbMateTerm.size() - 1), value);
-        const float mateTerm = Config::UcbMateTerm[mateNSaturated];
+        const int mateNSaturated = std::min(static_cast<int>(Game::UcbMateTerm.size() - 1), value);
+        const float mateTerm = Game::UcbMateTerm[mateNSaturated];
         _mateScore = [mateTerm](float explorationRate) { return explorationRate * mateTerm; };
     }
     else
@@ -745,20 +745,20 @@ void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& sa
     }
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint)
+void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint)
 {
     // Train for "stepCount" steps.
     auto startTrain = std::chrono::high_resolution_clock::now();
     const int startStep = (checkpoint - stepCount + 1);
     for (int step = startStep; step <= checkpoint; step++)
     {
-        TrainingBatch* batch = _storage->SampleBatch(gameType, Config());
+        TrainingBatch* batch = _storage->SampleBatch(GameType_Training, Config());
         network->TrainBatch(step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(), batch->policies.data());
 
-        // Test the network every TrainingStepsPerTest.
+        // Validate the network every "ValidationInterval" steps.
         if ((step % _networkConfig->Training.ValidationInterval) == 0)
         {
-            TestNetwork(network, step);
+            ValidateNetwork(network, step);
         }
     }
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
@@ -768,21 +768,22 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, GameType gameType, int step
     // Save the network and reload it for predictions.
     network->SaveNetwork(checkpoint);
 
-    // Strength-test the engine every TrainingStepsPerStrengthTest.
-    assert((_networkConfig->Training.CheckpointInterval % _networkConfig->Training.StrengthTestInterval) == 0);
+    // Strength-test the engine every "StrengthTestInterval" steps.
+    assert(_networkConfig->Training.StrengthTestInterval > _networkConfig->Training.CheckpointInterval);
+    assert((_networkConfig->Training.StrengthTestInterval % _networkConfig->Training.CheckpointInterval) == 0);
     if ((checkpoint % _networkConfig->Training.StrengthTestInterval) == 0)
     {
         StrengthTest(network, checkpoint);
     }
 }
 
-void SelfPlayWorker::TestNetwork(INetwork* network, int step)
+void SelfPlayWorker::ValidateNetwork(INetwork* network, int step)
 {
     // Measure validation loss/accuracy using one batch.
-    if (_storage->GamesPlayed(GameType_Test) > 0)
+    if (_storage->GamesPlayed(GameType_Validation) > 0)
     {
-        TrainingBatch* testBatch = _storage->SampleBatch(GameType_Test, Config());
-        network->TestBatch(step, _networkConfig->Training.BatchSize, testBatch->images.data(), testBatch->values.data(), testBatch->policies.data());
+        TrainingBatch* validationBatch = _storage->SampleBatch(GameType_Validation, Config());
+        network->ValidateBatch(step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(), validationBatch->policies.data());
     }
 }
 
@@ -978,7 +979,7 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
 
     const int ply = game.Ply();
     const float result = game.Result();
-    const int gameNumber = _storage->AddGame(GameType_Train, game.Save(), Config());
+    const int gameNumber = _storage->AddGame(GameType_Training, game.Save(), Config());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);

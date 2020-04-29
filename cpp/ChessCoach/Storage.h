@@ -18,14 +18,13 @@
 
 enum GameType
 {
-    GameType_Train,
-    GameType_Test,
-    GameType_Supervised,
+    GameType_Training,
+    GameType_Validation,
 
     GameType_Count,
 };
 
-constexpr const char* GameTypeNames[GameType_Count] = { "Train", "Test", "Supervised" };
+constexpr const char* GameTypeNames[GameType_Count] = { "Training", "Validation" };
 
 struct TrainingBatch
 {
@@ -38,14 +37,6 @@ class Storage
 {
 private:
 
-    static constexpr const char* const RootEnvPath = "localappdata";
-    static constexpr const char* const GamesPart = "ChessCoach/Training/Games";
-    static constexpr const char* const TrainPart = "Train";
-    static constexpr const char* const TestPart = "Test";
-    static constexpr const char* const SupervisedPart = "Supervised";
-    static constexpr const char* const PgnsPart = "ChessCoach/Training/Pgns";
-    static constexpr const char* const NetworksPart = "ChessCoach/Training/Networks";
-    static constexpr const char* const LogsPart = "ChessCoach/Training/Logs";
 
     using Version = uint16_t;
     using GameCount = uint16_t;
@@ -69,10 +60,9 @@ private:
 
 public:
 
-    Storage();
+    Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
     Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
-        const std::filesystem::path& supervisedTestPath, const std::filesystem::path& pgnsPath,
-        const std::filesystem::path& networksPath);
+        const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath);
 
     void LoadExistingGames(GameType gameType, int maxLoadCount);
     int AddGame(GameType gameType, SavedGame&& game, const NetworkConfig& networkConfig);
@@ -85,6 +75,7 @@ private:
 
     void AddGameWithoutSaving(GameType gameType, SavedGame&& game);
     void SaveToDisk(GameType gameType, const SavedGame& game);
+    std::filesystem::path MakePath(const std::filesystem::path& root, const std::filesystem::path& path);
 
 private:
 

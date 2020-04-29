@@ -1,1 +1,1 @@
-tensorboard --logdir %localappdata%\ChessCoach\Training\TensorBoard
+tensorboard --logdir %localappdata%\ChessCoach\TensorBoard

@@ -22,8 +22,8 @@ public:
 
 private:
 
-    void PlayGames(WorkCoordinator& workCoordinator, int gamesPerNetwork);
-    void TrainNetwork(SelfPlayWorker& worker, INetwork* network, GameType gameType, int stepCount, int checkpoint);
+    void PlayGames(WorkCoordinator& workCoordinator, int gameCount);
+    void TrainNetwork(SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
 };
 
 int main(int argc, char* argv[])
@@ -47,16 +47,14 @@ int main(int argc, char* argv[])
 void ChessCoachTrain::TrainChessCoach()
 {
     const NetworkConfig& config = Config::TrainingNetwork;
-    std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
-    Storage storage;
+    std::unique_ptr<INetwork> network(CreateNetwork(config));
+    Storage storage(config, Config::Misc);
 
-    storage.LoadExistingGames(GameType_Train, std::numeric_limits<int>::max());
-    storage.LoadExistingGames(GameType_Test, std::numeric_limits<int>::max());
+    // Load existing games.
+    storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
+    storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
 
-    // Set up configuration for full training.
-    const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
-    const int gamesPerNetwork = (config.Training.NumGames / networkCount);
-    
+    // Start self-play worker threads.
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
     std::vector<std::thread> selfPlayThreads;
 
@@ -70,67 +68,61 @@ void ChessCoachTrain::TrainChessCoach()
         selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, selfPlayWorkers[i].get(), std::ref(workCoordinator), network.get());
     }
 
-    // Wait until all workers are initialized.
+    // Wait until all self-play workers are initialized.
     workCoordinator.WaitForWorkers();
 
-        //// (Temporarily testing supervised learning)
-        //int existingSupervisedNetworks = storage.CountNetworks();
-        //storage.LoadExistingGames(GameType_Supervised, std::numeric_limits<int>::max());
-        //const int supervisedStepCount = static_cast<int>(Config::SampleBatchesPerGame * storage.GamesPlayed(GameType_Supervised));
-        //const int supervisedNetworkCount = (supervisedStepCount / Config::CheckpointInterval[GameType_Supervised]);
-        //const int overtrainMultiple = 2;
-        //for (int n = existingSupervisedNetworks; n < overtrainMultiple * supervisedNetworkCount; n++)
-        //{
-        //    const int checkpoint = (n + 1) * Config::CheckpointInterval[GameType_Supervised];
-        //    TrainNetwork(selfPlayWorkers.front(), network.get(), GameType_Supervised, Config::CheckpointInterval[GameType_Supervised], checkpoint);
-        //}
-        //return;
+    // Plan full training and resume progress. If the network's step count isn't a multiple of the checkpoint interval, round down.
+    const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
+    const int gamesPerNetwork = (config.Training.NumGames / networkCount);
+    const int startingNetwork = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
+    int gameCount = storage.GamesPlayed(GameType_Training);
 
-    // If existing games found, resume progress.
-    int existingNetworks = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
-    int bonusGames = std::max(0, storage.GamesPlayed(GameType_Train) - gamesPerNetwork * existingNetworks);
-
-    for (int n = existingNetworks; n < networkCount; n++)
+    // Run through all checkpoints with n in [1, networkCount].
+    for (int n = startingNetwork + 1; n <= networkCount; n++)
     {
         // Play self-play games (skip if we already have enough to train this checkpoint).
-        const int actualGames = (gamesPerNetwork - bonusGames);
-        if (actualGames > 0)
+        const int gameTarget = (n * gamesPerNetwork);
+        const int gamesToPlay = std::max(0, gameTarget - gameCount);
+        if (gamesToPlay > 0)
         {
-            PlayGames(workCoordinator, actualGames);
+            PlayGames(workCoordinator, gamesToPlay);
+            gameCount += gamesToPlay;
         }
-        bonusGames = std::max(0, bonusGames - gamesPerNetwork);
 
         // Train the network.
-        const int checkpoint = (n + 1) * config.Training.CheckpointInterval;
-        TrainNetwork(*selfPlayWorkers.front(), network.get(), GameType_Train, config.Training.CheckpointInterval, checkpoint);
+        const int checkpoint = (n * config.Training.CheckpointInterval);
+        TrainNetwork(*selfPlayWorkers.front(), network.get(), config.Training.CheckpointInterval, checkpoint);
 
         // Clear the prediction cache to prepare for the new network.
-        PredictionCache::Instance.PrintDebugInfo();
-        PredictionCache::Instance.Clear();
+        if (gamesToPlay > 0)
+        {
+            PredictionCache::Instance.PrintDebugInfo();
+            PredictionCache::Instance.Clear();
+        }
     }
 }
 
-void ChessCoachTrain::PlayGames(WorkCoordinator& workCoordinator, int gamesPerNetwork)
+void ChessCoachTrain::PlayGames(WorkCoordinator& workCoordinator, int gameCount)
 {
-    std::cout << "Playing " << gamesPerNetwork << " games..." << std::endl;
-    assert(gamesPerNetwork > 0);
+    std::cout << "Playing " << gameCount << " games..." << std::endl;
+    assert(gameCount > 0);
 
-    workCoordinator.ResetWorkItemsRemaining(gamesPerNetwork);
+    workCoordinator.ResetWorkItemsRemaining(gameCount);
 
     workCoordinator.WaitForWorkers();
 }
 
-void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* network, GameType gameType, int stepCount, int checkpoint)
+void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
 {
-    std::cout << "Training (" << GameTypeNames[gameType] << ")..." << std::endl;
+    std::cout << "Training..." << std::endl;
 
-    selfPlayWorker.TrainNetwork(network, gameType, stepCount, checkpoint);
+    selfPlayWorker.TrainNetwork(network, stepCount, checkpoint);
 }
 
 void ChessCoachTrain::DebugGame()
 {
     std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
-    Storage storage;
+    Storage storage(Config::TrainingNetwork, Config::Misc);
 
     SelfPlayWorker worker(Config::TrainingNetwork, &storage);
 

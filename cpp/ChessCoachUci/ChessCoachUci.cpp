@@ -123,12 +123,12 @@ void ChessCoachUci::Initialize()
 
     std::stringstream commandLogFilename;
 
-    std::time_t time = std::time(nullptr);
+    const std::time_t time = std::time(nullptr);
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
     commandLogFilename << std::put_time(std::localtime(&time), "ChessCoachUci_%Y%m%d_%H%M%S.log");
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
 
-    std::filesystem::path commandLogPath = (Storage().LogPath() / commandLogFilename.str());
+    const std::filesystem::path commandLogPath = (Storage(Config::UciNetwork, Config::Misc).LogPath() / commandLogFilename.str());
     _commandLog = std::ofstream(commandLogPath, std::ios::out);
 }
 

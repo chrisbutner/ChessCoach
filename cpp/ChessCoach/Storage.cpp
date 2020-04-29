@@ -7,24 +7,25 @@
 #include "Config.h"
 #include "Pgn.h"
 
-Storage::Storage()
+Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig)
     : _gameFileCount{}
     , _loadedGameCount{}
     , _currentSaveFile{}
     , _currentSaveGameCount{}
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
 {
-    char* rootEnvPath;
-    errno_t err = _dupenv_s(&rootEnvPath, nullptr, RootEnvPath);
-    assert(!err && rootEnvPath);
+    char* appData;
+    errno_t err = _dupenv_s(&appData, nullptr, "localappdata");
+    assert(!err && appData);
 
-    static_assert(GameType_Count == 3);
-    _gamesPaths[GameType_Train] = std::filesystem::path(rootEnvPath) / GamesPart / TrainPart;
-    _gamesPaths[GameType_Test] = std::filesystem::path(rootEnvPath) / GamesPart / TestPart;
-    _gamesPaths[GameType_Supervised] = std::filesystem::path(rootEnvPath) / GamesPart / SupervisedPart;
-    _pgnsPath = std::filesystem::path(rootEnvPath) / PgnsPart;
-    _networksPath = std::filesystem::path(rootEnvPath) / NetworksPart;
-    _logsPath = std::filesystem::path(rootEnvPath) / LogsPart;
+    const std::filesystem::path rootPath = (std::filesystem::path(appData) / "ChessCoach");
+
+    static_assert(GameType_Count == 2);
+    _gamesPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.GamesPathTraining);
+    _gamesPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.GamesPathValidation);
+    _pgnsPath = MakePath(rootPath, miscConfig.Paths_Pgns);
+    _networksPath = MakePath(rootPath, miscConfig.Paths_Networks);
+    _logsPath = MakePath(rootPath, miscConfig.Paths_Logs);
 
     for (std::filesystem::path gamesPath : _gamesPaths)
     {
@@ -37,18 +38,17 @@ Storage::Storage()
 
 // Used for testing
 Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
-    const std::filesystem::path& supervisedTestPath, const std::filesystem::path& pgnsPath,
-    const std::filesystem::path& networksPath)
+    const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath)
     : _gameFileCount{}
     , _loadedGameCount{}
     , _currentSaveFile{}
     , _currentSaveGameCount{}
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
-    , _gamesPaths{ gamesTrainPath, gamesTestPath, supervisedTestPath }
+    , _gamesPaths{ gamesTrainPath, gamesTestPath }
     , _pgnsPath(pgnsPath)
     , _networksPath(networksPath)
 {
-    static_assert(GameType_Count == 3);
+    static_assert(GameType_Count == 2);
 }
 
 void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
@@ -424,4 +424,14 @@ std::string Storage::GenerateGamesFilename(int gamesNumber)
 std::filesystem::path Storage::LogPath() const
 {
     return _logsPath;
+}
+
+std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const std::filesystem::path& path)
+{
+    // Root any relative paths at ChessCoach's appdata directory.
+    if (path.is_absolute())
+    {
+        return path;
+    }
+    return (root / path);
 }

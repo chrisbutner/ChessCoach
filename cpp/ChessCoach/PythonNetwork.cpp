@@ -42,7 +42,7 @@ PythonNetwork::PythonNetwork()
 
     _predictBatchFunction = LoadFunction(module, "predict_batch");
     _trainBatchFunction = LoadFunction(module, "train_batch");
-    _testBatchFunction = LoadFunction(module, "test_batch");
+    _validateBatchFunction = LoadFunction(module, "validate_batch");
     _logScalarsFunction = LoadFunction(module, "log_scalars");
     _loadNetworkFunction = LoadFunction(module, "load_network");
     _saveNetworkFunction = LoadFunction(module, "save_network");
@@ -56,7 +56,7 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_loadNetworkFunction);
     Py_XDECREF(_logScalarsFunction);
     Py_XDECREF(_trainBatchFunction);
-    Py_XDECREF(_testBatchFunction);
+    Py_XDECREF(_validateBatchFunction);
     Py_XDECREF(_predictBatchFunction);
 }
 
@@ -100,7 +100,7 @@ void PythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* valu
     Py_DECREF(pythonImages);
 }
 
-void PythonNetwork::TrainTestBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
+void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     PythonContext context;
 
@@ -137,12 +137,12 @@ void PythonNetwork::TrainTestBatch(PyObject* function, int step, int batchSize, 
 
 void PythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
-    TrainTestBatch(_trainBatchFunction, step, batchSize, images, values, policies);
+    TrainValidateBatch(_trainBatchFunction, step, batchSize, images, values, policies);
 }
 
-void PythonNetwork::TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
+void PythonNetwork::ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
-    TrainTestBatch(_testBatchFunction, step, batchSize, images, values, policies);
+    TrainValidateBatch(_validateBatchFunction, step, batchSize, images, values, policies);
 }
 
 void PythonNetwork::LogScalars(int step, int scalarCount, std::string* names, float* values)

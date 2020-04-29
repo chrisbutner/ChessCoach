@@ -1,4 +1,6 @@
 import toml
+import platform
+import os
 
 class Config(object):
 
@@ -25,5 +27,28 @@ class Config(object):
     self.training_network["learning_rate_schedule"] = dict(zip(
       self.training_network["learning_rate_schedule"]["steps"],
       self.training_network["learning_rate_schedule"]["rates"]))
+    
+    # Also make some miscellaneous config available.
+    self.misc = {
+      "paths": config["paths"]
+    }
 
-    self.log_next_train = False
+    # Root all paths.
+    self.training_network["games_path_training"] = self.make_path(self.training_network["games_path_training"])
+    self.training_network["games_path_validation"] = self.make_path(self.training_network["games_path_validation"])
+    for key, value in self.misc["paths"].items():
+      self.misc["paths"][key] = self.make_path(value)
+
+  def make_path(self, path):
+    # These need to be backslashes on Windows for TensorFlow's recursive creation code (tf.summary.create_file_writer).
+    if (platform.system() == "Windows"):
+      path = path.replace("/", "\\")
+    
+    # Root any relative paths at ChessCoach's appdata directory.
+    if not os.path.isabs(path):
+      path = os.path.join(os.environ["localappdata"], "ChessCoach", path)
+
+    # Create directories.
+    os.makedirs(path, exist_ok=True)
+
+    return path

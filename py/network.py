@@ -119,7 +119,7 @@ def update_network_for_training(network_path):
 
 def ensure_training():
   if not networks.training_network:
-    networks.training_network = storage.load_latest_network(networks.network_name, update_network_for_training)
+    networks.training_network = storage.load_latest_network(config, networks.network_name, update_network_for_training)
   if not networks.training_network:
     log("Creating new network (training)")
     networks.training_network = KerasNetwork()
@@ -141,7 +141,7 @@ def train_batch(step, images, values, policies):
     log_training("training", tensorboard_writer_training, step, losses)
 
 
-def test_batch(step, images, values, policies):
+def validate_batch(step, images, values, policies):
   ensure_training()
   log_training_prepare(step)
   losses = networks.training_network.model.test_on_batch(images, [values, policies])
@@ -190,7 +190,7 @@ def load_network(network_name):
 
   # Load latest prediction network now, but delay loading training network until necessary.
   networks.training_network = None
-  networks.prediction_network = storage.load_latest_network(network_name, update_network_for_predictions)
+  networks.prediction_network = storage.load_latest_network(config, network_name, update_network_for_predictions)
   if not networks.prediction_network:
     networks.prediction_network = UniformNetwork()
     log("Loaded uniform network (predictions)")
@@ -198,13 +198,14 @@ def load_network(network_name):
 def save_network(checkpoint):
   ensure_training()
   log(f"Saving network ({checkpoint} steps)...")
-  path = storage.save_network(networks.network_name, checkpoint, networks.training_network)
+  path = storage.save_network(config, networks.network_name, checkpoint, networks.training_network)
   log(f"Saved network ({checkpoint} steps)")
   networks.prediction_network = update_network_for_predictions(path)
 
 config = Config()
 networks = Networks()
-tensorboard_writer_training_path = os.path.join(storage.tensorboard_path, config.training_network["name"], "training")
+tensorboard_network_path = os.path.join(config.misc["paths"]["tensorboard"], config.training_network["name"])
+tensorboard_writer_training_path = os.path.join(tensorboard_network_path, "training")
 tensorboard_writer_training = tf.summary.create_file_writer(tensorboard_writer_training_path)
-tensorboard_writer_validation_path = os.path.join(storage.tensorboard_path, config.training_network["name"], "validation")
+tensorboard_writer_validation_path = os.path.join(tensorboard_network_path, "validation")
 tensorboard_writer_validation = tf.summary.create_file_writer(tensorboard_writer_validation_path)

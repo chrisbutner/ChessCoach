@@ -1,53 +1,76 @@
 ###############################################################################
-#						    Network configuration                             #
+#                           Network configuration                             #
 ###############################################################################
 
 [network]
 
-training_network_name = "tiny1"
+training_network_name = "supervised_test"
 uci_network_name = "supervised1"
 
 [[networks]]
 
-	name = "supervised1"
+    name = "supervised_test"
 
-	[networks.training]
+    [networks.training]
 
-	batch_size = 2048
-	steps = 1_400_000
-	num_games = 0
-	window_size = 10_000_000
+    batch_size = 2048
+    steps = 63000
+    num_games = 0
+    window_size = 10_000_000
+    games_path_training = "Games/Supervised"
 
-[[networks]]
+    [networks.training.learning_rate_schedule]
 
-	name = "selfplay2"
-
-	[networks.training]
-
-	batch_size = 512
-	steps = 5_600_000
-	validation_interval = 40
-	checkpoint_interval = 400
-	strength_test_interval = 2000
-	num_games = 44_000_000
+    steps = [0, 10_000, 30_000, 50_000]
+    rates = [1e-3, 1e-4, 1e-5, 1e-6]
 
 [[networks]]
 
-	name = "tiny1"
+    name = "supervised1"
 
-	[networks.training]
+    [networks.training]
 
-	batch_size = 512
-	steps = 100
-	validation_interval = 10
-	checkpoint_interval = 10
-	strength_test_interval = 100
-	num_games = 100
+    batch_size = 2048
+    steps = 63000
+    num_games = 0
+    window_size = 10_000_000
+    games_path_training = "Games/Supervised"
 
-	[networks.self_play]
+    [networks.training.learning_rate_schedule]
 
-	num_workers = 1
-	prediction_batch_size = 10
+    steps = [0, 10_000, 30_000, 50_000]
+    rates = [1e-3, 1e-4, 1e-5, 1e-6]
+
+[[networks]]
+
+    name = "selfplay2"
+
+    [networks.training]
+
+    batch_size = 512
+    steps = 5_600_000
+    validation_interval = 40
+    checkpoint_interval = 400
+    strength_test_interval = 2000
+    num_games = 44_000_000
+
+[[networks]]
+
+    name = "tiny1"
+
+    [networks.training]
+
+    batch_size = 512
+    steps = 100
+    validation_interval = 10
+    checkpoint_interval = 10
+    strength_test_interval = 100
+    num_games = 100
+
+    [networks.self_play]
+
+    num_workers = 1
+    prediction_batch_size = 10
 
 ###############################################################################
 #     Default training and self-play configuration. Networks can override.    #
@@ -65,6 +88,8 @@ num_games = 44_000_000
 window_size = 1_000_000
 weight_decay = 1e-4
 momentum = 0.9
+games_path_training = "Games/Training"
+games_path_validation = "Games/Validation"
 
 [training.learning_rate_schedule]
 
@@ -87,7 +112,7 @@ exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
 ###############################################################################
-#					    Miscellaneous configuration                           #
+#                       Miscellaneous configuration                           #
 ###############################################################################
 
 [prediction_cache]
@@ -107,5 +132,12 @@ mcts_parallelism = 16
 [storage]
 
 max_games_per_file = 2000
+
+[paths]
+
+networks = "Networks"
+tensorboard = "TensorBoard"
+logs = "Logs"
+pgns = "Pgns"
 
 ###############################################################################
