@@ -8,9 +8,12 @@ TEST(Network, Policy)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    std::vector<INetwork::InputPlanes> images(Config::PredictionBatchSize);
-    std::vector<float> values(Config::PredictionBatchSize);
-    std::vector<INetwork::OutputPlanes> policies(Config::PredictionBatchSize);
+    // Just use training network config.
+    const NetworkConfig& networkConfig = Config::TrainingNetwork;
+
+    std::vector<INetwork::InputPlanes> images(networkConfig.SelfPlay.PredictionBatchSize);
+    std::vector<float> values(networkConfig.SelfPlay.PredictionBatchSize);
+    std::vector<INetwork::OutputPlanes> policies(networkConfig.SelfPlay.PredictionBatchSize);
 
     SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {}, false /* tryHard */, &images[0], &values[0], &policies[0]);
     
@@ -26,7 +29,7 @@ TEST(Network, Policy)
         game.Root()->children[move] = child;
     }
     Move firstMove = *legalMoves.begin();
-    game.Root()->children[firstMove]->visitCount += (Config::NumSimulations - (legalMoveCount * evenCount));
+    game.Root()->children[firstMove]->visitCount += (networkConfig.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
 
     // Generate policy labels. Make sure that legal moves are non-zero and the rest are zero.
     game.StoreSearchStatistics();

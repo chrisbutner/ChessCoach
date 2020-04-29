@@ -8,7 +8,7 @@ public:
     void Initialize();
     void Finalize();
 
-    INetwork* CreateNetwork() const;
+    INetwork* CreateNetwork(const NetworkConfig& networkConfig) const;
 
 protected:
 

@@ -29,9 +29,9 @@ constexpr const char* GameTypeNames[GameType_Count] = { "Train", "Test", "Superv
 
 struct TrainingBatch
 {
-    std::array<INetwork::InputPlanes, Config::BatchSize> images;
-    std::array<float, Config::BatchSize> values;
-    std::array<INetwork::OutputPlanes, Config::BatchSize> policies;
+    std::vector<INetwork::InputPlanes> images;
+    std::vector<float> values;
+    std::vector<INetwork::OutputPlanes> policies;
 };
 
 class Storage
@@ -75,10 +75,10 @@ public:
         const std::filesystem::path& networksPath);
 
     void LoadExistingGames(GameType gameType, int maxLoadCount);
-    int AddGame(GameType gameType, SavedGame&& game);
-    TrainingBatch* SampleBatch(GameType gameType);
+    int AddGame(GameType gameType, SavedGame&& game, const NetworkConfig& networkConfig);
+    TrainingBatch* SampleBatch(GameType gameType, const NetworkConfig& networkConfig);
     int GamesPlayed(GameType gameType) const;
-    int NetworkStepCount() const;
+    int NetworkStepCount(const std::string& networkName) const;
     std::filesystem::path LogPath() const;
         
 private:
@@ -96,7 +96,7 @@ private:
     std::array<std::ofstream, GameType_Count> _currentSaveFile;
     std::array<int, GameType_Count> _currentSaveGameCount;
 
-    std::unique_ptr<TrainingBatch> _trainingBatch;
+    TrainingBatch _trainingBatch;
     Game _startingPosition;
 
     mutable std::default_random_engine _random;

@@ -193,7 +193,7 @@ void ChessCoachPgnToGames::ConvertPgns()
                 games.emplace_back(std::move(game));
                 pgnGamesConverted++;
 
-                if (games.size() >= Config::MaxGamesPerFile)
+                if (games.size() >= Config::Misc.Storage_MaxGamesPerFile)
                 {
                     const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGamesFilename(++_latestGamesNumber));
                     Storage::SaveMultipleGamesToDisk(gamePath, games);

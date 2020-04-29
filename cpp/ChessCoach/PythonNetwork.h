@@ -28,31 +28,33 @@ public:
     ~PythonContext();
 };
 
-class BatchedPythonNetwork : public INetwork
+class PythonNetwork : public INetwork
 {
 public:
 
-    BatchedPythonNetwork();
-    virtual ~BatchedPythonNetwork();
+    PythonNetwork();
+    virtual ~PythonNetwork();
 
     virtual void PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual void LogScalars(int step, int scalarCount, std::string* names, float* values);
+    virtual void LoadNetwork(const char* networkName);
     virtual void SaveNetwork(int checkpoint);
 
 private:
 
     void TrainTestBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
+    PyObject* LoadFunction(PyObject* module, const char* name);
     void PyCallAssert(bool result);
 
 private:
 
-    PyObject* _module;
     PyObject* _predictBatchFunction;
     PyObject* _trainBatchFunction;
     PyObject* _testBatchFunction;
     PyObject* _logScalarsFunction;
+    PyObject* _loadNetworkFunction;
     PyObject* _saveNetworkFunction;
 };
 

@@ -6,39 +6,22 @@ import time
 import os
 
 silent = bool(os.environ.get("CHESSCOACH_SILENT"))
-if (silent):
+if silent:
   os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import tensorflow as tf
 from tensorflow.python.saved_model import signature_constants
 from tensorflow.keras import backend as K
 
+from config import Config
 from model import ChessCoachModel
 import storage
 
 K.set_image_data_format("channels_first")
 
 def log(*args):
-  if (not silent):
+  if not silent:
     print(*args)
-
-class Config(object):
-
-  def __init__(self):
-    ### Training
-    self.run_name = "selfplay2"
-    self.batch_size = 512 # OOM on GTX 1080 @ 4096
-    self.chesscoach_training_factor = 4096 / self.batch_size # Increase training to compensate for lower batch size.
-    self.log_next_train = False
-
-    self.momentum = 0.9
-    self.chesscoach_slowdown_factor = 200
-    self.learning_rate_schedule = {
-        int(0 * self.chesscoach_training_factor): 2e-1 / self.chesscoach_slowdown_factor,
-        int(100e3 * self.chesscoach_training_factor): 2e-2 / self.chesscoach_slowdown_factor,
-        int(300e3 * self.chesscoach_training_factor): 2e-3 / self.chesscoach_slowdown_factor,
-        int(500e3 * self.chesscoach_training_factor): 2e-4 / self.chesscoach_slowdown_factor
-    }
 
 class Network(object):
 
@@ -49,7 +32,9 @@ class KerasNetwork(Network):
 
   def __init__(self, model=None):
     self.model = model or ChessCoachModel().build()
-    optimizer = tf.keras.optimizers.SGD(learning_rate=config.learning_rate_schedule[0], momentum=config.momentum)
+    optimizer = tf.keras.optimizers.SGD(
+      learning_rate=config.training_network["learning_rate_schedule"][0],
+      momentum=config.training_network["momentum"])
     losses = ["mean_squared_error", self.flat_categorical_crossentropy_from_logits]
     self.model.compile(optimizer=optimizer, loss=losses, loss_weights=[1.0, 1.0], metrics=[[], [self.flat_categorical_accuracy]])
 
@@ -75,10 +60,10 @@ class UniformNetwork(Network):
     # Check both separately because of threading
     values = self.latest_values
     policies = self.latest_policies
-    if ((values is None) or (len(image) != len(values))):
+    if (values is None) or (len(image) != len(values)):
       values = numpy.full((len(image)), 0.0, dtype=numpy.float32)
       self.latest_values = values
-    if ((policies is None) or (len(image) != len(policies))):
+    if (policies is None) or (len(image) != len(policies)):
       policies = numpy.zeros((len(image), ChessCoachModel.output_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
       self.latest_policies = policies
     return values, policies
@@ -96,6 +81,13 @@ class TensorFlowNetwork(Network):
     value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
     return numpy.array(value), numpy.array(policy)
 
+class Networks:
+
+  def __init__(self):
+    self.network_name = "network"
+    self.prediction_network = None
+    self.training_network = None
+
 def update_network_for_predictions(network_path):
   name = os.path.basename(os.path.normpath(network_path))
   log(f"Loading network (predictions): {name}...")
@@ -106,9 +98,9 @@ def update_network_for_predictions(network_path):
     except Exception as e:
       log("Exception:", e)
       time.sleep(0.25)
-  prediction_network = TensorFlowNetwork(tf_model)
+  network = TensorFlowNetwork(tf_model)
   log(f"Loaded network (predictions): {name}")
-  return prediction_network
+  return network
 
 def update_network_for_training(network_path):
   name = os.path.basename(os.path.normpath(network_path))
@@ -121,52 +113,39 @@ def update_network_for_training(network_path):
     except Exception as e:
       log("Exception:", e)
       time.sleep(0.25)
-  training_network = KerasNetwork(keras_model)
+  network = KerasNetwork(keras_model)
   log(f"Loaded network (training): {name}")
-  return training_network
-
-def prepare_predictions():
-  prediction_network = storage.load_latest_network(update_network_for_predictions)
-  if (not prediction_network):
-    prediction_network = UniformNetwork()
-    log("Loaded uniform network (predictions)")
-  return prediction_network
-
-def prepare_training():
-  training_network = storage.load_latest_network(update_network_for_training)
-  if (not training_network):
-    log("Creating new network (training)")
-    training_network = KerasNetwork()
-  return training_network
+  return network
 
 def ensure_training():
-  global training_network
-  if (not training_network):
-    training_network = prepare_training()
+  if not networks.training_network:
+    networks.training_network = storage.load_latest_network(networks.network_name, update_network_for_training)
+  if not networks.training_network:
+    log("Creating new network (training)")
+    networks.training_network = KerasNetwork()
 
 def predict_batch(image):
-  return prediction_network.predict_batch(image)
+  return networks.prediction_network.predict_batch(image)
 
 def train_batch(step, images, values, policies):
   ensure_training()
-  new_learning_rate = config.learning_rate_schedule.get(step)
-  if (new_learning_rate is not None):
-    K.set_value(training_network.model.optimizer.lr, new_learning_rate)
+  new_learning_rate = config.training_network["learning_rate_schedule"].get(step)
+  if new_learning_rate is not None:
+    K.set_value(networks.training_network.model.optimizer.lr, new_learning_rate)
 
-  if (config.log_next_train):
+  do_log_training = ((step % config.training_network["validation_interval"]) == 0)
+  if do_log_training:
     log_training_prepare(step)
-  losses = training_network.model.train_on_batch(images, [values, policies])
-  if (config.log_next_train):
+  losses = networks.training_network.model.train_on_batch(images, [values, policies])
+  if do_log_training:
     log_training("training", tensorboard_writer_training, step, losses)
-    config.log_next_train = False
 
 
 def test_batch(step, images, values, policies):
   ensure_training()
   log_training_prepare(step)
-  losses = training_network.model.test_on_batch(images, [values, policies])
+  losses = networks.training_network.model.test_on_batch(images, [values, policies])
   log_training("validation", tensorboard_writer_validation, step, losses)
-  config.log_next_train = True
 
 def log_scalars(step, names, values):
   with tensorboard_writer_validation.as_default():
@@ -178,14 +157,14 @@ def should_log_graph(step):
   return (step == 1)
 
 def log_training_prepare(step):
-  if (should_log_graph(step)):
+  if should_log_graph(step):
     tf.summary.trace_on(graph=True, profiler=False)
 
 def log_training(type, writer, step, losses):
   log(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f} ({type})")
   with writer.as_default():
     tf.summary.experimental.set_step(step)
-    if (should_log_graph(step)):
+    if should_log_graph(step):
       tf.summary.trace_export("model")
     log_loss_accuracy(losses)
     log_weights()
@@ -201,23 +180,31 @@ def log_loss_accuracy(losses):
     tf.summary.scalar("policy accuracy", losses[3])
 
 def log_weights():
-  for layer in training_network.model.layers:
+  for layer in networks.training_network.model.layers:
     for weight in layer.weights:
       weight_name = weight.name.replace(':', '_')
       tf.summary.histogram(weight_name, weight)
 
+def load_network(network_name):
+  networks.network_name = network_name
+
+  # Load latest prediction network now, but delay loading training network until necessary.
+  networks.training_network = None
+  networks.prediction_network = storage.load_latest_network(network_name, update_network_for_predictions)
+  if not networks.prediction_network:
+    networks.prediction_network = UniformNetwork()
+    log("Loaded uniform network (predictions)")
+
 def save_network(checkpoint):
   ensure_training()
-  global prediction_network
   log(f"Saving network ({checkpoint} steps)...")
-  path = storage.save_network(checkpoint, training_network)
+  path = storage.save_network(networks.network_name, checkpoint, networks.training_network)
   log(f"Saved network ({checkpoint} steps)")
-  prediction_network = update_network_for_predictions(path)
+  networks.prediction_network = update_network_for_predictions(path)
 
 config = Config()
-tensorboard_writer_training_path = os.path.join(storage.tensorboard_path, config.run_name, "training")
+networks = Networks()
+tensorboard_writer_training_path = os.path.join(storage.tensorboard_path, config.training_network["name"], "training")
 tensorboard_writer_training = tf.summary.create_file_writer(tensorboard_writer_training_path)
-tensorboard_writer_validation_path = os.path.join(storage.tensorboard_path, config.run_name, "validation")
+tensorboard_writer_validation_path = os.path.join(storage.tensorboard_path, config.training_network["name"], "validation")
 tensorboard_writer_validation = tf.summary.create_file_writer(tensorboard_writer_validation_path)
-prediction_network = prepare_predictions()
-training_network = None

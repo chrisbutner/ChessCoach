@@ -359,6 +359,7 @@ void ChessCoachUci::InitializeSelfPlayWorker()
         return;
     }
 
-    _selfPlayWorker.reset(new SelfPlayWorker());
-    _selfPlayThread.reset(new std::thread(&SelfPlayWorker::Search, _selfPlayWorker.get(), std::bind(&ChessCoach::CreateNetwork, this)));
+    _selfPlayWorker.reset(new SelfPlayWorker(Config::UciNetwork, nullptr /* storage */));
+    _selfPlayThread.reset(new std::thread(&SelfPlayWorker::Search, _selfPlayWorker.get(),
+        std::bind(&ChessCoach::CreateNetwork, this, Config::UciNetwork)));
 }

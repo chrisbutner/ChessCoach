@@ -13,6 +13,7 @@ def test_train():
   policies = numpy.zeros((batch_size, ChessCoachModel.output_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
   for i in range(batch_size):
     policies[i][1][2][3] = 1.0
+  network.load_network(network.config.training_network["name"])
   network.train_batch(step=1, images=images, values=values, policies=policies)
 
 print("Starting Python-ChessCoach")

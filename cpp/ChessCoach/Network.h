@@ -63,6 +63,7 @@ struct INetwork
     virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual void TestBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual void LogScalars(int step, int scalarCount, std::string* names, float* values) = 0;
+    virtual void LoadNetwork(const char* networkName) = 0;
     virtual void SaveNetwork(int checkpoint) = 0;
 };
 

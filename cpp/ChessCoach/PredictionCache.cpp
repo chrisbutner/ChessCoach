@@ -172,7 +172,6 @@ void PredictionCache::Clear()
     ResetProbeMetrics();
 
     _entryCount = 0;
-    _entryCapacity = 0;
 }
 
 void PredictionCache::ResetProbeMetrics()

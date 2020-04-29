@@ -95,8 +95,9 @@ void ChessCoachStrengthTest::StrengthTest()
 {
     std::cout << "Preparing network..." << std::endl;
 
-    std::unique_ptr<INetwork> network(CreateNetwork());
-    SelfPlayWorker worker;
+    // Use the UCI network for standalone strength tests.
+    std::unique_ptr<INetwork> network(CreateNetwork(Config::UciNetwork));
+    SelfPlayWorker worker(Config::UciNetwork, nullptr /* storage */);
 
     std::cout << "Testing " << _epdPath.stem() << "..." << std::endl;
 

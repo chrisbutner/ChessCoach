@@ -1,0 +1,111 @@
+###############################################################################
+#						    Network configuration                             #
+###############################################################################
+
+[network]
+
+training_network_name = "tiny1"
+uci_network_name = "supervised1"
+
+[[networks]]
+
+	name = "supervised1"
+
+	[networks.training]
+
+	batch_size = 2048
+	steps = 1_400_000
+	num_games = 0
+	window_size = 10_000_000
+
+[[networks]]
+
+	name = "selfplay2"
+
+	[networks.training]
+
+	batch_size = 512
+	steps = 5_600_000
+	validation_interval = 40
+	checkpoint_interval = 400
+	strength_test_interval = 2000
+	num_games = 44_000_000
+
+[[networks]]
+
+	name = "tiny1"
+
+	[networks.training]
+
+	batch_size = 512
+	steps = 100
+	validation_interval = 10
+	checkpoint_interval = 10
+	strength_test_interval = 100
+	num_games = 100
+
+	[networks.self_play]
+
+	num_workers = 1
+	prediction_batch_size = 10
+
+###############################################################################
+#     Default training and self-play configuration. Networks can override.    #
+###############################################################################
+
+[training]
+
+batch_size = 4096
+steps = 700_000
+pgn_interval = 100
+validation_interval = 100
+checkpoint_interval = 1000
+strength_test_interval = 5000
+num_games = 44_000_000
+window_size = 1_000_000
+weight_decay = 1e-4
+momentum = 0.9
+
+[training.learning_rate_schedule]
+
+steps = [0, 100_000, 300_000, 500_000]
+rates = [1e-3, 1e-4, 1e-5, 1e-6]
+
+[self_play]
+
+num_workers = 4
+prediction_batch_size = 128
+
+num_sampling_moves = 30
+max_moves = 512
+num_simulations = 800
+
+root_dirichlet_alpha = 0.3
+root_exploration_fraction = 0.25
+
+exploration_rate_base = 19652.0
+exploration_rate_init = 1.25
+
+###############################################################################
+#					    Miscellaneous configuration                           #
+###############################################################################
+
+[prediction_cache]
+
+size_gb = 8
+max_ply = 12
+
+[time_control]
+
+safety_buffer_ms = 500
+fraction_remaining = 20
+
+[search]
+
+mcts_parallelism = 16
+
+[storage]
+
+max_games_per_file = 2000
+
+###############################################################################

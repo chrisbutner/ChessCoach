@@ -1,39 +1,129 @@
 #include "Config.h"
 
-static_assert(Config::AlphaZeroBatchSize % Config::BatchSize == 0);
-const int Config::WindowSize = 1000000;
-const int Config::SelfPlayGames = 44000000;
-const float Config::SampleBatchesPerGame = static_cast<float>(TrainingSteps) / SelfPlayGames;
-const int Config::TrainingFactor = AlphaZeroBatchSize / BatchSize; // Increase training to compensate for lower batch size.
-const int Config::TrainingSteps = 700000 * TrainingFactor;
+#include <map>
+#include <vector>
+#include <functional>
 
-const int Config::CheckpointInterval[] = { 50 * TrainingFactor /* Train == SelfPlay */, -1, 500 * TrainingFactor /* Supervised */ };
-const int Config::TrainingStepsPerTest[] = { CheckpointInterval[0] / 10, -1, CheckpointInterval[2] / 10 };
-const int Config::TrainingStepsPerStrengthTest[] = { CheckpointInterval[0] * 5, -1, CheckpointInterval[2] * 5 };
+#include <toml11/toml.hpp>
 
-const int Config::GamesPerPgn = 100;
+using TomlValue = toml::basic_value<toml::discard_comments, std::map, std::vector>;
 
-const int Config::NumSampingMoves = 30;
-const int Config::NumSimulations = 800;
-
-const float Config::RootDirichletAlpha = 0.3f;
-const float Config::RootExplorationFraction = 0.25f;
-
-const float Config::PbCBase = 19652.f;
-const float Config::PbCInit = 1.25f;
-
-constexpr float UcbMateN(int mateN)
+struct DefaultPolicy
 {
-    return (1.f / (1 << mateN));
+    template <typename T>
+    T Find(const TomlValue& config, const toml::key& key, const T& defaultValue) const
+    {
+        return toml::find<T>(config, key);
+    }
+};
+
+struct OverridePolicy
+{
+    template <typename T>
+    T Find(const TomlValue& config, const toml::key& key, const T& defaultValue) const
+    {
+        return toml::find_or(config, key, defaultValue);
+    }
+};
+
+template <typename Policy>
+TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, const TrainingConfig& defaults)
+{
+    TrainingConfig training;
+
+    training.BatchSize = policy.Find<int>(config, "batch_size", defaults.BatchSize);
+    training.Steps = policy.Find<int>(config, "steps", defaults.Steps);
+    training.PgnInterval = policy.Find<int>(config, "pgn_interval", defaults.PgnInterval);
+    training.ValidationInterval = policy.Find<int>(config, "validation_interval", defaults.ValidationInterval);
+    training.CheckpointInterval = policy.Find<int>(config, "checkpoint_interval", defaults.CheckpointInterval);
+    training.StrengthTestInterval = policy.Find<int>(config, "strength_test_interval", defaults.StrengthTestInterval);
+    training.NumGames = policy.Find<int>(config, "num_games", defaults.NumGames);
+    training.WindowSize = policy.Find<int>(config, "window_size", defaults.WindowSize);
+
+    return training;
 }
-static_assert(UcbMateN(2) == 0.25f);
-static_assert(UcbMateN(3) == 0.125f);
-const std::array<float, 25> Config::UcbMateTerm = { 0.f, 1.f, UcbMateN(2), UcbMateN(3), UcbMateN(4),
-                                      UcbMateN(5), UcbMateN(6), UcbMateN(7), UcbMateN(8), UcbMateN(9),
-                                      UcbMateN(10), UcbMateN(11), UcbMateN(12), UcbMateN(13), UcbMateN(14),
-                                      UcbMateN(15), UcbMateN(16), UcbMateN(17), UcbMateN(18), UcbMateN(19),
-                                      UcbMateN(20), UcbMateN(21), UcbMateN(22), UcbMateN(23), UcbMateN(24), };
 
-const int Config::SearchMctsParallelism = 16;
+template <typename Policy>
+SelfPlayConfig ParseSelfPlay(const TomlValue& config, const Policy& policy, const SelfPlayConfig& defaults)
+{
+    SelfPlayConfig selfPlay;
 
-const char* Config::StartingPosition = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const int& testDefault = defaults.NumWorkers;
+    int test = toml::find_or(config, "num_workers", testDefault);
+
+    selfPlay.NumWorkers = policy.Find<int>(config, "num_workers", defaults.NumWorkers);
+    selfPlay.PredictionBatchSize = policy.Find<int>(config, "prediction_batch_size", defaults.PredictionBatchSize);
+
+    selfPlay.NumSampingMoves = policy.Find<int>(config, "num_sampling_moves", defaults.NumSampingMoves);
+    selfPlay.MaxMoves = policy.Find<int>(config, "max_moves", defaults.MaxMoves);
+    selfPlay.NumSimulations = policy.Find<int>(config, "num_simulations", defaults.NumSimulations);
+
+    selfPlay.RootDirichletAlpha = policy.Find<float>(config, "root_dirichlet_alpha", defaults.RootDirichletAlpha);
+    selfPlay.RootExplorationFraction = policy.Find<float>(config, "root_exploration_fraction", defaults.RootExplorationFraction);
+
+    selfPlay.ExplorationRateBase = policy.Find<float>(config, "exploration_rate_base", defaults.ExplorationRateBase);
+    selfPlay.ExplorationRateInit = policy.Find<float>(config, "exploration_rate_init", defaults.ExplorationRateInit);
+
+    return selfPlay;
+}
+
+MiscConfig ParseMisc(const TomlValue& config)
+{
+    MiscConfig misc;
+
+    misc.PredictionCache_SizeGb = toml::find<int>(config, "prediction_cache", "size_gb");
+    misc.PredictionCache_MaxPly = toml::find<int>(config, "prediction_cache", "max_ply");
+
+    misc.TimeControl_SafetyBufferMs = toml::find<int>(config, "time_control", "safety_buffer_ms");
+    misc.TimeControl_FractionOfRemaining = toml::find<int>(config, "time_control", "fraction_remaining");
+
+    misc.Search_MctsParallelism = toml::find<int>(config, "search", "mcts_parallelism");
+
+    misc.Storage_MaxGamesPerFile = toml::find<int>(config, "storage", "max_games_per_file");
+
+    return misc;
+}
+
+NetworkConfig Config::TrainingNetwork;
+NetworkConfig Config::UciNetwork;
+MiscConfig Config::Misc;
+
+void Config::Initialize()
+{
+    const TomlValue config = toml::parse<toml::discard_comments, std::map, std::vector>("config.toml");
+
+    // Parse default values.
+    const TrainingConfig defaultTraining = ParseTraining(toml::find(config, "training"), DefaultPolicy(), TrainingConfig());
+    const SelfPlayConfig defaultSelfPlay = ParseSelfPlay(toml::find(config, "self_play"), DefaultPolicy(), SelfPlayConfig());
+
+    // Parse network configs.
+    TrainingNetwork.Name = toml::find<std::string>(config, "network", "training_network_name");
+    UciNetwork.Name = toml::find<std::string>(config, "network", "uci_network_name");
+    auto networks = { &TrainingNetwork, &UciNetwork };
+    const std::vector<TomlValue> configNetworks = toml::find<std::vector<TomlValue>>(config, "networks");
+    for (const TomlValue& configNetwork : configNetworks)
+    {
+        const std::string name = toml::find<std::string>(configNetwork, "name");
+        for (NetworkConfig* network : networks)
+        {
+            if (name == network->Name)
+            {
+                network->Training = ParseTraining(toml::find_or(configNetwork, "training", TomlValue::table_type()), OverridePolicy(), defaultTraining);
+                network->SelfPlay = ParseSelfPlay(toml::find_or(configNetwork, "self_play", TomlValue::table_type()), OverridePolicy(), defaultSelfPlay);
+            }
+        }
+    }
+
+    // Parse miscellanous config.
+    Misc = ParseMisc(config);
+
+    // Apply debug overrides.
+#ifdef _DEBUG
+    for (NetworkConfig* network : networks)
+    {
+        network->SelfPlay.NumWorkers = 1;
+        network->SelfPlay.PredictionBatchSize = 1;
+
+    }
+#endif
+}

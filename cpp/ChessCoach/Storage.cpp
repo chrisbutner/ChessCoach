@@ -91,7 +91,7 @@ void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
     _loadedGameCount[gameType] = loadedCount;
 }
 
-int Storage::AddGame(GameType gameType, SavedGame&& game)
+int Storage::AddGame(GameType gameType, SavedGame&& game, const NetworkConfig& networkConfig)
 {
     std::lock_guard lock(_mutex);
     
@@ -103,7 +103,7 @@ int Storage::AddGame(GameType gameType, SavedGame&& game)
 
     const int gameNumber = _loadedGameCount[gameType];
     
-    if ((gameNumber % Config::GamesPerPgn) == 0)
+    if ((gameNumber % networkConfig.Training.PgnInterval) == 0)
     {
         std::stringstream suffix;
         suffix << std::setfill('0') << std::setw(9) << gameNumber;
@@ -132,21 +132,24 @@ void Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
 
     games.emplace_back(std::move(game));
     ++_loadedGameCount[gameType];
-
-    while (games.size() > Config::WindowSize)
-    {
-        games.pop_front();
-    }
 }
 
-TrainingBatch* Storage::SampleBatch(GameType gameType)
+// No locking: assumes single-threaded sampling periods without games being played.
+TrainingBatch* Storage::SampleBatch(GameType gameType, const NetworkConfig& networkConfig)
 {
     int positionSum = 0;
-    const std::deque<SavedGame>& games = _games[gameType];
+    std::deque<SavedGame>& games = _games[gameType];
 
-    if (!_trainingBatch)
+    if (_trainingBatch.images.size() != networkConfig.Training.BatchSize)
     {
-        _trainingBatch.reset(new TrainingBatch());
+        _trainingBatch.images.resize(networkConfig.Training.BatchSize);
+        _trainingBatch.values.resize(networkConfig.Training.BatchSize);
+        _trainingBatch.policies.resize(networkConfig.Training.BatchSize);
+    }
+
+    while (games.size() > networkConfig.Training.WindowSize)
+    {
+        games.pop_front();
     }
 
     for (const SavedGame& game : games)
@@ -162,7 +165,7 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
 
     std::discrete_distribution distribution(probabilities.begin(), probabilities.end());
 
-    for (int i = 0; i < Config::BatchSize; i++)
+    for (int i = 0; i < networkConfig.Training.BatchSize; i++)
     {
         const SavedGame& game =
 #if SAMPLE_BATCH_FIXED
@@ -184,12 +187,12 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
             scratchGame.ApplyMove(Move(game.moves[m]));
         }
 
-        _trainingBatch->images[i] = scratchGame.GenerateImage();
-        _trainingBatch->values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
-        _trainingBatch->policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
+        _trainingBatch.images[i] = scratchGame.GenerateImage();
+        _trainingBatch.values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
+        _trainingBatch.policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
     }
 
-    return _trainingBatch.get();
+    return &_trainingBatch;
 }
 
 int Storage::GamesPlayed(GameType gameType) const
@@ -199,12 +202,16 @@ int Storage::GamesPlayed(GameType gameType) const
     return _loadedGameCount[gameType];
 }
 
-int Storage::NetworkStepCount() const
+int Storage::NetworkStepCount(const std::string& networkName) const
 {
+    const std::string prefix = networkName + "_";
     std::filesystem::directory_entry lastEntry;
     for (const auto& entry : std::filesystem::directory_iterator(_networksPath))
     {
-        lastEntry = entry;
+        if (entry.path().filename().string().compare(0, prefix.size(), prefix) == 0)
+        {
+            lastEntry = entry;
+        }
     }
 
     if (lastEntry.path().empty())
@@ -213,9 +220,9 @@ int Storage::NetworkStepCount() const
     }
 
     std::stringstream tokenizer(lastEntry.path().filename().string());
-    std::string networkName;
+    std::string ignore;
     int networkStepCount;
-    std::getline(tokenizer, networkName, '_');
+    std::getline(tokenizer, ignore, '_');
     tokenizer >> networkStepCount;
 
     return networkStepCount;
@@ -229,7 +236,7 @@ void Storage::SaveToDisk(GameType gameType, const SavedGame& game)
     // Check whether the current save file has run out of room.
     if (_currentSaveFile[gameType].is_open())
     {
-        if (_currentSaveGameCount[gameType] >= Config::MaxGamesPerFile)
+        if (_currentSaveGameCount[gameType] >= Config::Misc.Storage_MaxGamesPerFile)
         {
             _currentSaveFile[gameType] = {};
             _currentSaveGameCount[gameType] = 0;
@@ -255,7 +262,7 @@ void Storage::SaveToDisk(GameType gameType, const SavedGame& game)
             lastFile.read(reinterpret_cast<char*>(&gameCount), sizeof(gameCount));
             assert(version == Version1);
 
-            if (gameCount < Config::MaxGamesPerFile)
+            if (gameCount < Config::Misc.Storage_MaxGamesPerFile)
             {
                 lastFile.close();
                 _currentSaveFile[gameType] = std::ofstream(lastEntry.path(), std::ios::in | std::ios::out | std::ios::binary);

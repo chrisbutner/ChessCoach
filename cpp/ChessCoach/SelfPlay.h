@@ -155,11 +155,6 @@ class SelfPlayGame : public Game
 {
 public:
 
-    static std::atomic_uint ThreadSeed;
-    thread_local static std::default_random_engine Random;
-
-public:
-
     SelfPlayGame();
     SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
     SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard, INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
@@ -173,8 +168,6 @@ public:
     SelfPlayGame SpawnShadow(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
 
     Node* Root() const;
-    bool IsTerminal() const;
-    float TerminalValue() const;
     float Result() const;
     
     bool TryHard() const;
@@ -184,7 +177,6 @@ public:
     void LimitBranchingToBest(int moveCount, uint16_t* moves, float* priors);
     bool IsDrawByNoProgressOrRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
-    std::pair<Move, Node*> SelectMove() const;
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
@@ -226,16 +218,21 @@ class SelfPlayWorker
 {
 public:
 
-    SelfPlayWorker();
+    static std::atomic_uint ThreadSeed;
+    thread_local static std::default_random_engine Random;
+
+public:
+
+    SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage);
 
     SelfPlayWorker(const SelfPlayWorker& other) = delete;
     SelfPlayWorker& operator=(const SelfPlayWorker& other) = delete;
     SelfPlayWorker(SelfPlayWorker&& other) = delete;
     SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
 
+    const NetworkConfig& Config() const;
     void ResetGames();
-    void PlayGames(WorkCoordinator& workCoordinator, Storage* storage, INetwork* network);
-    void Initialize(Storage* storage);
+    void PlayGames(WorkCoordinator& workCoordinator, INetwork* network);
     void ClearGame(int index);
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
@@ -244,10 +241,12 @@ public:
     void TrainNetwork(INetwork* network, GameType gameType, int stepCount, int checkpoint);
     void TestNetwork(INetwork* network, int step);
     void Play(int index);
+    bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(int index);
     std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
         std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
+    std::pair<Move, Node*> SelectMove(const SelfPlayGame& game) const;
     std::pair<Move, Node*> SelectChild(const Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
     void Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value);
@@ -287,6 +286,7 @@ private:
 
 private:
 
+    const NetworkConfig* _networkConfig;
     Storage* _storage;
 
     std::vector<SelfPlayState> _states;

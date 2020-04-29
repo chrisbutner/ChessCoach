@@ -46,26 +46,28 @@ int main(int argc, char* argv[])
 
 void ChessCoachTrain::TrainChessCoach()
 {
-    std::unique_ptr<INetwork> network(CreateNetwork());
+    const NetworkConfig& config = Config::TrainingNetwork;
+    std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
     Storage storage;
 
     storage.LoadExistingGames(GameType_Train, std::numeric_limits<int>::max());
     storage.LoadExistingGames(GameType_Test, std::numeric_limits<int>::max());
 
     // Set up configuration for full training.
-    const int networkCount = (Config::TrainingSteps / Config::CheckpointInterval[GameType_Train]);
-    const int gamesPerNetwork = (Config::SelfPlayGames / networkCount);
+    const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
+    const int gamesPerNetwork = (config.Training.NumGames / networkCount);
     
-    std::vector<SelfPlayWorker> selfPlayWorkers(Config::SelfPlayWorkerCount);
+    std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
     std::vector<std::thread> selfPlayThreads;
 
-    WorkCoordinator workCoordinator(static_cast<int>(selfPlayWorkers.size()));
-    for (int i = 0; i < selfPlayWorkers.size(); i++)
+    WorkCoordinator workCoordinator(config.SelfPlay.NumWorkers);
+    for (int i = 0; i < config.SelfPlay.NumWorkers; i++)
     {
         std::cout << "Starting self-play thread " << (i + 1) << " of " << selfPlayWorkers.size() <<
-            " (" << Config::PredictionBatchSize << " games per thread)" << std::endl;
+            " (" << config.SelfPlay.PredictionBatchSize << " games per thread)" << std::endl;
 
-        selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, &selfPlayWorkers[i], std::ref(workCoordinator), &storage, network.get());
+        selfPlayWorkers[i].reset(new SelfPlayWorker(config, &storage));
+        selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, selfPlayWorkers[i].get(), std::ref(workCoordinator), network.get());
     }
 
     // Wait until all workers are initialized.
@@ -85,7 +87,7 @@ void ChessCoachTrain::TrainChessCoach()
         //return;
 
     // If existing games found, resume progress.
-    int existingNetworks = (storage.NetworkStepCount() / Config::CheckpointInterval[GameType_Train]);
+    int existingNetworks = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
     int bonusGames = std::max(0, storage.GamesPlayed(GameType_Train) - gamesPerNetwork * existingNetworks);
 
     for (int n = existingNetworks; n < networkCount; n++)
@@ -99,8 +101,8 @@ void ChessCoachTrain::TrainChessCoach()
         bonusGames = std::max(0, bonusGames - gamesPerNetwork);
 
         // Train the network.
-        const int checkpoint = (n + 1) * Config::CheckpointInterval[GameType_Train];
-        TrainNetwork(selfPlayWorkers.front(), network.get(), GameType_Train, Config::CheckpointInterval[GameType_Train], checkpoint);
+        const int checkpoint = (n + 1) * config.Training.CheckpointInterval;
+        TrainNetwork(*selfPlayWorkers.front(), network.get(), GameType_Train, config.Training.CheckpointInterval, checkpoint);
 
         // Clear the prediction cache to prepare for the new network.
         PredictionCache::Instance.PrintDebugInfo();
@@ -127,11 +129,10 @@ void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* net
 
 void ChessCoachTrain::DebugGame()
 {
-    std::unique_ptr<INetwork> network(CreateNetwork());
+    std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
     Storage storage;
 
-    SelfPlayWorker worker;
-    worker.Initialize(&storage);
+    SelfPlayWorker worker(Config::TrainingNetwork, &storage);
 
     SavedGame saved = storage.LoadSingleGameFromDisk("path_to_game");
     worker.DebugGame(network.get(), 0, saved, 23);

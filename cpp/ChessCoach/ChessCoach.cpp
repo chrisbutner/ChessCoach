@@ -38,8 +38,12 @@ void ChessCoach::PrintExceptions()
                 {
                     std::cout << "Unhandled exception (unknown type)" << std::endl;
                 }
+                std::abort();
             }
-            std::abort();
+            else
+            {
+                // Finished running, graceful termination.
+            }
         });
 }
 
@@ -100,12 +104,13 @@ void ChessCoach::InitializeStockfish()
 
 void ChessCoach::InitializeChessCoach()
 {
+    Config::Initialize();
     Game::Initialize();
 }
 
 void ChessCoach::InitializePredictionCache()
 {
-    PredictionCache::Instance.Allocate(Config::PredictionCacheSizeGb);
+    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_SizeGb);
 }
 void ChessCoach::FinalizePython()
 {
@@ -119,7 +124,9 @@ void ChessCoach::FinalizeStockfish()
     Threads.set(0);
 }
 
-INetwork* ChessCoach::CreateNetwork() const
+INetwork* ChessCoach::CreateNetwork(const NetworkConfig& networkConfig) const
 {
-    return new BatchedPythonNetwork();
+    INetwork* network = new PythonNetwork();
+    network->LoadNetwork(networkConfig.Name.c_str());
+    return network;
 }

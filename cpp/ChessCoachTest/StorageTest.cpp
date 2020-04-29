@@ -42,8 +42,6 @@ void Basic(GameType gameType)
     // Expect zero games in a new, temporary directory.
 
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
-    EXPECT_EQ(storage1->NetworkStepCount(), 0);
-
     storage1->LoadExistingGames(gameType, std::numeric_limits<int>::max());
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
 
@@ -65,7 +63,7 @@ void Basic(GameType gameType)
 
     // Add to storage.
 
-    storage1->AddGame(gameType, SavedGame(saved));
+    storage1->AddGame(gameType, SavedGame(saved), Config::TrainingNetwork);
     EXPECT_EQ(storage1->GamesPlayed(gameType), 1);
 
     // Load a second Storage over the same directories and check that game loads.
@@ -74,7 +72,6 @@ void Basic(GameType gameType)
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
-    EXPECT_EQ(storage2->NetworkStepCount(), 0);
 }
 
 void SampleBatch(GameType gameType)
@@ -102,8 +99,6 @@ void SampleBatch(GameType gameType)
     // Expect zero games in a new, temporary directory.
 
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
-    EXPECT_EQ(storage1->NetworkStepCount(), 0);
-
     storage1->LoadExistingGames(gameType, std::numeric_limits<int>::max());
     EXPECT_EQ(storage1->GamesPlayed(gameType), 0);
 
@@ -129,7 +124,7 @@ void SampleBatch(GameType gameType)
 
     // Add to storage.
 
-    storage1->AddGame(gameType, SavedGame(saved));
+    storage1->AddGame(gameType, SavedGame(saved), Config::TrainingNetwork);
     EXPECT_EQ(storage1->GamesPlayed(gameType), 1);
 
     // Load a second Storage over the same directories and check that game loads.
@@ -138,11 +133,10 @@ void SampleBatch(GameType gameType)
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
-    EXPECT_EQ(storage2->NetworkStepCount(), 0);
 
     // Sample a batch from the second Storage and make sure that the data is consistent.
 
-    const TrainingBatch* batch = storage2->SampleBatch(gameType);
+    const TrainingBatch* batch = storage2->SampleBatch(gameType, Config::TrainingNetwork);
     int indexWhiteToPlay = static_cast<int>(std::distance(batch->values.begin(), std::find(batch->values.begin(), batch->values.end(), CHESSCOACH_VALUE_WIN)));
     int indexBlackToPlay = static_cast<int>(std::distance(batch->values.begin(), std::find(batch->values.begin(), batch->values.end(), CHESSCOACH_VALUE_LOSS)));
 

@@ -28,10 +28,10 @@ SelfPlayGame& PlayGame(SelfPlayWorker& selfPlayWorker, std::function<void (SelfP
         }
 
         // "GPU" work. Pretend to predict for a batch.
-        std::fill(values, values + Config::PredictionBatchSize, CHESSCOACH_VALUE_DRAW);
+        std::fill(values, values + selfPlayWorker.Config().SelfPlay.PredictionBatchSize, CHESSCOACH_VALUE_DRAW);
 
         float* policiesPtr = reinterpret_cast<float*>(policies);
-        const int policyCount = (Config::PredictionBatchSize * INetwork::OutputPlanesFloatCount);
+        const int policyCount = (selfPlayWorker.Config().SelfPlay.PredictionBatchSize * INetwork::OutputPlanesFloatCount);
         std::fill(policiesPtr, policiesPtr + policyCount, 0.f);
 
         tickCallback(*game);
@@ -126,7 +126,7 @@ TEST(Mcts, NodeLeaks)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker;
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
 
     auto [currentBefore, peakBefore] = Node::Allocator.DebugAllocations();
     EXPECT_EQ(currentBefore, 0);
@@ -144,7 +144,7 @@ TEST(Mcts, PrincipleVariation)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker;
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
     SearchState& searchState = selfPlayWorker.DebugSearchState();
 
     std::vector<Node*> latestPrincipleVariation;
@@ -169,7 +169,7 @@ TEST(Mcts, MateComparisons)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker;
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0);
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -204,7 +204,7 @@ TEST(Mcts, MateProving)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker;
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0);
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);

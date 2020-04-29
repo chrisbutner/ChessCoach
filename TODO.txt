@@ -1,4 +1,13 @@
 Next
+- unify config across C++/Python
+	- drive game paths via config
+	- fix "bonus games" bit, unify selfplay/supervised setup
+	- handle supervised run (tiny smoke test)
+	- handle selfplay run, including supervised network seeding (tiny smoke test)
+- add "other" param to storage tests, make sure games don't bleed between types
+- fixes
+	- crash starting selfplay right after strength tests?
+	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
 - uci
 	- try to increase in-thread parallelism without sacrificing STS strength
 		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
@@ -6,15 +15,6 @@ Next
 	- also test different FPU schemes for strength, but care, and def. don't change training
 	- try multi-thread
 		- need to sync std::cout - use Reply() everywhere
-- unify config across C++/Python
-	- match run name to network folder names, selectively load
-- implement endgame tablebases (for both UCI and self-play, but don't cut game short, let NN learn)
-	- see if we can reuse stockfish probing
-	- actually we need it to make mistakes in the endgame to learn, best play isn't enough - need noise or temperature
-- add "other" param to storage tests, make sure games don't bleed between types
-- fixes
-	- crash starting selfplay right after strength tests?
-	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
 
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
 - examine 2-repetitions again rigorously, write a test case, etc. - some good example positions online
@@ -68,6 +68,7 @@ Code quality
 - privatize C++ methods (got too python-brained)
 - try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
 - try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
+- improve config use in C++, feels messy
 - add Python type info everywhere - look up best practices for linting etc.
 
 GUI for debugging
@@ -86,6 +87,10 @@ UCI
 		- test with M1 position with M1 prior artifically set low for ply 0
 		- also strength-test
 	- forced draw propagation if it'll help
+- implement endgame tablebases (for UCI; self-play could be dangerous, needs more thought)
+	- see if we can reuse stockfish probing
+	- for self-play, definitely don't cut games short, play it out
+	- need it to make mistakes in the endgame to learn, best play isn't enough - need noise or temperature
 - implement worthwhile options (work out hash, TT vs. prediction cache)
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
