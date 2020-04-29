@@ -24,7 +24,7 @@ class Config(object):
     self.training_network["name"] = training_network_name
 
     # Build the learning rate schedule dictionary.
-    self.training_network["learning_rate_schedule"] = dict(zip(
+    self.training_network["learning_rate_schedule"] = list(zip(
       self.training_network["learning_rate_schedule"]["steps"],
       self.training_network["learning_rate_schedule"]["rates"]))
     

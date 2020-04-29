@@ -33,7 +33,7 @@ class KerasNetwork(Network):
   def __init__(self, model=None):
     self.model = model or ChessCoachModel().build()
     optimizer = tf.keras.optimizers.SGD(
-      learning_rate=config.training_network["learning_rate_schedule"][0],
+      learning_rate=get_learning_rate(config.training_network["learning_rate_schedule"], 0),
       momentum=config.training_network["momentum"])
     losses = ["mean_squared_error", self.flat_categorical_crossentropy_from_logits]
     self.model.compile(optimizer=optimizer, loss=losses, loss_weights=[1.0, 1.0], metrics=[[], [self.flat_categorical_accuracy]])
@@ -124,14 +124,21 @@ def ensure_training():
     log("Creating new network (training)")
     networks.training_network = KerasNetwork()
 
+def get_learning_rate(schedule, step):
+  rate = 0.0
+  for key, value in schedule:
+    if step >= key:
+      rate = value
+    else:
+      return rate
+
 def predict_batch(image):
   return networks.prediction_network.predict_batch(image)
 
 def train_batch(step, images, values, policies):
   ensure_training()
-  new_learning_rate = config.training_network["learning_rate_schedule"].get(step)
-  if new_learning_rate is not None:
-    K.set_value(networks.training_network.model.optimizer.lr, new_learning_rate)
+  learning_rate = get_learning_rate(config.training_network["learning_rate_schedule"], step)
+  K.set_value(networks.training_network.model.optimizer.lr, learning_rate)
 
   do_log_training = ((step % config.training_network["validation_interval"]) == 0)
   if do_log_training:
@@ -139,7 +146,6 @@ def train_batch(step, images, values, policies):
   losses = networks.training_network.model.train_on_batch(images, [values, policies])
   if do_log_training:
     log_training("training", tensorboard_writer_training, step, losses)
-
 
 def validate_batch(step, images, values, policies):
   ensure_training()

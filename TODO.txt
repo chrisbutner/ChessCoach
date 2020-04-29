@@ -2,13 +2,6 @@ Next
 - fixes
 	- crash starting selfplay right after strength tests?
 	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
-- uci
-	- try to increase in-thread parallelism without sacrificing STS strength
-		- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
-		- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
-	- also test different FPU schemes for strength, but care, and def. don't change training
-	- try multi-thread
-		- need to sync std::cout - use Reply() everywhere
 
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
 - examine 2-repetitions again rigorously, write a test case, etc. - some good example positions online
@@ -43,6 +36,14 @@ Improve convergence speed
 - can always retry SE in future when solid architecture/visualization
 - turn down the stockfish eval blend factor as training progresses
 
+UCI (#2)
+- try to increase in-thread parallelism without sacrificing STS strength
+	- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
+	- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
+- also test different FPU schemes for strength, but care, and def. don't change training
+- try multi-thread
+	- need to sync std::cout - use Reply() everywhere
+
 CPU/integration performance:
 - break down MCTS timing details just in case anything's off (just use sampling)
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
@@ -58,6 +59,7 @@ CPU/integration performance:
 	  limited by Node memory use now. anyway, think about it.
 
 Code quality
+- fix _ in network names - split on final _
 - privatize C++ methods (got too python-brained)
 - try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
 - try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
@@ -70,7 +72,7 @@ GUI for debugging
 - look into helping-to-get-mated
 - also try better text printouts, e.g. at X simulations print Y% win probability and PV
 
-UCI
+UCI (#3)
 - "random move with eval within 1%"
 	- if best is value N, softmax sample with temperature 10 among (value >= N - 0.01), where 0.01 = (win-loss)/100
 	- "best" I'm assuming is the otherwise usual selection, i.e. most visited

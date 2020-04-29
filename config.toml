@@ -4,12 +4,12 @@
 
 [network]
 
-training_network_name = "supervised_test"
+training_network_name = "supervised8"
 uci_network_name = "supervised1"
 
 [[networks]]
 
-    name = "supervised_test"
+    name = "supervised8"
 
     [networks.training]
 
@@ -22,24 +22,11 @@ uci_network_name = "supervised1"
     [networks.training.learning_rate_schedule]
 
     steps = [0, 10_000, 30_000, 50_000]
-    rates = [1e-3, 1e-4, 1e-5, 1e-6]
+    rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [[networks]]
 
     name = "supervised1"
-
-    [networks.training]
-
-    batch_size = 2048
-    steps = 63000
-    num_games = 0
-    window_size = 10_000_000
-    games_path_training = "Games/Supervised"
-
-    [networks.training.learning_rate_schedule]
-
-    steps = [0, 10_000, 30_000, 50_000]
-    rates = [1e-3, 1e-4, 1e-5, 1e-6]
 
 [[networks]]
 
@@ -94,7 +81,7 @@ games_path_validation = "Games/Validation"
 [training.learning_rate_schedule]
 
 steps = [0, 100_000, 300_000, 500_000]
-rates = [1e-3, 1e-4, 1e-5, 1e-6]
+rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [self_play]
 
