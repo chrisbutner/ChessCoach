@@ -175,24 +175,29 @@ TEST(Mcts, MateComparisons)
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up nodes from expected worst to best.
-    const int nodeCount = 7;
-    Node nodes[nodeCount] = { {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f} };
-    nodes[0].terminalValue = TerminalValue::OpponentMateIn<2>();
-    nodes[1].terminalValue = TerminalValue::OpponentMateIn<4>();
-    nodes[2].visitCount = 10;
-    nodes[3].terminalValue = TerminalValue::Draw();
-    nodes[3].visitCount = 15;
-    nodes[4].visitCount = 100;
-    nodes[5].terminalValue = TerminalValue::MateIn<3>();
-    nodes[6].terminalValue = TerminalValue::MateIn<1>();
+    std::array<Node, 8> nodes{ { {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f} } };
+    nodes[0].visitCount = 0;
+    nodes[1].terminalValue = TerminalValue::OpponentMateIn<2>();
+    nodes[1].visitCount = 1000;
+    nodes[2].terminalValue = TerminalValue::OpponentMateIn<4>();
+    nodes[2].visitCount = 1000;
+    nodes[3].visitCount = 10;
+    nodes[4].terminalValue = TerminalValue::Draw();
+    nodes[4].visitCount = 15;
+    nodes[5].visitCount = 100;
+    nodes[6].terminalValue = TerminalValue::MateIn<3>();
+    nodes[6].visitCount = 1;
+    nodes[7].terminalValue = TerminalValue::MateIn<1>();
+    nodes[7].visitCount = 1;
 
     // Check all pairs.
-    for (int i = 0; i < nodeCount - 1; i++)
+    for (int i = 0; i < nodes.size() - 1; i++)
     {
         EXPECT_FALSE(selfPlayWorker.WorseThan(&nodes[i], &nodes[i]));
 
-        for (int j = i + 1; j < nodeCount; j++)
+        for (int j = i + 1; j < nodes.size(); j++)
         {
+            if (!selfPlayWorker.WorseThan(&nodes[i], &nodes[j])) __debugbreak();
             EXPECT_TRUE(selfPlayWorker.WorseThan(&nodes[i], &nodes[j]));
             EXPECT_FALSE(selfPlayWorker.WorseThan(&nodes[j], &nodes[i]));
         }

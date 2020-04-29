@@ -4,7 +4,7 @@
 
 [network]
 
-training_network_name = "supervised8"
+training_network_name = "selfplay3"
 uci_network_name = "supervised1"
 
 [[networks]]
@@ -13,7 +13,6 @@ uci_network_name = "supervised1"
 
     [networks.training]
 
-    batch_size = 2048
     steps = 63000
     num_games = 0
     window_size = 10_000_000
@@ -30,16 +29,13 @@ uci_network_name = "supervised1"
 
 [[networks]]
 
-    name = "selfplay2"
+    name = "selfplay3"
 
     [networks.training]
 
-    batch_size = 512
-    steps = 5_600_000
-    validation_interval = 40
-    checkpoint_interval = 400
-    strength_test_interval = 2000
-    num_games = 44_000_000
+    validation_interval = 10
+    checkpoint_interval = 100
+    strength_test_interval = 500
 
 [[networks]]
 
@@ -65,8 +61,8 @@ uci_network_name = "supervised1"
 
 [training]
 
-batch_size = 4096
-steps = 700_000
+batch_size = 2048
+steps = 1_400_000
 pgn_interval = 100
 validation_interval = 100
 checkpoint_interval = 1000
@@ -80,7 +76,7 @@ games_path_validation = "Games/Validation"
 
 [training.learning_rate_schedule]
 
-steps = [0, 100_000, 300_000, 500_000]
+steps = [0, 200_000, 600_000, 1_000_000]
 rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [self_play]

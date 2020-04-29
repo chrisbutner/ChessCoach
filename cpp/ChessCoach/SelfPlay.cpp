@@ -1330,9 +1330,16 @@ void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
 
 bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
 {
-    // Expect RHS to be defined, so if no LHS then it's better.
-    assert(rhs);
-    if (!lhs)
+    // RHS has to exist and and have been visited at least once. This is important behaviorally
+    // but also technically; e.g. can't pre-expand new root in a new scratch game clone and
+    // check for draws with no accessible StateInfos.
+    if (!rhs || (rhs->visitCount <= 0))
+    {
+        return false;
+    }
+    
+    // RHS meets the minimum bar so if LHS doesn't then it's worse.
+    if (!lhs || (lhs->visitCount <= 0))
     {
         return true;
     }
