@@ -79,6 +79,11 @@ bool TerminalValue::operator==(const int other) const
     return (_value == other);
 }
 
+bool TerminalValue::IsNonTerminal() const
+{
+    return !_value;
+}
+
 bool TerminalValue::IsImmediate() const
 {
     return (_value &&
@@ -181,7 +186,7 @@ SelfPlayGame::SelfPlayGame()
     , _image(nullptr)
     , _value(nullptr)
     , _policy(nullptr)
-    , _searchRootPly(0)
+    , _searchRootPly(Ply())
     , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }
@@ -193,7 +198,7 @@ SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork:
     , _image(image)
     , _value(value)
     , _policy(policy)
-    , _searchRootPly(0)
+    , _searchRootPly(Ply())
     , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }
@@ -206,7 +211,7 @@ SelfPlayGame::SelfPlayGame(const std::string& fen, const std::vector<Move>& move
     , _image(image)
     , _value(value)
     , _policy(policy)
-    , _searchRootPly(0)
+    , _searchRootPly(Ply()) // Important for this to be moves.size() when searching positions.
     , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }
@@ -322,17 +327,20 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
 
     // Adjust the visit count for the new root so that it matches the sum of child visits from now on.
     // If the new root is a terminal node, reset to zero.
-    // Otherwise, decrement because the node was visited exactly once as a leaf before being expanded.
+    // Otherwise, sum child visits. For most nodes we could just decrement because the node was visited
+    // exactly once as a leaf before being expanded. However, 2-repetition draws complicate things because
+    // they could be visited multiple times as a terminal draw, then become non-terminal as the game progresses
+    // past the first occurence of the position and get expanded. Pack the terminal visit count into the Node
+    // to speed this up if required.
     if (_root->children.empty())
     {
         _root->visitCount = 0;
     }
     else
     {
-        _root->visitCount--;
+        _root->visitCount = std::transform_reduce(_root->children.begin(), _root->children.end(),
+            0, std::plus<>(), [](const auto& pair) { return pair.second->visitCount; });
     }
-    assert(_root->visitCount == std::transform_reduce(_root->children.begin(), _root->children.end(),
-        0, std::plus<>(), [](auto pair) { return pair.second->visitCount; }));
 }
 
 float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore)
@@ -410,23 +418,40 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
             return root->terminalValue.ImmediateValue();
         }
 
-        // Check for draw by 50-move or 3-repetition.
+        // Check for draw by 50-move or repetition.
+        // This has to happen after checking for mate in order to follow game rules.
+        //
+        // Use slightly confusing terminology:
+        // - a 1-repetition means the first occurence (actually 0 repetitions)
+        // - a 2-repetition means the second occurence (actually 1 repetition)
+        // - a 3-repetition means the third occurence (actually 2 repetitions)
         //
         // Stockfish checks for (a) two-fold repetition strictly after the search root
-        // (e.g. search-root, rep-0, rep-1) or (b) three-fold repetition anywhere
-        // (e.g. rep-0, rep-1, search-root, rep-2) in order to terminate and prune efficiently.
+        // (e.g. search-root, rep-1, rep-2) or (b) three-fold repetition anywhere
+        // (e.g. rep-1, rep-2, search-root, rep-3) in order to terminate and prune efficiently.
         //
         // We can use the same logic safely because we're path-dependent: no post-search valuations
         // are hashed purely by position (only network-dependent predictions, potentially),
-        // and nodes with identical positions reached differently are distinct in the tree.
-        //
+        // and nodes with identical positions reached differently are distinct in the tree
         // This saves time in the 800-simulation budget for more useful exploration.
-        const int plyToSearchRoot = (Ply() - _searchRootPly);
-        if (IsDrawByNoProgressOrRepetition(plyToSearchRoot))
+        //
+        // However, once the search root advances, reusing a sub-tree requires reevaluating any
+        // previous 2-repetitions that may no longer be so (because their earlier occurence
+        // got played), including possibly the root itself. So, for 2-repetitions, short-circuit here and
+        // return a draw score but don't cache it on the node. Instead, check again next time.
+        if (IsDrawByNoProgressOrThreefoldRepetition())
         {
             // Value from the parent's perspective (easy, it's a draw).
             root->terminalValue = TerminalValue::Draw();
             return root->terminalValue.ImmediateValue();
+        }
+        const int plyToSearchRoot = (Ply() - _searchRootPly);
+        if (IsDrawByTwofoldRepetition(plyToSearchRoot))
+        {
+            // Value from the parent's perspective (easy, it's a draw).
+            // Don't cache the 2-repetition; check again next time.
+            assert(root->terminalValue.IsNonTerminal());
+            return TerminalValue(TerminalValue::Draw()).ImmediateValue();
         }
 
         // Prepare for a prediction from the network.
@@ -507,16 +532,28 @@ void SelfPlayGame::LimitBranchingToBest(int moveCount, uint16_t* moves, float* p
 
 // Avoid Position::is_draw because it regenerates legal moves.
 // If we've already just checked for checkmate and stalemate then this works fine.
-bool SelfPlayGame::IsDrawByNoProgressOrRepetition(int plyToSearchRoot)
+bool SelfPlayGame::IsDrawByNoProgressOrThreefoldRepetition()
 {
-    const StateInfo& stateInfo = _positionStates->back();
+    const StateInfo* stateInfo = _position.state_info();
 
-    return 
+    return
         // Omit "and not checkmate" from Position::is_draw.
-        (stateInfo.rule50 > 99) ||
-        // Return a draw score if a position repeats once earlier but strictly
-        // after the root, or repeats twice before or at the root.
-        (stateInfo.repetition && (stateInfo.repetition < plyToSearchRoot));
+        (stateInfo->rule50 > 99) ||
+        // Stockfish encodes 3-repetition as negative.
+        (stateInfo->repetition < 0);
+}
+
+// Avoid Position::is_draw because it regenerates legal moves.
+// If we've already just checked for checkmate and stalemate then this works fine.
+bool SelfPlayGame::IsDrawByTwofoldRepetition(int plyToSearchRoot)
+{
+    const StateInfo* stateInfo = _position.state_info();
+
+    // Return a draw score if a position repeats once earlier but strictly
+    // after the root, or repeats twice before or at the root.
+    //
+    // Check for >0 rather than non-zero to exclude 3-repetition.
+    return ((stateInfo->repetition > 0) && (stateInfo->repetition < plyToSearchRoot));
 }
 
 void SelfPlayGame::Softmax(int moveCount, float* distribution) const
@@ -604,6 +641,11 @@ void SelfPlayGame::PruneAllInternal(Node* root)
         PruneAllInternal(pair.second);
     }
     delete root;
+}
+
+void SelfPlayGame::UpdateSearchRootPly()
+{
+    _searchRootPly = Ply();
 }
 
 Move SelfPlayGame::ParseSan(const std::string& san)
@@ -700,7 +742,7 @@ void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vec
     _games[index] = SelfPlayGame(fen, moves, tryHard, &_images[index], &_values[index], &_policies[index]);
 }
 
-void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset, bool tryHard)
+void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset)
 {
     ClearGame(index);
 
@@ -725,6 +767,10 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
             game.ApplyMoveWithRoot(move, newRoot);
         }
     }
+
+    // The additional moves are being applied to an existing game for efficiency, but really we're setting up
+    // a new position, so update the search root ply for draw-checking.
+    game.UpdateSearchRootPly();
 }
 
 void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly)
@@ -1330,16 +1376,9 @@ void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
 
 bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
 {
-    // RHS has to exist and and have been visited at least once. This is important behaviorally
-    // but also technically; e.g. can't pre-expand new root in a new scratch game clone and
-    // check for draws with no accessible StateInfos.
-    if (!rhs || (rhs->visitCount <= 0))
-    {
-        return false;
-    }
-    
-    // RHS meets the minimum bar so if LHS doesn't then it's worse.
-    if (!lhs || (lhs->visitCount <= 0))
+    // Expect RHS to be defined, so if no LHS then it's better.
+    assert(rhs);
+    if (!lhs)
     {
         return true;
     }
@@ -1464,7 +1503,8 @@ void SelfPlayWorker::UpdatePosition()
 
         // If the new position is the previous position plus some number of moves,
         // just play out the moves rather than throwing away search results.
-        if ((_searchState.positionFen == _searchConfig.positionFen) &&
+        if (_games[0].TryHard() &&
+            (_searchState.positionFen == _searchConfig.positionFen) &&
             (_searchConfig.positionMoves.size() >= _searchState.positionMoves.size()) &&
             (std::equal(_searchState.positionMoves.begin(), _searchState.positionMoves.end(), _searchConfig.positionMoves.begin())))
         {
@@ -1473,7 +1513,7 @@ void SelfPlayWorker::UpdatePosition()
                 std::cout << "info string [position] Reusing existing position with "
                     << (_searchConfig.positionMoves.size() - _searchState.positionMoves.size()) << " additional moves" << std::endl;
             }
-            SetUpGameExisting(0, _searchConfig.positionMoves, static_cast<int>(_searchState.positionMoves.size()), true /* tryHard */);
+            SetUpGameExisting(0, _searchConfig.positionMoves, static_cast<int>(_searchState.positionMoves.size()));
         }
         else
         {

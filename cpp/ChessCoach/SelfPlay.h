@@ -56,6 +56,8 @@ public:
     TerminalValue& operator=(const int value);
     bool operator==(const int other) const;
 
+    bool IsNonTerminal() const;
+
     bool IsImmediate() const;
     float ImmediateValue() const;
 
@@ -175,13 +177,15 @@ public:
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore);
     void LimitBranchingToBest(int moveCount, uint16_t* moves, float* priors);
-    bool IsDrawByNoProgressOrRepetition(int plyToSearchRoot);
+    bool IsDrawByNoProgressOrThreefoldRepetition();
+    bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
     void PruneExcept(Node* root, Node* except);
     void PruneAll();
+    void UpdateSearchRootPly();
 
     Move ParseSan(const std::string& san);
 
@@ -236,7 +240,7 @@ public:
     void ClearGame(int index);
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
-    void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset, bool tryHard);
+    void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset);
     void DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint);
     void ValidateNetwork(INetwork* network, int step);

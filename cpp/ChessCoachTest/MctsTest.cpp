@@ -175,29 +175,26 @@ TEST(Mcts, MateComparisons)
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up nodes from expected worst to best.
-    std::array<Node, 8> nodes{ { {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f} } };
-    nodes[0].visitCount = 0;
-    nodes[1].terminalValue = TerminalValue::OpponentMateIn<2>();
-    nodes[1].visitCount = 1000;
-    nodes[2].terminalValue = TerminalValue::OpponentMateIn<4>();
-    nodes[2].visitCount = 1000;
-    nodes[3].visitCount = 10;
-    nodes[4].terminalValue = TerminalValue::Draw();
-    nodes[4].visitCount = 15;
-    nodes[5].visitCount = 100;
-    nodes[6].terminalValue = TerminalValue::MateIn<3>();
-    nodes[6].visitCount = 1;
-    nodes[7].terminalValue = TerminalValue::MateIn<1>();
-    nodes[7].visitCount = 1;
+    const int nodeCount = 7;
+    Node nodes[nodeCount] = { {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f} };
+    nodes[0].terminalValue = TerminalValue::OpponentMateIn<2>();
+    nodes[1].terminalValue = TerminalValue::OpponentMateIn<4>();
+    nodes[2].visitCount = 10;
+    nodes[3].terminalValue = TerminalValue::Draw();
+    nodes[3].visitCount = 15;
+    nodes[4].visitCount = 100;
+    nodes[5].terminalValue = TerminalValue::MateIn<3>();
+    nodes[6].terminalValue = TerminalValue::MateIn<1>();
 
     // Check all pairs.
-    for (int i = 0; i < nodes.size() - 1; i++)
+    for (int i = 0; i < nodeCount - 1; i++)
     {
         EXPECT_FALSE(selfPlayWorker.WorseThan(&nodes[i], &nodes[i]));
 
-        for (int j = i + 1; j < nodes.size(); j++)
+        EXPECT_TRUE(selfPlayWorker.WorseThan(nullptr, &nodes[i]));
+
+        for (int j = i + 1; j < nodeCount; j++)
         {
-            if (!selfPlayWorker.WorseThan(&nodes[i], &nodes[j])) __debugbreak();
             EXPECT_TRUE(selfPlayWorker.WorseThan(&nodes[i], &nodes[j]));
             EXPECT_FALSE(selfPlayWorker.WorseThan(&nodes[j], &nodes[i]));
         }
@@ -278,6 +275,70 @@ TEST(Mcts, MateProving)
     CheckMateN(game->Root()->children[Move(2)]->children[Move(2)], 3);
     CheckOpponentMateN(game->Root()->children[Move(2)], 3);
     CheckMateN(game->Root(), 4);
+
+    game->PruneAll();
+}
+
+TEST(Mcts, TwofoldRepetition)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SelfPlayGame* game;
+    selfPlayWorker.SetUpGame(0);
+    selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
+
+    // Set up a simple 2-repetition.
+    std::vector<Move> moves{ make_move(SQ_E2, SQ_E4), make_move(SQ_D7, SQ_D6),
+        make_move(SQ_D1, SQ_G4), make_move(SQ_G8, SQ_F6),
+        make_move(SQ_G4, SQ_D1), make_move(SQ_F6, SQ_G8),
+        make_move(SQ_D1, SQ_G4) };
+    std::vector<Node*> nodes{};
+    Node* node = game->Root();
+    for (Move move : moves)
+    {
+        nodes.emplace_back(new Node(1.f));
+        node = node->children[move] = nodes.back();
+    }
+
+    // Apply the moves and evaluate the 2-repetition as a draw using the
+    // starting position as the search root.
+    {
+        SelfPlayGame searchRoot = *game;
+        for (int i = 0; i < moves.size(); i++)
+        {
+            searchRoot.ApplyMoveWithRoot(moves[i], nodes[i]);
+        }
+
+        SelfPlayState state = SelfPlayState::Working;
+        PredictionCacheChunk* cacheStore = nullptr;
+        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore);
+        EXPECT_EQ(value, CHESSCOACH_VALUE_DRAW);
+    }
+
+    // Apply 6 moves, snap off a search root, then evaluate the final
+    // position as a non-draw since it's not a 2-repetition past the
+    // search root.
+    {
+        SelfPlayGame progress = *game;
+        for (int i = 0; i < 6; i++)
+        {
+            progress.ApplyMoveWithRoot(moves[i], nodes[i]);
+        }
+
+        SelfPlayGame searchRoot = progress;
+        for (int i = 6; i < moves.size(); i++)
+        {
+            searchRoot.ApplyMoveWithRoot(moves[i], nodes[i]);
+        }
+
+        SelfPlayState state = SelfPlayState::Working;
+        PredictionCacheChunk* cacheStore = nullptr;
+        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore);
+        EXPECT_NE(value, CHESSCOACH_VALUE_DRAW);
+        EXPECT_TRUE(std::isnan(value)); // A non-terminal position requires a network evaluation.
+    }
 
     game->PruneAll();
 }

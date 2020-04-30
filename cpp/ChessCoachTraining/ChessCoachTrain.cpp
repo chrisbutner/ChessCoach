@@ -50,9 +50,11 @@ void ChessCoachTrain::TrainChessCoach()
     std::unique_ptr<INetwork> network(CreateNetwork(config));
     Storage storage(config, Config::Misc);
 
+#ifndef _DEBUG
     // Load existing games.
     storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
     storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
+#endif
 
     // Start self-play worker threads.
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);

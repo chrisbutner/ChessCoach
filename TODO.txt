@@ -1,26 +1,21 @@
-Next
-- fixes
-	- crash starting selfplay right after strength tests?
-	- maybe prune old game in SetUpGame, look into where it should be happening, assert somewhere for real games
+Try linux/TF C++ API
+- add Linux support (use v1 subsystem?)
+- use TF C++ API and benchmark
 
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
-- examine 2-repetitions again rigorously, write a test case, etc. - some good example positions online
-	- was-terminal-now-isn't actually isn't just about path dependence, more complicated
+- try bias again
 - try AZ history planes instead of mine
 	- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
 - try to train on some lc0 games or something to make sure everything's working/bug-free
-- try different NN architecture like attention/transformer (focus on strength)
 
 Self-play performance
 - try shrink Node memory
 - try different NN architecture like attention/transformer (focus on speed)
 - try distilling to a smaller network for self-play predictions
 
-Try linux/TF C++ API
-- add Linux support (use v1 subsystem?)
-- use TF C++ API and benchmark
-
 Improve convergence speed
+- do a big write-up of Oracle/Wu/own ideas and choose top N
+- try different NN architecture like attention/transformer (focus on strength)
 - try training value against lerped Z/Q a la Oracle blog
 - try v2 residuals
 - try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
@@ -78,6 +73,7 @@ UCI (#3)
 	- "best" I'm assuming is the otherwise usual selection, i.e. most visited
 	- code for shorter mates, etc., should override this behavior (no diversity needed then)
 - mate
+	- if root node's terminal value is known, and allowed to stop searching, make a move instantly and save time
 	- add global depth cut-off (a little tricky, need to allow MCTS to "back up" and ban paths that don't reach a leaf in time)
 	- add killer heuristic (needs to vanish quickly with exploration)
 		- test with M1 position with M1 prior artifically set low for ply 0

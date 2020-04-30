@@ -77,6 +77,7 @@ public:
   // cbutner-start
   //Position(const Position&) = delete;
   //Position& operator=(const Position&) = delete;
+  inline const StateInfo* state_info() const { return st; }
   // cbutner-finish
 
   // FEN string input/output
