@@ -130,6 +130,11 @@ void Config::Initialize()
     {
         network->SelfPlay.NumWorkers = 1;
         network->SelfPlay.PredictionBatchSize = 1;
+        network->Training.GamesPathTraining = "Debug/" + network->Training.GamesPathTraining;
+        network->Training.GamesPathValidation = "Debug/" + network->Training.GamesPathValidation;
     }
+    // Use the usual networks path, necessary and safe.
+    // Same with TensorBoard and Logs for now.
+    Misc.Paths_Pgns = "Debug/" + Misc.Paths_Pgns;
 #endif
 }

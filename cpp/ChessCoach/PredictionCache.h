@@ -10,34 +10,34 @@
 
 struct PredictionCacheEntry
 {
-    Key key;                                        // 8 bytes
-    float value;                                    // 4 bytes
-    int moveCount;                                  // 4 bytes
-    uint16_t policyMoves[Config::MaxBranchMoves];   // 160 bytes
-    float policyPriors[Config::MaxBranchMoves];     // 320 bytes
+    // Positions with more moves don't fit in the cache and so shouldn't be probed/stored.
+    static const int MaxMoveCount = 52;
+
+    Key key;                                                            // 8 bytes
+    float value;                                                        // 4 bytes
+    std::array<uint8_t, MaxMoveCount> policyPriors;    // 52 bytes
 };
-static_assert(sizeof(std::shared_mutex) == 8);
-static_assert(Config::MaxBranchMoves == 80);
-static_assert(sizeof(PredictionCacheEntry) == 496);
+static_assert(sizeof(PredictionCacheEntry) == 64);
 
 struct PredictionCacheChunk
 {
     void Clear();
-    bool TryGet(Key key, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut);
-    void Put(Key key, float value, int moveCount, uint16_t* moves, float* priors);
+    bool TryGet(Key key, int moveCount, float* valueOut, float* priorsOut);
+    void Put(Key key, float value, int moveCount, float* priors);
 
 private:
 
-    static const int EntryCount = 8;
+    static const int EntryCount = 7;
 
-    std::array<PredictionCacheEntry, EntryCount> _entries;  // 3968 bytes
+    std::array<PredictionCacheEntry, EntryCount> _entries;  // 384 bytes
     std::array<int, EntryCount> _ages;                      // 32 bytes
     std::shared_mutex _mutex;                               // 8 bytes
-    char padding[88];                                       // 88 bytes
+    char padding[24];                                       // 24 bytes
 
     friend class PredictionCache;
 };
-static_assert(sizeof(PredictionCacheChunk) == 4096);
+static_assert(sizeof(std::shared_mutex) == 8);
+static_assert(sizeof(PredictionCacheChunk) == 512);
 
 class PredictionCache
 {
@@ -58,7 +58,7 @@ public:
     void Allocate(int sizeGb);
     void Free();
 
-    bool TryGetPrediction(Key key, PredictionCacheChunk** chunkOut, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut);
+    bool TryGetPrediction(Key key, int moveCount, PredictionCacheChunk** chunkOut, float* valueOut, float* priorsOut);
     void Clear();
     void ResetProbeMetrics();
 

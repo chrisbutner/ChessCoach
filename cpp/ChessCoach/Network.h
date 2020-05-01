@@ -25,6 +25,16 @@ struct INetwork
     typedef std::array<Plane, InputPlaneCount> InputPlanes;
     typedef std::array<Plane, OutputPlaneCount> OutputPlanes;
 
+    constexpr static uint8_t QuantizeProbability(float probability01)
+    {
+        return static_cast<uint8_t>(probability01 * 255.f + 0.5f);
+    }
+
+    constexpr static float DequantizeProbability(uint8_t quantizedProbability)
+    {
+        return (quantizedProbability / 255.f);
+    }
+
     constexpr static float MapProbability01To11(float probability01)
     {
         return ((probability01 * 2.f) - 1.f);
@@ -66,5 +76,10 @@ struct INetwork
     virtual void LoadNetwork(const char* networkName) = 0;
     virtual void SaveNetwork(int checkpoint) = 0;
 };
+
+static_assert(INetwork::QuantizeProbability(1.f) == 255);
+static_assert(INetwork::QuantizeProbability(0.f) == 0);
+static_assert(INetwork::DequantizeProbability(255) == 1.f);
+static_assert(INetwork::DequantizeProbability(0) == 0.f);
 
 #endif // _NETWORK_H_

@@ -176,7 +176,7 @@ public:
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore);
-    void LimitBranchingToBest(int moveCount, uint16_t* moves, float* priors);
+    void Expand(int moveCount);
     bool IsDrawByNoProgressOrThreefoldRepetition();
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
@@ -214,7 +214,6 @@ private:
     ExtMove _expandAndEvaluate_moves[MAX_MOVES];
     ExtMove* _expandAndEvaluate_endMoves;
     Key _imageKey;
-    std::array<uint16_t, MAX_MOVES> _cachedMoves;
     std::array<float, MAX_MOVES> _cachedPriors;
 };
 

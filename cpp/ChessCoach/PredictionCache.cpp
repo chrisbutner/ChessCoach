@@ -17,7 +17,7 @@ void PredictionCacheChunk::Clear()
     }
 }
 
-bool PredictionCacheChunk::TryGet(Key key, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut)
+bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float* priorsOut)
 {
     // Only ages are mutated and the operations are atomic on basically all hardware, so use a shared_lock.
     std::shared_lock lock(_mutex);
@@ -33,9 +33,10 @@ bool PredictionCacheChunk::TryGet(Key key, float* valueOut, int* moveCountOut, u
         {
             _ages[i] = std::numeric_limits<int>::min();
             *valueOut = _entries[i].value;
-            *moveCountOut = _entries[i].moveCount;
-            std::copy(_entries[i].policyMoves, _entries[i].policyMoves + _entries[i].moveCount, movesOut);
-            std::copy(_entries[i].policyPriors, _entries[i].policyPriors + _entries[i].moveCount, priorsOut);
+            for (int m = 0; m < moveCount; m++)
+            {
+                priorsOut[m] = INetwork::DequantizeProbability(_entries[i].policyPriors[m]);
+            }
             return true;
         }
     }
@@ -43,7 +44,7 @@ bool PredictionCacheChunk::TryGet(Key key, float* valueOut, int* moveCountOut, u
     return false;
 }
 
-void PredictionCacheChunk::Put(Key key, float value, int moveCount, uint16_t* moves, float* priors)
+void PredictionCacheChunk::Put(Key key, float value, int moveCount, float* priors)
 {
     std::unique_lock lock(_mutex);
 
@@ -69,9 +70,10 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, uint16_t* mo
     _ages[oldestIndex] = std::numeric_limits<int>::min();
     _entries[oldestIndex].key = key;
     _entries[oldestIndex].value = value;
-    _entries[oldestIndex].moveCount = moveCount;
-    std::copy(moves, moves + moveCount, _entries[oldestIndex].policyMoves);
-    std::copy(priors, priors + moveCount, _entries[oldestIndex].policyPriors);
+    for (int m = 0; m < moveCount; m++)
+    {
+        _entries[oldestIndex].policyPriors[m] = INetwork::QuantizeProbability(priors[m]);
+    }
 }
 
 PredictionCache::PredictionCache()
@@ -130,9 +132,9 @@ void PredictionCache::Free()
     _entryCapacity = 0;
 }
 
-// If returning true, valueOut, moveCountOut, movesOut and priorsOut are populated; chunkOut is not populated.
-// If returning false, valueOut, moveCountOut, movesOut and priorsOut are not populated; chunkOut is populated only if the value/policy should be stored when available.
-bool PredictionCache::TryGetPrediction(Key key, PredictionCacheChunk** chunkOut, float* valueOut, int* moveCountOut, uint16_t* movesOut, float* priorsOut)
+// If returning true, valueOut and priorsOut are populated; chunkOut is not populated.
+// If returning false, valueOut and priorsOut are not populated; chunkOut is populated only if the value/policy should be stored when available.
+bool PredictionCache::TryGetPrediction(Key key, int moveCount, PredictionCacheChunk** chunkOut, float* valueOut, float* priorsOut)
 {
     if (_tables.empty())
     {
@@ -149,7 +151,7 @@ bool PredictionCache::TryGetPrediction(Key key, PredictionCacheChunk** chunkOut,
     const uint64_t chunkKey = (key & 0xFFFFFFFFFFFF);
     PredictionCacheChunk& chunk = table[chunkKey % ChunksPerTable];
 
-    if (chunk.TryGet(key, valueOut, moveCountOut, movesOut, priorsOut))
+    if (chunk.TryGet(key, moveCount, valueOut, priorsOut))
     {
         _hitCount++;
         return true;

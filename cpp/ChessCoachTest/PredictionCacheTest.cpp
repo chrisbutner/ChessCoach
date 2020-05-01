@@ -10,14 +10,12 @@ bool TryGetPrediction(Key key)
 {
     PredictionCacheChunk* chunk;
     float value;
-    int moveCount;
-    std::array<uint16_t, Config::MaxBranchMoves> moves;
-    std::array<float, Config::MaxBranchMoves> priors;
+    std::array<float, MAX_MOVES> priors;
 
-    bool hit = PredictionCache::Instance.TryGetPrediction(key, &chunk, &value, &moveCount, moves.data(), priors.data());
+    bool hit = PredictionCache::Instance.TryGetPrediction(key, 0, &chunk, &value, priors.data());
     if (!hit)
     {
-        chunk->Put(key, 0.f, 0, moves.data(), priors.data());
+        chunk->Put(key, 0.f, 0, priors.data());
     }
     return hit;
 }
@@ -97,4 +95,63 @@ TEST(PredictionCache, PathDependence)
     EXPECT_NE(game1_key3, game2_key3);
     EXPECT_FALSE(TryGetPrediction(game1_key3));
     EXPECT_FALSE(TryGetPrediction(game2_key3));
+}
+
+TEST(PredictionCache, Quantization)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    Game startingPosition;
+    Game game1 = startingPosition;
+    Game game2 = startingPosition;
+
+    for (Move move : { make_move(SQ_A2, SQ_A3), make_move(SQ_A7, SQ_A6), make_move(SQ_A3, SQ_A4)})
+    {
+        game1.ApplyMove(move);
+        game2.ApplyMove(move);
+    }
+
+    Key game1_key = game1.GenerateImageKey();
+    Key game2_key = game2.GenerateImageKey();
+
+    EXPECT_EQ(game1.DebugPosition().key(), game2.DebugPosition().key());
+    EXPECT_EQ(game1_key, game2_key);
+
+    // Make sure that the two games' moves are the same.
+    MoveList<LEGAL> moves1(game1.DebugPosition());
+    MoveList<LEGAL> moves2(game2.DebugPosition());
+    EXPECT_EQ(moves1.size(), moves2.size());
+    for (int i = 0; i < moves1.size(); i++)
+    {
+        EXPECT_EQ(moves1.begin()[i].move, moves2.begin()[i].move);
+    }
+
+    // Generate priors.
+    const int moveCount = static_cast<int>(moves1.size());
+    std::vector<float> priors1(moveCount);
+    for (int i = 0; i < moveCount; i++)
+    {
+        priors1[i] = (static_cast<float>(i) / moveCount);
+        EXPECT_LE(0.f, priors1[i]);
+        EXPECT_LE(priors1[i], 1.f);
+    }
+
+    // Put into the cache.
+    PredictionCacheChunk* chunk;
+    float value;
+    const bool hit1 = PredictionCache::Instance.TryGetPrediction(game1_key, moveCount, &chunk, &value, priors1.data());
+    EXPECT_FALSE(hit1);
+    chunk->Put(game1_key, value, moveCount, priors1.data());
+
+    // Get from the cache.
+    std::vector<float> priors2(moveCount);
+    const bool hit2 = PredictionCache::Instance.TryGetPrediction(game2_key, moveCount, &chunk, &value, priors2.data());
+    EXPECT_TRUE(hit2);
+
+    // Make sure that the cached priors are close enough, up to quantization (use a more permissive epsilon).
+    for (int i = 0; i < moveCount; i++)
+    {
+        EXPECT_NEAR(priors1[i], priors2[i], 1.f / std::numeric_limits<uint8_t>::max());
+    }
 }

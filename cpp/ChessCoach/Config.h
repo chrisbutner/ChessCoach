@@ -71,7 +71,6 @@ class Config
 public:
 
     static const int InputPreviousMoveCount = 8;
-    static const int MaxBranchMoves = 80;
     static constexpr const char StartingPosition[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 public:

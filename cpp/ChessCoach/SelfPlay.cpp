@@ -382,36 +382,12 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
 
     if (state == SelfPlayState::Working)
     {
-        // Try get a cached prediction. Only hit the cache up to a max ply for self-play since we
-        // see enough unique positions/paths to fill the cache no matter what, and it saves on time
-        // to evict less. However, in search (TryHard) it's better to keep everything recent.
-        cacheStore = nullptr;
-        float cachedValue;
-        int cachedMoveCount;
-        _imageKey = GenerateImageKey();
-        bool hitCached = false;
-        if (TryHard() || (Ply() <= Config::Misc.PredictionCache_MaxPly))
-        {
-            hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, &cacheStore, &cachedValue,
-                &cachedMoveCount, _cachedMoves.data(), _cachedPriors.data());
-        }
-        if (hitCached)
-        {
-            // Expand child nodes with the cached priors.
-            int i = 0;
-            for (int i = 0; i < cachedMoveCount; i++)
-            {
-                root->children[Move(_cachedMoves[i])] = new Node(_cachedPriors[i]);
-            }
-
-            return cachedValue;
-        }
-
         // Generate legal moves.
         _expandAndEvaluate_endMoves = generate<LEGAL>(_position, _expandAndEvaluate_moves);
 
         // Check for checkmate and stalemate.
-        if (_expandAndEvaluate_moves == _expandAndEvaluate_endMoves)
+        const int workingMoveCount = static_cast<int>(_expandAndEvaluate_endMoves - _expandAndEvaluate_moves);
+        if (workingMoveCount == 0)
         {
             // Value from the parent's perspective.
             root->terminalValue = (_position.checkers() ? TerminalValue::MateIn<1>() : TerminalValue::Draw());
@@ -454,6 +430,26 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
             return TerminalValue(TerminalValue::Draw()).ImmediateValue();
         }
 
+        // Try get a cached prediction. Only hit the cache up to a max ply for self-play since we
+        // see enough unique positions/paths to fill the cache no matter what, and it saves on time
+        // to evict less. However, in search (TryHard) it's better to keep everything recent.
+        cacheStore = nullptr;
+        float cachedValue;
+        _imageKey = GenerateImageKey();
+        bool hitCached = false;
+        if ((workingMoveCount <= PredictionCacheEntry::MaxMoveCount) &&
+            (TryHard() || (Ply() <= Config::Misc.PredictionCache_MaxPly)))
+        {
+            hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, workingMoveCount,
+                &cacheStore, &cachedValue, _cachedPriors.data());
+        }
+        if (hitCached)
+        {
+            // Expand child nodes with the cached priors.
+            Expand(workingMoveCount);
+            return cachedValue;
+        }
+
         // Prepare for a prediction from the network.
         *_image = GenerateImage();
         state = SelfPlayState::WaitingForPrediction;
@@ -483,50 +479,35 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     int moveCount = 0;
     for (ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
     {
-        _cachedMoves[moveCount] = cur->move;
         _cachedPriors[moveCount] = PolicyValue(*_policy, cur->move); // Logits
         moveCount++;
     }
     Softmax(moveCount, _cachedPriors.data()); // Logits -> priors
 
-    // Store in the cache if appropriate. This may limit moveCount to the branch limit for caching.
-    // In that case, better to also apply that limit now for consistency.
+    // Expand child nodes with the calculated priors.
+    Expand(moveCount);
+
+    // Store in the cache if appropriate.
     if (cacheStore)
     {
-        if (moveCount > Config::MaxBranchMoves)
-        {
-            LimitBranchingToBest(moveCount, _cachedMoves.data(), _cachedPriors.data());
-            moveCount = Config::MaxBranchMoves;
-        }
-        cacheStore->Put(_imageKey, value, moveCount, _cachedMoves.data(), _cachedPriors.data());
-    }
-
-    // Expand child nodes with the calculated priors.
-    for (int i = 0; i < moveCount; i++)
-    {
-        root->children[Move(_cachedMoves[i])] = new Node(_cachedPriors[i]);
+        assert(moveCount <= PredictionCacheEntry::MaxMoveCount);
+        cacheStore->Put(_imageKey, value, moveCount, _cachedPriors.data());
     }
 
     state = SelfPlayState::Working;
     return value;
 }
 
-void SelfPlayGame::LimitBranchingToBest(int moveCount, uint16_t* moves, float* priors)
+void SelfPlayGame::Expand(int moveCount)
 {
-    assert(moveCount > Config::MaxBranchMoves);
+    Node* root = _root;
+    assert(!root->IsExpanded());
 
-    for (int i = 0; i < Config::MaxBranchMoves; i++)
+    for (int i = 0; i < moveCount; i++)
     {
-        int max = i;
-        for (int j = i + 1; j < moveCount; j++)
-        {
-            if (priors[j] > priors[max]) max = j;
-        }
-        if (max != i)
-        {
-            std::swap(moves[i], moves[max]);
-            std::swap(priors[i], priors[max]);
-        }
+        const Move move = _expandAndEvaluate_moves[i].move;
+        assert(_position.legal(move));
+        root->children[move] = new Node(_cachedPriors[i]);
     }
 }
 
