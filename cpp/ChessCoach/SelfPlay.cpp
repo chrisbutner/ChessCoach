@@ -983,15 +983,6 @@ void SelfPlayWorker::Play(int index)
     SelfPlayState& state = _states[index];
     SelfPlayGame& game = _games[index];
 
-    if (!game.Root()->IsExpanded())
-    {
-        game.ExpandAndEvaluate(state, _cacheStores[index]);
-        if (state == SelfPlayState::WaitingForPrediction)
-        {
-            return;
-        }
-    }
-
     while (!IsTerminal(game))
     {
         Node* root = game.Root();
@@ -1046,13 +1037,6 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         {
             if (mctsSimulation == 0)
             {
-#if !DEBUG_MCTS
-                if (!game.TryHard())
-                {
-                    AddExplorationNoise(game);
-                }
-#endif
-
 #if DEBUG_MCTS
                 std::cout << "(Ready for ply " << game.Ply() << "...)" << std::endl;
                 std::string _;
@@ -1107,12 +1091,10 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             scratchGame.Root()->expanding = true;
             return std::pair(MOVE_NONE, nullptr);
         }
-        else
-        {
-            // Finished actually expanding children, or never needed to wait for an evaluation/priors
-            // (e.g. prediction cache hit) or no children possible (terminal node).
-            scratchGame.Root()->expanding = false;
-        }
+
+        // Finished actually expanding children, or never needed to wait for an evaluation/priors
+        // (e.g. prediction cache hit) or no children possible (terminal node).
+        scratchGame.Root()->expanding = false;
 
         // The value we get is from the final node of the scratch game (could be WHITE or BLACK),
         // from its parent's perspective, and we start applying it at the current position of
@@ -1133,6 +1115,25 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         // Adjust best-child pointers (principle variation) now that visits and mates have propagated.
         UpdatePrincipleVariation(searchPath);
         ValidatePrincipleVariation(scratchGame.Root());
+
+        // Expanding the search root is a special case. It happens at the very start of a game,
+        // and then whenever a previously-unexplored node is reached as a root (like a 2-repetition,
+        // or a child that wasn't visited, but alternatives were getting mated).
+        // We need to fix the root's visitCount so that it equals the sum of its children.
+        if (game.Root() == scratchGame.Root())
+        {
+            assert(game.Root()->visitCount == 1);
+            assert(searchPath.size() == 1);
+            game.Root()->visitCount = 0;
+
+            // Add exploration noise if not searching or debugging MCTS.
+#if !DEBUG_MCTS
+            if (!game.TryHard())
+            {
+                AddExplorationNoise(game);
+            }
+#endif
+        }
 
 #if DEBUG_MCTS
         std::cout << "prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
@@ -1780,19 +1781,6 @@ void SelfPlayWorker::SearchInitialize(int mctsParallelism)
 
 void SelfPlayWorker::SearchPlay(int mctsParallelism)
 {
-    // Get an initial expansion of moves/children.
-    SelfPlayState& primaryState = _states[0];
-    SelfPlayGame& primaryGame = _games[0];
-
-    if (!primaryGame.Root()->IsExpanded())
-    {
-        primaryGame.ExpandAndEvaluate(primaryState, _cacheStores[0]);
-        if (primaryState == SelfPlayState::WaitingForPrediction)
-        {
-            return;
-        }
-    }
-
     for (int i = 0; i < mctsParallelism; i++)
     {
         RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _searchPaths[i], _cacheStores[i]);
