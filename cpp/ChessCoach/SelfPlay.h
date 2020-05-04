@@ -8,7 +8,7 @@
 #include <functional>
 #include <optional>
 
-#include <Stockfish/Position.h>
+#include <Stockfish/position.h>
 #include <Stockfish/movegen.h>
 
 #include "Game.h"
@@ -145,8 +145,8 @@ struct SearchState
     std::string positionFen;
     std::vector<Move> positionMoves;
     bool searching;
-    std::chrono::steady_clock::time_point searchStart;
-    std::chrono::steady_clock::time_point lastPrincipleVariationPrint;
+    std::chrono::time_point<std::chrono::high_resolution_clock> searchStart;
+    std::chrono::time_point<std::chrono::high_resolution_clock>lastPrincipleVariationPrint;
     TimeControl timeControl;
     int nodeCount;
     int failedNodeCount;
@@ -299,7 +299,7 @@ private:
 
     std::vector<SelfPlayGame> _games;
     std::vector<SelfPlayGame> _scratchGames;
-    std::vector<std::chrono::steady_clock::time_point> _gameStarts;
+    std::vector<std::chrono::time_point<std::chrono::high_resolution_clock>> _gameStarts;
     std::vector<int> _mctsSimulations;
     std::vector<std::vector<std::pair<Move, Node*>>> _searchPaths;
     std::vector<PredictionCacheChunk*> _cacheStores;

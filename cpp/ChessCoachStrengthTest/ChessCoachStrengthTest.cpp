@@ -81,7 +81,7 @@ void ChessCoachStrengthTest::Initialize()
 {
     // Suppress all Python/TensorFlow output so that output is readable, especially when running
     // multiple strength tests back-to-back.
-    _putenv_s("CHESSCOACH_SILENT", "1");
+    Platform::SetEnvironmentVariable("CHESSCOACH_SILENT", "1");
 
     InitializePython();
     InitializeStockfish();

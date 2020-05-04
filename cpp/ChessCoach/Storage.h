@@ -10,7 +10,7 @@
 #include <functional>
 #include <fstream>
 
-#include <Stockfish/Position.h>
+#include <Stockfish/position.h>
 
 #include "Network.h"
 #include "Game.h"

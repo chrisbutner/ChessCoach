@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
 void ChessCoachUci::Initialize()
 {
     // Suppress all Python/TensorFlow output so that it doesn't interfere with UCI.
-    _putenv_s("CHESSCOACH_SILENT", "1");
+    Platform::SetEnvironmentVariable("CHESSCOACH_SILENT", "1");
 
     InitializePython();
     InitializeStockfish();

@@ -104,7 +104,7 @@ private:
         }
 
         // VirtualAlloc aligns to 64KiB, definitely covers base alignment.
-        const size_t alignment = std::max(__STDCPP_DEFAULT_NEW_ALIGNMENT__, alignof(T));
+        const size_t alignment = std::max(static_cast<size_t>(__STDCPP_DEFAULT_NEW_ALIGNMENT__), static_cast<size_t>(alignof(T)));
         const size_t alignedItemSizeBytes = ((sizeof(T) + alignment - 1) / alignment) * alignment;
         const size_t itemCount = (BlockSizeBytes / alignedItemSizeBytes);
         if (itemCount == 0)

@@ -6,6 +6,8 @@
 
 #include <toml11/toml.hpp>
 
+#include "Platform.h"
+
 using TomlValue = toml::basic_value<toml::discard_comments, std::map, std::vector>;
 
 struct DefaultPolicy
@@ -31,16 +33,16 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
 {
     TrainingConfig training;
 
-    training.BatchSize = policy.Find<int>(config, "batch_size", defaults.BatchSize);
-    training.Steps = policy.Find<int>(config, "steps", defaults.Steps);
-    training.PgnInterval = policy.Find<int>(config, "pgn_interval", defaults.PgnInterval);
-    training.ValidationInterval = policy.Find<int>(config, "validation_interval", defaults.ValidationInterval);
-    training.CheckpointInterval = policy.Find<int>(config, "checkpoint_interval", defaults.CheckpointInterval);
-    training.StrengthTestInterval = policy.Find<int>(config, "strength_test_interval", defaults.StrengthTestInterval);
-    training.NumGames = policy.Find<int>(config, "num_games", defaults.NumGames);
-    training.WindowSize = policy.Find<int>(config, "window_size", defaults.WindowSize);
-    training.GamesPathTraining = policy.Find<std::string>(config, "games_path_training", defaults.GamesPathTraining);
-    training.GamesPathValidation = policy.Find<std::string>(config, "games_path_validation", defaults.GamesPathValidation);
+    training.BatchSize = policy.template Find<int>(config, "batch_size", defaults.BatchSize);
+    training.Steps = policy.template Find<int>(config, "steps", defaults.Steps);
+    training.PgnInterval = policy.template Find<int>(config, "pgn_interval", defaults.PgnInterval);
+    training.ValidationInterval = policy.template Find<int>(config, "validation_interval", defaults.ValidationInterval);
+    training.CheckpointInterval = policy.template Find<int>(config, "checkpoint_interval", defaults.CheckpointInterval);
+    training.StrengthTestInterval = policy.template Find<int>(config, "strength_test_interval", defaults.StrengthTestInterval);
+    training.NumGames = policy.template Find<int>(config, "num_games", defaults.NumGames);
+    training.WindowSize = policy.template Find<int>(config, "window_size", defaults.WindowSize);
+    training.GamesPathTraining = policy.template Find<std::string>(config, "games_path_training", defaults.GamesPathTraining);
+    training.GamesPathValidation = policy.template Find<std::string>(config, "games_path_validation", defaults.GamesPathValidation);
 
     return training;
 }
@@ -50,21 +52,18 @@ SelfPlayConfig ParseSelfPlay(const TomlValue& config, const Policy& policy, cons
 {
     SelfPlayConfig selfPlay;
 
-    const int& testDefault = defaults.NumWorkers;
-    int test = toml::find_or(config, "num_workers", testDefault);
+    selfPlay.NumWorkers = policy.template Find<int>(config, "num_workers", defaults.NumWorkers);
+    selfPlay.PredictionBatchSize = policy.template Find<int>(config, "prediction_batch_size", defaults.PredictionBatchSize);
 
-    selfPlay.NumWorkers = policy.Find<int>(config, "num_workers", defaults.NumWorkers);
-    selfPlay.PredictionBatchSize = policy.Find<int>(config, "prediction_batch_size", defaults.PredictionBatchSize);
+    selfPlay.NumSampingMoves = policy.template Find<int>(config, "num_sampling_moves", defaults.NumSampingMoves);
+    selfPlay.MaxMoves = policy.template Find<int>(config, "max_moves", defaults.MaxMoves);
+    selfPlay.NumSimulations = policy.template Find<int>(config, "num_simulations", defaults.NumSimulations);
 
-    selfPlay.NumSampingMoves = policy.Find<int>(config, "num_sampling_moves", defaults.NumSampingMoves);
-    selfPlay.MaxMoves = policy.Find<int>(config, "max_moves", defaults.MaxMoves);
-    selfPlay.NumSimulations = policy.Find<int>(config, "num_simulations", defaults.NumSimulations);
+    selfPlay.RootDirichletAlpha = policy.template Find<float>(config, "root_dirichlet_alpha", defaults.RootDirichletAlpha);
+    selfPlay.RootExplorationFraction = policy.template Find<float>(config, "root_exploration_fraction", defaults.RootExplorationFraction);
 
-    selfPlay.RootDirichletAlpha = policy.Find<float>(config, "root_dirichlet_alpha", defaults.RootDirichletAlpha);
-    selfPlay.RootExplorationFraction = policy.Find<float>(config, "root_exploration_fraction", defaults.RootExplorationFraction);
-
-    selfPlay.ExplorationRateBase = policy.Find<float>(config, "exploration_rate_base", defaults.ExplorationRateBase);
-    selfPlay.ExplorationRateInit = policy.Find<float>(config, "exploration_rate_init", defaults.ExplorationRateInit);
+    selfPlay.ExplorationRateBase = policy.template Find<float>(config, "exploration_rate_base", defaults.ExplorationRateBase);
+    selfPlay.ExplorationRateInit = policy.template Find<float>(config, "exploration_rate_init", defaults.ExplorationRateInit);
 
     return selfPlay;
 }
@@ -97,7 +96,9 @@ MiscConfig Config::Misc;
 
 void Config::Initialize()
 {
-    const TomlValue config = toml::parse<toml::discard_comments, std::map, std::vector>("config.toml");
+    // TODO: Copy to user location
+    const std::filesystem::path configTomlPath = Platform::InstallationDataPath() / "config.toml";
+    const TomlValue config = toml::parse<toml::discard_comments, std::map, std::vector>(configTomlPath.string());
 
     // Parse default values.
     const TrainingConfig defaultTraining = ParseTraining(toml::find(config, "training"), DefaultPolicy(), TrainingConfig());

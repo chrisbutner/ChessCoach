@@ -2,13 +2,25 @@ import toml
 import platform
 import os
 
+if (platform.system() == "Windows"):
+  data_root = os.environ["localappdata"]
+else:
+  data_root = os.environ.get("XDG_DATA_HOME")
+  if data_root:
+    data_root = os.path.join(data_root, "ChessCoach")
+  else:
+    data_root = os.path.join(os.environ["HOME"], ".local/share/ChessCoach")
+
 class Config(object):
 
   def __init__(self):
     try:
       config = toml.load("config.toml")
     except:
-      config = toml.load("../config.toml")
+      try:
+        config = toml.load("../config.toml")
+      except:
+        config = toml.load("/usr/local/share/ChessCoach/config.toml")
 
     training_network_name = config["network"]["training_network_name"]
     assert training_network_name
@@ -46,7 +58,7 @@ class Config(object):
     
     # Root any relative paths at ChessCoach's appdata directory.
     if not os.path.isabs(path):
-      path = os.path.join(os.environ["localappdata"], "ChessCoach", path)
+      path = os.path.join(data_root, path)
 
     # Create directories.
     os.makedirs(path, exist_ok=True)

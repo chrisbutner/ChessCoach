@@ -284,6 +284,7 @@
     <ClCompile Include="ChessCoach.cpp" />
     <ClCompile Include="Epd.cpp" />
     <ClCompile Include="Pgn.cpp" />
+    <ClCompile Include="Platform.cpp" />
     <ClCompile Include="PoolAllocator.cpp" />
     <ClCompile Include="PredictionCache.cpp" />
     <ClCompile Include="Game.cpp" />
@@ -303,6 +304,7 @@
     <ClInclude Include="ChessCoach.h" />
     <ClInclude Include="Epd.h" />
     <ClInclude Include="Pgn.h" />
+    <ClInclude Include="Platform.h" />
     <ClInclude Include="PoolAllocator.h" />
     <ClInclude Include="PredictionCache.h" />
     <ClInclude Include="Game.h" />

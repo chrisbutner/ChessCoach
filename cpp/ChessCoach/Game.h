@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <array>
 
-#include <Stockfish/Position.h>
+#include <Stockfish/position.h>
 
 #include "Network.h"
 
@@ -27,7 +27,7 @@ public:
     inline static float CentipawnsToProbability(float centipawns)
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
-        const float probability11 = (std::atanf(centipawns / CentipawnConversionScale) / CentipawnConversionPhase);
+        const float probability11 = (::atanf(centipawns / CentipawnConversionScale) / CentipawnConversionPhase);
         const float probability01 = INetwork::MapProbability11To01(probability11);
         return std::clamp(probability01, 0.f, 1.f);
     }
@@ -36,7 +36,7 @@ public:
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
         const float probability11 = INetwork::MapProbability01To11(probability01);
-        const float centipawns = (std::tanf(probability11 * CentipawnConversionPhase) * CentipawnConversionScale);
+        const float centipawns = (::tanf(probability11 * CentipawnConversionPhase) * CentipawnConversionScale);
         return centipawns;
     }
 
@@ -93,7 +93,7 @@ public:
     // QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB]
     static int QueenKnightPlane[SQUARE_NB];
 
-    static const int NoProgressSaturationCount = 99;
+    constexpr static const int NoProgressSaturationCount = 99;
 
     static Key PredictionCache_PreviousMoveFromSquare[Config::InputPreviousMoveCount][SQUARE_NB];
     static Key PredictionCache_PreviousMoveToSquare[Config::InputPreviousMoveCount][SQUARE_NB];

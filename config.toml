@@ -101,7 +101,7 @@ exploration_rate_init = 1.25
 [prediction_cache]
 
 size_gb = 8
-max_ply = 14
+max_ply = 24
 
 [time_control]
 

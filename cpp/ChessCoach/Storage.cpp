@@ -6,6 +6,7 @@
 
 #include "Config.h"
 #include "Pgn.h"
+#include "Platform.h"
 
 Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig)
     : _gameFileCount{}
@@ -14,11 +15,7 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
     , _currentSaveGameCount{}
     , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
 {
-    char* appData;
-    errno_t err = _dupenv_s(&appData, nullptr, "localappdata");
-    assert(!err && appData);
-
-    const std::filesystem::path rootPath = (std::filesystem::path(appData) / "ChessCoach");
+    const std::filesystem::path rootPath = Platform::UserDataPath();
 
     static_assert(GameType_Count == 2);
     _gamesPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.GamesPathTraining);
@@ -231,8 +228,6 @@ int Storage::NetworkStepCount(const std::string& networkName) const
 // Requires caller to lock.
 void Storage::SaveToDisk(GameType gameType, const SavedGame& game)
 {
-    bool startNewFile = false;
-
     // Check whether the current save file has run out of room.
     if (_currentSaveFile[gameType].is_open())
     {

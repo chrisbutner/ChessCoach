@@ -7,19 +7,20 @@
 #include <Stockfish/types.h>
 
 #include "Network.h"
+#include "Platform.h"
 
-struct PredictionCacheEntry
+struct alignas(64) PredictionCacheEntry
 {
     // Positions with more moves don't fit in the cache and so shouldn't be probed/stored.
     static const int MaxMoveCount = 52;
 
-    Key key;                                                            // 8 bytes
-    float value;                                                        // 4 bytes
-    std::array<uint8_t, MaxMoveCount> policyPriors;    // 52 bytes
+    Key key;                                            // 8 bytes
+    float value;                                        // 4 bytes
+    std::array<uint8_t, MaxMoveCount> policyPriors;     // 52 bytes
 };
 static_assert(sizeof(PredictionCacheEntry) == 64);
 
-struct PredictionCacheChunk
+struct alignas(512) PredictionCacheChunk
 {
     void Clear();
     bool TryGet(Key key, int moveCount, float* valueOut, float* priorsOut);
@@ -27,16 +28,26 @@ struct PredictionCacheChunk
 
 private:
 
-    static const int EntryCount = 7;
+    static const int EntryCount =
+#ifdef CHESSCOACH_WINDOWS
+        7;
+#else
+        6;
+#endif
 
-    std::array<PredictionCacheEntry, EntryCount> _entries;  // 384 bytes
-    std::array<int, EntryCount> _ages;                      // 32 bytes
-    std::shared_mutex _mutex;                               // 8 bytes
-    char padding[24];                                       // 24 bytes
+    std::array<PredictionCacheEntry, EntryCount> _entries;  // 448/384 bytes
+    std::array<int, EntryCount> _ages;                      // 28=32/24 bytes
+    std::shared_mutex _mutex;                               // 8/56 bytes
 
     friend class PredictionCache;
 };
+
+#ifdef CHESSCOACH_WINDOWS
 static_assert(sizeof(std::shared_mutex) == 8);
+#else
+static_assert(sizeof(std::shared_mutex) == 56);
+#endif
+
 static_assert(sizeof(PredictionCacheChunk) == 512);
 
 class PredictionCache

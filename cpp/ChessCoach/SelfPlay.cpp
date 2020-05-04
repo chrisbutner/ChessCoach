@@ -134,7 +134,7 @@ thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
 
 std::atomic_uint SelfPlayWorker::ThreadSeed;
 thread_local std::default_random_engine SelfPlayWorker::Random(
-    std::random_device()() +
+    std::random_device{}() +
     static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()) +
     ++ThreadSeed);
 
@@ -544,13 +544,13 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
     float expSum = 0.f;
     for (int i = 0; i < moveCount; i++)
     {
-        expSum += std::expf(distribution[i] - max);
+        expSum += ::expf(distribution[i] - max);
     }
 
-    const float logSumExp = std::logf(expSum) + max;
+    const float logSumExp = ::logf(expSum) + max;
     for (int i = 0; i < moveCount; i++)
     {
-        distribution[i] = std::expf(distribution[i] - logSumExp);
+        distribution[i] = ::expf(distribution[i] - logSumExp);
     }
 }
 
@@ -932,7 +932,7 @@ int SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move
     assert(spec.pointSans.empty() ^ spec.avoidSans.empty());
     assert(spec.pointSans.size() == spec.points.size());
 
-    for (const std::string avoidSan : spec.avoidSans)
+    for (const std::string& avoidSan : spec.avoidSans)
     {
         const Move avoid = _games[0].ParseSan(avoidSan);
         assert(avoid != MOVE_NONE);
@@ -1031,6 +1031,14 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             //   lowering the exploration incentive in the UCB score.
             // - However, let searches override this when it's important enough; e.g. going down the
             //   same deep line to explore sibling leaves, or revisiting a checkmate.
+
+            // If parallel MCTS is already expanding the root then we have to just give up this round.
+            if (game.Root()->expanding)
+            {
+                assert(game.TryHard());
+                _searchState.failedNodeCount++;
+                return std::pair(MOVE_NONE, nullptr);
+            }
 
             scratchGame = game;
             searchPath.clear();
@@ -1204,8 +1212,8 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     const float parentVirtualExploration = static_cast<float>(parent->visitCount + parent->visitingCount);
     const float childVirtualExploration = static_cast<float>(child->visitCount + child->visitingCount);
     const float explorationRate =
-        (std::logf((parentVirtualExploration + Config().SelfPlay.ExplorationRateBase + 1.f) / Config().SelfPlay.ExplorationRateBase) + Config().SelfPlay.ExplorationRateInit) *
-        std::sqrtf(parentVirtualExploration) / (childVirtualExploration + 1.f);
+        (::logf((parentVirtualExploration + Config().SelfPlay.ExplorationRateBase + 1.f) / Config().SelfPlay.ExplorationRateBase) + Config().SelfPlay.ExplorationRateInit) *
+        ::sqrtf(parentVirtualExploration) / (childVirtualExploration + 1.f);
 
     // (a) prior score
     const float priorScore = explorationRate * child->prior;

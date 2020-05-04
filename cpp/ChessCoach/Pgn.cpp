@@ -385,7 +385,6 @@ float Pgn::ParseResultPrecise(const std::string& text)
 
 Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceType fromPieceType)
 {
-    const Color toPlay = position.side_to_move();
     const size_t capture = san.find('x', 1);
     Square targetSquare;
     bool hasPartialDisambiguation = false;

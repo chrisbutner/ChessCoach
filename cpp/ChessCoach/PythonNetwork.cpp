@@ -5,6 +5,8 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
+#include "Platform.h"
+
 thread_local PyGILState_STATE PythonContext::GilState;
 thread_local PyThreadState* PythonContext::ThreadState = nullptr;
 
@@ -37,6 +39,15 @@ PythonNetwork::PythonNetwork()
 {
     PythonContext context;
 
+    PyObject* sys = PyImport_ImportModule("sys");
+    PyCallAssert(sys);
+    PyObject* sysPath = PyObject_GetAttrString(sys, "path");
+    PyCallAssert(sysPath);
+    PyObject* pythonPath = PyUnicode_FromString(Platform::InstallationScriptPath().string().c_str());
+    PyCallAssert(pythonPath);
+    const int error = PyList_Append(sysPath, pythonPath);
+    PyCallAssert(!error);
+
     PyObject* module = PyImport_ImportModule("network");
     PyCallAssert(module);
 
@@ -48,6 +59,9 @@ PythonNetwork::PythonNetwork()
     _saveNetworkFunction = LoadFunction(module, "save_network");
 
     Py_DECREF(module);
+    Py_DECREF(pythonPath);
+    Py_DECREF(sysPath);
+    Py_DECREF(sys);
 }
 
 PythonNetwork::~PythonNetwork()

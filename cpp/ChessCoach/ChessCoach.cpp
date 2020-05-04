@@ -13,6 +13,7 @@
 #include "Game.h"
 #include "PredictionCache.h"
 #include "PoolAllocator.h"
+#include "Platform.h"
 
 namespace PSQT
 {
@@ -64,15 +65,13 @@ void ChessCoach::Finalize()
 int ChessCoach::InitializePython()
 {
     // Work around a Python crash.
-    char* pythonHome;
-    errno_t err = _dupenv_s(&pythonHome, nullptr, "PYTHONHOME");
-    if (err || !pythonHome)
+    const std::string pythonHome = Platform::GetEnvironmentVariable("PYTHONHOME");
+    if (pythonHome.empty())
     {
-        char* condaPrefix;
-        errno_t err = _dupenv_s(&condaPrefix, nullptr, "CONDA_PREFIX");
-        if (!err && condaPrefix)
+        const std::string condaPrefix = Platform::GetEnvironmentVariable("CONDA_PREFIX");
+        if (!condaPrefix.empty())
         {
-            _putenv_s("PYTHONHOME", condaPrefix);
+            Platform::SetEnvironmentVariable("PYTHONHOME", condaPrefix.c_str());
         }
     }
 

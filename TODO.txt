@@ -1,5 +1,11 @@
 Try linux/TF C++ API
 - add Linux support (use v1 subsystem?)
+	- set up debug/release
+	- hook up tests
+	- get gcc and clang working
+	- test all exes on linux
+	- test all exes on windows
+	- copy config.toml to user location
 - use TF C++ API and benchmark
 
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
