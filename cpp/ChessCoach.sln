@@ -9,7 +9,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Stockfish", "Stockfish\Stoc
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTest", "ChessCoachTest\ChessCoachTest.vcxproj", "{9FA44135-8B16-47B5-91D0-F4B02FCDDB75}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTrain", "ChessCoachTraining\ChessCoachTraining.vcxproj", "{811C1C94-ED7C-4007-AF1F-BC16D2BFB906}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTrain", "ChessCoachTrain\ChessCoachTrain.vcxproj", "{811C1C94-ED7C-4007-AF1F-BC16D2BFB906}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2F83C3F3-96F3-4B3A-80B6-ED446C68D0DC}"
 	ProjectSection(SolutionItems) = preProject
@@ -22,16 +22,6 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachUci", "ChessCoachUci\ChessCoachUci.vcxproj", "{E3E1DA7B-0C6D-4B63-A5AE-6811CB614139}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachStrengthTest", "ChessCoachStrengthTest\ChessCoachStrengthTest.vcxproj", "{ADA5C431-2270-446C-BF46-9A7430625409}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "py", "py", "{D9736AC4-6D15-404F-8DF8-2B68FCC27C65}"
-	ProjectSection(SolutionItems) = preProject
-		..\py\config.py = ..\py\config.py
-		..\py\freeze.py = ..\py\freeze.py
-		..\py\main.py = ..\py\main.py
-		..\py\model.py = ..\py\model.py
-		..\py\network.py = ..\py\network.py
-		..\py\storage.py = ..\py\storage.py
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -130,9 +120,6 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{D9736AC4-6D15-404F-8DF8-2B68FCC27C65} = {2F83C3F3-96F3-4B3A-80B6-ED446C68D0DC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AC57FD4A-AFB6-4BB3-8297-2AD49D464AA7}

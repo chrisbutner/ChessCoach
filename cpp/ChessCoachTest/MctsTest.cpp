@@ -50,7 +50,7 @@ std::vector<Node*> GeneratePrincipleVariation(const SelfPlayWorker& selfPlayWork
             if (pair.second->visitCount > 0)
             {
                 const bool bestIsNotBest = selfPlayWorker.WorseThan(node->bestChild.second, pair.second);
-                if (bestIsNotBest) throw std::exception("bestIsNotBest false");
+                if (bestIsNotBest) throw std::runtime_error("bestIsNotBest false");
             }
         }
         if (node->bestChild.second)

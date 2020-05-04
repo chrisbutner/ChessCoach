@@ -13,8 +13,9 @@
 #include <ChessCoach/Storage.h>
 #include <ChessCoach/Pgn.h>
 
-// ~13k-15k games per second on i7-6700, Samsung SSD 950 PRO 512GB
+// ~15k (MSVC), ~71k (GCC) games per second on i7-6700, Samsung SSD 950 PRO 512GB.
 // Could probably be trivially improved by lessening PGN queue mutex contention.
+// Haven't investigated platform/compiler differences, probably easy gains.
 class ChessCoachPgnToGames : public ChessCoach
 {
 public:

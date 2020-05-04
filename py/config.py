@@ -3,7 +3,7 @@ import platform
 import os
 
 if (platform.system() == "Windows"):
-  data_root = os.environ["localappdata"]
+  data_root = os.path.join(os.environ["localappdata"], "ChessCoach")
 else:
   data_root = os.environ.get("XDG_DATA_HOME")
   if data_root:

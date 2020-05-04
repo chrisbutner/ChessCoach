@@ -1,3 +1,6 @@
+#ifndef _CHESSCOACH_H_
+#define _CHESSCOACH_H_
+
 #include "Network.h"
 
 class ChessCoach
@@ -20,3 +23,5 @@ protected:
     void FinalizePython();
     void FinalizeStockfish();
 };
+
+#endif // _CHESSCOACH_H_

@@ -7,7 +7,6 @@
 
 TEST(PoolAllocator, Basic)
 {
-    const int itemCount = 3;
     const size_t blockSizeBytes = (sizeof(std::tuple<int, int, int, int>) * 3);
     const size_t maxBlocks = 1;
     PoolAllocator<std::tuple<int, int, int, int>, blockSizeBytes, maxBlocks> poolAllocator;
@@ -55,7 +54,7 @@ TEST(PoolAllocator, Node)
 
 TEST(PoolAllocator, Alignment)
 {
-    const size_t alignment = std::max(__STDCPP_DEFAULT_NEW_ALIGNMENT__, alignof(int));
+    const size_t alignment = std::max(static_cast<size_t>(__STDCPP_DEFAULT_NEW_ALIGNMENT__), static_cast<size_t>(alignof(int)));
     EXPECT_GT(alignment, sizeof(int));
 
     const int itemCount = 5;

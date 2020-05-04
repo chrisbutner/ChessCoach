@@ -56,6 +56,6 @@ TEST(Network, Policy)
     float sum = 0;
     for (int i = 0; i < legalMoveCount; i++)
     {
-        sum += (game.PolicyValue(labels, *(legalMoves.begin() + i)) * -std::logf(prediction));
+        sum += (game.PolicyValue(labels, *(legalMoves.begin() + i)) * -::logf(prediction));
     }
 }

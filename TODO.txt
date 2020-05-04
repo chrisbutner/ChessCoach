@@ -1,11 +1,5 @@
-Try linux/TF C++ API
-- add Linux support (use v1 subsystem?)
-	- set up debug/release
-	- hook up tests
-	- get gcc and clang working
-	- test all exes on linux
-	- test all exes on windows
-	- copy config.toml to user location
+Try TF C++ API
+- check again about Windows, otherwise dual-boot
 - use TF C++ API and benchmark
 
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
@@ -60,6 +54,7 @@ CPU/integration performance:
 	  limited by Node memory use now. anyway, think about it.
 
 Code quality
+- copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - fix _ in network names - split on final _
 - privatize C++ methods (got too python-brained)
 - try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
