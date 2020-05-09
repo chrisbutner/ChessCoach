@@ -4,12 +4,12 @@
 
 [network]
 
-training_network_name = "selfplay3"
-uci_network_name = "supervised1"
+training_network_name = "supervised5"
+uci_network_name = "supervised5"
 
 [[networks]]
 
-    name = "supervised8"
+    name = "supervised5"
 
     [networks.training]
 
@@ -70,6 +70,8 @@ strength_test_interval = 5000
 num_games = 44_000_000
 window_size = 1_000_000
 weight_decay = 1e-4
+value_loss_weight = 0.1
+policy_loss_weight = 1.0
 momentum = 0.9
 games_path_training = "Games/Training"
 games_path_validation = "Games/Validation"

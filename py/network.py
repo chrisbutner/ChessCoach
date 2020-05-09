@@ -36,7 +36,8 @@ class KerasNetwork(Network):
       learning_rate=get_learning_rate(config.training_network["learning_rate_schedule"], 0),
       momentum=config.training_network["momentum"])
     losses = ["mean_squared_error", self.flat_categorical_crossentropy_from_logits]
-    self.model.compile(optimizer=optimizer, loss=losses, loss_weights=[1.0, 1.0], metrics=[[], [self.flat_categorical_accuracy]])
+    loss_weights = [config.training_network["value_loss_weight"], config.training_network["policy_loss_weight"]]
+    self.model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=[[], [self.flat_categorical_accuracy]])
 
   # This fixes an issue with categorical_crossentropy calculating incorrectly
   # over our 73*8*8 output planes - loss ends up way too small.
@@ -177,11 +178,14 @@ def log_training(type, writer, step, losses):
     writer.flush()
 
 def log_loss_accuracy(losses):
+  # Fix losses: only total includes loss weighting.
+  model = networks.training_network.model
   with tf.name_scope("loss"):
     tf.summary.scalar("overall loss", losses[0])
     tf.summary.scalar("value loss", losses[1])
     tf.summary.scalar("policy loss", losses[2])
-    tf.summary.scalar("L2 loss", losses[0] - losses[1] - losses[2])
+    # Equivalent to tf.math.add_n(model.losses)
+    tf.summary.scalar("L2 loss", losses[0] - (losses[1] * model.loss_weights[0]) - (losses[2] * model.loss_weights[1])) 
   with tf.name_scope("accuracy"):
     tf.summary.scalar("policy accuracy", losses[3])
 

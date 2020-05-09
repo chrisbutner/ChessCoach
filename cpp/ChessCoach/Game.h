@@ -94,9 +94,6 @@ public:
     static int QueenKnightPlane[SQUARE_NB];
 
     constexpr static const int NoProgressSaturationCount = 99;
-
-    static Key PredictionCache_PreviousMoveFromSquare[Config::InputPreviousMoveCount][SQUARE_NB];
-    static Key PredictionCache_PreviousMoveToSquare[Config::InputPreviousMoveCount][SQUARE_NB];
     static Key PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 
     constexpr const static char* SquareName[SQUARE_NB] = {
@@ -134,18 +131,21 @@ public:
     float StockfishEvaluation() const;
 
     inline Position& DebugPosition() { return _position; }
+    inline Position& DebugPreviousPosition(int index) { return _previousPositions[index]; }
 
 private:
 
+    void GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, const Position& position) const;
     void FillPlane(INetwork::Plane& plane, float value) const;
+    Key Rotate(Key key, unsigned int distance) const;
 
 protected:
 
     // Used for both real and scratch games.
     Position _position;
     StateListPtr _positionStates;
-    std::array<Move, Config::InputPreviousMoveCount> _previousMoves;
-    int _previousMovesOldest;
+    std::array<Position, INetwork::InputPreviousPositionCount> _previousPositions;
+    int _previousPositionsOldest;
 };
 
 static_assert(CHESSCOACH_VALUE_WIN > CHESSCOACH_VALUE_DRAW);

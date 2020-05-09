@@ -1,12 +1,7 @@
-Try TF C++ API
-- check again about Windows, otherwise dual-boot
-- use TF C++ API and benchmark
-
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
-- try bias again
-- try AZ history planes instead of mine
-	- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
 - try to train on some lc0 games or something to make sure everything's working/bug-free
+- really need value to converge
+- pipeline batch sampling in C++, too slow
 
 Self-play performance
 - try shrink Node memory
@@ -41,6 +36,7 @@ UCI (#2)
 
 CPU/integration performance:
 - break down MCTS timing details just in case anything's off (just use sampling)
+- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
 	- can always binary search Move-ints or something too, it's not mutated
@@ -56,6 +52,7 @@ CPU/integration performance:
 Code quality
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - fix _ in network names - split on final _
+- factor out all-exist ringbuffer with foreach iteration (begin/end)
 - privatize C++ methods (got too python-brained)
 - try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
 - try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
@@ -89,6 +86,11 @@ UCI (#3)
 - implement proper time controls/search options, ponder
 - write out currmove et al (e.g. for Arena)
 - implement multiPV (run/batch multiple games in a worker with path restrictions?)
+
+TPUs (if needed)
+- get it running on cloud
+- scale up training + inference
+- try mixed mode (16/32)
 
 Scalability
 - can't play enough self-play games, work on new ideas soon

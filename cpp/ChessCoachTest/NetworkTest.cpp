@@ -59,3 +59,39 @@ TEST(Network, Policy)
         sum += (game.PolicyValue(labels, *(legalMoves.begin() + i)) * -::logf(prediction));
     }
 }
+
+TEST(Network, ImagePieceHistoryPlanes)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    Game game;
+
+    const int finalHistoryPlanes = (INetwork::InputPreviousPositionCount - 1) * INetwork::InputPlanesPerPosition;
+    const int currentPositionPlanes = INetwork::InputPreviousPositionCount * INetwork::InputPlanesPerPosition;
+
+    // Ensure that the final history plane is all zeros.
+    std::unique_ptr<INetwork::InputPlanes> image1(std::make_unique<INetwork::InputPlanes>(game.GenerateImage()));
+    const INetwork::Plane startingPositionOurPawns = (*image1)[currentPositionPlanes + 0];
+    for (int i = 0; i < INetwork::InputPlanesPerPosition; i++)
+    {
+        for (int rank = 0; rank < INetwork::BoardSide; rank++)
+        {
+            for (int file = 0; file < INetwork::BoardSide; file++)
+            {
+                EXPECT_EQ((*image1)[finalHistoryPlanes + i][rank][file], 0.f);
+            }
+        }
+    }
+
+    // Make a move. Ensure that the final history our-pawns plane equals the starting position's.
+    game.ApplyMove(make_move(SQ_E2, SQ_E4));
+    std::unique_ptr<INetwork::InputPlanes> image2(std::make_unique<INetwork::InputPlanes>(game.GenerateImage()));
+    for (int rank = 0; rank < INetwork::BoardSide; rank++)
+    {
+        for (int file = 0; file < INetwork::BoardSide; file++)
+        {
+            EXPECT_EQ((*image2)[finalHistoryPlanes + 0][rank][file], startingPositionOurPawns[rank][file]);
+        }
+    }
+}

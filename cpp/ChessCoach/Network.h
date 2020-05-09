@@ -13,8 +13,11 @@ constexpr static const float NETWORK_VALUE_LOSS = -1.f;
 
 struct INetwork
 {
+    static const int InputPreviousPositionCount = 7;
+    static const int InputPlanesPerPosition = 12;
+
     static const int BoardSide = 8;
-    static const int InputPlaneCount = 25;
+    static const int InputPlaneCount = 101;
     static const int OutputPlaneCount = 73;
 
     static const int PlaneFloatCount = BoardSide * BoardSide;

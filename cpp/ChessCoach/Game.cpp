@@ -6,8 +6,6 @@
 #include "Config.h"
 
 int Game::QueenKnightPlane[SQUARE_NB];
-Key Game::PredictionCache_PreviousMoveFromSquare[Config::InputPreviousMoveCount][SQUARE_NB];
-Key Game::PredictionCache_PreviousMoveToSquare[Config::InputPreviousMoveCount][SQUARE_NB];
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 std::array<float, 25> Game::UcbMateTerm;
 
@@ -40,14 +38,6 @@ void Game::Initialize()
 
     // Set up additional Zobrist hash keys for prediction caching (additional info beyond position).
     PRNG rng(7607098); // Arbitrary seed
-    for (int i = 0; i < Config::InputPreviousMoveCount; i++)
-    {
-        for (Square square = SQ_A1; square <= SQ_H8; ++square)
-        {
-            PredictionCache_PreviousMoveFromSquare[i][square] = rng.rand<Key>();
-            PredictionCache_PreviousMoveToSquare[i][square] = rng.rand<Key>();
-        }
-    }
     for (int i = 0; i <= NoProgressSaturationCount; i++)
     {
         PredictionCache_NoProgressCount[i] = rng.rand<Key>();
@@ -66,8 +56,8 @@ void Game::Initialize()
 
 Game::Game()
     : _positionStates(new std::deque<StateInfo>(1))
-    , _previousMoves{} // Fills with MOVE_NONE == 0
-    , _previousMovesOldest(0)
+    , _previousPositions{}
+    , _previousPositionsOldest(0)
 
 {
     _position.set(Config::StartingPosition, false /* isChess960 */, &_positionStates->back(), Threads.main());
@@ -75,8 +65,8 @@ Game::Game()
 
 Game::Game(const std::string& fen, const std::vector<Move>& moves)
     : _positionStates(new std::deque<StateInfo>(1))
-    , _previousMoves{} // Fills with MOVE_NONE == 0
-    , _previousMovesOldest(0)
+    , _previousPositions{}
+    , _previousPositionsOldest(0)
 
 {
     _position.set(fen, false /* isChess960 */, &_positionStates->back(), Threads.main());
@@ -90,8 +80,8 @@ Game::Game(const std::string& fen, const std::vector<Move>& moves)
 Game::Game(const Game& other)
     : _position(other._position)
     , _positionStates(new std::deque<StateInfo>())
-    , _previousMoves(other._previousMoves)
-    , _previousMovesOldest(other._previousMovesOldest)
+    , _previousPositions(other._previousPositions)
+    , _previousPositionsOldest(other._previousPositionsOldest)
 {
     assert(&other != this);
 }
@@ -102,8 +92,8 @@ Game& Game::operator=(const Game& other)
 
     _position = other._position;
     _positionStates.reset(new std::deque<StateInfo>());
-    _previousMoves = other._previousMoves;
-    _previousMovesOldest = other._previousMovesOldest;
+    _previousPositions = other._previousPositions;
+    _previousPositionsOldest = other._previousPositionsOldest;
 
     return *this;
 }
@@ -111,8 +101,8 @@ Game& Game::operator=(const Game& other)
 Game::Game(Game&& other) noexcept
     : _position(other._position)
     , _positionStates(std::move(other._positionStates))
-    , _previousMoves(other._previousMoves)
-    , _previousMovesOldest(other._previousMovesOldest)
+    , _previousPositions(other._previousPositions)
+    , _previousPositionsOldest(other._previousPositionsOldest)
 {
     assert(&other != this);
 }
@@ -123,8 +113,8 @@ Game& Game::operator=(Game&& other) noexcept
 
     _position = other._position;
     _positionStates = std::move(other._positionStates);
-    _previousMoves = other._previousMoves;
-    _previousMovesOldest = other._previousMovesOldest;
+    _previousPositions = other._previousPositions;
+    _previousPositionsOldest = other._previousPositionsOldest;
 
     return *this;
 }
@@ -140,10 +130,11 @@ Color Game::ToPlay() const
 
 void Game::ApplyMove(Move move)
 {
+    _previousPositions[_previousPositionsOldest] = _position;
+    _previousPositionsOldest = (_previousPositionsOldest + 1) % INetwork::InputPreviousPositionCount;
+
     _positionStates->emplace_back();
     _position.do_move(move, _positionStates->back());
-    _previousMoves[_previousMovesOldest] = move;
-    _previousMovesOldest = (_previousMovesOldest + 1) % Config::InputPreviousMoveCount;
 }
 
 int Game::Ply() const
@@ -176,30 +167,25 @@ float& Game::PolicyValue(INetwork::OutputPlanes& policy, Move move) const
 
 Key Game::GenerateImageKey() const
 {
-    // Stockfish key includes material (planes 0-11) and castling rights (planes 20-23).
-    Key key = _position.key();
+    // No need to flip anything for hash keys: for a particular position, it's always the same player to move.
+    // Stockfish key includes material and castling rights, so we just need to add history and no-progress.
+    // Because Zobrist keys are iteratively updated via moves, they collide when combining positions that are
+    // reached by different permutations of the same set of moves. So, rotate the key to differentiate.
 
-    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
-    const Color toPlay = ToPlay();
+    // Add no-progress plane to key.
+    Key key = PredictionCache_NoProgressCount[std::min(NoProgressSaturationCount, _position.rule50_count())];
 
-    // Add previous move planes 12-19 to key.
-    int previousMoveIndex = _previousMovesOldest;
-    for (int i = 0; i < Config::InputPreviousMoveCount; i++)
+    // Add last 7 positions.
+    int previousPositionIndex = _previousPositionsOldest;
+    for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
     {
-        Move move = _previousMoves[previousMoveIndex];
-        if (move != MOVE_NONE)
-        {
-            move = FlipMove(toPlay, move);
-            Square from = from_sq(move);
-            Square to = to_sq(move);
-            key ^= PredictionCache_PreviousMoveFromSquare[i][from];
-            key ^= PredictionCache_PreviousMoveToSquare[i][to];
-        }
-        previousMoveIndex = (previousMoveIndex + 1) % Config::InputPreviousMoveCount;
+        const Position& position = _previousPositions[previousPositionIndex];
+        key ^= (position.state_info() ? Rotate(position.key(), INetwork::InputPreviousPositionCount - i) : 0);
+        previousPositionIndex = (previousPositionIndex + 1) % INetwork::InputPreviousPositionCount;
     }
 
-    // Add no-progress plane 24 to key.
-    key ^= PredictionCache_NoProgressCount[std::min(NoProgressSaturationCount, _position.rule50_count())];
+    // Add current position.
+    key ^= _position.key();
 
     return key;
 }
@@ -208,63 +194,60 @@ Key Game::GenerateImageKey() const
 INetwork::InputPlanes Game::GenerateImage() const
 {
     INetwork::InputPlanes image = {};
+    int nextPlane = 0;
 
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = ToPlay();
 
-    // Piece planes 0-11
-    for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
+    // Add last 7 positions' pieces, planes 0-83.
+    assert(nextPlane == 0);
+    int previousPositionIndex = _previousPositionsOldest;
+    for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
     {
-        for (File file = FILE_A; file <= FILE_H; ++file)
-        {
-            Piece piece = FlipPiece[toPlay][_position.piece_on(FlipSquare(toPlay, make_square(file, rank)))];
-            int plane = ImagePiecePlane[piece];
-            if (plane != NO_PLANE)
-            {
-                assert((plane >= 0) && (plane < InputPiecePlaneCount));
-                image[plane][rank][file] = 1.f;
-            }
-        }
+        const Position& position = _previousPositions[previousPositionIndex];
+        GeneratePiecePlanes(image, nextPlane, position);
+
+        nextPlane += INetwork::InputPlanesPerPosition;
+        previousPositionIndex = (previousPositionIndex + 1) % INetwork::InputPreviousPositionCount;
     }
 
-    // Previous move planes 12-19
-    int previousMoveIndex = _previousMovesOldest;
-    for (int i = 0; i < Config::InputPreviousMoveCount; i++)
-    {
-        Move move = _previousMoves[previousMoveIndex];
-        if (move != MOVE_NONE)
-        {
-            move = FlipMove(toPlay, move);
-            Square from = from_sq(move);
-            Square to = to_sq(move);
-            image[i][rank_of(from)][file_of(from)] = 1.f;
-            image[i][rank_of(to)][file_of(to)] = 1.f;
-        }
-        previousMoveIndex = (previousMoveIndex + 1) % Config::InputPreviousMoveCount;
-    }
+    // Add current position's pieces, planes 84-95.
+    assert(nextPlane == 84);
+    GeneratePiecePlanes(image, nextPlane, _position);
+    nextPlane += INetwork::InputPlanesPerPosition;
 
-    // Castling planes 20-23
+    // Castling planes 96-99
+    assert(nextPlane == 96);
     if (_position.can_castle(toPlay & KING_SIDE))
     {
-        FillPlane(image[20], 1.f);
+        FillPlane(image[nextPlane], 1.f);
     }
-    if (_position.can_castle(~toPlay & KING_SIDE))
-    {
-        FillPlane(image[21], 1.f);
-    }
+    nextPlane++;
     if (_position.can_castle(toPlay & QUEEN_SIDE))
     {
-        FillPlane(image[22], 1.f);
+        FillPlane(image[nextPlane], 1.f);
     }
+    nextPlane++;
+    if (_position.can_castle(~toPlay & KING_SIDE))
+    {
+        FillPlane(image[nextPlane], 1.f);
+    }
+    nextPlane++;
     if (_position.can_castle(~toPlay & QUEEN_SIDE))
     {
-        FillPlane(image[23], 1.f);
+        FillPlane(image[nextPlane], 1.f);
     }
+    nextPlane++;
 
-    // No-progress plane 24
+    // No-progress plane 100
+    assert(nextPlane == 100);
     const float normalizedFiftyRuleCount = std::min(1.f, static_cast<float>(_position.rule50_count()) / NoProgressSaturationCount);
-    FillPlane(image[24], normalizedFiftyRuleCount);
+    FillPlane(image[nextPlane++], normalizedFiftyRuleCount);
 
+    static_assert(INetwork::InputPreviousPositionCount == 7);
+    static_assert(INetwork::InputPlanesPerPosition == 12);
+    static_assert(INetwork::InputPlaneCount == 101);
+    assert(nextPlane == INetwork::InputPlaneCount);
     return image;
 }
 
@@ -293,7 +276,42 @@ float Game::StockfishEvaluation() const
     return probability;
 }
 
+void Game::GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, const Position& position) const
+{
+    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
+    const Color toPlay = position.side_to_move();
+
+    for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
+    {
+        for (File file = FILE_A; file <= FILE_H; ++file)
+        {
+            const Piece piece = FlipPiece[toPlay][position.piece_on(FlipSquare(toPlay, make_square(file, rank)))];
+            const int plane = ImagePiecePlane[piece];
+            if (plane != NO_PLANE)
+            {
+                // If any auxilary info is added to position planes then they won't both be 12 anymore.
+                const int piecePlanesPerPosition = 12;
+                static_assert(piecePlanesPerPosition <= INetwork::InputPlanesPerPosition);
+                assert((plane >= 0) && (plane < piecePlanesPerPosition));
+                image[planeOffset + plane][rank][file] = 1.f;
+            }
+        }
+    }
+}
+
 void Game::FillPlane(INetwork::Plane& plane, float value) const
 {
     std::fill(&plane[0][0], &plane[0][0] + INetwork::PlaneFloatCount, value);
+}
+
+Key Game::Rotate(Key key, unsigned int distance) const
+{
+    // https://stackoverflow.com/questions/776508/best-practices-for-circular-shift-rotate-operations-in-c
+    // https://blog.regehr.org/archives/1063
+    
+    static_assert(std::is_same<uint64_t, Key>::value);
+    
+    const unsigned int mask = 63;
+    distance &= mask;
+    return (key >> distance) | (key << (-distance & mask));
 }

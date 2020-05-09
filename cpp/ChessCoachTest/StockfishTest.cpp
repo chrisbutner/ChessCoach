@@ -45,3 +45,39 @@ TEST(Stockfish, CentipawnConversion)
     EXPECT_NEAR(Game::CentipawnsToProbability(32000), CHESSCOACH_VALUE_WIN, epsilon);
     EXPECT_NEAR(Game::CentipawnsToProbability(-32000), CHESSCOACH_VALUE_LOSS, epsilon);
 }
+
+TEST(Stockfish, EmptyPosition)
+{
+    Position position{};
+    EXPECT_EQ(position.state_info(), nullptr);
+
+    for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
+    {
+        for (File file = FILE_A; file <= FILE_H; ++file)
+        {
+            EXPECT_EQ(position.piece_on(make_square(file, rank)), NO_PIECE);
+        }
+    }
+}
+
+TEST(Stockfish, EmptyGamePositionHistory)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    Game game;
+
+    for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
+    {
+        const Position& position = game.DebugPreviousPosition(i);
+        EXPECT_EQ(position.state_info(), nullptr);
+
+        for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
+        {
+            for (File file = FILE_A; file <= FILE_H; ++file)
+            {
+                EXPECT_EQ(position.piece_on(make_square(file, rank)), NO_PIECE);
+            }
+        }
+    }
+}
