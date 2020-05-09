@@ -131,7 +131,8 @@ def get_learning_rate(schedule, step):
     if step >= key:
       rate = value
     else:
-      return rate
+      break
+  return rate
 
 def predict_batch(image):
   return networks.prediction_network.predict_batch(image)
