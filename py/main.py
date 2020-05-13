@@ -33,7 +33,6 @@ board_side = 8
 images = tf.constant(numpy.ones((7, 101, board_side, board_side), dtype=numpy.float32))
 # (B, D-model, H, W)
 x = tf.keras.layers.Conv2D(filters=total_depth, kernel_size=(3, 3), padding="same", data_format="channels_first")(images)
-x = tf.transpose(x, [0, 2, 3, 1]) # channels first->last
 
 test = MultiHeadSelfAttention2D(total_depth, num_heads, 1e-4, "blah")
 test2 = test(x)

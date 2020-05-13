@@ -28,6 +28,8 @@
 
 import tensorflow.compat.v1 as tf
 import tensorflow.keras as keras
+from tensorflow.keras import backend as K
+K.set_image_data_format("channels_first")
 
 class MultiHeadSelfAttention2D(keras.layers.Layer):
 
@@ -56,25 +58,25 @@ class MultiHeadSelfAttention2D(keras.layers.Layer):
     # Prepare to compute qkv (initialization from tensor2tensor, compute_attention_component).
     kv_initializer_stddev = self.total_depth ** -0.5
     q_initializer_stddev = kv_initializer_stddev * (self.depth_per_head ** -0.5)
-    self.query = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_last",
+    self.query = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
       name=f"{self.layer_name}/query_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=q_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
-    self.key = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_last",
+    self.key = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
       name=f"{self.layer_name}/key_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=kv_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
-    self.value = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_last",
+    self.value = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
       name=f"{self.layer_name}/value_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=kv_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
 
     # Project heads with final 1x1 convolution.
-    self.combined_output = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_last",
+    self.combined_output = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
       name=f"{self.layer_name}/output_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=q_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
 
     super(MultiHeadSelfAttention2D, self).build(input_shape)
 
   def call(self, input):
-    # Expect input with shape [batch, length, length, total_depth].
+    # Expect input with shape [batch, total_depth, length, length].
     q = self.query(input)
     k = self.key(input)
     v = self.value(input)
@@ -87,7 +89,7 @@ class MultiHeadSelfAttention2D(keras.layers.Layer):
     # Scale down a la Transformer to help with gradients.
     q *= self.depth_per_head**-0.5
 
-    # Calculate actual attention, then recombine to [batch, length, length, total_depth].
+    # Calculate actual attention, then recombine to [batch, total_depth, length, length].
     x = self.dot_product_attention_relative_2d(q, k, v)
     x = self.combine_heads_2d(x)
 
@@ -143,34 +145,23 @@ class MultiHeadSelfAttention2D(keras.layers.Layer):
     return xy_matmul + xz_matmul
 
   def split_heads_2d(self, x, num_heads):
-    """Split channels (dimension 3) into multiple heads (becomes dimension 1).
+    """Split channels into multiple heads.
 
     Args:
-      x: a Tensor with shape [batch, height, width, channels]
+      x: a Tensor with shape [batch, channels, height, width]
       num_heads: an integer
 
     Returns:
       a Tensor with shape [batch, num_heads, height, width, channels / num_heads]
     """
-    return tf.transpose(self.split_last_dimension(x, num_heads), [0, 3, 1, 2, 4])
+    length = self.shape_list(x)[2]
 
-  def split_last_dimension(self, x, n):
-    """Reshape x so that the last dimension becomes two dimensions.
+    # x is [batch, num_heads, depth_per_head, length, length]
+    x = tf.reshape(x, (-1, self.num_heads, self.depth_per_head, length, length))
 
-    The first of these two dimensions is n.
-
-    Args:
-      x: a Tensor with shape [..., m]
-      n: an integer.
-
-    Returns:
-      a Tensor with shape [..., n, m/n]
-    """
-    x_shape = self.shape_list(x)
-    m = x_shape[-1]
-    if isinstance(m, int) and isinstance(n, int):
-      assert m % n == 0
-    return tf.reshape(x, x_shape[:-1] + [n, m // n])
+    # x is [batch, num_heads, length, length, depth_per_head]
+    x = tf.transpose(x, [0, 1, 3, 4, 2])
+    return x
 
   def combine_heads_2d(self, x):
     """Inverse of split_heads_2d.
@@ -180,22 +171,16 @@ class MultiHeadSelfAttention2D(keras.layers.Layer):
         [batch, num_heads, height, width, channels / num_heads]
 
     Returns:
-      a Tensor with shape [batch, height, width, channels]
+      a Tensor with shape [batch, channels, height, width]
     """
-    return self.combine_last_two_dimensions(tf.transpose(x, [0, 2, 3, 1, 4]))
+    length = self.shape_list(x)[2]
 
-  def combine_last_two_dimensions(self, x):
-    """Reshape x so that the last two dimension become one.
+    # x is [batch, num_heads, depth_per_head, length, length]
+    x = tf.transpose(x, [0, 1, 4, 2, 3])
 
-    Args:
-      x: a Tensor with shape [..., a, b]
-
-    Returns:
-      a Tensor with shape [..., ab]
-    """
-    x_shape = self.shape_list(x)
-    a, b = x_shape[-2:]
-    return tf.reshape(x, x_shape[:-2] + [a * b])
+    # x is [batch, channels, length, length]
+    x = tf.reshape(x, (-1, self.total_depth, length, length))
+    return x
 
   def shape_list(self, x):
     """Return list of dims, statically where possible."""
