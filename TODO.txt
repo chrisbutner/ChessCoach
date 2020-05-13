@@ -1,11 +1,12 @@
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
+- try different NN architecture like attention/transformer (focus on speed)
+	- check TensorBoard weights, make sure names/hierarchy are okay
 - try to train on some lc0 games or something to make sure everything's working/bug-free
 - really need value to converge
 - pipeline batch sampling in C++, too slow
 
 Self-play performance
 - try shrink Node memory
-- try different NN architecture like attention/transformer (focus on speed)
 - try distilling to a smaller network for self-play predictions
 
 Improve convergence speed
@@ -33,6 +34,9 @@ UCI (#2)
 - also test different FPU schemes for strength, but care, and def. don't change training
 - try multi-thread
 	- need to sync std::cout - use Reply() everywhere
+- basic improvements to time control
+	- don't waste time when only 1 or few legal moves
+	- if dangerous time left, take mate-in-N rather than trying to find faster
 
 CPU/integration performance:
 - break down MCTS timing details just in case anything's off (just use sampling)
