@@ -1,8 +1,20 @@
-Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
-- try different NN architecture like attention/transformer (focus on speed)
-	- check TensorBoard weights, make sure names/hierarchy are okay
-- try to train on some lc0 games or something to make sure everything's working/bug-free
+Attention network experiments:
+- try eliminate initial convolution
+- try 32-filter value head
+- try 32-filter attention value head
+- try v2 residuals
+- try different learning rates
+- try different policy/value learning weights
+- try longer tower
+- try longer stem
+- try different heads
+
+Attention:
+- add architecture configuration to toml config (type, residuals*filters, etc.)
 - really need value to converge
+
+Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
+- try to train on some lc0 games or something to make sure everything's working/bug-free
 - pipeline batch sampling in C++, too slow
 
 Self-play performance

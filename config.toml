@@ -4,8 +4,26 @@
 
 [network]
 
-training_network_name = "supervised5"
+training_network_name = "attention1"
 uci_network_name = "supervised5"
+
+[[networks]]
+
+    name = "attention1"
+
+    [networks.training]
+
+    batch_size = 1024
+
+    steps = 63000
+    num_games = 0
+    window_size = 10_000_000
+    games_path_training = "Games/Supervised"
+
+    [networks.training.learning_rate_schedule]
+
+    steps = [0, 10_000, 30_000, 50_000]
+    rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [[networks]]
 

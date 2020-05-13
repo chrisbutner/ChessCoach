@@ -33,8 +33,8 @@ K.set_image_data_format("channels_first")
 
 class MultiHeadSelfAttention2D(keras.layers.Layer):
 
-  def __init__(self, total_depth, num_heads, weight_decay, layer_name):
-    super(MultiHeadSelfAttention2D, self).__init__()
+  def __init__(self, total_depth, num_heads, weight_decay, name):
+    super(MultiHeadSelfAttention2D, self).__init__(name=name)
 
     if total_depth % num_heads != 0:
       raise ValueError("Total depth (%d) must be divisible by the number of "
@@ -43,34 +43,32 @@ class MultiHeadSelfAttention2D(keras.layers.Layer):
     self.total_depth = total_depth
     self.num_heads = num_heads
     self.weight_decay = weight_decay
-    self.layer_name = layer_name
 
     self.depth_per_head = total_depth // num_heads
 
   def build(self, input_shape):
-    print("Build:", input_shape)
     length = input_shape[2]
 
     # Use a relative position embedding for keys.
     self.relative_position_embeddings = self._generate_relative_positions_embeddings_2d(
-        length, self.layer_name + "/relative_positions")
+        length, "relative_positions")
 
     # Prepare to compute qkv (initialization from tensor2tensor, compute_attention_component).
     kv_initializer_stddev = self.total_depth ** -0.5
     q_initializer_stddev = kv_initializer_stddev * (self.depth_per_head ** -0.5)
     self.query = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
-      name=f"{self.layer_name}/query_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=q_initializer_stddev),
+      name=f"query_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=q_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
     self.key = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
-      name=f"{self.layer_name}/key_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=kv_initializer_stddev),
+      name=f"key_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=kv_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
     self.value = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
-      name=f"{self.layer_name}/value_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=kv_initializer_stddev),
+      name=f"value_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=kv_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
 
     # Project heads with final 1x1 convolution.
     self.combined_output = keras.layers.Conv2D(filters=self.total_depth, kernel_size=(1, 1), data_format="channels_first",
-      name=f"{self.layer_name}/output_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=q_initializer_stddev),
+      name=f"output_{self.total_depth}", use_bias=False, kernel_initializer=keras.initializers.RandomNormal(stddev=q_initializer_stddev),
       kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))
 
     super(MultiHeadSelfAttention2D, self).build(input_shape)
