@@ -3,7 +3,6 @@
 
 #include <map>
 #include <vector>
-#include <random>
 #include <atomic>
 #include <functional>
 #include <optional>
@@ -219,11 +218,6 @@ private:
 
 class SelfPlayWorker
 {
-public:
-
-    static std::atomic_uint ThreadSeed;
-    thread_local static std::default_random_engine Random;
-
 public:
 
     SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage);

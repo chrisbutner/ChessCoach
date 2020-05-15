@@ -12,6 +12,7 @@
 
 #include "Config.h"
 #include "Pgn.h"
+#include "Random.h"
 
 TerminalValue TerminalValue::NonTerminal()
 {
@@ -131,12 +132,6 @@ float TerminalValue::MateScore(float explorationRate) const
 }
 
 thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
-
-std::atomic_uint SelfPlayWorker::ThreadSeed;
-thread_local std::default_random_engine SelfPlayWorker::Random(
-    std::random_device{}() +
-    static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()) +
-    ++ThreadSeed);
 
 Node::Node(float setPrior)
     : bestChild(MOVE_NONE, nullptr)
@@ -779,7 +774,7 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     const int startStep = (checkpoint - stepCount + 1);
     for (int step = startStep; step <= checkpoint; step++)
     {
-        TrainingBatch* batch = _storage->SampleBatch(GameType_Training, Config());
+        TrainingBatch* batch = _storage->SampleBatch(GameType_Training);
         network->TrainBatch(step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(), batch->policies.data());
 
         // Validate the network every "ValidationInterval" steps.
@@ -809,7 +804,7 @@ void SelfPlayWorker::ValidateNetwork(INetwork* network, int step)
     // Measure validation loss/accuracy using one batch.
     if (_storage->GamesPlayed(GameType_Validation) > 0)
     {
-        TrainingBatch* validationBatch = _storage->SampleBatch(GameType_Validation, Config());
+        TrainingBatch* validationBatch = _storage->SampleBatch(GameType_Validation);
         network->ValidateBatch(step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(), validationBatch->policies.data());
     }
 }
@@ -997,7 +992,7 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
 
     const int ply = game.Ply();
     const float result = game.Result();
-    const int gameNumber = _storage->AddGame(GameType_Training, game.Save(), Config());
+    const int gameNumber = _storage->AddGame(GameType_Training, game.Save());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);
@@ -1141,7 +1136,7 @@ void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
     float noiseSum = 0.f;
     for (int i = 0; i < noise.size(); i++)
     {
-        noise[i] = gamma(Random);
+        noise[i] = gamma(Random::Engine);
         noiseSum += noise[i];
     }
 
@@ -1161,7 +1156,7 @@ std::pair<Move, Node*> SelfPlayWorker::SelectMove(const SelfPlayGame& game) cons
     {
         // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
         const int sumChildVisits = game.Root()->visitCount;
-        int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random);
+        int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random::Engine);
         for (const auto& pair : game.Root()->children)
         {
             const int visitCount = pair.second->visitCount;

@@ -3,18 +3,28 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <chrono>
 
 #include "Config.h"
 #include "Pgn.h"
 #include "Platform.h"
+#include "Random.h"
+
+using namespace std::chrono_literals;
 
 Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig)
     : _gameFileCount{}
     , _loadedGameCount{}
     , _currentSaveFile{}
     , _currentSaveGameCount{}
-    , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
+    , _pipelines{ { { _games[GameType_Training], networkConfig.Training.BatchSize }, { _games[GameType_Validation], networkConfig.Training.BatchSize } } }
+    , _trainingBatchSize(networkConfig.Training.BatchSize)
+    , _trainingWindowSize(networkConfig.Training.WindowSize)
+    , _pgnInterval(networkConfig.Training.PgnInterval)
 {
+    _trainingBatchSize = networkConfig.Training.BatchSize;
+    _pgnInterval = networkConfig.Training.PgnInterval;
+
     const std::filesystem::path rootPath = Platform::UserDataPath();
 
     static_assert(GameType_Count == 2);
@@ -31,21 +41,36 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
     std::filesystem::create_directories(_pgnsPath);
     std::filesystem::create_directories(_networksPath);
     std::filesystem::create_directories(_logsPath);
+
+    InitializePipelines();
 }
 
 // Used for testing
-Storage::Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
+Storage::Storage(const NetworkConfig& networkConfig,
+    const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
     const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath)
     : _gameFileCount{}
     , _loadedGameCount{}
     , _currentSaveFile{}
     , _currentSaveGameCount{}
-    , _random(std::random_device()() + static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()))
+    , _pipelines{ { { _games[GameType_Training], networkConfig.Training.BatchSize }, { _games[GameType_Validation], networkConfig.Training.BatchSize } } }
+    , _trainingBatchSize(networkConfig.Training.BatchSize)
+    , _trainingWindowSize(networkConfig.Training.WindowSize)
+    , _pgnInterval(networkConfig.Training.PgnInterval)
     , _gamesPaths{ gamesTrainPath, gamesTestPath }
     , _pgnsPath(pgnsPath)
     , _networksPath(networksPath)
 {
     static_assert(GameType_Count == 2);
+
+    InitializePipelines();
+}
+
+void Storage::InitializePipelines()
+{
+    static_assert(GameType_Count == 2);
+    _pipelines[GameType_Training].StartWorkers(1);
+    _pipelines[GameType_Validation].StartWorkers(1);
 }
 
 void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
@@ -88,7 +113,7 @@ void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
     _loadedGameCount[gameType] = loadedCount;
 }
 
-int Storage::AddGame(GameType gameType, SavedGame&& game, const NetworkConfig& networkConfig)
+int Storage::AddGame(GameType gameType, SavedGame&& game)
 {
     std::lock_guard lock(_mutex);
     
@@ -100,7 +125,7 @@ int Storage::AddGame(GameType gameType, SavedGame&& game, const NetworkConfig& n
 
     const int gameNumber = _loadedGameCount[gameType];
     
-    if ((gameNumber % networkConfig.Training.PgnInterval) == 0)
+    if ((gameNumber % _pgnInterval) == 0)
     {
         std::stringstream suffix;
         suffix << std::setfill('0') << std::setw(9) << gameNumber;
@@ -129,67 +154,14 @@ void Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
 
     games.emplace_back(std::move(game));
     ++_loadedGameCount[gameType];
+
+    // TODO: Popping for window size removed until pipeline threading accounts for it.
 }
 
 // No locking: assumes single-threaded sampling periods without games being played.
-TrainingBatch* Storage::SampleBatch(GameType gameType, const NetworkConfig& networkConfig)
+TrainingBatch* Storage::SampleBatch(GameType gameType)
 {
-    int positionSum = 0;
-    std::deque<SavedGame>& games = _games[gameType];
-
-    if (_trainingBatch.images.size() != networkConfig.Training.BatchSize)
-    {
-        _trainingBatch.images.resize(networkConfig.Training.BatchSize);
-        _trainingBatch.values.resize(networkConfig.Training.BatchSize);
-        _trainingBatch.policies.resize(networkConfig.Training.BatchSize);
-    }
-
-    while (games.size() > networkConfig.Training.WindowSize)
-    {
-        games.pop_front();
-    }
-
-    for (const SavedGame& game : games)
-    {
-        positionSum += game.moveCount;
-    }
-
-    std::vector<float> probabilities(games.size());
-    for (int i = 0; i < games.size(); i++)
-    {
-        probabilities[i] = static_cast<float>(games[i].moveCount) / positionSum;
-    }
-
-    std::discrete_distribution distribution(probabilities.begin(), probabilities.end());
-
-    for (int i = 0; i < networkConfig.Training.BatchSize; i++)
-    {
-        const SavedGame& game =
-#if SAMPLE_BATCH_FIXED
-            games[i];
-#else
-            games[distribution(_random)];
-#endif
-
-        int positionIndex =
-#if SAMPLE_BATCH_FIXED
-            i % game.moveCount;
-#else
-            std::uniform_int_distribution<int>(0, game.moveCount - 1)(_random);
-#endif
-
-        Game scratchGame = _startingPosition;
-        for (int m = 0; m < positionIndex; m++)
-        {
-            scratchGame.ApplyMove(Move(game.moves[m]));
-        }
-
-        _trainingBatch.images[i] = scratchGame.GenerateImage();
-        _trainingBatch.values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
-        _trainingBatch.policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
-    }
-
-    return &_trainingBatch;
+    return _pipelines[gameType].SampleBatch();
 }
 
 int Storage::GamesPlayed(GameType gameType) const
@@ -429,4 +401,115 @@ std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const
         return path;
     }
     return (root / path);
+}
+
+Pipeline::Pipeline(const std::deque<SavedGame>& games, int trainingBatchSize)
+    : _games(&games)
+    , _trainingBatchSize(trainingBatchSize)
+{
+}
+
+void Pipeline::StartWorkers(int workerCount)
+{
+    for (int i = 0; i < workerCount; i++)
+    {
+        // Just leak them until clean ending/joining for the whole training process is implemented.
+        new std::thread(&Pipeline::GenerateBatches, this);
+    }
+}
+
+TrainingBatch* Pipeline::SampleBatch()
+{
+    std::unique_lock lock(_mutex);
+
+    while (_count <= 0)
+    {
+        _batchExists.wait(lock);
+    }
+
+    const int index = ((_oldest + BufferCount - _count) % BufferCount);
+    if (--_count == (MaxFill - 1))
+    {
+        _roomExists.notify_one();
+    }
+    return &_batches[index];
+}
+
+void Pipeline::AddBatch(TrainingBatch&& batch)
+{
+    std::unique_lock lock(_mutex);
+
+    while (_count >= MaxFill)
+    {
+        _roomExists.wait(lock);
+    }
+
+    _batches[_oldest] = std::move(batch);
+
+    _oldest = ((_oldest + 1) % BufferCount);
+    if (++_count == 1)
+    {
+        _batchExists.notify_one();
+    }
+}
+
+void Pipeline::GenerateBatches()
+{
+    const std::deque<SavedGame>& games = *_games;
+    Game startingPosition;
+    TrainingBatch workingBatch;
+    workingBatch.images.resize(_trainingBatchSize);
+    workingBatch.values.resize(_trainingBatchSize);
+    workingBatch.policies.resize(_trainingBatchSize);
+
+    // Use _trainingBatchSize as a rough minimum game count to sample from.
+    while (games.size() < _trainingBatchSize)
+    {
+        std::this_thread::sleep_for(1s);
+    }
+
+    while (true)
+    {
+        const int gameCount = static_cast<int>(games.size());
+
+        std::vector<int> weights(gameCount);
+        for (int i = 0; i < gameCount; i++)
+        {
+            weights[i] = games[i].moveCount;
+        }
+
+        std::discrete_distribution distribution(weights.begin(), weights.end());
+
+        for (int i = 0; i < _trainingBatchSize; i++)
+        {
+            const SavedGame& game =
+#if SAMPLE_BATCH_FIXED
+                games[i];
+#else
+                games[distribution(Random::Engine)];
+#endif
+
+            int positionIndex =
+#if SAMPLE_BATCH_FIXED
+                i % game.moveCount;
+#else
+                std::uniform_int_distribution<int>(0, game.moveCount - 1)(Random::Engine);
+#endif
+
+            Game scratchGame = startingPosition;
+            for (int m = 0; m < positionIndex; m++)
+            {
+                scratchGame.ApplyMove(Move(game.moves[m]));
+            }
+
+            workingBatch.images[i] = scratchGame.GenerateImage();
+            workingBatch.values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
+            workingBatch.policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
+        }
+
+        AddBatch(std::move(workingBatch));
+        workingBatch.images.resize(_trainingBatchSize);
+        workingBatch.values.resize(_trainingBatchSize);
+        workingBatch.policies.resize(_trainingBatchSize);
+    }
 }

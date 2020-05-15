@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <mutex>
 #include <deque>
-#include <random>
 #include <map>
 #include <vector>
 #include <functional>
@@ -28,9 +27,48 @@ constexpr const char* GameTypeNames[GameType_Count] = { "Training", "Validation"
 
 struct TrainingBatch
 {
+    TrainingBatch() = default;
+    ~TrainingBatch() = default;
+    TrainingBatch(const TrainingBatch& other) = delete;
+    TrainingBatch& operator=(const TrainingBatch& other) = delete;
+    TrainingBatch(TrainingBatch&& other) noexcept = default;
+    TrainingBatch& operator=(TrainingBatch&& other) noexcept = default;
+
     std::vector<INetwork::InputPlanes> images;
     std::vector<float> values;
     std::vector<INetwork::OutputPlanes> policies;
+};
+
+class Pipeline
+{
+public:
+
+    // Don't completely fill the buffer, to avoid clobbbering the in-use sampled batch.
+    static const int BufferCount = 4;
+    static const int MaxFill = (BufferCount - 1);
+
+public:
+
+    Pipeline(const std::deque<SavedGame>& games, int trainingBatchSize);
+    void StartWorkers(int workerCount);
+    TrainingBatch* SampleBatch();
+
+private:
+
+    void GenerateBatches();
+    void AddBatch(TrainingBatch&& batch);
+
+private:
+
+    const std::deque<SavedGame>* _games;
+    int _trainingBatchSize;
+    std::array<TrainingBatch, BufferCount> _batches;
+    std::mutex _mutex;
+    std::condition_variable _batchExists;
+    std::condition_variable _roomExists;
+
+    int _oldest = 0;
+    int _count = 0;
 };
 
 class Storage
@@ -61,18 +99,20 @@ private:
 public:
 
     Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
-    Storage(const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
+    Storage(const NetworkConfig& networkConfig,
+        const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
         const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath);
 
     void LoadExistingGames(GameType gameType, int maxLoadCount);
-    int AddGame(GameType gameType, SavedGame&& game, const NetworkConfig& networkConfig);
-    TrainingBatch* SampleBatch(GameType gameType, const NetworkConfig& networkConfig);
+    int AddGame(GameType gameType, SavedGame&& game);
+    TrainingBatch* SampleBatch(GameType gameType);
     int GamesPlayed(GameType gameType) const;
     int NetworkStepCount(const std::string& networkName) const;
     std::filesystem::path LogPath() const;
         
 private:
 
+    void InitializePipelines();
     void AddGameWithoutSaving(GameType gameType, SavedGame&& game);
     void SaveToDisk(GameType gameType, const SavedGame& game);
     std::filesystem::path MakePath(const std::filesystem::path& root, const std::filesystem::path& path);
@@ -87,10 +127,11 @@ private:
     std::array<std::ofstream, GameType_Count> _currentSaveFile;
     std::array<int, GameType_Count> _currentSaveGameCount;
 
-    TrainingBatch _trainingBatch;
-    Game _startingPosition;
+    std::array<Pipeline, GameType_Count> _pipelines;
 
-    mutable std::default_random_engine _random;
+    int _trainingBatchSize;
+    int _trainingWindowSize;
+    int _pgnInterval;
 
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
     std::filesystem::path _pgnsPath;

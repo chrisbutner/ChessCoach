@@ -35,7 +35,7 @@ void Basic(GameType gameType)
     std::filesystem::create_directory(networksPath);
 #pragma warning(default:4996) // Internal buffer is immediately consumed and detached.
 
-    std::unique_ptr<Storage> storage1(new Storage(gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage1(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
 
     // Expect zero games in a new, temporary directory.
 
@@ -61,12 +61,12 @@ void Basic(GameType gameType)
 
     // Add to storage.
 
-    storage1->AddGame(gameType, SavedGame(saved), Config::TrainingNetwork);
+    storage1->AddGame(gameType, SavedGame(saved));
     EXPECT_EQ(storage1->GamesPlayed(gameType), 1);
 
     // Load a second Storage over the same directories and check that game loads.
 
-    std::unique_ptr<Storage> storage2(new Storage(gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage2(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
@@ -90,7 +90,7 @@ void SampleBatch(GameType gameType)
     std::filesystem::create_directory(networksPath);
 #pragma warning(default:4996) // Internal buffer is immediately consumed and detached.
 
-    std::unique_ptr<Storage> storage1(new Storage(gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage1(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
 
     // Expect zero games in a new, temporary directory.
 
@@ -120,19 +120,19 @@ void SampleBatch(GameType gameType)
 
     // Add to storage.
 
-    storage1->AddGame(gameType, SavedGame(saved), Config::TrainingNetwork);
+    storage1->AddGame(gameType, SavedGame(saved));
     EXPECT_EQ(storage1->GamesPlayed(gameType), 1);
 
     // Load a second Storage over the same directories and check that game loads.
 
-    std::unique_ptr<Storage> storage2(new Storage(gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage2(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
 
     // Sample a batch from the second Storage and make sure that the data is consistent.
 
-    const TrainingBatch* batch = storage2->SampleBatch(gameType, Config::TrainingNetwork);
+    const TrainingBatch* batch = storage2->SampleBatch(gameType);
     int indexWhiteToPlay = static_cast<int>(std::distance(batch->values.begin(), std::find(batch->values.begin(), batch->values.end(), CHESSCOACH_VALUE_WIN)));
     int indexBlackToPlay = static_cast<int>(std::distance(batch->values.begin(), std::find(batch->values.begin(), batch->values.end(), CHESSCOACH_VALUE_LOSS)));
 
