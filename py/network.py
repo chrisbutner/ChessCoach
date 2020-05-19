@@ -31,7 +31,7 @@ class Network(object):
 class KerasNetwork(Network):
 
   def __init__(self, model=None):
-    self.model = model or ChessCoachModel().build()
+    self.model = model or ChessCoachModel().build(config)
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=get_learning_rate(config.training_network["learning_rate_schedule"], 0),
       momentum=config.training_network["momentum"])
@@ -79,7 +79,10 @@ class TensorFlowNetwork(Network):
   def predict_batch(self, image):
     image = tf.constant(image)
     prediction = self.function(image)
-    value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
+    try:
+      value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
+    except:
+      value, policy = prediction["output_1"], prediction["output_2"]
     return numpy.array(value), numpy.array(policy)
 
 class Networks:

@@ -1,21 +1,27 @@
 Attention network experiments:
-- try eliminate initial convolution
-- try 32-filter value head
+- try lower L2 reg just on value head
+- go much wider on attention heads, either overall and less depth, or especially early on
+- try full SASA, extract_patches
+- try inception
+- try absolute/no positional embeddings
+- try shrink memory and go back to 2048 batch
+- try initial attention instead of convolution
+- try warmup step count (possibly in combination with increasing value learning weight)
 - try 32-filter attention value head
-- try v2 residuals
-- try different learning rates
 - try different policy/value learning weights
+- try remove dot scaling
+- try fixup instead of batchnorm
+
+Larger scale experiments:
 - try longer tower
 - try longer stem
 - try different heads
 
 Attention:
-- add architecture configuration to toml config (type, residuals*filters, etc.)
 - really need value to converge
 
 Final architecture vetting before self-play perf focus (ensure value head convergence, etc.)
 - try to train on some lc0 games or something to make sure everything's working/bug-free
-- pipeline batch sampling in C++, too slow
 
 Self-play performance
 - try shrink Node memory
@@ -75,6 +81,8 @@ Code quality
 - improve config use in C++, feels messy
 - add Python type info everywhere - look up best practices for linting etc.
 - poison self-play workers and join threads properly
+- check for any unnecessary move constructors
+- add further architecture configuration to toml config (residuals*filters, etc.)
 
 GUI for debugging
 - develop/use low-cost GUI for debugging MCTS, value, policy

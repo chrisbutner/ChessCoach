@@ -4,25 +4,29 @@
 
 [network]
 
-training_network_name = "attention1"
-uci_network_name = "supervised5"
+training_network_name = "attention9"
+uci_network_name = "attention9"
 
 [[networks]]
 
-    name = "attention1"
+    name = "attention9"
 
     [networks.training]
 
+    architecture = "augmented"
     batch_size = 1024
+    validation_interval = 200
+    checkpoint_interval = 2000
+    strength_test_interval = 10000
 
-    steps = 63000
+    steps = 126000
     num_games = 0
     window_size = 10_000_000
     games_path_training = "Games/Supervised"
 
     [networks.training.learning_rate_schedule]
 
-    steps = [0, 10_000, 30_000, 50_000]
+    steps = [0, 20_000, 60_000, 100_000]
     rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [[networks]]
@@ -40,10 +44,6 @@ uci_network_name = "supervised5"
 
     steps = [0, 10_000, 30_000, 50_000]
     rates = [1e-1, 1e-2, 1e-3, 1e-4]
-
-[[networks]]
-
-    name = "supervised1"
 
 [[networks]]
 
@@ -79,6 +79,7 @@ uci_network_name = "supervised5"
 
 [training]
 
+architecture = "conv2d"
 batch_size = 2048
 steps = 1_400_000
 pgn_interval = 100
@@ -87,7 +88,6 @@ checkpoint_interval = 1000
 strength_test_interval = 5000
 num_games = 44_000_000
 window_size = 1_000_000
-weight_decay = 1e-4
 value_loss_weight = 0.1
 policy_loss_weight = 1.0
 momentum = 0.9

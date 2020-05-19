@@ -33,7 +33,7 @@ K.set_image_data_format("channels_first")
 
 class MultiHeadSelfAttention2D(keras.layers.Layer):
 
-  def __init__(self, total_depth, num_heads, weight_decay, name):
+  def __init__(self, *, total_depth, num_heads, weight_decay, name):
     super(MultiHeadSelfAttention2D, self).__init__(name=name)
 
     if total_depth % num_heads != 0:
