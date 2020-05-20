@@ -51,8 +51,8 @@ void ChessCoachTrain::TrainChessCoach()
     Storage storage(config, Config::Misc);
 
     // Load existing games.
-    storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
-    storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
+    storage.LoadExistingGames(GameType_Training, 500000/*std::numeric_limits<int>::max()*/);
+    storage.LoadExistingGames(GameType_Validation, 50000/*std::numeric_limits<int>::max()*/);
 
     // Start self-play worker threads.
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);

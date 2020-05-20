@@ -124,6 +124,9 @@
     <IncludePath>$(SolutionDir);$(SolutionDir)\tclap\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(USERPROFILE)\Anaconda3\libs;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
+  <PropertyGroup>
+    <DisableFastUpToDateCheck>True</DisableFastUpToDateCheck>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>

@@ -82,6 +82,7 @@ class TensorFlowNetwork(Network):
     try:
       value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
     except:
+      print("Model output names broken")
       value, policy = prediction["output_1"], prediction["output_2"]
     return numpy.array(value), numpy.array(policy)
 

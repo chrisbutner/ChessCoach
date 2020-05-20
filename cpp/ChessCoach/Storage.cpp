@@ -424,6 +424,7 @@ TrainingBatch* Pipeline::SampleBatch()
 
     while (_count <= 0)
     {
+        std::cout << "SampleBatch pipeline starved" << std::endl;
         _batchExists.wait(lock);
     }
 
