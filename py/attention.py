@@ -205,18 +205,27 @@ class MultiHeadSelfAttention2D(keras.layers.Layer):
     # Generates embedding for each relative position of dimension depth
     # (initialization from https://arxiv.org/pdf/1904.09925.pdf).
     embeddings_initializer_stddev = self.depth_per_head ** -0.5
-    embeddings_table_h = tf.get_variable(name + "/embeddings_h", [vocab_size, dimension_depth],
-      trainable=True, dtype="float32", initializer=tf.random_normal_initializer(stddev=embeddings_initializer_stddev))
-    embeddings_table_w = tf.get_variable(name + "/embeddings_w", [vocab_size, dimension_depth],
-      trainable=True, dtype="float32", initializer=tf.random_normal_initializer(stddev=embeddings_initializer_stddev))
-    relative_positions_matrix = self._generate_relative_positions_matrix(length)
-    embeddings_h = tf.gather(embeddings_table_h, relative_positions_matrix)
-    embeddings_h = tf.pad(embeddings_h, [[0, 0], [0, 0], [0, dimension_depth]])
-    embeddings_h = embeddings_h[:, None, :, None]
-    embeddings_w = tf.gather(embeddings_table_w, relative_positions_matrix)
-    embeddings_w = tf.pad(embeddings_w, [[0, 0], [0, 0], [dimension_depth, 0]])
-    embeddings_w = embeddings_w[None, :, None, :]
-    embeddings = embeddings_h + embeddings_w
+    relative = True
+    if relative:
+      embeddings_table_h = tf.get_variable(name + "/embeddings_h", [vocab_size, dimension_depth],
+        trainable=True, dtype="float32", initializer=tf.random_normal_initializer(stddev=embeddings_initializer_stddev))
+      embeddings_table_w = tf.get_variable(name + "/embeddings_w", [vocab_size, dimension_depth],
+        trainable=True, dtype="float32", initializer=tf.random_normal_initializer(stddev=embeddings_initializer_stddev))
+      relative_positions_matrix = self._generate_relative_positions_matrix(length)
+      embeddings_h = tf.gather(embeddings_table_h, relative_positions_matrix)
+      embeddings_h = tf.tile(embeddings_h[:, None, :, None, :], [1, length, 1, length, 1])
+      embeddings_w = tf.gather(embeddings_table_w, relative_positions_matrix)
+      embeddings_w = tf.tile(embeddings_w[None, :, None, :, :], [length, 1, length, 1, 1])
+      embeddings = tf.concat([embeddings_h, embeddings_w], axis=4)
+    else:
+      # Way over-dimensioned experiment control - reduce and change einsum if actually using.
+      embeddings_table_h = tf.get_variable(name + "/embeddings_h", [length, dimension_depth],
+        trainable=True, dtype="float32", initializer=tf.random_normal_initializer(stddev=embeddings_initializer_stddev))
+      embeddings_table_w = tf.get_variable(name + "/embeddings_w", [length, dimension_depth],
+        trainable=True, dtype="float32", initializer=tf.random_normal_initializer(stddev=embeddings_initializer_stddev))
+      embeddings_h = tf.tile(embeddings_table_h[:, None, None, None, :], [1, length, length, length, 1])
+      embeddings_w = tf.tile(embeddings_table_w[None, :, None, None, :], [length, 1, length, length, 1])
+      embeddings = tf.concat([embeddings_h, embeddings_w], axis=4)
     return embeddings
 
   def _generate_relative_positions_matrix(self, length):
