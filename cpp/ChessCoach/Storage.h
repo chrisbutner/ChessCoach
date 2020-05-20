@@ -44,7 +44,7 @@ class Pipeline
 public:
 
     // Don't completely fill the buffer, to avoid clobbbering the in-use sampled batch.
-    static const int BufferCount = 4;
+    static const int BufferCount = 16;
     static const int MaxFill = (BufferCount - 1);
 
 public:

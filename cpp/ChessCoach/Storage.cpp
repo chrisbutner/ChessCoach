@@ -69,7 +69,7 @@ Storage::Storage(const NetworkConfig& networkConfig,
 void Storage::InitializePipelines()
 {
     static_assert(GameType_Count == 2);
-    _pipelines[GameType_Training].StartWorkers(1);
+    _pipelines[GameType_Training].StartWorkers(2);
     _pipelines[GameType_Validation].StartWorkers(1);
 }
 
@@ -424,7 +424,7 @@ TrainingBatch* Pipeline::SampleBatch()
 
     while (_count <= 0)
     {
-        std::cout << "SampleBatch pipeline starved" << std::endl;
+        //std::cout << "SampleBatch pipeline starved" << std::endl;
         _batchExists.wait(lock);
     }
 
