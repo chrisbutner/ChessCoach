@@ -17,7 +17,8 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
     , _loadedGameCount{}
     , _currentSaveFile{}
     , _currentSaveGameCount{}
-    , _pipelines{ { { _games[GameType_Training], networkConfig.Training.BatchSize }, { _games[GameType_Validation], networkConfig.Training.BatchSize } } }
+    , _pipelines{ { { _games[GameType_Training], _gameMoveCounts[GameType_Training], networkConfig.Training.BatchSize },
+        { _games[GameType_Validation], _gameMoveCounts[GameType_Validation], networkConfig.Training.BatchSize } } }
     , _trainingBatchSize(networkConfig.Training.BatchSize)
     , _trainingWindowSize(networkConfig.Training.WindowSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
@@ -53,7 +54,8 @@ Storage::Storage(const NetworkConfig& networkConfig,
     , _loadedGameCount{}
     , _currentSaveFile{}
     , _currentSaveGameCount{}
-    , _pipelines{ { { _games[GameType_Training], networkConfig.Training.BatchSize }, { _games[GameType_Validation], networkConfig.Training.BatchSize } } }
+    , _pipelines{ { { _games[GameType_Training], _gameMoveCounts[GameType_Training], networkConfig.Training.BatchSize },
+        { _games[GameType_Validation], _gameMoveCounts[GameType_Validation], networkConfig.Training.BatchSize } } }
     , _trainingBatchSize(networkConfig.Training.BatchSize)
     , _trainingWindowSize(networkConfig.Training.WindowSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
@@ -121,6 +123,7 @@ int Storage::AddGame(GameType gameType, SavedGame&& game)
 
     const std::deque<SavedGame>& games = _games[gameType];
     const SavedGame& emplaced = games.back();
+
     SaveToDisk(gameType, emplaced);
 
     const int gameNumber = _loadedGameCount[gameType];
@@ -143,6 +146,7 @@ int Storage::AddGame(GameType gameType, SavedGame&& game)
 void Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
 {
     std::deque<SavedGame>& games = _games[gameType];
+    std::deque<int>& gameMoveCounts = _gameMoveCounts[gameType];
 
     for (auto map : game.childVisits)
     {
@@ -152,7 +156,9 @@ void Storage::AddGameWithoutSaving(GameType gameType, SavedGame&& game)
         }
     }
 
+    gameMoveCounts.push_back(game.moveCount);
     games.emplace_back(std::move(game));
+    
     ++_loadedGameCount[gameType];
 
     // TODO: Popping for window size removed until pipeline threading accounts for it.
@@ -403,8 +409,9 @@ std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const
     return (root / path);
 }
 
-Pipeline::Pipeline(const std::deque<SavedGame>& games, int trainingBatchSize)
+Pipeline::Pipeline(const std::deque<SavedGame>& games, const std::deque<int>& gameMoveCounts, int trainingBatchSize)
     : _games(&games)
+    , _gameMoveCounts(&gameMoveCounts)
     , _trainingBatchSize(trainingBatchSize)
 {
 }
@@ -457,6 +464,7 @@ void Pipeline::AddBatch(TrainingBatch&& batch)
 void Pipeline::GenerateBatches()
 {
     const std::deque<SavedGame>& games = *_games;
+    const std::deque<int>& gameMoveCounts = *_gameMoveCounts;
     Game startingPosition;
     TrainingBatch workingBatch;
     workingBatch.images.resize(_trainingBatchSize);
@@ -473,13 +481,7 @@ void Pipeline::GenerateBatches()
     {
         const int gameCount = static_cast<int>(games.size());
 
-        std::vector<int> weights(gameCount);
-        for (int i = 0; i < gameCount; i++)
-        {
-            weights[i] = games[i].moveCount;
-        }
-
-        std::discrete_distribution distribution(weights.begin(), weights.end());
+        std::discrete_distribution distribution(gameMoveCounts.begin(), gameMoveCounts.begin() + gameCount);
 
         for (int i = 0; i < _trainingBatchSize; i++)
         {

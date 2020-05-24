@@ -49,7 +49,7 @@ public:
 
 public:
 
-    Pipeline(const std::deque<SavedGame>& games, int trainingBatchSize);
+    Pipeline(const std::deque<SavedGame>& games, const std::deque<int>& gameMoveCounts, int trainingBatchSize);
     void StartWorkers(int workerCount);
     TrainingBatch* SampleBatch();
 
@@ -61,6 +61,7 @@ private:
 private:
 
     const std::deque<SavedGame>* _games;
+    const std::deque<int>* _gameMoveCounts;
     int _trainingBatchSize;
     std::array<TrainingBatch, BufferCount> _batches;
     std::mutex _mutex;
@@ -121,6 +122,7 @@ private:
 
     mutable std::mutex _mutex;
     std::array<std::deque<SavedGame>, GameType_Count> _games;
+    std::array<std::deque<int>, GameType_Count> _gameMoveCounts;
     std::array<int, GameType_Count> _gameFileCount;
     std::array<int, GameType_Count> _loadedGameCount;
 
