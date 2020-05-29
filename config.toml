@@ -4,8 +4,40 @@
 
 [network]
 
-training_network_name = "attention9"
-uci_network_name = "attention9"
+training_network_name = "shuffle3"
+uci_network_name = "shuffle3"
+
+[[networks]]
+
+    name = "shuffle3"
+
+    [networks.training]
+
+    steps = 63000
+    num_games = 0
+    window_size = 10_000_000
+    games_path_training = "Games/Supervised"
+
+    [networks.training.learning_rate_schedule]
+
+    steps = [0, 10_000, 30_000, 50_000]
+    rates = [1e-1, 1e-2, 1e-3, 1e-4]
+
+[[networks]]
+
+    name = "inception4"
+
+    [networks.training]
+
+    steps = 63000
+    num_games = 0
+    window_size = 10_000_000
+    games_path_training = "Games/Supervised"
+
+    [networks.training.learning_rate_schedule]
+
+    steps = [0, 10_000, 30_000, 50_000]
+    rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [[networks]]
 

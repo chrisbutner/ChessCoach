@@ -23,6 +23,15 @@ def log(*args):
   if not silent:
     print(*args)
 
+# This fixes an issue with categorical_crossentropy calculating incorrectly
+# over our 73*8*8 output planes - loss ends up way too small.
+def flat_categorical_crossentropy_from_logits(y_true, y_pred):
+  return tf.keras.losses.categorical_crossentropy(y_true=K.batch_flatten(y_true), y_pred=K.batch_flatten(y_pred), from_logits=True)
+
+# This fixes the same issue with categorical_accuracy. No point doing softmax on logits for argmax.
+def flat_categorical_accuracy(y_true, y_pred):
+  return tf.keras.metrics.categorical_accuracy(y_true=K.batch_flatten(y_true), y_pred=K.batch_flatten(y_pred))
+
 class Network(object):
 
   def predict_batch(self, image):
@@ -35,18 +44,10 @@ class KerasNetwork(Network):
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=get_learning_rate(config.training_network["learning_rate_schedule"], 0),
       momentum=config.training_network["momentum"])
-    losses = ["mean_squared_error", self.flat_categorical_crossentropy_from_logits]
+    losses = ["mean_squared_error", flat_categorical_crossentropy_from_logits]
     loss_weights = [config.training_network["value_loss_weight"], config.training_network["policy_loss_weight"]]
-    self.model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=[[], [self.flat_categorical_accuracy]])
-
-  # This fixes an issue with categorical_crossentropy calculating incorrectly
-  # over our 73*8*8 output planes - loss ends up way too small.
-  def flat_categorical_crossentropy_from_logits(self, y_true, y_pred):
-    return tf.keras.losses.categorical_crossentropy(y_true=K.batch_flatten(y_true), y_pred=K.batch_flatten(y_pred), from_logits=True)
-
-  # This fixes the same issue with categorical_accuracy. No point doing softmax on logits for argmax.
-  def flat_categorical_accuracy(self, y_true, y_pred):
-    return tf.keras.metrics.categorical_accuracy(y_true=K.batch_flatten(y_true), y_pred=K.batch_flatten(y_pred))
+    metrics = [[], [flat_categorical_accuracy]]
+    self.model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
   def predict_batch(self, image):
     assert False
@@ -112,8 +113,11 @@ def update_network_for_training(network_path):
   log(f"Loading network (training): {name}...")
   while True:
     try:
-      # Work around bug: AttributeError: 'CategoricalCrossentropy' object has no attribute '__name__'
-      keras_model = tf.keras.models.load_model(network_path, compile=False)
+      # Don't serialize optimizer: custom loss/metrics.
+      keras_model = tf.keras.models.load_model(network_path, custom_objects={
+        "flat_categorical_crossentropy_from_logits": flat_categorical_crossentropy_from_logits,
+        "flat_categorical_accuracy": flat_categorical_accuracy,
+      }, compile=False)
       break
     except Exception as e:
       log("Exception:", e)
@@ -184,13 +188,13 @@ def log_training(type, writer, step, losses):
 
 def log_loss_accuracy(losses):
   # Fix losses: only total includes loss weighting.
-  model = networks.training_network.model
   with tf.name_scope("loss"):
     tf.summary.scalar("overall loss", losses[0])
     tf.summary.scalar("value loss", losses[1])
     tf.summary.scalar("policy loss", losses[2])
     # Equivalent to tf.math.add_n(model.losses)
-    tf.summary.scalar("L2 loss", losses[0] - (losses[1] * model.loss_weights[0]) - (losses[2] * model.loss_weights[1])) 
+    loss_weights = [config.training_network["value_loss_weight"], config.training_network["policy_loss_weight"]]
+    tf.summary.scalar("L2 loss", losses[0] - (losses[1] * loss_weights[0]) - (losses[2] * loss_weights[1])) 
   with tf.name_scope("accuracy"):
     tf.summary.scalar("policy accuracy", losses[3])
 

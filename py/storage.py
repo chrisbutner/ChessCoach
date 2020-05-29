@@ -15,5 +15,6 @@ def save_network(config, name, step, network):
   parent_path = config.misc["paths"]["networks"]
   directory_name = f"{name}_{str(step).zfill(9)}"
   path = os.path.join(parent_path, directory_name)
-  network.model.save(path, include_optimizer=True, save_format="tf")
+  # Don't serialize optimizer: custom loss/metrics.
+  network.model.save(path, include_optimizer=False, save_format="tf")
   return path
