@@ -1,32 +1,36 @@
-Attention network experiments:
-- try inception
-- try less attention mixed in (stay at 2048 batch, keep cuda % down)
-- be very careful with test loss now with fixup - may need to increase L2 weight or try mixup - check it out after full training
-- try warmup step count (possibly in combination with increasing value learning weight)
-
 Curriculum learning:
 - get rid of stockfish eval blend, mismatch in intent too likely to taint
 - try some additional curriculum heads; e.g. autoencode position, or count piece types, or linear material imbalance
 - experiment with full curriculum learning, endgames backwards, slowly add piece types
 
-Improve convergence speed
-- do a big write-up of Oracle/Wu/own ideas and choose top N
-- try different NN architecture like attention/transformer (focus on strength)
-- try training value against lerped Z/Q a la Oracle blog
-- try v2 residuals
-- try Wu improvements (accelerating go learning)
-- try deformable CNNs
-- try 32-filter value convolution once enough data to compare
-	- although, this may reduce reuse/regularization between value/policy - do it way later when it can play chess
-- revisit full Oracle blog series
-- @gcp saying MSE overfitting inevitable without 100ks of games; maybe look into pseudonegatives soon
-	- is it possible to filter them through an MCTS or something to ensure the data are still "chess"-y?
-- we could estimate duplication factors for positions in early plies and de-weight them in the sampling distribution slightly?
-- can always retry SE in future when solid architecture/visualization
+Additional head ideas:
+- (Wu): "whenever a desired target can be expressed as a sum, conjunction, or disjunction of separate subevents, or would be highly correlated with such subevents, predicting those subevents is likely to help""
+- autoencode position
+- count piece types
+- count piece imbalances
+- predict opponent move (Wu uses 0.15 factor)
+- principle variation (big output surface, complicated idea)
+- predict final board state or piece distribution (like Wu's final ownership)
+- king safety, mobility, etc.
+
+Improve self-play training
+- try training value against lerped Z/Q (Oracle)
+	- add "shape" to Z a la network distillation; can be a low factor
+- smaller window early, increase over training (Oracle)
+	- need to forget early, bad data fast, but eventually have variety/regularization
+- warmup (Wu)
+	- seeing this more everywhere, FB game nets recently, etc., good justifications re: landscape/adaptive
+
+Once self-play is actually learning fast enough, as a control, maybe try the following:
+- playout cap randomization (Wu)
+- forced playouts/pruning (Wu)
+- SE (lc0) or SE-ish-as-bias (Wu)
+- pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
 
 Self-play performance
 - try shrink Node memory
 - try distilling to a smaller network for self-play predictions
+- TensorRT may be the best bet, even without int8 - see if it's worth the mess, maybe revisit dual-booting
 
 UCI (#2)
 - try to increase in-thread parallelism without sacrificing STS strength

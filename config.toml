@@ -4,12 +4,12 @@
 
 [network]
 
-training_network_name = "shuffle3"
-uci_network_name = "shuffle3"
+training_network_name = "curriculum1"
+uci_network_name = "curriculum1"
 
 [[networks]]
 
-    name = "shuffle3"
+    name = "curriculum1"
 
     [networks.training]
 
@@ -20,45 +20,7 @@ uci_network_name = "shuffle3"
 
     [networks.training.learning_rate_schedule]
 
-    steps = [0, 10_000, 30_000, 50_000]
-    rates = [1e-1, 1e-2, 1e-3, 1e-4]
-
-[[networks]]
-
-    name = "inception4"
-
-    [networks.training]
-
-    steps = 63000
-    num_games = 0
-    window_size = 10_000_000
-    games_path_training = "Games/Supervised"
-
-    [networks.training.learning_rate_schedule]
-
-    steps = [0, 10_000, 30_000, 50_000]
-    rates = [1e-1, 1e-2, 1e-3, 1e-4]
-
-[[networks]]
-
-    name = "attention9"
-
-    [networks.training]
-
-    architecture = "augmented"
-    batch_size = 1024
-    validation_interval = 200
-    checkpoint_interval = 2000
-    strength_test_interval = 10000
-
-    steps = 126000
-    num_games = 0
-    window_size = 10_000_000
-    games_path_training = "Games/Supervised"
-
-    [networks.training.learning_rate_schedule]
-
-    steps = [0, 20_000, 60_000, 100_000]
+    steps = [0, 15_000, 30_000, 50_000]
     rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [[networks]]
@@ -74,7 +36,7 @@ uci_network_name = "shuffle3"
 
     [networks.training.learning_rate_schedule]
 
-    steps = [0, 10_000, 30_000, 50_000]
+    steps = [0, 15_000, 30_000, 50_000]
     rates = [1e-1, 1e-2, 1e-3, 1e-4]
 
 [[networks]]

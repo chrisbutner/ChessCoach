@@ -10,7 +10,7 @@ class ChessCoachModel:
   input_planes_count = 101
   output_planes_count = 73
   residual_count = 10
-  filter_count = 256
+  filter_count = 128
   attention_heads = 8
   dense_count = 256
   weight_decay = 1e-4
@@ -44,8 +44,8 @@ class ChessCoachModel:
     x = tf.keras.layers.Conv2D(filters=self.filter_count, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
       name=f"initial/conv2d_{self.filter_count}",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(x)
-    #x = tf.keras.layers.BatchNormalization(axis=1, name=f"initial/batchnorm")(x)
-    #x = tf.keras.layers.ReLU(name=f"initial/relu")(x)
+    x = tf.keras.layers.BatchNormalization(axis=1, name=f"initial/batchnorm")(x)
+    x = tf.keras.layers.ReLU(name=f"initial/relu")(x)
     return x
 
   def tower(self, x, config):
@@ -54,18 +54,13 @@ class ChessCoachModel:
     architecture_layer = self.architecture_layers[architecture]
     residual = Residual([architecture_layer, architecture_layer], [architecture, architecture], self.filter_count, self.weight_decay)
     for i in range(self.residual_count):
-      #x = residual.build_residual_block_v2(x, i)
-      x = residual.build_inception_residual_block_v2(x, i)
+      x = residual.build_residual_block_v2(x, i)
 
     # Tower BN/ReLU
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"tower/batchnorm")(x)
     x = tf.keras.layers.ReLU(name=f"tower/relu")(x)
     return x
   
-  def shuffle_tower(self, x, config):
-    residual = Residual([None, None], [None, None], self.filter_count, self.weight_decay)
-    for i in range(self.residual_count):
-      x = residual.build_shufflenet_v2_residual_block_v2_tf(x, i)
     
     # Tower BN/ReLU
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"tower/batchnorm")(x)
@@ -105,8 +100,7 @@ class ChessCoachModel:
     stem = self.stem(input)
 
     # Residual tower
-    #tower = self.tower(stem, config)
-    tower = self.shuffle_tower(stem, config)
+    tower = self.tower(stem, config)
 
     # Value head
     value = self.value_head(tower)

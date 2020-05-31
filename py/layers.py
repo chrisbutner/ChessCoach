@@ -86,31 +86,73 @@ class Residual:
       input = tf.reshape(input, [batch, shape[1], shape[2], shape[3]])
     x, y = tf.split(input, 2, axis=1)
 
+    filters = self.filter_count // 2
+
     z = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/piece_0/batchnorm")(x)
     z = tf.keras.layers.ReLU(name=f"residual_{block}/piece_0/relu")(z)
-    z = self.build_shufflenet_v2_pointwise(z, name=f"residual_{block}/piece_0")
+    z = self.build_shufflenet_v2_pointwise(z, filters, name=f"residual_{block}/piece_0")
 
     z = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/piece_1/batchnorm")(z)
     z = tf.keras.layers.ReLU(name=f"residual_{block}/piece_1/relu")(z)
-    z = self.build_shufflenet_v2_depthwise(z, name=f"residual_{block}/piece_1")
+    z = self.build_shufflenet_v2_depthwise(z, (3, 3), filters, name=f"residual_{block}/piece_1")
 
     z = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/piece_2/batchnorm")(z)
-    z = self.build_shufflenet_v2_pointwise(z, name=f"residual_{block}/piece_2")
+    z = self.build_shufflenet_v2_pointwise(z, filters, name=f"residual_{block}/piece_2")
 
     x = tf.keras.layers.Add(name=f"residual_{block}/add")([x, z])
     output = tf.concat([x, y], axis=1)
     return output
 
-  def build_shufflenet_v2_pointwise(self, x, name):
-    filters = self.filter_count // 2
+  def build_shuffleception(self, input, block):
+    if block != 0:
+      batch = tf.shape(input)[0]
+      shape = input.shape
+      input = tf.reshape(input, (batch, 2, shape[1] // 2, shape[2], shape[3]))
+      input = tf.transpose(input, [0, 2, 1, 3, 4])
+      input = tf.reshape(input, [batch, shape[1], shape[2], shape[3]])
+    x, y = tf.split(input, 2, axis=1)
+
+    z = x
+    z = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/common/piece_0/batchnorm")(z)
+    z = tf.keras.layers.ReLU(name=f"residual_{block}/common/piece_0/relu")(z)
+
+    branch_0 = self.build_shufflenet_v2_pointwise(z, 32, name=f"residual_{block}/branch_0/piece_0")
+    branch_0 = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/branch_0/piece_1/batchnorm")(branch_0)
+    branch_0 = tf.keras.layers.ReLU(name=f"residual_{block}/branch_0/piece_1/relu")(branch_0)
+    branch_0 = self.build_shufflenet_v2_depthwise(branch_0, (3, 3), 32, name=f"residual_{block}/branch_0/piece_1")
+
+    branch_1 = self.build_shufflenet_v2_pointwise(z, 32, name=f"residual_{block}/branch_1/piece_0")
+    branch_1 = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/branch_1/piece_1/batchnorm")(branch_1)
+    branch_1 = tf.keras.layers.ReLU(name=f"residual_{block}/branch_1/piece_1/relu")(branch_1)
+    branch_1 = self.build_shufflenet_v2_depthwise(branch_1, (3, 3), 40, name=f"residual_{block}/branch_1/piece_1")
+    branch_1 = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/branch_1/piece_2/batchnorm")(branch_1)
+    branch_1 = tf.keras.layers.ReLU(name=f"residual_{block}/branch_1/piece_2/relu")(branch_1)
+    branch_1 = self.build_shufflenet_v2_depthwise(branch_1, (3, 3), 48, name=f"residual_{block}/branch_1/piece_2")
+
+    branch_2 = self.build_shufflenet_v2_pointwise(z, 32, name=f"residual_{block}/branch_2/piece_0")
+    branch_2 = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/branch_2/piece_1/batchnorm")(branch_2)
+    branch_2 = tf.keras.layers.ReLU(name=f"residual_{block}/branch_2/piece_1/relu")(branch_2)
+    branch_2 = self.build_shufflenet_v2_depthwise(branch_2, (1, 15), 40, name=f"residual_{block}/branch_2/piece_1")
+    branch_2 = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/branch_2/piece_2/batchnorm")(branch_2)
+    branch_2 = tf.keras.layers.ReLU(name=f"residual_{block}/branch_2/piece_2/relu")(branch_2)
+    branch_2 = self.build_shufflenet_v2_depthwise(branch_2, (15, 1), 48, name=f"residual_{block}/branch_2/piece_2")
+
+    z = tf.concat([branch_0, branch_1, branch_2], axis=1)
+    z = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/piece_2/batchnorm")(z)
+    z = self.build_shufflenet_v2_pointwise(z, 128, name=f"residual_{block}/piece_2")
+
+    x = tf.keras.layers.Add(name=f"residual_{block}/add")([x, z])
+    output = tf.concat([x, y], axis=1)
+    return output
+
+  def build_shufflenet_v2_pointwise(self, x, filters, name):
     x = tf.keras.layers.Conv2D(filters=filters, kernel_size=(1, 1), padding="same", data_format="channels_first",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay),
       name=f"{name}/conv2d_pw_{filters}")(x)
     return x
 
-  def build_shufflenet_v2_depthwise(self, x, name):
-    filters = self.filter_count // 2
-    x = tf.keras.layers.DepthwiseConv2D(kernel_size=(3, 3), depth_multiplier=1, padding="same", data_format="channels_first",
+  def build_shufflenet_v2_depthwise(self, x, kernel_size, filters, name):
+    x = tf.keras.layers.DepthwiseConv2D(kernel_size=kernel_size, depth_multiplier=1, padding="same", data_format="channels_first",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay),
-      name=f"{name}/conv2d_dw33_{filters}")(x)
+      name=f"{name}/conv2d_dw_{kernel_size[0]}{kernel_size[1]}_{filters}")(x)
     return x
