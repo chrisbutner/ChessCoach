@@ -454,20 +454,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     // Received a prediction from the network.
 
     // Value from the parent's perspective.
-    float value = FlipValue(*_value);
-
-    // Mix in the Stockfish evaluation when available.
-    //
-    // The important thing here is that this helps guide the MCTS search and thus the policy training,
-    // but doesn't train the value head: that is still based purely on game result, so the network isn't
-    // trying to learn a linear human evaluation function.
-    if (!TryHard() && StockfishCanEvaluate())
-    {
-        // TODO: Lerp based on training progress.
-        const float stockfishProbability01 = StockfishEvaluation();
-        const float stockfishiness = 0.5f;
-        value = (value * (1.f - stockfishiness)) + (stockfishProbability01 * stockfishiness);
-    }
+    const float value = FlipValue(*_value);
 
     // Index legal moves into the policy output planes to get logits,
     // then calculate softmax over them to get normalized probabilities for priors.
