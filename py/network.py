@@ -44,9 +44,9 @@ class KerasNetwork(Network):
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=get_learning_rate(config.training_network["learning_rate_schedule"], 0),
       momentum=config.training_network["momentum"])
-    losses = ["mean_squared_error", flat_categorical_crossentropy_from_logits]
-    loss_weights = [config.training_network["value_loss_weight"], config.training_network["policy_loss_weight"]]
-    metrics = [[], [flat_categorical_accuracy]]
+    losses = ["mean_squared_error", flat_categorical_crossentropy_from_logits, flat_categorical_crossentropy_from_logits]
+    loss_weights = [config.training_network["value_loss_weight"], config.training_network["policy_loss_weight"], config.training_network["reply_policy_loss_weight"]]
+    metrics = [[], [flat_categorical_accuracy], [flat_categorical_accuracy]]
     self.model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
   def predict_batch(self, image):
@@ -145,7 +145,7 @@ def get_learning_rate(schedule, step):
 def predict_batch(image):
   return networks.prediction_network.predict_batch(image)
 
-def train_batch(step, images, values, policies):
+def train_batch(step, images, values, policies, reply_policies):
   ensure_training()
   learning_rate = get_learning_rate(config.training_network["learning_rate_schedule"], step)
   K.set_value(networks.training_network.model.optimizer.lr, learning_rate)
@@ -153,14 +153,14 @@ def train_batch(step, images, values, policies):
   do_log_training = ((step % config.training_network["validation_interval"]) == 0)
   if do_log_training:
     log_training_prepare(step)
-  losses = networks.training_network.model.train_on_batch(images, [values, policies])
+  losses = networks.training_network.model.train_on_batch(images, [values, policies, reply_policies])
   if do_log_training:
     log_training("training", tensorboard_writer_training, step, losses)
 
-def validate_batch(step, images, values, policies):
+def validate_batch(step, images, values, policies, reply_policies):
   ensure_training()
   log_training_prepare(step)
-  losses = networks.training_network.model.test_on_batch(images, [values, policies])
+  losses = networks.training_network.model.test_on_batch(images, [values, policies, reply_policies])
   log_training("validation", tensorboard_writer_validation, step, losses)
 
 def log_scalars(step, names, values):
@@ -177,7 +177,7 @@ def log_training_prepare(step):
     tf.summary.trace_on(graph=True, profiler=False)
 
 def log_training(type, writer, step, losses):
-  log(f"Loss: {losses[0]:.6f} (Value: {losses[1]:.6f}, Policy: {losses[2]:.6f}), Accuracy (policy argmax): {losses[3]:.6f} ({type})")
+  log(f"Loss: {losses[0]:.6f} (V: {losses[1]:.6f}, P: {losses[2]:.6f}, RP: {losses[3]:.6f}), Acc. (P): {losses[4]:.6f}, Acc. (RP): {losses[5]:.6f} ({type})")
   with writer.as_default():
     tf.summary.experimental.set_step(step)
     if should_log_graph(step):
@@ -192,11 +192,14 @@ def log_loss_accuracy(losses):
     tf.summary.scalar("overall loss", losses[0])
     tf.summary.scalar("value loss", losses[1])
     tf.summary.scalar("policy loss", losses[2])
+    tf.summary.scalar("reply policy loss", losses[3])
     # Equivalent to tf.math.add_n(model.losses)
-    loss_weights = [config.training_network["value_loss_weight"], config.training_network["policy_loss_weight"]]
-    tf.summary.scalar("L2 loss", losses[0] - (losses[1] * loss_weights[0]) - (losses[2] * loss_weights[1])) 
+    loss_weights = [config.training_network["value_loss_weight"], config.training_network["policy_loss_weight"],
+      config.training_network["reply_policy_loss_weight"]]
+    tf.summary.scalar("L2 loss", losses[0] - (losses[1] * loss_weights[0]) - (losses[2] * loss_weights[1]) - (losses[3] * loss_weights[2])) 
   with tf.name_scope("accuracy"):
-    tf.summary.scalar("policy accuracy", losses[3])
+    tf.summary.scalar("policy accuracy", losses[4])
+    tf.summary.scalar("reply policy accuracy", losses[5])
 
 def log_weights():
   for layer in networks.training_network.model.layers:

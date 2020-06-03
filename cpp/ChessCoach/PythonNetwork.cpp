@@ -114,7 +114,8 @@ void PythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* valu
     Py_DECREF(pythonImages);
 }
 
-void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
+void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
+    OutputPlanes* replyPolicies)
 {
     PythonContext context;
 
@@ -139,24 +140,31 @@ void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSi
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policies);
     PyCallAssert(pythonPolicies);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(function, pythonStep, pythonImages, pythonValues, pythonPolicies, nullptr);
+    PyObject* pythonReplyPolicies = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, replyPolicies);
+    PyCallAssert(pythonReplyPolicies);
+
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(function, pythonStep, pythonImages, pythonValues, pythonPolicies, pythonReplyPolicies, nullptr);
     PyCallAssert(tupleResult);
 
     Py_DECREF(tupleResult);
+    Py_DECREF(pythonReplyPolicies);
     Py_DECREF(pythonPolicies);
     Py_DECREF(pythonValues);
     Py_DECREF(pythonImages);
     Py_DECREF(pythonStep);
 }
 
-void PythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
+void PythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
+    OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch(_trainBatchFunction, step, batchSize, images, values, policies);
+    TrainValidateBatch(_trainBatchFunction, step, batchSize, images, values, policies, replyPolicies);
 }
 
-void PythonNetwork::ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
+void PythonNetwork::ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
+    OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch(_validateBatchFunction, step, batchSize, images, values, policies);
+    TrainValidateBatch(_validateBatchFunction, step, batchSize, images, values, policies, replyPolicies);
 }
 
 void PythonNetwork::LogScalars(int step, int scalarCount, std::string* names, float* values)

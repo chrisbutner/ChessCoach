@@ -470,6 +470,7 @@ void Pipeline::GenerateBatches()
     workingBatch.images.resize(_trainingBatchSize);
     workingBatch.values.resize(_trainingBatchSize);
     workingBatch.policies.resize(_trainingBatchSize);
+    workingBatch.replyPolicies.resize(_trainingBatchSize);
 
     // Use _trainingBatchSize as a rough minimum game count to sample from.
     while (games.size() < _trainingBatchSize)
@@ -492,13 +493,14 @@ void Pipeline::GenerateBatches()
                 games[distribution(Random::Engine)];
 #endif
 
-            int positionIndex =
+            const int positionIndex =
 #if SAMPLE_BATCH_FIXED
                 i % game.moveCount;
 #else
                 std::uniform_int_distribution<int>(0, game.moveCount - 1)(Random::Engine);
 #endif
 
+            // Populate the image, value and policy for the chosen position.
             Game scratchGame = startingPosition;
             for (int m = 0; m < positionIndex; m++)
             {
@@ -508,11 +510,25 @@ void Pipeline::GenerateBatches()
             workingBatch.images[i] = scratchGame.GenerateImage();
             workingBatch.values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
             workingBatch.policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
+
+            // If there's a follow-up position then populate the reply policy. Otherwise, zero it.
+            const int replyPositionIndex = (positionIndex + 1);
+            if (replyPositionIndex < game.moveCount)
+            {
+                scratchGame.ApplyMove(Move(game.moves[replyPositionIndex - 1]));
+                workingBatch.replyPolicies[i] = scratchGame.GeneratePolicy(game.childVisits[replyPositionIndex]);
+            }
+            else
+            {
+                float* data = reinterpret_cast<float*>(workingBatch.replyPolicies[i].data());
+                std::fill(data, data + INetwork::OutputPlanesFloatCount, 0.f);
+            }
         }
 
         AddBatch(std::move(workingBatch));
         workingBatch.images.resize(_trainingBatchSize);
         workingBatch.values.resize(_trainingBatchSize);
         workingBatch.policies.resize(_trainingBatchSize);
+        workingBatch.replyPolicies.resize(_trainingBatchSize);
     }
 }

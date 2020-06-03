@@ -37,6 +37,7 @@ struct TrainingBatch
     std::vector<INetwork::InputPlanes> images;
     std::vector<float> values;
     std::vector<INetwork::OutputPlanes> policies;
+    std::vector<INetwork::OutputPlanes> replyPolicies;
 };
 
 class Pipeline

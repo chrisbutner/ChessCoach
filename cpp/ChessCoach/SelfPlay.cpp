@@ -762,7 +762,8 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     for (int step = startStep; step <= checkpoint; step++)
     {
         TrainingBatch* batch = _storage->SampleBatch(GameType_Training);
-        network->TrainBatch(step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(), batch->policies.data());
+        network->TrainBatch(step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(),
+            batch->policies.data(), batch->replyPolicies.data());
 
         // Validate the network every "ValidationInterval" steps.
         if ((step % _networkConfig->Training.ValidationInterval) == 0)
@@ -792,7 +793,8 @@ void SelfPlayWorker::ValidateNetwork(INetwork* network, int step)
     if (_storage->GamesPlayed(GameType_Validation) > 0)
     {
         TrainingBatch* validationBatch = _storage->SampleBatch(GameType_Validation);
-        network->ValidateBatch(step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(), validationBatch->policies.data());
+        network->ValidateBatch(step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(),
+            validationBatch->policies.data(), validationBatch->replyPolicies.data());
     }
 }
 

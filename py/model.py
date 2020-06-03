@@ -18,6 +18,7 @@ class ChessCoachModel:
   input_name = "Input"
   output_value_name = "OutputValue"
   output_policy_name = "OutputPolicy"
+  output_reply_policy_name = "OutputReplyPolicy"
 
   def __init__(self):
     self.architecture_layers = {
@@ -60,12 +61,6 @@ class ChessCoachModel:
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"tower/batchnorm")(x)
     x = tf.keras.layers.ReLU(name=f"tower/relu")(x)
     return x
-  
-    
-    # Tower BN/ReLU
-    x = tf.keras.layers.BatchNormalization(axis=1, name=f"tower/batchnorm")(x)
-    x = tf.keras.layers.ReLU(name=f"tower/relu")(x)
-    return x
 
   def value_head(self, x):
     value_filter_count = 1
@@ -82,16 +77,16 @@ class ChessCoachModel:
       name=self.output_value_name)(x)
     return x
 
-  def policy_head(self, x, config):
+  def policy_head(self, x, name, output_name, config):
     architecture = config.training_network["architecture"]
     architecture_layer = self.architecture_layers[architecture]
-    x = architecture_layer(name=f"policy/{architecture}_{self.filter_count}")(x)
-    x = tf.keras.layers.BatchNormalization(axis=1, name=f"policy/batchnorm")(x)
-    x = tf.keras.layers.ReLU(name=f"policy/relu")(x)
-    # Add bias for this layer with no more batchnorms.
-    x = tf.keras.layers.Conv2D(filters=self.output_planes_count, kernel_size=(1,1), strides=1, data_format="channels_first",
-      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=self.output_policy_name)(x)
-    return x
+    x = architecture_layer(name=f"{name}/{architecture}_{self.filter_count}")(x)
+    x = tf.keras.layers.BatchNormalization(axis=1, name=f"{name}/batchnorm")(x)
+    x = tf.keras.layers.ReLU(name=f"{name}/relu")(x)
+    # Add bias for these layers with no more batchnorms.
+    policy = tf.keras.layers.Conv2D(filters=self.output_planes_count, kernel_size=(1,1), strides=1, data_format="channels_first",
+      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=output_name)(x)
+    return policy
 
   def build(self, config):
     input = tf.keras.layers.Input(shape=(self.input_planes_count, self.board_side, self.board_side), dtype="float32", name=self.input_name)
@@ -105,7 +100,8 @@ class ChessCoachModel:
     # Value head
     value = self.value_head(tower)
 
-    # Policy head
-    policy = self.policy_head(tower, config)
+    # Policy heads
+    policy = self.policy_head(tower, "policy", self.output_policy_name, config)
+    reply_policy = self.policy_head(tower, "reply_policy", self.output_reply_policy_name, config)
 
-    return tf.keras.Model(input, [value, policy])
+    return tf.keras.Model(input, [value, policy, reply_policy])
