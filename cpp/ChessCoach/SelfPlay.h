@@ -179,6 +179,7 @@ public:
     bool IsDrawByNoProgressOrThreefoldRepetition();
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
+    void GenerateHistoryAndSearchStatistics(const std::vector<Move>& moves);
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;

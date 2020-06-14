@@ -536,6 +536,18 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
     }
 }
 
+void SelfPlayGame::GenerateHistoryAndSearchStatistics(const std::vector<Move>& moves)
+{
+    _history.insert(_history.end(), moves.begin(), moves.end());
+
+    const int begin = static_cast<int>(_childVisits.size());
+    _childVisits.resize(_childVisits.size() + moves.size());
+    for (int i = 0; i < moves.size(); i++)
+    {
+        _childVisits[begin + i].emplace(moves[i], 1.f);
+    }
+}
+
 void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float> visits;
@@ -695,8 +707,20 @@ void SelfPlayWorker::ClearGame(int index)
 void SelfPlayWorker::SetUpGame(int index)
 {
     ClearGame(index);
-    _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
 
+    // Are games available for curriculum learning sampling?
+    if (_storage->GamesPlayed(GameType_Curriculum) > 0)
+    {
+        // TODO: Not 5/6, get from window
+        const std::vector<Move> moves = _storage->SamplePartialGame(4, 5);
+        _games[index] = SelfPlayGame(Config::StartingPosition, moves, false /* tryHard */, &_images[index], &_values[index], &_policies[index]);
+        _games[index].GenerateHistoryAndSearchStatistics(moves);
+    }
+    // If not then just start games from scratch.
+    else
+    {
+        _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
+    }
 }
 
 void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard)
@@ -734,24 +758,6 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
     // The additional moves are being applied to an existing game for efficiency, but really we're setting up
     // a new position, so update the search root ply for draw-checking.
     game.UpdateSearchRootPly();
-}
-
-void SelfPlayWorker::DebugGame(INetwork* network, int index, const SavedGame& saved, int startingPly)
-{
-    SetUpGame(index);
-
-    SelfPlayGame& game = _games[index];
-    for (int i = 0; i < startingPly; i++)
-    {
-        game.ApplyMove(Move(saved.moves[i]));
-    }
-
-    while (true)
-    {
-        Play(index);
-        assert(_states[index] == SelfPlayState::WaitingForPrediction);
-        network->PredictBatch(index + 1, _images.data(), _values.data(), _policies.data());
-    }
 }
 
 void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint)
@@ -1000,15 +1006,6 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
     {
         if (state == SelfPlayState::Working)
         {
-            if (mctsSimulation == 0)
-            {
-#if DEBUG_MCTS
-                std::cout << "(Ready for ply " << game.Ply() << "...)" << std::endl;
-                std::string _;
-                std::getline(std::cin, _);
-#endif
-            }
-
             // MCTS tree parallelism - enabled when searching, not when training - needs some guidance
             // to avoid repeating the same deterministic child selections:
             // - Avoid branches + leaves by incrementing "visitingCount" while selecting a search path,
@@ -1048,9 +1045,6 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
                 scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
                 searchPath.push_back(selected /* == scratchGame.Root() */);
                 selected.second->visitingCount++;
-#if DEBUG_MCTS
-                std::cout << Game::SquareName[from_sq(selected.first)] << Game::SquareName[to_sq(selected.first)] << "(" << selected.second->visitCount << "), ";
-#endif
             }
         }
 
@@ -1099,18 +1093,12 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             assert(searchPath.size() == 1);
             game.Root()->visitCount = 0;
 
-            // Add exploration noise if not searching or debugging MCTS.
-#if !DEBUG_MCTS
+            // Add exploration noise if not searching.
             if (!game.TryHard())
             {
                 AddExplorationNoise(game);
             }
-#endif
         }
-
-#if DEBUG_MCTS
-        std::cout << "prior " << scratchGame.Root()->prior << ", prediction " << value << std::endl;
-#endif
     }
 
     mctsSimulation = 0;
@@ -1160,7 +1148,7 @@ std::pair<Move, Node*> SelfPlayWorker::SelectMove(const SelfPlayGame& game) cons
     }
     else
     {
-        // Use temperature=inf; i.e., just select the best (most-visited, overridden by mates).
+        // Use temperature=0; i.e., just select the best (most-visited, overridden by mates).
         assert(game.Root()->bestChild.second);
         return game.Root()->bestChild;
     }

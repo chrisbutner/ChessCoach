@@ -13,65 +13,20 @@
 
 #include "Network.h"
 #include "Game.h"
-#include "SavedGame.h"
+#include "ReplayBuffer.h"
+#include "Pipeline.h"
 
 enum GameType
 {
     GameType_Training,
     GameType_Validation,
+    GameType_Curriculum,
 
     GameType_Count,
 };
 
-constexpr const char* GameTypeNames[GameType_Count] = { "Training", "Validation" };
-
-struct TrainingBatch
-{
-    TrainingBatch() = default;
-    ~TrainingBatch() = default;
-    TrainingBatch(const TrainingBatch& other) = delete;
-    TrainingBatch& operator=(const TrainingBatch& other) = delete;
-    TrainingBatch(TrainingBatch&& other) noexcept = default;
-    TrainingBatch& operator=(TrainingBatch&& other) noexcept = default;
-
-    std::vector<INetwork::InputPlanes> images;
-    std::vector<float> values;
-    std::vector<INetwork::OutputPlanes> policies;
-    std::vector<INetwork::OutputPlanes> replyPolicies;
-};
-
-class Pipeline
-{
-public:
-
-    // Don't completely fill the buffer, to avoid clobbbering the in-use sampled batch.
-    static const int BufferCount = 16;
-    static const int MaxFill = (BufferCount - 1);
-
-public:
-
-    Pipeline(const std::deque<SavedGame>& games, const std::deque<int>& gameMoveCounts, int trainingBatchSize);
-    void StartWorkers(int workerCount);
-    TrainingBatch* SampleBatch();
-
-private:
-
-    void GenerateBatches();
-    void AddBatch(TrainingBatch&& batch);
-
-private:
-
-    const std::deque<SavedGame>* _games;
-    const std::deque<int>* _gameMoveCounts;
-    int _trainingBatchSize;
-    std::array<TrainingBatch, BufferCount> _batches;
-    std::mutex _mutex;
-    std::condition_variable _batchExists;
-    std::condition_variable _roomExists;
-
-    int _oldest = 0;
-    int _count = 0;
-};
+constexpr const char* GameTypeNames[GameType_Count] = { "Training", "Validation", "Curriculum" };
+static_assert(GameType_Count == 3);
 
 class Storage
 {
@@ -86,8 +41,6 @@ private:
 
 public:
 
-    static SavedGame LoadSingleGameFromDisk(const std::filesystem::path& path);
-    static void SaveSingleGameToDisk(const std::filesystem::path& path, const SavedGame& game);
     static void SaveMultipleGamesToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games);
     static std::string GenerateGamesFilename(int gamesNumber);
 
@@ -102,28 +55,28 @@ public:
 
     Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
     Storage(const NetworkConfig& networkConfig,
-        const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath,
+        const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath, const std::filesystem::path& gamesCurriculumPath,
         const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath);
 
     void LoadExistingGames(GameType gameType, int maxLoadCount);
     int AddGame(GameType gameType, SavedGame&& game);
     TrainingBatch* SampleBatch(GameType gameType);
+    std::vector<Move> SamplePartialGame(int minMovesBeforeEnd, int maxMovesBeforeEnd);
     int GamesPlayed(GameType gameType) const;
     int NetworkStepCount(const std::string& networkName) const;
     std::filesystem::path LogPath() const;
+    void SetWindow(GameType gameType, const Window& window);
         
 private:
 
-    void InitializePipelines();
-    void AddGameWithoutSaving(GameType gameType, SavedGame&& game);
+    void InitializePipelines(const NetworkConfig& networkConfig);
     void SaveToDisk(GameType gameType, const SavedGame& game);
     std::filesystem::path MakePath(const std::filesystem::path& root, const std::filesystem::path& path);
 
 private:
 
     mutable std::mutex _mutex;
-    std::array<std::deque<SavedGame>, GameType_Count> _games;
-    std::array<std::deque<int>, GameType_Count> _gameMoveCounts;
+    std::array<ReplayBuffer, GameType_Count> _games;
     std::array<int, GameType_Count> _gameFileCount;
     std::array<int, GameType_Count> _loadedGameCount;
 
@@ -133,7 +86,6 @@ private:
     std::array<Pipeline, GameType_Count> _pipelines;
 
     int _trainingBatchSize;
-    int _trainingWindowSize;
     int _pgnInterval;
 
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;

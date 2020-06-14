@@ -3,7 +3,6 @@
 
 #include <string>
 
-#define DEBUG_MCTS 0
 #define SAMPLE_BATCH_FIXED 0
 
 struct TrainingConfig
@@ -15,9 +14,14 @@ struct TrainingConfig
     int CheckpointInterval;
     int StrengthTestInterval;
     int NumGames;
-    int WindowSize;
+    int WindowSizeStart;
+    int WindowSizeFinish;
+    int WindowEndingPositionsStart;
+    int WindowEndingPositionsFinish;
+    float WindowEndingProbability;
     std::string GamesPathTraining;
     std::string GamesPathValidation;
+    std::string GamesPathCurriculum;
 };
 
 struct SelfPlayConfig

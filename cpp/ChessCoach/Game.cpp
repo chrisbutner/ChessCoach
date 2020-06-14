@@ -56,7 +56,7 @@ void Game::Initialize()
 
 Game::Game()
     : _positionStates(new std::deque<StateInfo>(1))
-    , _previousPositions{}
+    , _previousPositions(INetwork::InputPreviousPositionCount)
     , _previousPositionsOldest(0)
 
 {
@@ -65,7 +65,7 @@ Game::Game()
 
 Game::Game(const std::string& fen, const std::vector<Move>& moves)
     : _positionStates(new std::deque<StateInfo>(1))
-    , _previousPositions{}
+    , _previousPositions(INetwork::InputPreviousPositionCount)
     , _previousPositionsOldest(0)
 
 {
@@ -101,7 +101,7 @@ Game& Game::operator=(const Game& other)
 Game::Game(Game&& other) noexcept
     : _position(other._position)
     , _positionStates(std::move(other._positionStates))
-    , _previousPositions(other._previousPositions)
+    , _previousPositions(std::move(other._previousPositions))
     , _previousPositionsOldest(other._previousPositionsOldest)
 {
     assert(&other != this);
@@ -113,7 +113,7 @@ Game& Game::operator=(Game&& other) noexcept
 
     _position = other._position;
     _positionStates = std::move(other._positionStates);
-    _previousPositions = other._previousPositions;
+    _previousPositions = std::move(other._previousPositions);
     _previousPositionsOldest = other._previousPositionsOldest;
 
     return *this;

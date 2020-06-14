@@ -18,12 +18,12 @@ class ChessCoachTrain : public ChessCoach
 public:
 
     void TrainChessCoach();
-    void DebugGame();
 
 private:
 
     void PlayGames(WorkCoordinator& workCoordinator, int gameCount);
     void TrainNetwork(SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
+    Window CalculateWindow(const NetworkConfig& config, int gamesPerNetwork, int networkCount, int network);
 };
 
 int main(int argc, char* argv[])
@@ -33,11 +33,7 @@ int main(int argc, char* argv[])
     chessCoachTrain.PrintExceptions();
     chessCoachTrain.Initialize();
 
-#if DEBUG_MCTS
-    chessCoachTrain.DebugGame();
-#else
     chessCoachTrain.TrainChessCoach();
-#endif
 
     chessCoachTrain.Finalize();
 
@@ -49,10 +45,7 @@ void ChessCoachTrain::TrainChessCoach()
     const NetworkConfig& config = Config::TrainingNetwork;
     std::unique_ptr<INetwork> network(CreateNetwork(config));
     Storage storage(config, Config::Misc);
-
-    // Load existing games.
-    storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
-    storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
+    bool loadedGames = false;
 
     // Start self-play worker threads.
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
@@ -75,18 +68,35 @@ void ChessCoachTrain::TrainChessCoach()
     const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
     const int gamesPerNetwork = (config.Training.NumGames / networkCount);
     const int startingNetwork = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
-    int gameCount = storage.GamesPlayed(GameType_Training);
 
     // Run through all checkpoints with n in [1, networkCount].
     for (int n = startingNetwork + 1; n <= networkCount; n++)
     {
+        // Configure the replay buffer windows for partial game sampling (curriculum learning)
+        // and position sampling (neural network training.
+        const Window trainingWindow = CalculateWindow(config, gamesPerNetwork, networkCount, n);
+        const Window fullWindow = { 0, std::numeric_limits<int>::max(), 0, 0.f };
+        storage.SetWindow(GameType_Training, trainingWindow);
+        storage.SetWindow(GameType_Validation, fullWindow);
+        storage.SetWindow(GameType_Curriculum, fullWindow);
+        static_assert(GameType_Count == 3);
+
+        // Load games if we haven't yet.
+        if (!loadedGames)
+        {
+            loadedGames = true;
+            storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
+            storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
+            storage.LoadExistingGames(GameType_Curriculum, std::numeric_limits<int>::max());
+        }
+
         // Play self-play games (skip if we already have enough to train this checkpoint).
         const int gameTarget = (n * gamesPerNetwork);
+        const int gameCount = storage.GamesPlayed(GameType_Training);
         const int gamesToPlay = std::max(0, gameTarget - gameCount);
         if (gamesToPlay > 0)
         {
             PlayGames(workCoordinator, gamesToPlay);
-            gameCount += gamesToPlay;
         }
 
         // Train the network.
@@ -119,13 +129,15 @@ void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* net
     selfPlayWorker.TrainNetwork(network, stepCount, checkpoint);
 }
 
-void ChessCoachTrain::DebugGame()
+Window ChessCoachTrain::CalculateWindow(const NetworkConfig& config, int gamesPerNetwork, int networkCount, int network)
 {
-    std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
-    Storage storage(Config::TrainingNetwork, Config::Misc);
+    const int gameTarget = (network * gamesPerNetwork);
+    const float t = (static_cast<float>(network - 1) / (networkCount - 1));
+    const int windowSize = static_cast<int>(config.Training.WindowSizeStart +
+        t * (config.Training.WindowSizeFinish - config.Training.WindowSizeStart));
+    const int endingPositions = static_cast<int>(config.Training.WindowEndingPositionsStart +
+        t * (config.Training.WindowEndingPositionsFinish - config.Training.WindowEndingPositionsStart));
 
-    SelfPlayWorker worker(Config::TrainingNetwork, &storage);
-
-    SavedGame saved = storage.LoadSingleGameFromDisk("path_to_game");
-    worker.DebugGame(network.get(), 0, saved, 23);
+    // Min is inclusive, max is exclusive, both 0-based.
+    return { std::max(0, gameTarget - windowSize), gameTarget, endingPositions, config.Training.WindowEndingProbability };
 }

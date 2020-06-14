@@ -144,7 +144,7 @@ protected:
     // Used for both real and scratch games.
     Position _position;
     StateListPtr _positionStates;
-    std::array<Position, INetwork::InputPreviousPositionCount> _previousPositions;
+    std::vector<Position> _previousPositions;
     int _previousPositionsOldest;
 };
 
