@@ -32,6 +32,9 @@ uci_network_name = "curriculum3"
 
     [networks.training]
 
+    steps = 140_000
+    num_games = 4_400_000
+
     validation_interval = 10
     checkpoint_interval = 100
     strength_test_interval = 500
