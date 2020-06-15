@@ -186,6 +186,7 @@ public:
     void PruneExcept(Node* root, Node* except);
     void PruneAll();
     void UpdateSearchRootPly();
+    int CurriculumBasisMoveCount() const;
 
     Move ParseSan(const std::string& san);
 

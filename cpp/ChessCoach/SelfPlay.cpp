@@ -623,6 +623,13 @@ void SelfPlayGame::UpdateSearchRootPly()
     _searchRootPly = Ply();
 }
 
+int SelfPlayGame::CurriculumBasisMoveCount() const
+{
+    // This is "accidental" resuse of a search-related field, so slightly fragile.
+    // Revisit in future if self-play/UCI diverge more.
+    return _searchRootPly;
+}
+
 Move SelfPlayGame::ParseSan(const std::string& san)
 {
     return Pgn::ParseSan(_position, san);
@@ -711,8 +718,10 @@ void SelfPlayWorker::SetUpGame(int index)
     // Are games available for curriculum learning sampling?
     if (_storage->GamesPlayed(GameType_Curriculum) > 0)
     {
-        // TODO: Not 5/6, get from window
-        const std::vector<Move> moves = _storage->SamplePartialGame(4, 5);
+        // Sample evenly between CurriculumEndingPositions and (CurriculumEndingPositions + 1) to avoid over-representing one of the sides.
+        const int minPlyBeforeEnd = _storage->GetWindow(GameType_Training).CurriculumEndingPositions;
+        const int maxPlyBeforeEnd = (minPlyBeforeEnd + 1);
+        const std::vector<Move> moves = _storage->SamplePartialGame(minPlyBeforeEnd, maxPlyBeforeEnd);
         _games[index] = SelfPlayGame(Config::StartingPosition, moves, false /* tryHard */, &_images[index], &_values[index], &_policies[index]);
         _games[index].GenerateHistoryAndSearchStatistics(moves);
     }
@@ -986,12 +995,18 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
     const SelfPlayGame& game = _games[index];
 
     const int ply = game.Ply();
+    const int mctsPly = (ply - game.CurriculumBasisMoveCount());
     const float result = game.Result();
     const int gameNumber = _storage->AddGame(GameType_Training, game.Save());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
-    const float mctsTime = (gameTime / ply);
-    std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
+    const float mctsTime = (gameTime / mctsPly);
+    std::cout << "Game " << gameNumber << ", ply " << ply;
+    if (game.CurriculumBasisMoveCount() > 0)
+    {
+        std::cout << " (" << game.CurriculumBasisMoveCount() << " + " << mctsPly << ")";
+    }
+    std::cout << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
     //PredictionCache::Instance.PrintDebugInfo();
 }
 

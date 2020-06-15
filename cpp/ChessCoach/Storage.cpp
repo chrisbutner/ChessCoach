@@ -16,6 +16,7 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
     , _currentSaveGameCount{}
     , _trainingBatchSize(networkConfig.Training.BatchSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
+    , _maxMoves(networkConfig.SelfPlay.MaxMoves)
 {
     _trainingBatchSize = networkConfig.Training.BatchSize;
     _pgnInterval = networkConfig.Training.PgnInterval;
@@ -43,6 +44,7 @@ Storage::Storage(const NetworkConfig& networkConfig,
     , _currentSaveGameCount{}
     , _trainingBatchSize(networkConfig.Training.BatchSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
+    , _maxMoves(networkConfig.SelfPlay.MaxMoves)
     , _gamesPaths{ gamesTrainPath, gamesTestPath, gamesCurriculumPath }
     , _pgnsPath(pgnsPath)
     , _networksPath(networksPath)
@@ -136,9 +138,9 @@ TrainingBatch* Storage::SampleBatch(GameType gameType)
     return _pipelines[gameType].SampleBatch();
 }
 
-std::vector<Move> Storage::SamplePartialGame(int minMovesBeforeEnd, int maxMovesBeforeEnd)
+std::vector<Move> Storage::SamplePartialGame(int minPlyBeforeEnd, int maxPlyBeforeEnd)
 {
-    return _games[GameType_Curriculum].SamplePartialGame(minMovesBeforeEnd, maxMovesBeforeEnd);
+    return _games[GameType_Curriculum].SamplePartialGame(_maxMoves, minPlyBeforeEnd, maxPlyBeforeEnd);
 }
 
 int Storage::GamesPlayed(GameType gameType) const
@@ -368,6 +370,11 @@ std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const
     const std::filesystem::path rooted = (root / path);
     std::filesystem::create_directories(rooted);
     return rooted;
+}
+
+Window Storage::GetWindow(GameType gameType) const
+{
+    return _games[gameType].GetWindow();
 }
 
 void Storage::SetWindow(GameType gameType, const Window& window)

@@ -11,11 +11,12 @@ class ReplayBuffer
 {
 public:
 
+    Window GetWindow() const;
     void SetWindow(const Window& window);
     SavedGame& AddGame(SavedGame&& game);
     int GameCount() const;
     bool SampleBatch(TrainingBatch& batch) const;
-    std::vector<Move> SamplePartialGame(int minMovesBeforeEnd, int maxMovesBeforeEnd);
+    std::vector<Move> SamplePartialGame(int maxMoves, int minMovesBeforeEnd, int maxMovesBeforeEnd);
 
 private:
 

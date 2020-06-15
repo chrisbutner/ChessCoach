@@ -1,10 +1,6 @@
-- TODOs
-	- 512 in ReplayBuffer.cpp
-	- 5, 6 in SelfPlay.cpp
-	- ply/mcts time is wrong now
-
 Curriculum learning:
 - full curriculum selfplay test run
+- seeing heavy overhead for small move counts, 2-4, as well as generally - investigate game time composition
 
 Additional head ideas:
 - separate Q head rather than lerped Z/Q target

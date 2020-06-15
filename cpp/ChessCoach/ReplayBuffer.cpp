@@ -4,6 +4,11 @@
 
 #include "Game.h"
 
+Window ReplayBuffer::GetWindow() const
+{
+    return _window;
+}
+
 void ReplayBuffer::SetWindow(const Window& window)
 {
     _window = window;
@@ -95,35 +100,29 @@ bool ReplayBuffer::SampleBatch(TrainingBatch& batch) const
     return true;
 }
 
-std::vector<Move> ReplayBuffer::SamplePartialGame(int minMovesBeforeEnd, int maxMovesBeforeEnd)
+std::vector<Move> ReplayBuffer::SamplePartialGame(int maxMoves, int minPlyBeforeEnd, int maxPlyBeforeEnd)
 {
-    while (true)
+
+    const int gameCount = static_cast<int>(_games.size());
+    const int gameIndex = std::uniform_int_distribution<int>(0, gameCount - 1)(Random::Engine);
+    const SavedGame& game = _games[gameIndex];
+    const int endPly = std::min(maxMoves, game.moveCount);
+
+    // There are N halfmoves/ply and (N+1) positions. Halfmove M leads from position M to position (M+1).
+    // The final position isn't useful because it's terminal, so N useful positions, so require that
+    // "minPlyBeforeEnd" is at least 1.
+    assert(minPlyBeforeEnd >= 1);
+    assert(maxPlyBeforeEnd >= minPlyBeforeEnd);
+    const int positionIndex = std::max(0, endPly -
+        std::uniform_int_distribution<int>(minPlyBeforeEnd, maxPlyBeforeEnd)(Random::Engine));
+
+    // For position 0 apply moves {}; for position 1 apply moves {0}; etc.
+    std::vector<Move> moves(positionIndex);
+    for (int m = 0; m < positionIndex; m++)
     {
-        const int gameCount = static_cast<int>(_games.size());
-        const int gameIndex = std::uniform_int_distribution<int>(0, gameCount - 1)(Random::Engine);
-        const SavedGame& game = _games[gameIndex];
-        if (game.moveCount > 512) // TODO: Access config
-        {
-            continue;
-        }
-
-        // There are N moves and (N+1) positions. Move M leads from position M to position (M+1).
-        // The final position isn't useful because it's terminal, so (N-1) useful moves/positions
-        const int positionIndex = game.moveCount - 1 -
-            std::uniform_int_distribution<int>(minMovesBeforeEnd, maxMovesBeforeEnd)(Random::Engine);
-        if (positionIndex < 0)
-        {
-            continue;
-        }
-
-        // For position 0 apply moves {}; for position 1 apply moves {0}; etc.
-        std::vector<Move> moves(positionIndex);
-        for (int m = 0; m < positionIndex; m++)
-        {
-            moves[m] = Move(game.moves[m]);
-        }
-        return moves;
+        moves[m] = Move(game.moves[m]);
     }
+    return moves;
 }
 
 float ReplayBuffer::CalculateMoveCount(const SavedGame& game)

@@ -65,6 +65,7 @@ public:
     int GamesPlayed(GameType gameType) const;
     int NetworkStepCount(const std::string& networkName) const;
     std::filesystem::path LogPath() const;
+    Window GetWindow(GameType gameType) const;
     void SetWindow(GameType gameType, const Window& window);
         
 private:
@@ -87,6 +88,7 @@ private:
 
     int _trainingBatchSize;
     int _pgnInterval;
+    int _maxMoves;
 
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
     std::filesystem::path _pgnsPath;
