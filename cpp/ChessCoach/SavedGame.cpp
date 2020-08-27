@@ -6,9 +6,10 @@ SavedGame::SavedGame()
 {
 }
 
-SavedGame::SavedGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::map<Move, float>>& setChildVisits)
+SavedGame::SavedGame(float setResult, const std::vector<Move>& setMoves, const std::vector<float>& setMctsValues, const std::vector<std::map<Move, float>>& setChildVisits)
     : result(setResult)
     , moves(setMoves.size())
+    , mctsValues(setMctsValues)
 {
     assert(setMoves.size() == setChildVisits.size());
 
@@ -23,9 +24,10 @@ SavedGame::SavedGame(float setResult, const std::vector<Move>& setMoves, const s
     moveCount = static_cast<int>(moves.size());
 }
 
-SavedGame::SavedGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::map<Move, float>>&& setChildVisits)
+SavedGame::SavedGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<float>&& setMctsValues, std::vector<std::map<Move, float>>&& setChildVisits)
     : result(setResult)
     , moves(std::move(setMoves))
+    , mctsValues(std::move(setMctsValues))
     , childVisits(std::move(setChildVisits))
 {
     moveCount = static_cast<int>(moves.size());

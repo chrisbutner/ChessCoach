@@ -128,15 +128,21 @@ TEST(Mcts, NodeLeaks)
 
     SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
 
+// Allocations are only tracked with DEBUG.
+#ifdef DEBUG
     auto [currentBefore, peakBefore] = Node::Allocator.DebugAllocations();
     EXPECT_EQ(currentBefore, 0);
     EXPECT_EQ(peakBefore, 0);
+#endif
 
     PlayGame(selfPlayWorker, [](auto&) {});
 
+// Allocations are only tracked with DEBUG.
+#ifdef DEBUG
     auto [currentAfter, peakAfter] = Node::Allocator.DebugAllocations();
     EXPECT_EQ(currentAfter, 0);
     EXPECT_GT(peakAfter, 0);
+#endif
 }
 
 TEST(Mcts, PrincipleVariation)

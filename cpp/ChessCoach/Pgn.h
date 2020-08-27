@@ -24,6 +24,7 @@ private:
 
 private:
 
+    static std::vector<float> GenerateMctsValues(const std::vector<uint16_t>& moves, float result);
     static std::vector<std::map<Move, float>> GenerateChildVisits(const std::vector<uint16_t>& moves);
     static float ParseResult(std::istream& content);
     static void ParseMoves(std::istream& content, std::vector<uint16_t>& moves, float result);

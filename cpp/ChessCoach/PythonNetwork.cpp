@@ -114,13 +114,14 @@ void PythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* valu
     Py_DECREF(pythonImages);
 }
 
-void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
-    OutputPlanes* replyPolicies)
+void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+    OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
     PythonContext context;
 
     // MCTS deals with probabilities in [0, 1]. Network deals with tanh outputs/targets in (-1, 1)/[-1, 1].
     MapProbabilities01To11(batchSize, values);
+    MapProbabilities01To11(batchSize, mctsValues);
 
     PyObject* pythonStep = PyLong_FromLong(step);
     PyCallAssert(pythonStep);
@@ -135,6 +136,10 @@ void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSi
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
     PyCallAssert(pythonValues);
 
+    PyObject* pythonMctsValues = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, mctsValues);
+    PyCallAssert(pythonMctsValues);
+
     npy_intp policyDims[4]{ batchSize, OutputPlaneCount, BoardSide, BoardSide };
     PyObject* pythonPolicies = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policies);
@@ -144,27 +149,29 @@ void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSi
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, replyPolicies);
     PyCallAssert(pythonReplyPolicies);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(function, pythonStep, pythonImages, pythonValues, pythonPolicies, pythonReplyPolicies, nullptr);
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(function, pythonStep, pythonImages,
+        pythonValues, pythonMctsValues, pythonPolicies, pythonReplyPolicies, nullptr);
     PyCallAssert(tupleResult);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonReplyPolicies);
     Py_DECREF(pythonPolicies);
+    Py_DECREF(pythonMctsValues);
     Py_DECREF(pythonValues);
     Py_DECREF(pythonImages);
     Py_DECREF(pythonStep);
 }
 
-void PythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
-    OutputPlanes* replyPolicies)
+void PythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+    OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch(_trainBatchFunction, step, batchSize, images, values, policies, replyPolicies);
+    TrainValidateBatch(_trainBatchFunction, step, batchSize, images, values, mctsValues, policies, replyPolicies);
 }
 
-void PythonNetwork::ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
-    OutputPlanes* replyPolicies)
+void PythonNetwork::ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+    OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch(_validateBatchFunction, step, batchSize, images, values, policies, replyPolicies);
+    TrainValidateBatch(_validateBatchFunction, step, batchSize, images, values, mctsValues, policies, replyPolicies);
 }
 
 void PythonNetwork::LogScalars(int step, int scalarCount, std::string* names, float* values)

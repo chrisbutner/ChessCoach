@@ -13,12 +13,13 @@ struct SavedGame
 public:
 
     SavedGame();
-    SavedGame(float setResult, const std::vector<Move>& setMoves, const std::vector<std::map<Move, float>>& setChildVisits);
-    SavedGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<std::map<Move, float>>&& setChildVisits);
+    SavedGame(float setResult, const std::vector<Move>& setMoves, const std::vector<float>& setMctsValues, const std::vector<std::map<Move, float>>& setChildVisits);
+    SavedGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<float>&& setMctsValues, std::vector<std::map<Move, float>>&& setChildVisits);
 
     float result;
     int moveCount;
     std::vector<uint16_t> moves;
+    std::vector<float> mctsValues;
     std::vector<std::map<Move, float>> childVisits;
 };
 
@@ -33,6 +34,7 @@ struct TrainingBatch
 
     std::vector<INetwork::InputPlanes> images;
     std::vector<float> values;
+    std::vector<float> mctsValues;
     std::vector<INetwork::OutputPlanes> policies;
     std::vector<INetwork::OutputPlanes> replyPolicies;
 };
@@ -43,11 +45,7 @@ struct Window
     // set TrainingGameMin=10000, TrainingGameMax=20000.
     int TrainingGameMin; // Inclusive, 0-based
     int TrainingGameMax; // Exclusive, 0-based
-
-    // E.g. for 60% probability of sampling one of the final 5 positions, or 40% in the earlier positions,
-    // set CurriculumEndingPositions=5, CurriculumEndingProbability=0.6f. For an even distribution, set 0/0.f.
-    int CurriculumEndingPositions;
-    float CurriculumEndingProbability;
+    int MinimumSamplableGames; // Usually roughly training batch size
 };
 
 #endif // _SAVEDGAME_H_

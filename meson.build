@@ -59,10 +59,13 @@ chesscoach_sources = [
   'cpp/ChessCoach/Epd.cpp',
   'cpp/ChessCoach/Game.cpp',
   'cpp/ChessCoach/Pgn.cpp',
+  'cpp/ChessCoach/Pipeline.cpp',
   'cpp/ChessCoach/Platform.cpp',
   'cpp/ChessCoach/PoolAllocator.cpp',
   'cpp/ChessCoach/PredictionCache.cpp',
   'cpp/ChessCoach/PythonNetwork.cpp',
+  'cpp/ChessCoach/Random.cpp',
+  'cpp/ChessCoach/ReplayBuffer.cpp',
   'cpp/ChessCoach/SavedGame.cpp',
   'cpp/ChessCoach/SelfPlay.cpp',
   'cpp/ChessCoach/Storage.cpp',
@@ -173,7 +176,9 @@ test('AllTests', chesscoachtest, timeout: 300)
 install_data('config.toml')
 
 python_sources = [
+  'py/attention.py',
   'py/config.py',
+  'py/layers.py',
   'py/model.py',
   'py/network.py',
   'py/storage.py',

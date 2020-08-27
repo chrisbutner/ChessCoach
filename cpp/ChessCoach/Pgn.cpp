@@ -24,14 +24,30 @@ void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&)> gameH
         std::vector<uint16_t> moves;
         ParseMoves(content, moves, result);
 
-        gameHandler(SavedGame(result, std::move(moves), GenerateChildVisits(moves)));
+        gameHandler(SavedGame(result, std::move(moves), GenerateMctsValues(moves, result), GenerateChildVisits(moves)));
     }
+}
+
+std::vector<float> Pgn::GenerateMctsValues(const std::vector<uint16_t>& moves, float result)
+{
+    std::vector<float> mctsValues(moves.size());
+
+    // There is no MCTS search data, so set the MCTS value to the original game's result
+    // Flip to the side to play's perspective (NOT the parent's perspective, like in MCTS trees).
+    for (int i = 0; i < moves.size(); i++)
+    {
+        const Color toPlay = Color(i % COLOR_NB);
+        mctsValues[i] = Game::FlipValue(toPlay, result);
+    }
+
+    return mctsValues;
 }
 
 std::vector<std::map<Move, float>> Pgn::GenerateChildVisits(const std::vector<uint16_t>& moves)
 {
     std::vector<std::map<Move, float>> childVisits(moves.size());
 
+    // There is no MCTS search data, so just set 1.0 for the chosen move and imply 0.0 for others.
     for (int i = 0; i < moves.size(); i++)
     {
         childVisits[i].emplace(Move(moves[i]), 1.f);

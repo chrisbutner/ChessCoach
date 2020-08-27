@@ -42,12 +42,8 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     training.NumGames = policy.template Find<int>(config, "num_games", defaults.NumGames);
     training.WindowSizeStart = policy.template Find<int>(config, "window_size_start", defaults.WindowSizeStart);
     training.WindowSizeFinish = policy.template Find<int>(config, "window_size_finish", defaults.WindowSizeFinish);
-    training.WindowEndingPositionsStart = policy.template Find<int>(config, "window_ending_positions_start", defaults.WindowEndingPositionsStart);
-    training.WindowEndingPositionsFinish = policy.template Find<int>(config, "window_ending_positions_finish", defaults.WindowEndingPositionsFinish);
-    training.WindowEndingProbability = policy.template Find<float>(config, "window_ending_probability", defaults.WindowEndingProbability);
     training.GamesPathTraining = policy.template Find<std::string>(config, "games_path_training", defaults.GamesPathTraining);
     training.GamesPathValidation = policy.template Find<std::string>(config, "games_path_validation", defaults.GamesPathValidation);
-    training.GamesPathCurriculum = policy.template Find<std::string>(config, "games_path_curriculum", defaults.GamesPathCurriculum);
 
     return training;
 }
@@ -143,10 +139,6 @@ void Config::Initialize()
         if (!network->Training.GamesPathValidation.empty())
         {
             network->Training.GamesPathValidation = "Debug/" + network->Training.GamesPathValidation;
-        }
-        if (!network->Training.GamesPathCurriculum.empty())
-        {
-            network->Training.GamesPathCurriculum = "Debug/" + network->Training.GamesPathCurriculum;
         }
     }
     // Use the usual networks path, necessary and safe.

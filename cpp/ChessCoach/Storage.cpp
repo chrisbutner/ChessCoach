@@ -16,17 +16,15 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
     , _currentSaveGameCount{}
     , _trainingBatchSize(networkConfig.Training.BatchSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
-    , _maxMoves(networkConfig.SelfPlay.MaxMoves)
 {
     _trainingBatchSize = networkConfig.Training.BatchSize;
     _pgnInterval = networkConfig.Training.PgnInterval;
 
     const std::filesystem::path rootPath = Platform::UserDataPath();
 
-    static_assert(GameType_Count == 3);
+    static_assert(GameType_Count == 2);
     _gamesPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.GamesPathTraining);
     _gamesPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.GamesPathValidation);
-    _gamesPaths[GameType_Curriculum] = MakePath(rootPath, networkConfig.Training.GamesPathCurriculum);
     _pgnsPath = MakePath(rootPath, miscConfig.Paths_Pgns);
     _networksPath = MakePath(rootPath, miscConfig.Paths_Networks);
     _logsPath = MakePath(rootPath, miscConfig.Paths_Logs);
@@ -36,7 +34,7 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
 
 // Used for testing
 Storage::Storage(const NetworkConfig& networkConfig,
-    const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath, const std::filesystem::path& gamesCurriculumPath,
+    const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesValidationPath,
     const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath)
     : _gameFileCount{}
     , _loadedGameCount{}
@@ -44,22 +42,20 @@ Storage::Storage(const NetworkConfig& networkConfig,
     , _currentSaveGameCount{}
     , _trainingBatchSize(networkConfig.Training.BatchSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
-    , _maxMoves(networkConfig.SelfPlay.MaxMoves)
-    , _gamesPaths{ gamesTrainPath, gamesTestPath, gamesCurriculumPath }
+    , _gamesPaths{ gamesTrainPath, gamesValidationPath }
     , _pgnsPath(pgnsPath)
     , _networksPath(networksPath)
 {
-    static_assert(GameType_Count == 3);
+    static_assert(GameType_Count == 2);
 
     InitializePipelines(networkConfig);
 }
 
 void Storage::InitializePipelines(const NetworkConfig& networkConfig)
 {
-    static_assert(GameType_Count == 3);
+    static_assert(GameType_Count == 2);
     _pipelines[GameType_Training].Initialize(_games[GameType_Training], networkConfig.Training.BatchSize, 2 /* workerCount */);
-    _pipelines[GameType_Validation].Initialize(_games[GameType_Validation], networkConfig.Training.BatchSize, 1 /* workerCount */);
-    // No curriculum pipeline
+    _pipelines[GameType_Validation].Initialize(_games[GameType_Validation], networkConfig.Training.BatchSize, 2 /* workerCount */);
 }
 
 void Storage::LoadExistingGames(GameType gameType, int maxLoadCount)
@@ -136,11 +132,6 @@ int Storage::AddGame(GameType gameType, SavedGame&& game)
 TrainingBatch* Storage::SampleBatch(GameType gameType)
 {
     return _pipelines[gameType].SampleBatch();
-}
-
-std::vector<Move> Storage::SamplePartialGame(int minPlyBeforeEnd, int maxPlyBeforeEnd)
-{
-    return _games[GameType_Curriculum].SamplePartialGame(_maxMoves, minPlyBeforeEnd, maxPlyBeforeEnd);
 }
 
 int Storage::GamesPlayed(GameType gameType) const
@@ -264,6 +255,9 @@ int Storage::LoadFromDiskInternal(const std::filesystem::path& path, std::functi
         std::vector<uint16_t> moves(moveCount);
         file.read(reinterpret_cast<char*>(moves.data()), sizeof(uint16_t) * moveCount);
 
+        std::vector<float> mctsValues(moveCount);
+        file.read(reinterpret_cast<char*>(mctsValues.data()), sizeof(float) * moveCount);
+
         std::vector<std::map<Move, float>> childVisits(moveCount);
         for (int i = 0; i < moveCount; i++)
         {
@@ -279,7 +273,7 @@ int Storage::LoadFromDiskInternal(const std::filesystem::path& path, std::functi
             }
         }
 
-        gameHandler(SavedGame(result, std::move(moves), std::move(childVisits)));
+        gameHandler(SavedGame(result, std::move(moves), std::move(mctsValues), std::move(childVisits)));
     }
 
     return loadCount;
@@ -325,6 +319,8 @@ void Storage::SaveToDiskInternal(std::ofstream& file, const SavedGame& game)
     file.write(reinterpret_cast<const char*>(&game.result), sizeof(game.result));
 
     file.write(reinterpret_cast<const char*>(game.moves.data()), sizeof(uint16_t) * moveCount);
+
+    file.write(reinterpret_cast<const char*>(game.mctsValues.data()), sizeof(float) * moveCount);
 
     for (int i = 0; i < moveCount; i++)
     {
@@ -380,7 +376,6 @@ Window Storage::GetWindow(GameType gameType) const
 void Storage::SetWindow(GameType gameType, const Window& window)
 {
     std::cout << "Setting window: " << window.TrainingGameMin << " -> " << window.TrainingGameMax
-        << ", " << window.CurriculumEndingProbability << " @ last " << window.CurriculumEndingPositions << " positions ("
-        << GameTypeNames[gameType] << ")" << std::endl;
+        << " (" << GameTypeNames[gameType] << ")" << std::endl;
     _games[gameType].SetWindow(window);
 }

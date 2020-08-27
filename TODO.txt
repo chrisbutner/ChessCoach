@@ -1,10 +1,11 @@
-Curriculum learning:
-- full curriculum selfplay test run
-- seeing heavy overhead for small move counts, 2-4, as well as generally - investigate game time composition
-- try enable prediction caching for ply < N OR pieces < M
+TODO
+- update to TF 2.3
+- try out initial supervised text commentary, separate head
+- get to minimum-viable-selfplay
+	- get to piece value understanding ASAP, try out specific A/B positions
+	- (lots more ideas below)
 
 Additional head ideas:
-- separate Q head rather than lerped Z/Q target
 - (Wu): "whenever a desired target can be expressed as a sum, conjunction, or disjunction of separate subevents, or would be highly correlated with such subevents, predicting those subevents is likely to help""
 - autoencode position
 - count all pieces?
@@ -17,10 +18,6 @@ Additional head ideas:
 - king safety, mobility, etc.
 
 Improve self-play training
-- try training value against lerped Z/Q (Oracle)
-	- add "shape" to Z a la network distillation; can be a low factor
-- smaller window early, increase over training (Oracle)
-	- need to forget early, bad data fast, but eventually have variety/regularization
 - warmup (Wu)
 	- seeing this more everywhere, FB game nets recently, etc., good justifications re: landscape/adaptive
 
@@ -30,6 +27,7 @@ Once self-play is actually learning fast enough, as a control, maybe try the fol
 - SE (lc0) or SE-ish-as-bias (Wu)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
 - try varying 800 sims in endgames/curriculum
+- try 1 vs. 8 value head filters again
 
 Self-play performance
 - try shrink Node memory
@@ -47,14 +45,11 @@ UCI (#2)
 	- don't waste time when only 1 or few legal moves
 	- if dangerous time left, take mate-in-N rather than trying to find faster
 
-CPU/integration performance:
+CPU+GPU integration performance:
 - break down MCTS timing details just in case anything's off (just use sampling)
-- try more lookup tables for plane mappings, e.g. byte/short slices of float rows
 - try use inline map in Node rather than heap-allocated (limit to 80? 480 extra bytes plus overhead)
 	- maybe just linear lookup, no log-time involved? investigate by-key vs. iteration cases
 	- can always binary search Move-ints or something too, it's not mutated
-- check inlining once CPU tree is looking good
-- try Intel compiler in future
 - image key for prediction cache can be incrementally updated if it helps enough
 - do some timeline charting for CPU vs. GPU use
 	- it may make sense to keep shared images/values/policies but have separate CPU worker threads
@@ -76,11 +71,6 @@ Code quality
 - add further architecture configuration to toml config (residuals*filters, etc.)
 - switch to sample ratio, rather than specifying games + steps (complicated, ties in to "curriculum schedule" in config maybe)
 
-GUI for debugging
-- develop/use low-cost GUI for debugging MCTS, value, policy
-- look into helping-to-get-mated
-- also try better text printouts, e.g. at X simulations print Y% win probability and PV
-
 UCI (#3)
 - "random move with eval within 1%"
 	- if best is value N, softmax sample with temperature 10 among (value >= N - 0.01), where 0.01 = (win-loss)/100
@@ -100,13 +90,6 @@ UCI (#3)
 - implement worthwhile options (work out hash, TT vs. prediction cache)
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
-- write out currmove et al (e.g. for Arena)
-- implement multiPV (run/batch multiple games in a worker with path restrictions?)
-
-TPUs (if needed)
-- get it running on cloud
-- scale up training + inference
-- try mixed mode (16/32)
 
 Scalability
 - can't play enough self-play games, work on new ideas soon
@@ -124,3 +107,9 @@ Revisit
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
 - any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 	- while not full hit rate should be higher? add some new metrics
+
+Won't do
+- TPUs or mixed mode (focus is on single desktop, GTX 1080 compatibility)
+- Richer UCI features like multiPV
+- GUI for play/debug, only UCI debug commands
+- CPU optimization - not measurable enough while GPU-dominated

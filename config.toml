@@ -4,64 +4,21 @@
 
 [network]
 
-training_network_name = "curriculum3"
-uci_network_name = "curriculum3"
+training_network_name = "tiny1"
+uci_network_name = "tiny1"
 
 [[networks]]
 
-    name = "window2"
-
-    [networks.training]
-
-    batch_size = 512
-    validation_interval = 5
-    checkpoint_interval = 20
-    strength_test_interval = 200
-
-    num_workers = 4
-    prediction_batch_size = 32
-
-    [networks.training.learning_rate_schedule]
-
-    steps = [0, 15_000, 30_000, 50_000]
-    rates = [1e-2, 1e-3, 1e-4, 1e-5]
-
-[[networks]]
-
-    name = "curriculum3"
-
-    [networks.training]
-
-    steps = 140_000
-    num_games = 4_400_000
-
-    validation_interval = 10
-    checkpoint_interval = 100
-    strength_test_interval = 500
-    window_size_start = 3142
-    games_path_training = "Games/Training_curriculum3"
-
-    [networks.training.learning_rate_schedule]
-
-    steps = [0, 15_000, 30_000, 50_000]
-    rates = [1e-1, 1e-2, 1e-3, 1e-4]
-
-[[networks]]
-
-    name = "supervised6"
+    name = "supervised7"
 
     [networks.training]
 
     steps = 63000
     num_games = 2_000_000
     games_path_training = "Games/Supervised"
-    games_path_curriculum = ""
 
     window_size_start = 250_000
     window_size_finish = 250_000
-    window_ending_positions_start = 0
-    window_ending_positions_finish = 0
-    window_ending_probability = 0.0
 
     [networks.training.learning_rate_schedule]
 
@@ -70,15 +27,13 @@ uci_network_name = "curriculum3"
 
 [[networks]]
 
-    name = "pureselfplay1"
+    name = "selfplay3"
 
     [networks.training]
 
     validation_interval = 10
     checkpoint_interval = 100
     strength_test_interval = 500
-
-    games_path_curriculum = ""
 
 [[networks]]
 
@@ -114,16 +69,13 @@ strength_test_interval = 5000
 num_games = 44_000_000
 window_size_start = 31_428
 window_size_finish = 1_000_000
-window_ending_positions_start = 5
-window_ending_positions_finish = 512
-window_ending_probability = 0.5
 value_loss_weight = 0.1
+mcts_value_loss_weight = 0.015
 policy_loss_weight = 1.0
 reply_policy_loss_weight = 0.15
 momentum = 0.9
 games_path_training = "Games/Training"
 games_path_validation = "Games/Validation"
-games_path_curriculum = "Games/Supervised"
 
 [training.learning_rate_schedule]
 

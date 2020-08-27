@@ -249,6 +249,7 @@ SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
     , _value(other._value)
     , _policy(other._policy)
     , _searchRootPly(other._searchRootPly)
+    , _mctsValues(std::move(other._mctsValues))
     , _childVisits(std::move(other._childVisits))
     , _history(std::move(other._history))
     , _result(other._result)
@@ -268,6 +269,7 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
     _value = other._value;
     _policy = other._policy;
     _searchRootPly = other._searchRootPly;
+    _mctsValues = std::move(other._mctsValues);
     _childVisits = std::move(other._childVisits);
     _history = std::move(other._history);
     _result = other._result;
@@ -536,18 +538,6 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
     }
 }
 
-void SelfPlayGame::GenerateHistoryAndSearchStatistics(const std::vector<Move>& moves)
-{
-    _history.insert(_history.end(), moves.begin(), moves.end());
-
-    const int begin = static_cast<int>(_childVisits.size());
-    _childVisits.resize(_childVisits.size() + moves.size());
-    for (int i = 0; i < moves.size(); i++)
-    {
-        _childVisits[begin + i].emplace(moves[i], 1.f);
-    }
-}
-
 void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float> visits;
@@ -556,6 +546,8 @@ void SelfPlayGame::StoreSearchStatistics()
     {
         visits[pair.first] = static_cast<float>(pair.second->visitCount) / sumChildVisits;
     }
+    // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
+    _mctsValues.push_back(FlipValue(_root->Value()));
     _childVisits.emplace_back(std::move(visits));
 }
 
@@ -572,7 +564,7 @@ void SelfPlayGame::Complete()
 
 SavedGame SelfPlayGame::Save() const
 {
-    return SavedGame(Result(), _history, _childVisits);
+    return SavedGame(Result(), _history, _mctsValues, _childVisits);
 }
 
 void SelfPlayGame::PruneExcept(Node* root, Node* except)
@@ -621,13 +613,6 @@ void SelfPlayGame::PruneAllInternal(Node* root)
 void SelfPlayGame::UpdateSearchRootPly()
 {
     _searchRootPly = Ply();
-}
-
-int SelfPlayGame::CurriculumBasisMoveCount() const
-{
-    // This is "accidental" resuse of a search-related field, so slightly fragile.
-    // Revisit in future if self-play/UCI diverge more.
-    return _searchRootPly;
 }
 
 Move SelfPlayGame::ParseSan(const std::string& san)
@@ -714,22 +699,7 @@ void SelfPlayWorker::ClearGame(int index)
 void SelfPlayWorker::SetUpGame(int index)
 {
     ClearGame(index);
-
-    // Are games available for curriculum learning sampling?
-    if (_storage->GamesPlayed(GameType_Curriculum) > 0)
-    {
-        // Sample evenly between CurriculumEndingPositions and (CurriculumEndingPositions + 1) to avoid over-representing one of the sides.
-        const int minPlyBeforeEnd = _storage->GetWindow(GameType_Training).CurriculumEndingPositions;
-        const int maxPlyBeforeEnd = (minPlyBeforeEnd + 1);
-        const std::vector<Move> moves = _storage->SamplePartialGame(minPlyBeforeEnd, maxPlyBeforeEnd);
-        _games[index] = SelfPlayGame(Config::StartingPosition, moves, false /* tryHard */, &_images[index], &_values[index], &_policies[index]);
-        _games[index].GenerateHistoryAndSearchStatistics(moves);
-    }
-    // If not then just start games from scratch.
-    else
-    {
-        _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
-    }
+    _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
 }
 
 void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard)
@@ -778,7 +748,7 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     {
         TrainingBatch* batch = _storage->SampleBatch(GameType_Training);
         network->TrainBatch(step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(),
-            batch->policies.data(), batch->replyPolicies.data());
+            batch->mctsValues.data(), batch->policies.data(), batch->replyPolicies.data());
 
         // Validate the network every "ValidationInterval" steps.
         if ((step % _networkConfig->Training.ValidationInterval) == 0)
@@ -809,7 +779,7 @@ void SelfPlayWorker::ValidateNetwork(INetwork* network, int step)
     {
         TrainingBatch* validationBatch = _storage->SampleBatch(GameType_Validation);
         network->ValidateBatch(step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(),
-            validationBatch->policies.data(), validationBatch->replyPolicies.data());
+            validationBatch->mctsValues.data(), validationBatch->policies.data(), validationBatch->replyPolicies.data());
     }
 }
 
@@ -995,18 +965,12 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
     const SelfPlayGame& game = _games[index];
 
     const int ply = game.Ply();
-    const int mctsPly = (ply - game.CurriculumBasisMoveCount());
     const float result = game.Result();
     const int gameNumber = _storage->AddGame(GameType_Training, game.Save());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
-    const float mctsTime = (gameTime / mctsPly);
-    std::cout << "Game " << gameNumber << ", ply " << ply;
-    if (game.CurriculumBasisMoveCount() > 0)
-    {
-        std::cout << " (" << game.CurriculumBasisMoveCount() << " + " << mctsPly << ")";
-    }
-    std::cout << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
+    const float mctsTime = (gameTime / ply);
+    std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
     //PredictionCache::Instance.PrintDebugInfo();
 }
 
@@ -1082,7 +1046,8 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
         // from its parent's perspective, and we start applying it at the current position of
         // the actual game (could again be WHITE or BLACK), again from its parent's perspective,
         // so flip it if they differ (the ^). This seems a little strange for the root node, because
-        // it doesn't really have a parent in the game, but that is why its value doesn't really matter.
+        // it doesn't really have a parent in the game, but you can still consider the flipped value
+        // as the side-to-play's broad evaluation of the position.
         assert(!std::isnan(value));
         value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);

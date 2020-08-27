@@ -20,13 +20,12 @@ enum GameType
 {
     GameType_Training,
     GameType_Validation,
-    GameType_Curriculum,
 
     GameType_Count,
 };
 
-constexpr const char* GameTypeNames[GameType_Count] = { "Training", "Validation", "Curriculum" };
-static_assert(GameType_Count == 3);
+constexpr const char* GameTypeNames[GameType_Count] = { "Training", "Validation" };
+static_assert(GameType_Count == 2);
 
 class Storage
 {
@@ -55,13 +54,12 @@ public:
 
     Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
     Storage(const NetworkConfig& networkConfig,
-        const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesTestPath, const std::filesystem::path& gamesCurriculumPath,
+        const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesValidationPath,
         const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath);
 
     void LoadExistingGames(GameType gameType, int maxLoadCount);
     int AddGame(GameType gameType, SavedGame&& game);
     TrainingBatch* SampleBatch(GameType gameType);
-    std::vector<Move> SamplePartialGame(int minMovesBeforeEnd, int maxMovesBeforeEnd);
     int GamesPlayed(GameType gameType) const;
     int NetworkStepCount(const std::string& networkName) const;
     std::filesystem::path LogPath() const;
@@ -88,7 +86,6 @@ private:
 
     int _trainingBatchSize;
     int _pgnInterval;
-    int _maxMoves;
 
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
     std::filesystem::path _pgnsPath;

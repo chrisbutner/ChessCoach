@@ -12,13 +12,6 @@ Window ReplayBuffer::GetWindow() const
 void ReplayBuffer::SetWindow(const Window& window)
 {
     _window = window;
-
-    // Recompute curriculum-window-skewed move counts for each game
-    // to use as a sampling distribution.
-    for (int i = 0; i < _games.size(); i++)
-    {
-        _gameMoveCounts[i] = CalculateMoveCount(_games[i]);
-    }
 }
 
 SavedGame& ReplayBuffer::AddGame(SavedGame&& game)
@@ -31,7 +24,7 @@ SavedGame& ReplayBuffer::AddGame(SavedGame&& game)
         }
     }
 
-    _gameMoveCounts.push_back(CalculateMoveCount(game));
+    _gameMoveCounts.push_back(game.moveCount);
     _games.emplace_back(std::move(game));
 
     return _games.back();
@@ -44,14 +37,14 @@ int ReplayBuffer::GameCount() const
 
 bool ReplayBuffer::SampleBatch(TrainingBatch& batch) const
 {
-    // Use the training batch size as a rough minimum game count to sample from.
+    // Make sure that there are enough games ready to sample from.
     const int gamesInWindow = (std::min(_window.TrainingGameMax, static_cast<int>(_games.size())) - _window.TrainingGameMin);
-    if (gamesInWindow < static_cast<int>(batch.images.size()))
+    if (gamesInWindow < _window.MinimumSamplableGames)
     {
         return false;
     }
 
-    const std::discrete_distribution gameDistribution = CalculateGameDistribution();
+    std::discrete_distribution gameDistribution = CalculateGameDistribution();
 
     for (int i = 0; i < batch.images.size(); i++)
     {
@@ -63,13 +56,11 @@ bool ReplayBuffer::SampleBatch(TrainingBatch& batch) const
 #endif
         const SavedGame& game = _games[gameIndex];
 
-        const std::discrete_distribution positionDistribution = CalculatePositionDistribution(_games[gameIndex]);
-
         const int positionIndex =
 #if SAMPLE_BATCH_FIXED
             i % game.moveCount;
 #else
-            positionDistribution(Random::Engine);
+            std::uniform_int_distribution<int>(0, game.moveCount - 1)(Random::Engine);
 #endif
 
         // Populate the image, value and policy for the chosen position.
@@ -81,6 +72,7 @@ bool ReplayBuffer::SampleBatch(TrainingBatch& batch) const
 
         batch.images[i] = scratchGame.GenerateImage();
         batch.values[i] = Game::FlipValue(scratchGame.ToPlay(), game.result);
+        batch.mctsValues[i] = game.mctsValues[positionIndex];
         batch.policies[i] = scratchGame.GeneratePolicy(game.childVisits[positionIndex]);
 
         // If there's a follow-up position then populate the reply policy. Otherwise, zero it.
@@ -100,37 +92,11 @@ bool ReplayBuffer::SampleBatch(TrainingBatch& batch) const
     return true;
 }
 
-std::vector<Move> ReplayBuffer::SamplePartialGame(int maxMoves, int minPlyBeforeEnd, int maxPlyBeforeEnd)
+const SavedGame& ReplayBuffer::SampleGame() const
 {
-
-    const int gameCount = static_cast<int>(_games.size());
-    const int gameIndex = std::uniform_int_distribution<int>(0, gameCount - 1)(Random::Engine);
-    const SavedGame& game = _games[gameIndex];
-    const int endPly = std::min(maxMoves, game.moveCount);
-
-    // There are N halfmoves/ply and (N+1) positions. Halfmove M leads from position M to position (M+1).
-    // The final position isn't useful because it's terminal, so N useful positions, so require that
-    // "minPlyBeforeEnd" is at least 1.
-    assert(minPlyBeforeEnd >= 1);
-    assert(maxPlyBeforeEnd >= minPlyBeforeEnd);
-    const int positionIndex = std::max(0, endPly -
-        std::uniform_int_distribution<int>(minPlyBeforeEnd, maxPlyBeforeEnd)(Random::Engine));
-
-    // For position 0 apply moves {}; for position 1 apply moves {0}; etc.
-    std::vector<Move> moves(positionIndex);
-    for (int m = 0; m < positionIndex; m++)
-    {
-        moves[m] = Move(game.moves[m]);
-    }
-    return moves;
-}
-
-float ReplayBuffer::CalculateMoveCount(const SavedGame& game)
-{
-    const int positionCount = static_cast<int>(game.moveCount);
-    const int endingPositionCount = std::min(positionCount, _window.CurriculumEndingPositions);
-    return (_window.CurriculumEndingProbability * endingPositionCount) +
-        ((1.f - _window.CurriculumEndingProbability) * (positionCount - endingPositionCount));
+    std::discrete_distribution gameDistribution = CalculateGameDistribution();
+    const int gameIndex = (gameDistribution(Random::Engine) + _window.TrainingGameMin);
+    return _games[gameIndex];
 }
 
 std::discrete_distribution<int> ReplayBuffer::CalculateGameDistribution() const
@@ -144,31 +110,4 @@ std::discrete_distribution<int> ReplayBuffer::CalculateGameDistribution() const
     return std::discrete_distribution<int>(
         _gameMoveCounts.begin() + _window.TrainingGameMin,
         _gameMoveCounts.begin() + trainingGameMax);
-}
-
-std::discrete_distribution<int> ReplayBuffer::CalculatePositionDistribution(const SavedGame& game) const
-{
-    const int positionCount = static_cast<int>(game.moveCount);
-    std::vector<float> positionProbabilities(positionCount);
-    assert(_window.CurriculumEndingPositions >= 0);
-    assert(_window.CurriculumEndingProbability >= 0.f);
-    assert(_window.CurriculumEndingProbability <= 1.f);
-
-    // Distribute ending positions.
-    const int endingPositionCount = std::min(positionCount, _window.CurriculumEndingPositions);
-    const float endingPositionProbability = (_window.CurriculumEndingProbability / endingPositionCount);
-    for (int j = positionCount - endingPositionCount; j < positionCount; j++)
-    {
-        positionProbabilities[j] = endingPositionProbability;
-    }
-
-    // Distribute early positions.
-    const int earlyPositionCount = (positionCount - endingPositionCount);
-    const float earlyPositionProbability = ((1.f - _window.CurriculumEndingProbability) / earlyPositionCount);
-    for (int j = 0; j < earlyPositionCount; j++)
-    {
-        positionProbabilities[j] = earlyPositionProbability;
-    }
-
-    return std::discrete_distribution(positionProbabilities.begin(), positionProbabilities.end());
 }

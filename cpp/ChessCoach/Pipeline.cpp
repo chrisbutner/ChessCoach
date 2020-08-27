@@ -4,15 +4,36 @@
 
 using namespace std::chrono_literals;
 
+Pipeline::~Pipeline()
+{
+    {
+        std::unique_lock lock(_mutex);
+
+        _shuttingDown = true;
+
+        _roomExists.notify_all();
+    }
+
+    for (std::thread& thread : _threads)
+    {
+        thread.join();
+    }
+}
+
 void Pipeline::Initialize(const ReplayBuffer& games, int trainingBatchSize, int workerCount)
 {
+    if (_initialized)
+    {
+        throw std::runtime_error("Pipeline already initialized");
+    }
+    _initialized = true;
+
     _games = &games;
     _trainingBatchSize = trainingBatchSize;
 
     for (int i = 0; i < workerCount; i++)
     {
-        // Just leak them until clean ending/joining for the whole training process is implemented.
-        new std::thread(&Pipeline::GenerateBatches, this);
+        _threads.emplace_back(&Pipeline::GenerateBatches, this);
     }
 }
 
@@ -38,9 +59,13 @@ void Pipeline::AddBatch(TrainingBatch&& batch)
 {
     std::unique_lock lock(_mutex);
 
-    while (_count >= MaxFill)
+    while (!_shuttingDown && (_count >= MaxFill))
     {
         _roomExists.wait(lock);
+    }
+    if (_shuttingDown)
+    {
+        return;
     }
 
     _batches[_oldest] = std::move(batch);
@@ -57,10 +82,11 @@ void Pipeline::GenerateBatches()
     TrainingBatch workingBatch;
     workingBatch.images.resize(_trainingBatchSize);
     workingBatch.values.resize(_trainingBatchSize);
+    workingBatch.mctsValues.resize(_trainingBatchSize);
     workingBatch.policies.resize(_trainingBatchSize);
     workingBatch.replyPolicies.resize(_trainingBatchSize);
 
-    while (true)
+    while (!_shuttingDown)
     {
         if (!_games->SampleBatch(workingBatch))
         {
@@ -72,6 +98,7 @@ void Pipeline::GenerateBatches()
         AddBatch(std::move(workingBatch));
         workingBatch.images.resize(_trainingBatchSize);
         workingBatch.values.resize(_trainingBatchSize);
+        workingBatch.mctsValues.resize(_trainingBatchSize);
         workingBatch.policies.resize(_trainingBatchSize);
         workingBatch.replyPolicies.resize(_trainingBatchSize);
     }

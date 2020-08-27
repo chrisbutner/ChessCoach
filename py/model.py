@@ -17,6 +17,7 @@ class ChessCoachModel:
 
   input_name = "Input"
   output_value_name = "OutputValue"
+  output_mcts_value_name = "OutputMctsValue"
   output_policy_name = "OutputPolicy"
   output_reply_policy_name = "OutputReplyPolicy"
 
@@ -62,19 +63,19 @@ class ChessCoachModel:
     x = tf.keras.layers.ReLU(name=f"tower/relu")(x)
     return x
 
-  def value_head(self, x):
+  def value_head(self, x, name, output_name):
     value_filter_count = 1
     x = tf.keras.layers.Conv2D(filters=value_filter_count, kernel_size=(1,1), strides=1, data_format="channels_first",
-      name=f"value/conv2d_{value_filter_count}",
+      name=f"{name}/conv2d_{value_filter_count}",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(x)
-    x = tf.keras.layers.BatchNormalization(axis=1, name=f"value/batchnorm")(x)
-    x = tf.keras.layers.ReLU(name=f"value/relu")(x)
-    x = tf.keras.layers.Flatten(name=f"value/flatten")(x)
+    x = tf.keras.layers.BatchNormalization(axis=1, name=f"{name}/batchnorm")(x)
+    x = tf.keras.layers.ReLU(name=f"{name}/relu")(x)
+    x = tf.keras.layers.Flatten(name=f"{name}/flatten")(x)
     # Add bias for these layers with no more batchnorms.
     x = tf.keras.layers.Dense(self.dense_count, kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), activation="relu", use_bias=True,
-      name=f"value/dense_{self.dense_count}")(x)
+      name=f"{name}/dense_{self.dense_count}")(x)
     x = tf.keras.layers.Dense(1, kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), activation="tanh", use_bias=True,
-      name=self.output_value_name)(x)
+      name=output_name)(x)
     return x
 
   def policy_head(self, x, name, output_name, config):
@@ -97,11 +98,12 @@ class ChessCoachModel:
     # Residual tower
     tower = self.tower(stem, config)
 
-    # Value head
-    value = self.value_head(tower)
+    # Value heads
+    value = self.value_head(tower, "value", self.output_value_name)
+    mcts_value = self.value_head(tower, "mcts_value", self.output_mcts_value_name)
 
     # Policy heads
     policy = self.policy_head(tower, "policy", self.output_policy_name, config)
     reply_policy = self.policy_head(tower, "reply_policy", self.output_reply_policy_name, config)
 
-    return tf.keras.Model(input, [value, policy, reply_policy])
+    return tf.keras.Model(input, [value, mcts_value, policy, reply_policy])

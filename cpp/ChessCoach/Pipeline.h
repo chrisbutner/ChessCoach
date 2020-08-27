@@ -2,7 +2,9 @@
 #define _PIPELINE_H_
 
 #include <vector>
+#include <thread>
 #include <mutex>
+#include <condition_variable>
 
 #include "Network.h"
 #include "ReplayBuffer.h"
@@ -17,6 +19,11 @@ private:
 
 public:
 
+    Pipeline() = default;
+    ~Pipeline();
+    Pipeline(const Pipeline& other) = delete;
+    Pipeline& operator=(const Pipeline& other) = delete;
+    
     void Initialize(const ReplayBuffer& games, int trainingBatchSize, int workerCount);
     TrainingBatch* SampleBatch();
 
@@ -27,6 +34,9 @@ private:
 
 private:
 
+    bool _initialized = false;
+    std::atomic_bool _shuttingDown = false;
+    std::vector<std::thread> _threads;
     const ReplayBuffer* _games = nullptr;
     int _trainingBatchSize = 1;
     std::array<TrainingBatch, BufferCount> _batches;

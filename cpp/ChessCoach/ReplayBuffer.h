@@ -16,20 +16,18 @@ public:
     SavedGame& AddGame(SavedGame&& game);
     int GameCount() const;
     bool SampleBatch(TrainingBatch& batch) const;
-    std::vector<Move> SamplePartialGame(int maxMoves, int minMovesBeforeEnd, int maxMovesBeforeEnd);
+    const SavedGame& SampleGame() const;
 
 private:
 
-    float CalculateMoveCount(const SavedGame& game);
     std::discrete_distribution<int> CalculateGameDistribution() const;
-    std::discrete_distribution<int> CalculatePositionDistribution(const SavedGame& game) const;
 
 private:
 
-    Window _window = {};
+    Window _window = { 0, 0, std::numeric_limits<int>::max() };
     Game _startingPosition;
     std::deque<SavedGame> _games;
-    std::deque<float> _gameMoveCounts;
+    std::deque<int> _gameMoveCounts;
 };
 
 #endif // _REPLAYBUFFER_H_

@@ -4,6 +4,9 @@
 #include <vector>
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
+
+#include "Platform.h"
 
 class LargePageAllocator
 {
@@ -45,6 +48,17 @@ public:
             LargePageAllocator::Free(block);
         }
         _blocks.clear();
+
+        for (void* block : _fallbackBlocks)
+        {
+#ifdef CHESSCOACH_WINDOWS
+            ::_aligned_free(block);
+#else
+            std::free(block);
+#endif
+        }
+        _fallbackBlocks.clear();
+
         _next = nullptr;
     }
     
@@ -91,14 +105,19 @@ public:
 
     int DebugBlockCount()
     {
-        return static_cast<int>(_blocks.size());
+        return BlockCount();
     }
 
 private:
 
+    int BlockCount()
+    {
+        return static_cast<int>(_blocks.size() + _fallbackBlocks.size());
+    }
+
     void AllocateBlock()
     {
-        if (_blocks.size() >= MaxBlocks)
+        if (BlockCount() >= MaxBlocks)
         {
             throw std::bad_alloc();
         }
@@ -112,13 +131,25 @@ private:
             throw std::bad_alloc();
         }
 
+        // If memory is too fragmented to grab a block-size allocation then fall back to std::aligned_alloc.
         void* block = LargePageAllocator::Allocate(BlockSizeBytes);
-        assert(block);
-        if (!block)
+        if (block)
         {
-            throw std::bad_alloc();
+            _blocks.push_back(block);
         }
-        _blocks.push_back(block);
+        else
+        {
+#ifdef CHESSCOACH_WINDOWS
+            block = ::_aligned_malloc(BlockSizeBytes, alignment);
+#else
+            block = std::aligned_alloc(alignment, BlockSizeBytes);
+#endif
+            if (!block)
+            {
+                throw std::bad_alloc();
+            }
+            _fallbackBlocks.push_back(block);
+        }
 
         Chunk* first = reinterpret_cast<Chunk*>(block);
         Chunk* chunk = first;
@@ -137,6 +168,7 @@ private:
 private:
 
     std::vector<void*> _blocks;
+    std::vector<void*> _fallbackBlocks;
     Chunk* _next;
     int _currentlyAllocatedCount;
     int _peakAllocatedCount;

@@ -16,12 +16,8 @@ struct TrainingConfig
     int NumGames;
     int WindowSizeStart;
     int WindowSizeFinish;
-    int WindowEndingPositionsStart;
-    int WindowEndingPositionsFinish;
-    float WindowEndingProbability;
     std::string GamesPathTraining;
     std::string GamesPathValidation;
-    std::string GamesPathCurriculum;
 };
 
 struct SelfPlayConfig

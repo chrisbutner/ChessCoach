@@ -36,18 +36,18 @@ public:
     virtual ~PythonNetwork();
 
     virtual void PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
-    virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
-        OutputPlanes* replyPolicies);
-    virtual void ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
-        OutputPlanes* replyPolicies);
+    virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+        OutputPlanes* policies, OutputPlanes* replyPolicies);
+    virtual void ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+        OutputPlanes* policies, OutputPlanes* replyPolicies);
     virtual void LogScalars(int step, int scalarCount, std::string* names, float* values);
     virtual void LoadNetwork(const char* networkName);
     virtual void SaveNetwork(int checkpoint);
 
 private:
 
-    void TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies,
-        OutputPlanes* replyPolicies);
+    void TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+        OutputPlanes* policies, OutputPlanes* replyPolicies);
     PyObject* LoadFunction(PyObject* module, const char* name);
     void PyCallAssert(bool result);
 

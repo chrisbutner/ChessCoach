@@ -90,7 +90,9 @@ void SampleBatch(GameType gameType)
     std::filesystem::create_directory(networksPath);
 #pragma warning(default:4996) // Internal buffer is immediately consumed and detached.
 
+    // Set up storage and a simple sampling window.
     std::unique_ptr<Storage> storage1(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    storage1->SetWindow(gameType, { 0, 1, 1 });
 
     // Expect zero games in a new, temporary directory.
 
@@ -123,9 +125,10 @@ void SampleBatch(GameType gameType)
     storage1->AddGame(gameType, SavedGame(saved));
     EXPECT_EQ(storage1->GamesPlayed(gameType), 1);
 
-    // Load a second Storage over the same directories and check that game loads.
+    // Load a second Storage over the same directories with a simple sampling window and check that the game loads.
 
     std::unique_ptr<Storage> storage2(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    storage2->SetWindow(gameType, { 0, 1, 1 });
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
