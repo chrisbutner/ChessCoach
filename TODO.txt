@@ -3,7 +3,7 @@ TODO
 	- buffer fstreams for windows, see link
 	- throw away comments above X length, storytelling unrelated to move
 	- throw away comments below X eng words
-	- dedupe comments in case pgns have doubled up - text index
+	- write unit tests for comment preprocessing
 - get to minimum-viable-selfplay
 	- get to piece value understanding ASAP, try out specific A/B positions
 	- (lots more ideas below)

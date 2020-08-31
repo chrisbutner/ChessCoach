@@ -50,6 +50,28 @@ stockfish = static_library(
   )
 
 ###############################################################################
+# hunspell
+###############################################################################
+
+hunspell_sources = [
+  'cpp/hunspell/affentry.cxx',
+  'cpp/hunspell/affixmgr.cxx',
+  'cpp/hunspell/csutil.cxx',
+  'cpp/hunspell/filemgr.cxx',
+  'cpp/hunspell/hashmgr.cxx',
+  'cpp/hunspell/hunspell.cxx',
+  'cpp/hunspell/hunzip.cxx',
+  'cpp/hunspell/phonet.cxx',
+  'cpp/hunspell/replist.cxx',
+  'cpp/hunspell/suggestmgr.cxx',
+  ]
+
+hunspell = static_library(
+  'hunspell',
+  hunspell_sources,
+  )
+
+###############################################################################
 # ChessCoach
 ###############################################################################
 
@@ -63,6 +85,7 @@ chesscoach_sources = [
   'cpp/ChessCoach/Platform.cpp',
   'cpp/ChessCoach/PoolAllocator.cpp',
   'cpp/ChessCoach/PredictionCache.cpp',
+  'cpp/ChessCoach/Preprocessing.cpp',
   'cpp/ChessCoach/PythonNetwork.cpp',
   'cpp/ChessCoach/Random.cpp',
   'cpp/ChessCoach/ReplayBuffer.cpp',
@@ -91,7 +114,7 @@ chesscoachuci = executable(
   'ChessCoachUci',
   chesscoachuci_sources,
   include_directories: cpp_includes,
-  link_with: [chesscoach, stockfish],
+  link_with: [chesscoach, stockfish, hunspell],
   install: true,
   )
 
@@ -107,7 +130,7 @@ chesscoachpgntogames = executable(
   'ChessCoachPgnToGames',
   chesscoachpgntogames_sources,
   include_directories: [cpp_includes, tclap_includes],
-  link_with: [chesscoach, stockfish],
+  link_with: [chesscoach, stockfish, hunspell],
   install: true,
   )
 
@@ -123,7 +146,7 @@ chesscoachstrengthtest = executable(
   'ChessCoachStrengthTest',
   chesscoachstrengthtest_sources,
   include_directories: [cpp_includes, tclap_includes],
-  link_with: [chesscoach, stockfish],
+  link_with: [chesscoach, stockfish, hunspell],
   install: true,
   )
 
@@ -139,7 +162,7 @@ chesscoachtrain = executable(
   'ChessCoachTrain',
   chesscoachtrain_sources,
   include_directories: cpp_includes,
-  link_with: [chesscoach, stockfish],
+  link_with: [chesscoach, stockfish, hunspell],
   install: true,
   )
 
@@ -164,7 +187,7 @@ chesscoachtest = executable(
   chesscoachtest_sources,
   include_directories: cpp_includes,
   dependencies: [gtest_dependency],
-  link_with: [chesscoach, stockfish],
+  link_with: [chesscoach, stockfish, hunspell],
 )
 
 test('AllTests', chesscoachtest, timeout: 300)

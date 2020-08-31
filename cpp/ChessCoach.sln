@@ -24,6 +24,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachUci", "ChessCoach
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachStrengthTest", "ChessCoachStrengthTest\ChessCoachStrengthTest.vcxproj", "{ADA5C431-2270-446C-BF46-9A7430625409}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hunspell", "hunspell\hunspell.vcxproj", "{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -118,6 +120,18 @@ Global
 		{ADA5C431-2270-446C-BF46-9A7430625409}.ReleaseNoOpt|x64.Build.0 = ReleaseNoOpt|x64
 		{ADA5C431-2270-446C-BF46-9A7430625409}.ReleaseNoOpt|x86.ActiveCfg = ReleaseNoOpt|Win32
 		{ADA5C431-2270-446C-BF46-9A7430625409}.ReleaseNoOpt|x86.Build.0 = ReleaseNoOpt|Win32
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Debug|x64.ActiveCfg = Debug|x64
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Debug|x64.Build.0 = Debug|x64
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Debug|x86.ActiveCfg = Debug|Win32
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Debug|x86.Build.0 = Debug|Win32
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Release|x64.ActiveCfg = Release|x64
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Release|x64.Build.0 = Release|x64
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Release|x86.ActiveCfg = Release|Win32
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.Release|x86.Build.0 = Release|Win32
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.ReleaseNoOpt|x64.ActiveCfg = ReleaseNoOpt|x64
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.ReleaseNoOpt|x64.Build.0 = ReleaseNoOpt|x64
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.ReleaseNoOpt|x86.ActiveCfg = ReleaseNoOpt|Win32
+		{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}.ReleaseNoOpt|x86.Build.0 = ReleaseNoOpt|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
