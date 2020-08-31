@@ -189,7 +189,7 @@ void ChessCoachPgnToGames::ConvertPgns()
         }
 
         std::ifstream pgnFile = std::ifstream(pgnPath, std::ios::in);
-        Pgn::ParsePgn(pgnFile, [&](SavedGame&& game)
+        Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, SavedCommentary&& commentary)
             {
                 games.emplace_back(std::move(game));
                 pgnGamesConverted++;

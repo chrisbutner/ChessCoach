@@ -10,21 +10,41 @@
 #include "Game.h"
 
 // Parsing is quite minimal and brittle, intended to parse very-well-formed PGNs with minimal dev time and improved only as needed.
-// E.g. assume that pawn capture squares are fully specified
-void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&)> gameHandler)
+// E.g. assume that pawn capture squares are fully specified.
+//
+// Note that this means SAN input like "ex" will cause overflows. Don't feed in untrusted input.
+void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler)
 {
     while (true)
     {
-        float result = ParseResult(content);
-        if (std::isnan(result))
+        // Try to get the result from headers and validate against the one after the move list,
+        // but be forgiving and allow the one after the move list to fill in.
+        bool fenGame = false;
+        float result = ParseHeaders(content, fenGame);
+
+        // FEN games aren't supported, so skip.
+        if (fenGame)
+        {
+            SkipGame(content);
+            continue;
+        }
+
+        StateListPtr positionStates(new std::deque<StateInfo>(1));
+        Position position;
+        position.set(Config::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
+        std::vector<uint16_t> moves;
+        SavedCommentary commentary;
+        if (!ParseMoves(content, positionStates, position, moves, commentary, result, false /* inVariation */))
         {
             break;
         }
+        if (std::isnan(result))
+        {
+            // This can be the end of the file, or a really bad PGN/game with no result in either headers or after the move list.
+            break;
+        }
 
-        std::vector<uint16_t> moves;
-        ParseMoves(content, moves, result);
-
-        gameHandler(SavedGame(result, std::move(moves), GenerateMctsValues(moves, result), GenerateChildVisits(moves)));
+        gameHandler(SavedGame(result, std::move(moves), GenerateMctsValues(moves, result), GenerateChildVisits(moves)), std::move(commentary));
     }
 }
 
@@ -56,87 +76,490 @@ std::vector<std::map<Move, float>> Pgn::GenerateChildVisits(const std::vector<ui
     return childVisits;
 }
 
-// Assume BOM + [Result on the same line won't happen.
-float Pgn::ParseResult(std::istream& content) 
+float Pgn::ParseHeaders(std::istream& content, bool& fenGameInOut)
 {
-    const std::string resultHeader = "[Result";
+    float result = std::numeric_limits<float>::quiet_NaN();
 
-    const int resultValueOffset = 9;
+    char c;
+    while (content >> c)
+    {
+        if (c == '[')
+        {
+            ParseHeader(content, fenGameInOut, result);
+        }
+        else if (c == '1')
+        {
+            // Found the first move, so headers are finished.
+            content.unget();
+            break;
+        }
+        else if (c == '{')
+        {
+            // Found a comment before the first move, just throw it away.
+            ParseUntil(content, '}');
+        }
+        else if ((c == 'ï') || (c == '»') || (c == '¿'))
+        {
+            // Ignore UTF-8 BOM.
+        }
+        else
+        {
+            // Let the move parser handle the rest.
+            content.unget();
+            break;
+        }
+    }
+
+    return result;
+}
+
+void Pgn::ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOut)
+{
+    const std::string fenHeader = "FEN";
+    const std::string resultHeader = "Result";
+
+    const int fenValueOffset = 5;
+    const int resultValueOffset = 8;
     const std::string win = "1-";
     const std::string draw = "1/";
     const std::string undetermined = "*";
     const std::string loss = "0";
 
-    std::string line;
-    while (std::getline(content, line))
+    // Grab the rest of the line. It would be nice to ParseUntil the closing square brace
+    // but some PGNs like to nest square braces within headers like Event or Annotator.
+    std::string header;
+    std::getline(content, header);
+
+    // FEN games aren't supported.
+    if (header.compare(0, fenHeader.size(), fenHeader) == 0)
     {
-        if (line.compare(0, resultHeader.size(), resultHeader) == 0)
+        // Some PGNs include the starting position as a FEN header, which is pretty confusing.
+        if (header.compare(fenValueOffset, std::size(Config::StartingPosition) - 1, Config::StartingPosition) != 0)
         {
-            if (line.compare(resultValueOffset, win.size(), win) == 0)
-            {
-                return CHESSCOACH_VALUE_WIN;
-            }
-            else if ((line.compare(resultValueOffset, draw.size(), draw) == 0) ||
-                (line.compare(resultValueOffset, undetermined.size(), undetermined) == 0))
-            {
-                return CHESSCOACH_VALUE_DRAW;
-            }
-            else if (line.compare(resultValueOffset, loss.size(), loss) == 0)
-            {
-                return CHESSCOACH_VALUE_LOSS;
-            }
+            fenGameInOut = true;
         }
     }
-    return std::numeric_limits<float>::quiet_NaN();
+
+    // Check for the "Result" header in particular and return the float representation.
+    if (header.compare(0, resultHeader.size(), resultHeader) == 0)
+    {
+        if (header.compare(resultValueOffset, win.size(), win) == 0)
+        {
+            resultOut = CHESSCOACH_VALUE_WIN;
+        }
+        else if ((header.compare(resultValueOffset, draw.size(), draw) == 0) ||
+            (header.compare(resultValueOffset, undetermined.size(), undetermined) == 0))
+        {
+            resultOut = CHESSCOACH_VALUE_DRAW;
+        }
+        else if (header.compare(resultValueOffset, loss.size(), loss) == 0)
+        {
+            resultOut = CHESSCOACH_VALUE_LOSS;
+        }
+    }
 }
 
-void Pgn::ParseMoves(std::istream& content, std::vector<uint16_t>& moves, float result)
+bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, SavedCommentary& commentary, float& resultInOut, bool inVariation)
 {
-    const std::string firstMove = "1";
-
-    std::string line;
-    while (std::getline(content, line))
+    char c;
+    std::string str;
+    while (content >> c)
     {
-        if (line.compare(0, firstMove.size(), firstMove) != 0)
+        // Uncomment to debug: you can insert ^ in most places in the PGN.
+        //if (c == '^')
+        //{
+        //    std::cout << position.fen() << std::endl;
+        //    ::__debugbreak();
+        //} else
+        if (::isdigit(static_cast<unsigned char>(c)))
         {
+            content.unget();
+            int moveNumber;
+            content >> moveNumber;
+
+            if (((moveNumber == 1) && (moves.size() <= 1) && (content.peek() != '-') && (content.peek() != '/')) ||
+                (moveNumber >= 2))
+            {
+                // After e.g. 8 half-moves, expect "5.": (moves.size() == (moveNumber - 1) * 2)
+                // After e.g. 9 half-moves, expect "5...": (moves.size() == ((moveNumber - 1) * 2) + 1)
+                //
+                // However, poor-quality PGNs may do many things wrongly:
+                // - Use the wrong move number
+                // - Omit dots completely
+                // - Include too few dots
+                // - Abut the next move
+                //
+                // As long as the move number is unambiguous with results/castling, be forgiving.
+                // Don't even try to consume the right number of dots, let dot-forgiveness handle it below.
+                //
+                // Do watch out for a 1-0 or 1/2-1/2 result without anything else in the move list though.
+            }
+            else if (moveNumber == 0)
+            {
+                // This is a loss ("0-1") or a poor-quality PGN with 0-0 or 0-0-0 instead
+                // of O-O or O-O-O.
+                //
+                // Don't use another unget() here. It can fail on Windows on boundaries like 512000
+                // despite reading the zero again in between ungets. ParseMoveGlyph will return an empty
+                // string anyway if it hits whitespace right after the zero.
+                ParseMoveGlyph(content, str);
+                if (str == "-1")
+                {
+                    assert(!inVariation);
+                    EncounterResult(CHESSCOACH_VALUE_LOSS, resultInOut);
+
+                    // Game is finished.
+                    break;
+                }
+                else
+                {
+                    std::replace(str.begin(), str.end(), '0', 'O');
+                    str.insert(str.begin(), 'O');
+                    const Move move = ParseSan(position, str);
+                    if (move == MOVE_NONE)
+                    {
+                        assert(!"Unexpected zero in PGN, not 0-1 or 0-0 or 0-0-0");
+                        return false;
+                    }
+                    ApplyMove(positionStates, position, move);
+                    moves.push_back(move);
+                }
+            }
+            else if (moveNumber == 1)
+            {
+                // This is a win ("1-0") or draw ("1/2-1/2").
+                content >> c; // Could fail and remain '1'
+                if (c == '-')
+                {
+                    assert(!inVariation);
+                    if (!Expect(content, "0"))
+                    {
+                        return false;
+                    }
+                    EncounterResult(CHESSCOACH_VALUE_WIN, resultInOut);
+
+                    // Game is finished.
+                    break;
+                }
+                else if (c == '/')
+                {
+                    // Also be forgiving of just "1/2".
+                    assert(!inVariation);
+                    ParseMoveGlyph(content, str);
+                    if ((str == "2-1/2") || (str == "2"))
+                    {
+                        EncounterResult(CHESSCOACH_VALUE_DRAW, resultInOut);
+
+                        // Game is finished.
+                        break;
+                    }
+                    else
+                    {
+                        assert(!"Unexpected 1/ in PGN, not 1/2-1/2 or 1/2");
+                        return false;
+                    }
+                }
+                else
+                {
+                    assert(!"Unexpected move number in PGN");
+                    return false;
+                }
+            }
+            else
+            {
+                assert(!"Unexpected move number in PGN");
+                return false;
+            }
+        }
+        else if (c == '.')
+        {
+            // Allow for too few dots in the move number cases above, as well as too many dots
+            // in cases like  "38. ...Kf3". Just consume and move on.
+        }
+        else if (c == '*')
+        {
+            // This is an indeterminate result: "*".
+            assert(!inVariation);
+            EncounterResult(CHESSCOACH_VALUE_DRAW, resultInOut);
+
+            // Game is finished.
+            break;
+        }
+        // Allow "--" or "Z0" for null moves.
+        else if (::isalpha(static_cast<unsigned char>(c)) || (c == '-'))
+        {
+            content.unget();
+            ParseMoveGlyph(content, str);
+            const Move move = ParseSan(position, str);
+            if (move == MOVE_NONE)
+            {
+                assert(!"Failed to parse move SAN in PGN");
+                return false;
+            }
+            ApplyMove(positionStates, position, move);
+            moves.push_back(move);
+        }
+        else if (c == '$')
+        {
+            // Ignore the rest of the Numeric Annotation Glyph (NAG).
+            ParseMoveGlyph(content, str);
+        }
+        else if ((c == '!') || (c == '?'))
+        {
+            // Ignore isolated unencoded NAGs.
+        }
+        else if (c == '{')
+        {
+            ParseComment(content, moves, commentary);
+        }
+        else if (c == '(')
+        {
+            if (!ParseVariation(content, position, moves, commentary, resultInOut))
+            {
+                return false;
+            }
+        }
+        else if (c == ')')
+        {
+            if (!inVariation)
+            {
+                assert(!"Unexpected ) outside of a variation");
+                return false;
+            }
+
+            // Variation is finished.
+            break;
+        }
+        else if (c == '[')
+        {
+            // Assume we're in a poor-quality PGN with a missing result after the move list.
+            // Try to fill in a result then move on to the next game.
+            if (inVariation)
+            {
+                assert(!"Unexpected [ inside a variation");
+                return false;
+            }
+
+            float fillResult = resultInOut;
+            if (std::isnan(fillResult))
+            {
+                fillResult = CHESSCOACH_VALUE_DRAW;
+            }
+            
+            EncounterResult(fillResult, resultInOut);
+            content.unget();
+
+            // Game is finished.
+            break;
+        }
+        else if (c == '}')
+        {
+            // Assume a poor-quality PGN with something like "{ comment } }".
+            // Just consume and move on.
+        }
+        else
+        {
+            assert(!"Unexpected character in PGN");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves, SavedCommentary& commentary)
+{
+    // Grab the full comment string between curly braces, including spaces.
+    std::string comment = ParseUntil(content, '}');
+
+    // Store the trimmed comment if not empty.
+    Trim(comment);
+    if (!comment.empty())
+    {
+        commentary.comments.emplace_back(Comment{ (static_cast<int>(moves.size()) - 1), {}, comment });
+    }
+}
+
+std::string Pgn::ParseUntil(std::istream& content, char delimiter)
+{
+    // Grab the full string including spaces, and consume the delimiter.
+    std::string text;
+    char c;
+
+    content >> std::noskipws;
+    while ((content >> c) && (c != delimiter))
+    {
+        text += c;
+    }
+    content >> std::skipws;
+
+    return text;
+}
+
+void Pgn::ParseMoveGlyph(std::istream& content, std::string& target)
+{
+    // Stop at the first whitespace or punctuation, leaving them unconsumed.
+    target.clear();
+    char c;
+
+    content >> std::noskipws;
+    while (content >> c)
+    {
+        if (::isspace(static_cast<unsigned char>(c)) ||
+            (c == '(') || (c == ')') || (c == '{') || (c == '}'))
+        {
+            content.unget();
+            break;
+        }
+        target += c;
+    }
+    content >> std::skipws;
+}
+
+void Pgn::Trim(std::string& text)
+{
+    text.erase(text.begin(), std::find_if(text.begin(), text.end(), [](char c) {
+        return !::isspace(static_cast<unsigned char>(c));
+        }));
+    text.erase(std::find_if(text.rbegin(), text.rend(), [](char c) {
+        return !::isspace(static_cast<unsigned char>(c));
+        }).base(), text.end());
+}
+
+bool Pgn::ParseVariation(std::istream& content, const Position& parent, const std::vector<uint16_t>& parentMoves, SavedCommentary& commentary, float& resultInOut)
+{
+    // Copy/branch the position and move list. We can start a new empty StateInfo list
+    // that refers into the old one just like the "Game" class.
+    StateListPtr positionStates(new std::deque<StateInfo>());
+    Position position = parent;
+    std::vector<uint16_t> moves = parentMoves;
+
+    UndoMoveInVariation(position, Move(moves.back()));
+    moves.pop_back();
+
+    int newCommentary = static_cast<int>(commentary.comments.size());
+    const bool success = ParseMoves(content, positionStates, position, moves, commentary, resultInOut, true /* inVariation */);
+
+    // Loop over all new comments since they're specific to this variation.
+    // This means that right now their moveIndex will correctly reference
+    // this variation's "moves" but will dangle over "parentMoves", after
+    // culling the final move that the variation is overriding.
+    //
+    // Note that since variations can nest, some comments may already have
+    // "variationMoves", so these need to be preserved. This is how we know
+    // that they've already been "fixed up" to lie within "moves" though.
+    const int preVariationMoveCount = (static_cast<int>(parentMoves.size()) - 1);
+    while (newCommentary < commentary.comments.size())
+    {
+        // One annoying special case is when annotators integrate moves into prose, e.g.:
+        //
+        // 11...Nxd5 ( { Another plan is } 11...Bxd5 12. exd5 { when Nf6 remains in place to threaten Pd5 }
+        //
+        // Here, the comment "Another plan is" helps refer to the next move, not the previous, but human input would be needed
+        // to combine/rewrite in a post-move fashion, e.g. "Another plan, where Nf6 remains in place to threaten Pd5".
+        // Sometimes you'd want to combine with the next comment, other times move the comment to the end of the variation, etc.
+        // It seems like a very complicated problem after browsing through various annotators' work.
+        //
+        // For now, throw away the initial pre-move comment. When the comment was generated the final parent move
+        // had already been culled from "moves", so we can test for (comment.moveIndex < preVariationMoveCount)
+        // (i.e. breaking the first asserted invariant below).
+        Comment& comment = commentary.comments[newCommentary];
+        if (comment.moveIndex < preVariationMoveCount)
+        {
+            commentary.comments.erase(commentary.comments.begin() + newCommentary);
             continue;
         }
+        
+        assert(comment.moveIndex >= preVariationMoveCount);
+        assert(comment.moveIndex < moves.size());
 
-        std::stringstream moveStream(line);
-        std::string extra;
+        // Pull the comment's moveIndex back until it can point into "parentMoves",
+        // after culling the final move that the variation is overriding,
+        // and prepend the backtracked moves into "variationMoves" (which may be
+        // non-empty because of a nested variation's fix-up).
+        const int target = (preVariationMoveCount - 1);
+        const int depth = (comment.moveIndex - target);
+        comment.variationMoves.insert(comment.variationMoves.begin(),
+            moves.begin() + preVariationMoveCount, moves.begin() + preVariationMoveCount + depth);
+        comment.moveIndex -= depth;
+        assert(comment.moveIndex == target);
 
-        StateListPtr positionStates(new std::deque<StateInfo>(1));
-        Position position;
-        position.set(Config::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
+        newCommentary++;
+    }
 
-        moveStream >> extra;
+    return success;
+}
 
-        while (true)
+bool Pgn::Expect(std::istream& content, char expected)
+{
+    char c;
+    if (!(content >> c))
+    {
+        assert(!"Unexpected end-of-stream");
+        return false;
+    }
+
+    if (c != expected)
+    {
+        assert(!"Unexpected char found");
+        return false;
+    }
+
+    return true;
+}
+
+bool Pgn::Expect(std::istream& content, const std::string& expected)
+{
+    for (const char e : expected)
+    {
+        if (!Expect(content, e))
         {
-            std::string san1;
-            std::string san2;
+            return false;
+        }
+    }
 
-            moveStream >> san1 >> san2 >> extra;
-            
-            Move move1 = ParseSan(position, san1);
-            if (move1 == MOVE_NONE)
-            {
-                // E.g. finishes with "66. Kf4 Be5+ 0-1" (this is the previous "extra").
-                assert(ParseResultPrecise(extra) == result);
-                return;
-            }
-            ApplyMove(positionStates, position, move1);
-            moves.push_back(move1);
+    return true;
+}
 
-            Move move2 = ParseSan(position, san2);
-            if (move2 == MOVE_NONE)
+void Pgn::EncounterResult(float encountered, float& resultInOut)
+{
+    // Some PGNs may not include the actual result in the header (e.g. "?" instead).
+    // Be forgiving and let the result after the move list fill it in.
+    if (!std::isnan(resultInOut))
+    {
+        assert(encountered == resultInOut);
+    }
+    else
+    {
+        resultInOut = encountered;
+    }
+}
+
+void Pgn::SkipGame(std::istream& content)
+{
+    // We want to ParseUntil the start of the next header ('[') but sometimes
+    // square brackets are used inside comments, so ignore them there. Don't
+    // try to handle nested comments, since that would be very destructive
+    // elsewhere anyway. It's fine to skip whitespace in this case.
+    bool inComment = false;
+    char c;
+    while (content >> c)
+    {
+        if (c == '{')
+        {
+            inComment = true;
+        }
+        else if (c == '}')
+        {
+            inComment = false;
+        }
+        else if (c == '[')
+        {
+            if (!inComment)
             {
-                // E.g. finishes with "68. Kb1 1/2-1/2".
-                assert(ParseResultPrecise(san2) == result);
-                return;
+                content.unget();
+                break;
             }
-            ApplyMove(positionStates, position, move2);
-            moves.push_back(move2);
         }
     }
 }
@@ -152,11 +575,9 @@ Move Pgn::ParseSan(const Position& position, const std::string& san)
     {
         return MOVE_NONE;
     }
-
-    // E.g. finishes with "68. Kb1 1/2-1/2".
-    if ((san[0] == '1') || (san[0] == '0') || (san[0] == '*'))
+    if ((san == "--") || (san == "Z0"))
     {
-        return MOVE_NONE;
+        return MOVE_NULL;
     }
 
     const PieceType fromPieceType = ParsePieceType(san, 0);
@@ -372,30 +793,26 @@ std::string Pgn::SanPiece(const Position& position, Move move, Piece piece)
 void Pgn::ApplyMove(StateListPtr& positionStates, Position& position, Move move)
 {
     positionStates->emplace_back();
-    position.do_move(move, positionStates->back());
-}
-
-float Pgn::ParseResultPrecise(const std::string& text)
-{
-    if (text == "1-0")
+    if (move != MOVE_NULL)
     {
-        return CHESSCOACH_VALUE_WIN;
-    }
-    else if (text == "1/2-1/2")
-    {
-        return CHESSCOACH_VALUE_DRAW;
-    }
-    else if (text == "*")
-    {
-        return CHESSCOACH_VALUE_DRAW;
-    }
-    else if (text == "0-1")
-    {
-        return CHESSCOACH_VALUE_LOSS;
+        position.do_move(move, positionStates->back());
     }
     else
     {
-        return std::numeric_limits<float>::quiet_NaN();
+        position.do_null_move(positionStates->back());
+    }
+}
+
+// Intended for branched variations, so doesn't update the StateInfo list. 
+void Pgn::UndoMoveInVariation(Position& position, Move move)
+{
+    if (move != MOVE_NULL)
+    {
+        position.undo_move(move);
+    }
+    else
+    {
+        position.undo_null_move();
     }
 }
 
@@ -499,13 +916,35 @@ Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceT
 Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
 {
     const Color toPlay = position.side_to_move();
-    const bool capture = (san[1] == 'x');
-    const Square targetSquare = ParseSquare(san, capture ? 2 : 0);
+
+    // Handle e.g. "gf6<...>" or "g5f6<...>" as "gxf6<...>".
+    size_t capture = san.find('x', 1);
+    if (capture == std::string::npos)
+    {
+        File maybeFile;
+
+        if ((san.size() >= 2) &&
+            (maybeFile = ParseFile(san, 1)) && // Intentionally assigning, not comparing
+            (maybeFile >= FILE_A) &&
+            (maybeFile <= FILE_H))
+        {
+            capture = 0;
+        }
+        else if ((san.size() >= 3) &&
+            (maybeFile = ParseFile(san, 2)) && // Intentionally assigning, not comparing
+            (maybeFile >= FILE_A) &&
+            (maybeFile <= FILE_H))
+        {
+            capture = 1;
+        }
+    }
+
+    const Square targetSquare = ParseSquare(san, (capture != std::string::npos) ? (static_cast<int>(capture) + 1) : 0);
     const Direction advance = ((toPlay == WHITE) ? NORTH : SOUTH);
     Square fromSquare = (targetSquare - advance);
     const size_t promotion = san.find('=', 2);
 
-    if (capture)
+    if (capture != std::string::npos)
     {
         fromSquare = make_square(ParseFile(san, 0), rank_of(fromSquare));
     }
@@ -520,7 +959,7 @@ Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
 
         return make<PROMOTION>(fromSquare, targetSquare, promotionType);
     }
-    else if (capture && (position.piece_on(targetSquare) == NO_PIECE))
+    else if ((capture != std::string::npos) && (position.piece_on(targetSquare) == NO_PIECE))
     {
         return make<ENPASSANT>(fromSquare, targetSquare);
     }

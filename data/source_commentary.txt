@@ -1,0 +1,27 @@
+https://chess.stackexchange.com/questions/9237/good-resource-for-annotated-games (lists other sources)
+https://www.chess.com/forum/view/chess-equipment/annotated-games (lists other sources)
+---
+http://www.angelfire.com/games3/smartbridge/
+	Deleted "perle.pgn", contains Italian/Spanish
+	Deleted "europe_echecs.pgn", contains French
+	Deleted "middleg.pgn", set-up FEN positions
+	Deleted "chess_doctor.pgn", too many problems in PGN
+	Deleted "d00_chess_informant.pgn", problems in PGN and no English commentary
+https://pgnchessbook.org/pgn/
+	Annotated game collections
+http://www.chesszone.org/bases/tourn/tourn.html
+	Can't use, all in Russian
+https://www.chessgames.com/perl/ezsearch.pl?search=annotated
+	TODO - requires crawling
+https://gameknot.com/
+	TODO - requires crawling
+Other databases
+	TODO - list annotators
+---
+Various minor fixes made in PGNs, e.g.:
+- Fixed some contradictory results in headers vs. after move lists
+- Fixed missing move disambiguations
+- Fixed missing end-of-variation parentheses
+- Fixed missing = symbol for pawn promotions
+- Fixed junk comments
+- Deleted games with spurious move sequences

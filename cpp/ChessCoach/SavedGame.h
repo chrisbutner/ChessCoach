@@ -23,6 +23,22 @@ public:
     std::vector<std::map<Move, float>> childVisits;
 };
 
+struct Comment
+{
+public:
+
+    int moveIndex;
+    std::vector<uint16_t> variationMoves;
+    std::string comment;
+};
+
+struct SavedCommentary
+{
+public:
+
+    std::vector<Comment> comments;
+};
+
 struct TrainingBatch
 {
     TrainingBatch() = default;
