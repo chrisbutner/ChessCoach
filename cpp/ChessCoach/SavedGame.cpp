@@ -32,3 +32,17 @@ SavedGame::SavedGame(float setResult, std::vector<uint16_t>&& setMoves, std::vec
 {
     moveCount = static_cast<int>(moves.size());
 }
+
+SavedComment::SavedComment()
+    : gameIndex(-1)
+    , moveIndex(-1)
+{
+}
+
+SavedComment::SavedComment(int setGameIndex, int setMoveIndex, std::vector<uint16_t>&& setVariationMoves, std::string&& setComment)
+    : gameIndex(setGameIndex)
+    , moveIndex(setMoveIndex)
+    , variationMoves(std::move(setVariationMoves))
+    , comment(std::move(setComment))
+{
+}

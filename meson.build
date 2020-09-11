@@ -4,6 +4,7 @@ project('ChessCoach', 'cpp', version: '0.9.0', license: 'GPL3',
   ])
 
 bindir = get_option('bindir')
+datadir = get_option('datadir')
 
 cpp_includes = include_directories('cpp')
 tclap_includes = include_directories('cpp/tclap/include')
@@ -196,7 +197,10 @@ test('AllTests', chesscoachtest, timeout: 300)
 # Install
 ###############################################################################
 
+# Access by Platform::InstallationDataPath()
 install_data('config.toml')
+install_subdir('cpp/StrengthTests', install_dir: datadir + '/ChessCoach')
+install_subdir('cpp/Dictionaries', install_dir: datadir + '/ChessCoach')
 
 python_sources = [
   'py/attention.py',
@@ -205,6 +209,10 @@ python_sources = [
   'py/model.py',
   'py/network.py',
   'py/storage.py',
+  'py/transformer.py',
   ]
 
+# Access by Platform::InstallationScriptPath()
 install_data(python_sources, install_dir: bindir + '/ChessCoach')
+
+# Access Games, Networks, etc. by Platform::UserDataPath()

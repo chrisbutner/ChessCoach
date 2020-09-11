@@ -4,10 +4,12 @@
 #include <sstream>
 #include <iostream>
 #include <chrono>
+#include <set>
 
 #include "Config.h"
 #include "Pgn.h"
 #include "Platform.h"
+#include "Preprocessing.h"
 
 Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig)
     : _gameFileCount{}
@@ -15,16 +17,17 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
     , _currentSaveFile{}
     , _currentSaveGameCount{}
     , _trainingBatchSize(networkConfig.Training.BatchSize)
+    , _trainingCommentaryBatchSize(networkConfig.Training.CommentaryBatchSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
+    , _vocabularyFilename(networkConfig.Training.VocabularyFilename)
 {
-    _trainingBatchSize = networkConfig.Training.BatchSize;
-    _pgnInterval = networkConfig.Training.PgnInterval;
-
     const std::filesystem::path rootPath = Platform::UserDataPath();
 
     static_assert(GameType_Count == 2);
     _gamesPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.GamesPathTraining);
     _gamesPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.GamesPathValidation);
+    _commentaryPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.CommentaryPathTraining);
+    _commentaryPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.CommentaryPathValidation);
     _pgnsPath = MakePath(rootPath, miscConfig.Paths_Pgns);
     _networksPath = MakePath(rootPath, miscConfig.Paths_Networks);
     _logsPath = MakePath(rootPath, miscConfig.Paths_Logs);
@@ -41,8 +44,11 @@ Storage::Storage(const NetworkConfig& networkConfig,
     , _currentSaveFile{}
     , _currentSaveGameCount{}
     , _trainingBatchSize(networkConfig.Training.BatchSize)
+    , _trainingCommentaryBatchSize(networkConfig.Training.CommentaryBatchSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
+    , _vocabularyFilename() // TODO: Update with commentary unit tests
     , _gamesPaths{ gamesTrainPath, gamesValidationPath }
+    , _commentaryPaths { "", "" } // TODO: Update with commentary unit tests
     , _pgnsPath(pgnsPath)
     , _networksPath(networksPath)
 {
@@ -368,6 +374,56 @@ std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const
     return rooted;
 }
 
+void Storage::LoadCommentary()
+{
+    const Preprocessor preprocessor;
+    const GameType gameType = GameType_Training; // TODO: Always training for now
+
+    _commentary.games.clear();
+    _commentary.comments.clear();
+
+    // Load and pre-process commentary, culling empty/unreferenced comments and games.
+    for (auto&& entry : std::filesystem::recursive_directory_iterator(_commentaryPaths[gameType]))
+    {
+        if (entry.path().extension().string() == ".pgn")
+        {
+            std::ifstream pgnFile = std::ifstream(entry.path(), std::ios::in);
+            Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, Commentary&& commentary)
+                {
+                    int gameIndex = -1;
+                    for (auto comment : commentary.comments)
+                    {
+                        preprocessor.PreprocessComment(comment.comment);
+                        if (!comment.comment.empty())
+                        {
+                            if (gameIndex == -1)
+                            {
+                                _commentary.games.emplace_back(std::move(game));
+                                gameIndex = (static_cast<int>(_commentary.games.size()) - 1);
+                            }
+                            _commentary.comments.emplace_back(gameIndex, comment.moveIndex, std::move(comment.variationMoves), std::move(comment.comment));
+                        }
+                    }
+                });
+        }
+    }
+
+    // Generate a vocabulary document with unique comments.
+    std::set<std::string> vocabulary;
+    for (const SavedComment& comment : _commentary.comments)
+    {
+        vocabulary.insert(comment.comment);
+    }
+    const std::filesystem::path vocabularyPath = (_commentaryPaths[gameType] / _vocabularyFilename);
+    std::ofstream vocabularyFile = std::ofstream(vocabularyPath, std::ios::out);
+    for (const std::string& comment : vocabulary)
+    {
+        vocabularyFile << comment << std::endl;
+    }
+
+    std::cout << "Loaded " << _commentary.comments.size() << " move comments" << std::endl;
+}
+
 Window Storage::GetWindow(GameType gameType) const
 {
     return _games[gameType].GetWindow();
@@ -378,4 +434,58 @@ void Storage::SetWindow(GameType gameType, const Window& window)
     std::cout << "Setting window: " << window.TrainingGameMin << " -> " << window.TrainingGameMax
         << " (" << GameTypeNames[gameType] << ")" << std::endl;
     _games[gameType].SetWindow(window);
+}
+
+CommentaryTrainingBatch* Storage::SampleCommentaryBatch()
+{
+    // Load comments if needed.
+    if (_commentary.comments.empty())
+    {
+        LoadCommentary();
+    }
+
+    // Make sure that there are enough comments to sample from. Just require the batch size for now.
+    if (_commentary.comments.size() < _trainingCommentaryBatchSize)
+    {
+        return nullptr;
+    }
+
+    _commentaryBatch.images.resize(_trainingCommentaryBatchSize);
+    _commentaryBatch.comments.resize(_trainingCommentaryBatchSize);
+
+    std::uniform_int_distribution<int> commentDistribution(0, static_cast<int>(_commentary.comments.size()) - 1);
+
+    for (int i = 0; i < _commentaryBatch.images.size(); i++)
+    {
+        const int commentIndex =
+#if SAMPLE_BATCH_FIXED
+            i;
+#else
+            commentDistribution(Random::Engine);
+#endif
+
+        const SavedComment& comment = _commentary.comments[i];
+        const SavedGame& game = _commentary.games[comment.gameIndex];
+
+        // Find the position for the chosen comment and populate the image and comment text.
+        //
+        // For now interpret the comment as refering to the position after playing the move,
+        // so play moves up to *and including* the stored moveIndex.
+        Game scratchGame = _startingPosition;
+        for (int m = 0; m <= comment.moveIndex; m++)
+        {
+            scratchGame.ApplyMove(Move(game.moves[m]));
+        }
+
+        // Also play out the variation.
+        for (uint16_t move : comment.variationMoves)
+        {
+            scratchGame.ApplyMove(Move(move));
+        }
+
+        _commentaryBatch.images[i] = scratchGame.GenerateImage();
+        _commentaryBatch.comments[i] = comment.comment;
+    }
+
+    return &_commentaryBatch;
 }

@@ -13,7 +13,7 @@ class Pgn
 {
 public:
 
-    static void ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler);
+    static void ParsePgn(std::istream& content, std::function<void(SavedGame&&, Commentary&&)> gameHandler);
     static Move ParseSan(const Position& position, const std::string& san);
 
     static void GeneratePgn(std::ostream& content, const SavedGame& game);
@@ -30,12 +30,11 @@ private:
 
     static float ParseHeaders(std::istream& content, bool& fenGameInOut);
     static void ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOut);
-    static bool ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, SavedCommentary& commentary, float& resultInOut, bool inVariation);
-    static void ParseComment(std::istream& content, const std::vector<uint16_t>& moves, SavedCommentary& commentary);
+    static bool ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, Commentary& commentary, float& resultInOut, bool inVariation);
+    static void ParseComment(std::istream& content, const std::vector<uint16_t>& moves, Commentary& commentary);
     static std::string ParseUntil(std::istream& content, char delimiter);
     static void ParseMoveGlyph(std::istream& content, std::string& target);
-    static void Trim(std::string& text);
-    static bool ParseVariation(std::istream& content, const Position& mainLine, const std::vector<uint16_t>& mainLineMoves, SavedCommentary& commentary, float& resultInOut);
+    static bool ParseVariation(std::istream& content, const Position& mainLine, const std::vector<uint16_t>& mainLineMoves, Commentary& commentary, float& resultInOut);
     static bool Expect(std::istream& content, char expected);
     static bool Expect(std::istream& content, const std::string& expected);
     static void EncounterResult(float encountered, float& resultInOut);

@@ -8,12 +8,13 @@
 #include <Stockfish/movegen.h>
 
 #include "Game.h"
+#include "Preprocessing.h"
 
 // Parsing is quite minimal and brittle, intended to parse very-well-formed PGNs with minimal dev time and improved only as needed.
 // E.g. assume that pawn capture squares are fully specified.
 //
 // Note that this means SAN input like "ex" will cause overflows. Don't feed in untrusted input.
-void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler)
+void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, Commentary&&)> gameHandler)
 {
     while (true)
     {
@@ -33,7 +34,7 @@ void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedC
         Position position;
         position.set(Config::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
         std::vector<uint16_t> moves;
-        SavedCommentary commentary;
+        Commentary commentary;
         if (!ParseMoves(content, positionStates, position, moves, commentary, result, false /* inVariation */))
         {
             break;
@@ -159,7 +160,7 @@ void Pgn::ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOu
     }
 }
 
-bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, SavedCommentary& commentary, float& resultInOut, bool inVariation)
+bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, Commentary& commentary, float& resultInOut, bool inVariation)
 {
     char c;
     std::string str;
@@ -367,13 +368,13 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
     return true;
 }
 
-void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves, SavedCommentary& commentary)
+void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves, Commentary& commentary)
 {
     // Grab the full comment string between curly braces, including spaces.
     std::string comment = ParseUntil(content, '}');
 
     // Store the trimmed comment if not empty.
-    Trim(comment);
+    Preprocessor::Trim(comment);
     if (!comment.empty())
     {
         commentary.comments.emplace_back(Comment{ (static_cast<int>(moves.size()) - 1), {}, comment });
@@ -416,17 +417,7 @@ void Pgn::ParseMoveGlyph(std::istream& content, std::string& target)
     content >> std::skipws;
 }
 
-void Pgn::Trim(std::string& text)
-{
-    text.erase(text.begin(), std::find_if(text.begin(), text.end(), [](char c) {
-        return !::isspace(static_cast<unsigned char>(c));
-        }));
-    text.erase(std::find_if(text.rbegin(), text.rend(), [](char c) {
-        return !::isspace(static_cast<unsigned char>(c));
-        }).base(), text.end());
-}
-
-bool Pgn::ParseVariation(std::istream& content, const Position& parent, const std::vector<uint16_t>& parentMoves, SavedCommentary& commentary, float& resultInOut)
+bool Pgn::ParseVariation(std::istream& content, const Position& parent, const std::vector<uint16_t>& parentMoves, Commentary& commentary, float& resultInOut)
 {
     // Copy/branch the position and move list. We can start a new empty StateInfo list
     // that refers into the old one just like the "Game" class.

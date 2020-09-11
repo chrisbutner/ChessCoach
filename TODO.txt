@@ -1,9 +1,31 @@
+TODO - next
+- get back to training encoder too after confirmed working
+- try wrap main engine loop with @tf.function too?
+- wrap <start>/<end> in graph mode - Transformer article
+- cull attention weight plumbing
+- can pre-sequence-and-index commentary
+- adam->sgd with momentum
+- write unit tests for comment preprocessing
+
+TODO - text quality
+- basic - does the encoder need an extra dense+relu layer after the tower/reshape?
+- tokenizing - lots of options for chess specifically, around puntuation, top-k, etc.
+- larger model size
+- different model architectures
+	- definitely try universal transformer
+- different tokenizers
+	- definitely try SubwordTextEncoder
+- build deterministic train/validate split?
+- try encode before + after positions - comment on the move, not the position
+	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
+
+TODO - major work
+- try out transformer, isolated training
+- try out rotating supervised <-> commentary, compare to supervised alone for same step count
+
 TODO
-- try out initial supervised text commentary, separate head
-	- buffer fstreams for windows, see link
-	- throw away comments above X length, storytelling unrelated to move
-	- throw away comments below X eng words
-	- write unit tests for comment preprocessing
+- try out triple rotation of supervised/selfplay/commentary
+- try out "sleeping" in the rotation - train random noise, different distributions
 - get to minimum-viable-selfplay
 	- get to piece value understanding ASAP, try out specific A/B positions
 	- (lots more ideas below)
@@ -59,6 +81,7 @@ CPU+GPU integration performance:
 	  drop in/pick up there, using a GPU worker like very beginning, and maybe oversubscribe
 	  like double-buffer games? might just be equivalent to doubling threads though. seem to be
 	  limited by Node memory use now. anyway, think about it.
+- buffer fstreams for windows
 
 Code quality
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm

@@ -8,6 +8,7 @@
 struct TrainingConfig
 {
     int BatchSize;
+    int CommentaryBatchSize;
     int Steps;
     int PgnInterval;
     int ValidationInterval;
@@ -16,8 +17,11 @@ struct TrainingConfig
     int NumGames;
     int WindowSizeStart;
     int WindowSizeFinish;
+    std::string VocabularyFilename;
     std::string GamesPathTraining;
     std::string GamesPathValidation;
+    std::string CommentaryPathTraining;
+    std::string CommentaryPathValidation;
 };
 
 struct SelfPlayConfig

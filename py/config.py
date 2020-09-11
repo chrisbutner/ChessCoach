@@ -48,6 +48,8 @@ class Config(object):
     # Root all paths.
     self.training_network["games_path_training"] = self.make_path(self.training_network["games_path_training"])
     self.training_network["games_path_validation"] = self.make_path(self.training_network["games_path_validation"])
+    self.training_network["commentary_path_training"] = self.make_path(self.training_network["commentary_path_training"])
+    self.training_network["commentary_path_validation"] = self.make_path(self.training_network["commentary_path_validation"])
     for key, value in self.misc["paths"].items():
       self.misc["paths"][key] = self.make_path(value)
 

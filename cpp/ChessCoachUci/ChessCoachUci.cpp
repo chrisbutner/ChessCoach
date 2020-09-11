@@ -30,6 +30,7 @@ private:
 
     bool HandleCommand(std::stringstream& commands, std::string command);
 
+    // UCI commands
     void HandleUci(std::stringstream& commands);
     void HandleDebug(std::stringstream& commands);
     void HandleIsReady(std::stringstream& commands);
@@ -43,6 +44,9 @@ private:
     void HandleQuit(std::stringstream& commands);
 
     // Custom commands
+    void HandleComment(std::stringstream& commands);
+
+    // Console
     void HandleConsole(std::stringstream& commands);
 
     void InitializeSelfPlayWorker();
@@ -105,6 +109,7 @@ void ChessCoachUci::Initialize()
     // Use an 8 GB prediction cache for now. In future, should be configurable per MB by UCI options.
     PredictionCache::Instance.Allocate(8 /* sizeGb */);
 
+    // UCI commands
     _commandHandlers.emplace_back("uci", std::bind(&ChessCoachUci::HandleUci, this, std::placeholders::_1));
     _commandHandlers.emplace_back("debug", std::bind(&ChessCoachUci::HandleDebug, this, std::placeholders::_1));
     _commandHandlers.emplace_back("isready", std::bind(&ChessCoachUci::HandleIsReady, this, std::placeholders::_1));
@@ -118,6 +123,9 @@ void ChessCoachUci::Initialize()
     _commandHandlers.emplace_back("quit", std::bind(&ChessCoachUci::HandleQuit, this, std::placeholders::_1));
 
     // Custom commands
+    _commandHandlers.emplace_back("comment", std::bind(&ChessCoachUci::HandleComment, this, std::placeholders::_1));
+
+    // Console (for unsafely-threaded debug info)
     _commandHandlers.emplace_back("`", std::bind(&ChessCoachUci::HandleConsole, this, std::placeholders::_1));
     _commandHandlers.emplace_back("~", std::bind(&ChessCoachUci::HandleConsole, this, std::placeholders::_1));
 
@@ -326,6 +334,12 @@ void ChessCoachUci::HandleQuit(std::stringstream& commands)
         _selfPlayThread->join();
     }
     _quit = true;
+}
+
+void ChessCoachUci::HandleComment(std::stringstream& commands)
+{
+    InitializeSelfPlayWorker();
+    _selfPlayWorker->SignalComment();
 }
 
 void ChessCoachUci::HandleConsole(std::stringstream& commands)

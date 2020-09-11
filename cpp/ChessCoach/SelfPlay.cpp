@@ -783,6 +783,30 @@ void SelfPlayWorker::ValidateNetwork(INetwork* network, int step)
     }
 }
 
+void SelfPlayWorker::TrainNetworkWithCommentary(INetwork* network, int stepCount, int checkpoint)
+{
+    // Train for "stepCount" steps.
+    auto startTrain = std::chrono::high_resolution_clock::now();
+    const int startStep = (checkpoint - stepCount + 1);
+    for (int step = startStep; step <= checkpoint; step++)
+    {
+        CommentaryTrainingBatch* batch = _storage->SampleCommentaryBatch();
+        if (!batch)
+        {
+            std::cout << "No commentary available, skipping training" << std::endl;
+            return;
+        }
+
+        network->TrainCommentaryBatch(step, _networkConfig->Training.CommentaryBatchSize, batch->images.data(), batch->comments.data());
+    }
+    const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
+    const float trainTimePerStep = (trainTime / stepCount);
+    std::cout << "Trained commentary steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
+
+    // Save the network and reload it for predictions.
+    network->SaveNetwork(checkpoint);
+}
+
 void SelfPlayWorker::StrengthTest(INetwork* network, int step)
 {
     std::map<std::string, int> testResults;
@@ -794,7 +818,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
     const std::string stsName = "STS";
 
     // Find strength test .epd files.
-    const std::filesystem::path testPath = (std::filesystem::current_path() / "StrengthTests");
+    const std::filesystem::path testPath = (Platform::InstallationDataPath() / "StrengthTests");
     for (const auto& entry : std::filesystem::directory_iterator(testPath))
     {
         if (entry.path().extension().string() == ".epd")
@@ -1390,14 +1414,24 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
                 _searchConfig.signalReady.notify_all();
             }
 
-            // Wait until told to search.
-            while (!_searchConfig.quit && !_searchConfig.search)
+            // Wait until told to search or comment.
+            while (!_searchConfig.quit && !_searchConfig.search && !_searchConfig.comment)
             {
                 _searchConfig.signalUci.wait(lock);
             }
         }
 
+        // Set the position up in _games[0] ready to search or comment.
         UpdatePosition();
+
+        // Commenting is one-shot, jump back above to wait.
+        if (_searchConfig.comment.exchange(false))
+        {
+            CommentOnPosition(network.get());
+            continue;
+        }
+
+        // Search until stopped.
         UpdateSearch();
         if (_searchState.searching)
         {
@@ -1694,6 +1728,15 @@ void SelfPlayWorker::SignalQuit()
     _searchConfig.signalUci.notify_all();
 }
 
+void SelfPlayWorker::SignalComment()
+{
+    std::lock_guard lock(_searchConfig.mutexUci);
+
+    _searchConfig.comment = true;
+
+    _searchConfig.signalUci.notify_all();
+}
+
 void SelfPlayWorker::WaitUntilReady()
 {
     std::unique_lock lock(_searchConfig.mutexUci);
@@ -1726,4 +1769,11 @@ void SelfPlayWorker::SearchPlay(int mctsParallelism)
     {
         RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _searchPaths[i], _cacheStores[i]);
     }
+}
+
+void SelfPlayWorker::CommentOnPosition(INetwork* network)
+{
+    _images[0] = _games[0].GenerateImage();
+    const std::vector<std::string> comments = network->PredictCommentaryBatch(1, _images.data());
+    std::cout << comments[0] << std::endl;
 }

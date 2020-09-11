@@ -65,12 +65,14 @@ public:
     std::filesystem::path LogPath() const;
     Window GetWindow(GameType gameType) const;
     void SetWindow(GameType gameType, const Window& window);
+    CommentaryTrainingBatch* SampleCommentaryBatch();
         
 private:
 
     void InitializePipelines(const NetworkConfig& networkConfig);
     void SaveToDisk(GameType gameType, const SavedGame& game);
     std::filesystem::path MakePath(const std::filesystem::path& root, const std::filesystem::path& path);
+    void LoadCommentary();
 
 private:
 
@@ -84,10 +86,17 @@ private:
 
     std::array<Pipeline, GameType_Count> _pipelines;
 
+    SavedCommentary _commentary;
+    CommentaryTrainingBatch _commentaryBatch;
+    Game _startingPosition;
+
     int _trainingBatchSize;
+    int _trainingCommentaryBatchSize;
     int _pgnInterval;
 
+    std::string _vocabularyFilename;
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
+    std::array<std::filesystem::path, GameType_Count> _commentaryPaths;
     std::filesystem::path _pgnsPath;
     std::filesystem::path _networksPath;
     std::filesystem::path _logsPath;

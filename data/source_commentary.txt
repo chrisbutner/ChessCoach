@@ -16,7 +16,7 @@ https://www.chessgames.com/perl/ezsearch.pl?search=annotated
 https://gameknot.com/
 	TODO - requires crawling
 Other databases
-	TODO - list annotators
+	Manually filtered, according to annotator, for English commentary
 ---
 Various minor fixes made in PGNs, e.g.:
 - Fixed some contradictory results in headers vs. after move lists

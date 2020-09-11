@@ -32,11 +32,32 @@ public:
     std::string comment;
 };
 
-struct SavedCommentary
+struct Commentary
 {
 public:
 
     std::vector<Comment> comments;
+};
+
+struct SavedComment
+{
+public:
+
+    SavedComment();
+    SavedComment(int setGameIndex, int setMoveIndex, std::vector<uint16_t>&& setVariationMoves, std::string&& setComment);
+
+    int gameIndex;
+    int moveIndex;
+    std::vector<uint16_t> variationMoves;
+    std::string comment;
+};
+
+struct SavedCommentary
+{
+public:
+
+    std::vector<SavedGame> games;
+    std::vector<SavedComment> comments;
 };
 
 struct TrainingBatch
@@ -53,6 +74,12 @@ struct TrainingBatch
     std::vector<float> mctsValues;
     std::vector<INetwork::OutputPlanes> policies;
     std::vector<INetwork::OutputPlanes> replyPolicies;
+};
+
+struct CommentaryTrainingBatch
+{
+    std::vector<INetwork::InputPlanes> images;
+    std::vector<std::string> comments;
 };
 
 struct Window

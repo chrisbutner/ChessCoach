@@ -23,6 +23,7 @@ private:
 
     void PlayGames(WorkCoordinator& workCoordinator, int gameCount);
     void TrainNetwork(SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
+    void TrainNetworkWithCommentary(SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
     Window CalculateWindow(const NetworkConfig& config, int totalGamesCount, int networkCount, int network);
 };
 
@@ -68,6 +69,48 @@ void ChessCoachTrain::TrainChessCoach()
     const int totalGamesCount = config.Training.NumGames;
     const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
     const int startingNetwork = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
+
+    // TODO: TEMP commentary training loop
+    for (int n = startingNetwork + 1; n <= networkCount; n++)
+    {
+        // Configure the replay buffer windows for position sampling (neural network training).
+        const Window trainingWindow = CalculateWindow(config, totalGamesCount, networkCount, n);
+        const Window fullWindow = { 0, std::numeric_limits<int>::max(), config.Training.BatchSize };
+        storage.SetWindow(GameType_Training, trainingWindow);
+        storage.SetWindow(GameType_Validation, fullWindow);
+        static_assert(GameType_Count == 2);
+
+        //// Load games if we haven't yet.
+        //if (!loadedGames)
+        //{
+        //    loadedGames = true;
+        //    storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
+        //    storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
+        //}
+
+        //// Play self-play games (skip if we already have enough to train this checkpoint).
+        //const int gameTarget = trainingWindow.TrainingGameMax;
+        //const int gameCount = storage.GamesPlayed(GameType_Training);
+        //const int gamesToPlay = std::max(0, gameTarget - gameCount);
+        //if (gamesToPlay > 0)
+        //{
+        //    PlayGames(workCoordinator, gamesToPlay);
+        //}
+
+        //// Train the network.
+        //const int checkpoint = (n * config.Training.CheckpointInterval);
+        //TrainNetwork(*selfPlayWorkers.front(), network.get(), config.Training.CheckpointInterval, checkpoint);
+
+        const int checkpoint = (n * config.Training.CheckpointInterval);
+        TrainNetworkWithCommentary(*selfPlayWorkers.front(), network.get(), config.Training.CheckpointInterval, checkpoint);
+
+        //// Clear the prediction cache to prepare for the new network.
+        //if (gamesToPlay > 0)
+        //{
+        //    PredictionCache::Instance.PrintDebugInfo();
+        //    PredictionCache::Instance.Clear();
+        //}
+    }
 
     // Run through all checkpoints with n in [1, networkCount].
     for (int n = startingNetwork + 1; n <= networkCount; n++)
@@ -124,6 +167,13 @@ void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* net
     std::cout << "Training..." << std::endl;
 
     selfPlayWorker.TrainNetwork(network, stepCount, checkpoint);
+}
+
+void ChessCoachTrain::TrainNetworkWithCommentary(SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
+{
+    std::cout << "Training commentary..." << std::endl;
+
+    selfPlayWorker.TrainNetworkWithCommentary(network, stepCount, checkpoint);
 }
 
 Window ChessCoachTrain::CalculateWindow(const NetworkConfig& config, int totalGamesCount, int networkCount, int network)

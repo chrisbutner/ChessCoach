@@ -129,6 +129,7 @@ struct SearchConfig
     std::atomic_bool quit;
     std::atomic_bool debug;
     bool ready;
+    std::atomic_bool comment;
 
     std::atomic_bool searchUpdated;
     std::atomic_bool search;
@@ -237,6 +238,7 @@ public:
     void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset);
     void TrainNetwork(INetwork* network, int stepCount, int checkpoint);
     void ValidateNetwork(INetwork* network, int step);
+    void TrainNetworkWithCommentary(INetwork* network, int stepCount, int checkpoint);
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(int index);
@@ -262,6 +264,7 @@ public:
     void SignalSearchGo(const TimeControl& timeControl);
     void SignalSearchStop();
     void SignalQuit();
+    void SignalComment();
     void WaitUntilReady();
 
     void StrengthTest(INetwork* network, int step);
@@ -277,6 +280,7 @@ private:
     void PrintPrincipleVariation();
     void SearchInitialize(int mctsParallelism);
     void SearchPlay(int mctsParallelism);
+    void CommentOnPosition(INetwork* network);
 
     int StrengthTestPosition(INetwork* network, const StrengthTestSpec& spec, int moveTimeMs);
     int JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move);

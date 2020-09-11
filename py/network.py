@@ -16,6 +16,7 @@ from tensorflow.keras import backend as K
 from config import Config
 from model import ChessCoachModel
 import storage
+import transformer
 
 K.set_image_data_format("channels_first")
 
@@ -34,13 +35,21 @@ def flat_categorical_accuracy(y_true, y_pred):
 
 class Network(object):
 
-  def predict_batch(self, image):
+  def predict_batch(self, images):
     assert False
 
 class KerasNetwork(Network):
 
-  def __init__(self, model=None):
+  def __init__(self, model=None, model_commentary_decoder=None, commentary_tokenizer=None):
     self.model = model or ChessCoachModel().build(config)
+    self.model_play = ChessCoachModel().subset_play(self.model)
+    self.model_commentary_encoder = ChessCoachModel().subset_commentary_encoder(self.model)
+    if not model_commentary_decoder or not commentary_tokenizer:
+      self.model_commentary_decoder, self.commentary_tokenizer = ChessCoachModel().build_commentary_decoder(config)
+    else:
+      self.model_commentary_decoder = model_commentary_decoder
+      self.commentary_tokenizer  = commentary_tokenizer
+    
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=get_learning_rate(config.training_network["learning_rate_schedule"], 0),
       momentum=config.training_network["momentum"])
@@ -48,9 +57,9 @@ class KerasNetwork(Network):
     loss_weights = [config.training_network["value_loss_weight"], config.training_network["mcts_value_loss_weight"],
       config.training_network["policy_loss_weight"], config.training_network["reply_policy_loss_weight"]]
     metrics = [[], [], [flat_categorical_accuracy], [flat_categorical_accuracy]]
-    self.model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
+    self.model_play.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
-  def predict_batch(self, image):
+  def predict_batch(self, images):
     assert False
 
 class UniformNetwork(Network):
@@ -59,15 +68,15 @@ class UniformNetwork(Network):
     self.latest_values = None
     self.latest_policies = None
 
-  def predict_batch(self, image):
+  def predict_batch(self, images):
     # Check both separately because of threading
     values = self.latest_values
     policies = self.latest_policies
-    if (values is None) or (len(image) != len(values)):
-      values = numpy.full((len(image)), 0.0, dtype=numpy.float32)
+    if (values is None) or (len(images) != len(values)):
+      values = numpy.full((len(images)), 0.0, dtype=numpy.float32)
       self.latest_values = values
-    if (policies is None) or (len(image) != len(policies)):
-      policies = numpy.zeros((len(image), ChessCoachModel.output_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
+    if (policies is None) or (len(images) != len(policies)):
+      policies = numpy.zeros((len(images), ChessCoachModel.output_planes_count, ChessCoachModel.board_side, ChessCoachModel.board_side), dtype=numpy.float32)
       self.latest_policies = policies
     return values, policies
 
@@ -78,9 +87,9 @@ class TensorFlowNetwork(Network):
     self.model = model
     self.function = self.model.signatures[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
 
-  def predict_batch(self, image):
-    image = tf.constant(image)
-    prediction = self.function(image)
+  def predict_batch(self, images):
+    images = tf.constant(images)
+    prediction = self.function(images)
     value, policy = prediction[ChessCoachModel.output_value_name], prediction[ChessCoachModel.output_policy_name]
     return numpy.array(value), numpy.array(policy)
 
@@ -96,7 +105,7 @@ def update_network_for_predictions(network_path):
   log(f"Loading network (predictions): {name}...")
   while True:
     try:
-      tf_model = tf.saved_model.load(network_path)
+      tf_model = tf.saved_model.load(storage.model_path(network_path))
       break
     except Exception as e:
       log("Exception:", e)
@@ -111,15 +120,19 @@ def update_network_for_training(network_path):
   while True:
     try:
       # Don't serialize optimizer: custom loss/metrics.
-      keras_model = tf.keras.models.load_model(network_path, custom_objects={
+      model = tf.keras.models.load_model(storage.model_path(network_path), custom_objects={
         "flat_categorical_crossentropy_from_logits": flat_categorical_crossentropy_from_logits,
         "flat_categorical_accuracy": flat_categorical_accuracy,
       }, compile=False)
+      with open(storage.commentary_tokenizer_path(network_path), 'r') as f:
+        commentary_tokenizer = tf.keras.preprocessing.text.tokenizer_from_json(f.read())
+      model_commentary_decoder, _ = ChessCoachModel().build_commentary_decoder(config, commentary_tokenizer)
+      model_commentary_decoder.load_weights(storage.model_commentary_decoder_path(network_path))
       break
     except Exception as e:
       log("Exception:", e)
       time.sleep(0.25)
-  network = KerasNetwork(keras_model)
+  network = KerasNetwork(model, model_commentary_decoder, commentary_tokenizer)
   log(f"Loaded network (training): {name}")
   return network
 
@@ -139,26 +152,71 @@ def get_learning_rate(schedule, step):
       break
   return rate
 
-def predict_batch(image):
-  return networks.prediction_network.predict_batch(image)
+def predict_batch(images):
+  return networks.prediction_network.predict_batch(images)
+
+def predict_commentary_batch(images):
+  # Use training network for now
+  ensure_training()
+
+  encoder = networks.training_network.model_commentary_encoder
+  decoder = networks.training_network.model_commentary_decoder
+  tokenizer = networks.training_network.commentary_tokenizer
+
+  start_token = tokenizer.word_index[ChessCoachModel.token_start]
+  end_token = tokenizer.word_index[ChessCoachModel.token_end]
+  max_length = ChessCoachModel.transformer_max_length
+
+  sequences = transformer.predict_greedy(encoder, decoder,
+    start_token, end_token, max_length, images)
+
+  def trim_start_end_tokens(sequence):
+    for i, token in enumerate(sequence):
+      if (token == end_token):
+        return sequence[1:i]
+    return sequence[1:]
+
+  sequences = [trim_start_end_tokens(s) for s in sequences.numpy()]
+  comments = tokenizer.sequences_to_texts(sequences)
+  comments = numpy.array([c.encode("utf-8") for c in comments])
+  return comments
 
 def train_batch(step, images, values, mcts_values, policies, reply_policies):
   ensure_training()
   learning_rate = get_learning_rate(config.training_network["learning_rate_schedule"], step)
-  K.set_value(networks.training_network.model.optimizer.lr, learning_rate)
+  K.set_value(networks.training_network.model_play.optimizer.lr, learning_rate)
 
   do_log_training = ((step % config.training_network["validation_interval"]) == 0)
   if do_log_training:
     log_training_prepare(step)
-  losses = networks.training_network.model.train_on_batch(images, [values, mcts_values, policies, reply_policies])
+  losses = networks.training_network.model_play.train_on_batch(images, [values, mcts_values, policies, reply_policies])
   if do_log_training:
     log_training("training", tensorboard_writer_training, step, losses)
 
 def validate_batch(step, images, values, mcts_values, policies, reply_policies):
   ensure_training()
   log_training_prepare(step)
-  losses = networks.training_network.model.test_on_batch(images, [values, mcts_values, policies, reply_policies])
+  losses = networks.training_network.model_play.test_on_batch(images, [values, mcts_values, policies, reply_policies])
   log_training("validation", tensorboard_writer_validation, step, losses)
+
+def train_commentary_batch(step, images, comments):
+  ensure_training()
+  learning_rate = get_learning_rate(config.training_network["learning_rate_schedule"], step)
+  
+  # TODO: Set LR if adam->SGD_momentum
+  #K.set_value(commentary_optimizer.lr, learning_rate)
+
+  do_log_training = ((step % config.training_network["validation_interval"]) == 0)
+  comments = [f"{ChessCoachModel.token_start} {c.decode('utf-8')} {ChessCoachModel.token_end}" for c in comments]
+  comments = networks.training_network.commentary_tokenizer.texts_to_sequences(comments)
+  comments = tf.keras.preprocessing.sequence.pad_sequences(comments, padding="post")
+  losses = transformer.train_step(
+    networks.training_network.model_commentary_encoder,
+    networks.training_network.model_commentary_decoder,
+    images,
+    comments)
+  if do_log_training:
+    log_training_commentary("training", tensorboard_writer_training, step, losses)
 
 def log_scalars(step, names, values):
   with tensorboard_writer_validation.as_default():
@@ -182,6 +240,17 @@ def log_training(type, writer, step, losses):
     log_loss_accuracy(losses)
     log_weights()
     writer.flush()
+
+def log_training_commentary(type, writer, step, losses):
+  log(f"Loss: {losses[0]:.4f}, Accuracy: {losses[1]:.4f} ({type})")
+  # TODO: log commentary training to tensorboard
+  # with writer.as_default():
+  #   tf.summary.experimental.set_step(step)
+  #   if should_log_graph(step):
+  #     tf.summary.trace_export("model")
+  #   log_loss_accuracy(losses)
+  #   log_weights()
+  #   writer.flush()
 
 def log_loss_accuracy(losses):
   # Fix losses: only total includes loss weighting.

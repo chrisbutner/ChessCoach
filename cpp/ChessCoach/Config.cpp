@@ -34,6 +34,7 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     TrainingConfig training;
 
     training.BatchSize = policy.template Find<int>(config, "batch_size", defaults.BatchSize);
+    training.CommentaryBatchSize = policy.template Find<int>(config, "commentary_batch_size", defaults.CommentaryBatchSize);
     training.Steps = policy.template Find<int>(config, "steps", defaults.Steps);
     training.PgnInterval = policy.template Find<int>(config, "pgn_interval", defaults.PgnInterval);
     training.ValidationInterval = policy.template Find<int>(config, "validation_interval", defaults.ValidationInterval);
@@ -42,8 +43,11 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     training.NumGames = policy.template Find<int>(config, "num_games", defaults.NumGames);
     training.WindowSizeStart = policy.template Find<int>(config, "window_size_start", defaults.WindowSizeStart);
     training.WindowSizeFinish = policy.template Find<int>(config, "window_size_finish", defaults.WindowSizeFinish);
+    training.VocabularyFilename = policy.template Find<std::string>(config, "vocabulary_filename", defaults.VocabularyFilename);
     training.GamesPathTraining = policy.template Find<std::string>(config, "games_path_training", defaults.GamesPathTraining);
     training.GamesPathValidation = policy.template Find<std::string>(config, "games_path_validation", defaults.GamesPathValidation);
+    training.CommentaryPathTraining = policy.template Find<std::string>(config, "commentary_path_training", defaults.CommentaryPathTraining);
+    training.CommentaryPathValidation = policy.template Find<std::string>(config, "commentary_path_validation", defaults.CommentaryPathValidation);
 
     return training;
 }

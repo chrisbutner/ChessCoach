@@ -3,6 +3,7 @@
 
 #include <array>
 #include <vector>
+#include <string>
 #include <cassert>
 
 #include "Config.h"
@@ -73,10 +74,12 @@ struct INetwork
     virtual ~INetwork() {};
 
     virtual void PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
+    virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images) = 0;
     virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
         OutputPlanes* policies, OutputPlanes* replyPolicies) = 0;
     virtual void ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
         OutputPlanes* policies, OutputPlanes* replyPolicies) = 0;
+    virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments) = 0;
     virtual void LogScalars(int step, int scalarCount, std::string* names, float* values) = 0;
     virtual void LoadNetwork(const char* networkName) = 0;
     virtual void SaveNetwork(int checkpoint) = 0;

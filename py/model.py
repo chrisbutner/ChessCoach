@@ -2,7 +2,9 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 K.set_image_data_format("channels_first")
 from attention import MultiHeadSelfAttention2D
+from transformer import Transformer
 from layers import Residual
+import os
 
 class ChessCoachModel:
   
@@ -15,11 +17,25 @@ class ChessCoachModel:
   dense_count = 256
   weight_decay = 1e-4
 
+  transformer_layers = 4 # 6
+  transformer_filters = 128 # 512
+  transformer_heads = 8
+  transformer_feedforward = 512 # 2048
+  transformer_dropout_rate = 0.1
+  transformer_num_words = 5000 # Arbitrary for now
+  transformer_max_length = 128 # Arbitrary for now
+
   input_name = "Input"
   output_value_name = "OutputValue"
   output_mcts_value_name = "OutputMctsValue"
   output_policy_name = "OutputPolicy"
   output_reply_policy_name = "OutputReplyPolicy"
+  output_commentary_encoder_name = "OutputCommentaryEncoder"
+  
+  token_start = "<start>"
+  token_end = "<end>"
+  token_unk = "<unk>"
+  token_pad = "<pad>"
 
   def __init__(self):
     self.architecture_layers = {
@@ -89,6 +105,12 @@ class ChessCoachModel:
       use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=output_name)(x)
     return policy
 
+  def commentary_encoder_head(self, x, name, output_name):
+    # Just reshape to 1D-sequence, channels-last.
+    x = tf.reshape(x, [-1, self.filter_count, self.board_side * self.board_side])
+    encoder = tf.transpose(x, [0, 2, 1], name=output_name)
+    return encoder
+
   def build(self, config):
     input = tf.keras.layers.Input(shape=(self.input_planes_count, self.board_side, self.board_side), dtype="float32", name=self.input_name)
 
@@ -106,4 +128,33 @@ class ChessCoachModel:
     policy = self.policy_head(tower, "policy", self.output_policy_name, config)
     reply_policy = self.policy_head(tower, "reply_policy", self.output_reply_policy_name, config)
 
-    return tf.keras.Model(input, [value, mcts_value, policy, reply_policy])
+    # Commentary encoder head
+    commentary_encoder = self.commentary_encoder_head(tower, "commentary_encoder", self.output_commentary_encoder_name)
+
+    return tf.keras.Model(input, [value, mcts_value, policy, reply_policy, commentary_encoder])
+
+  def subset_play(self, model):
+    return tf.keras.Model(model.input, model.outputs[:4])
+
+  def subset_commentary_encoder(self, model):
+    return tf.keras.Model(model.input, model.outputs[4:])
+
+  def build_commentary_decoder(self, config, tokenizer=None):
+    if not tokenizer:
+      vocabulary_path = os.path.join(config.training_network["commentary_path_training"], config.training_network["vocabulary_filename"])
+      with open(vocabulary_path, 'r', errors="ignore") as f:
+        comments = f.readlines()
+      comments = [f"{self.token_start} {c} {self.token_end}" for c in comments]
+
+      tokenizer = tf.keras.preprocessing.text.Tokenizer(num_words=self.transformer_num_words, oov_token=self.token_unk, filters='!"#$%&()*+.,-/:;=?@[\\]^_`{|}~ ')
+      tokenizer.fit_on_texts(comments)
+      tokenizer.word_index[self.token_pad] = 0
+      tokenizer.index_word[0] = self.token_pad
+
+    vocab_size = self.transformer_num_words + 1
+    max_length = self.transformer_max_length
+
+    transformer = Transformer(self.transformer_layers, self.transformer_filters, self.transformer_heads,
+      self.transformer_feedforward, vocab_size, max_length, self.transformer_dropout_rate)
+
+    return transformer, tokenizer

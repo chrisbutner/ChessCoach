@@ -52,8 +52,10 @@ PythonNetwork::PythonNetwork()
     PyCallAssert(module);
 
     _predictBatchFunction = LoadFunction(module, "predict_batch");
+    _predictCommentaryBatchFunction = LoadFunction(module, "predict_commentary_batch");
     _trainBatchFunction = LoadFunction(module, "train_batch");
     _validateBatchFunction = LoadFunction(module, "validate_batch");
+    _trainCommentaryBatchFunction = LoadFunction(module, "train_commentary_batch");
     _logScalarsFunction = LoadFunction(module, "log_scalars");
     _loadNetworkFunction = LoadFunction(module, "load_network");
     _saveNetworkFunction = LoadFunction(module, "save_network");
@@ -69,8 +71,10 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_saveNetworkFunction);
     Py_XDECREF(_loadNetworkFunction);
     Py_XDECREF(_logScalarsFunction);
-    Py_XDECREF(_trainBatchFunction);
+    Py_XDECREF(_trainCommentaryBatchFunction);
     Py_XDECREF(_validateBatchFunction);
+    Py_XDECREF(_trainBatchFunction);
+    Py_XDECREF(_predictCommentaryBatchFunction);
     Py_XDECREF(_predictBatchFunction);
 }
 
@@ -112,6 +116,35 @@ void PythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* valu
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonImages);
+}
+
+std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, InputPlanes* images)
+{
+    PythonContext context;
+
+    // Make the predict call.
+    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
+    PyObject* pythonImages = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
+    PyCallAssert(pythonImages);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_predictCommentaryBatchFunction, pythonImages, nullptr);
+    PyCallAssert(result);
+    PyCallAssert(PyArray_Check(result));
+
+    // Extract the values.
+    PyArrayObject* pythonCommentsArray = reinterpret_cast<PyArrayObject*>(result);
+
+    std::vector<std::string> comments(batchSize);
+    for (int i = 0; i < batchSize; i++)
+    {
+        comments[i] = reinterpret_cast<const char*>(PyArray_GETPTR1(pythonCommentsArray, i));
+    }
+
+    Py_DECREF(result);
+    Py_DECREF(pythonImages);
+
+    return comments;
 }
 
 void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
@@ -172,6 +205,50 @@ void PythonNetwork::ValidateBatch(int step, int batchSize, InputPlanes* images, 
     OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
     TrainValidateBatch(_validateBatchFunction, step, batchSize, images, values, mctsValues, policies, replyPolicies);
+}
+
+void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments)
+{
+    PythonContext context;
+
+    PyObject* pythonStep = PyLong_FromLong(step);
+    PyCallAssert(pythonStep);
+
+    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
+    PyObject* pythonImages = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
+    PyCallAssert(pythonImages);
+
+    // Pack the strings contiguously.
+    int longestString = 0;
+    for (int i = 0; i < batchSize; i++)
+    {
+        longestString = std::max(longestString, static_cast<int>(comments[i].size()));
+    }
+    void* memory = PyDataMem_NEW(longestString * batchSize);
+    assert(memory);
+    char* packedStrings = reinterpret_cast<char*>(memory);
+    for (int i = 0; i < batchSize; i++)
+    {
+        char* packedString = (packedStrings + (i * longestString));
+        std::copy(&comments[i][0], &comments[i][0] + comments[i].size(), packedString);
+        std::fill(packedString + comments[i].size(), packedString + longestString, '\0');
+    }
+
+    npy_intp commentDims[1]{ batchSize };
+    PyObject* pythonComments = PyArray_New(&PyArray_Type, Py_ARRAY_LENGTH(commentDims), commentDims,
+        NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
+    PyCallAssert(pythonComments);
+
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainCommentaryBatchFunction, pythonStep, pythonImages,
+        pythonComments, nullptr);
+    PyCallAssert(tupleResult);
+
+    Py_DECREF(tupleResult);
+    Py_DECREF(pythonComments);
+    Py_DECREF(pythonImages);
+    Py_DECREF(pythonStep);
+
 }
 
 void PythonNetwork::LogScalars(int step, int scalarCount, std::string* names, float* values)
