@@ -8,6 +8,17 @@
 int Game::QueenKnightPlane[SQUARE_NB];
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 std::array<float, 25> Game::UcbMateTerm;
+thread_local PoolAllocator<StateInfo, Game::BlockSizeBytes> Game::StateAllocator;
+
+StateInfo* Game::AllocateState()
+{
+    return reinterpret_cast<StateInfo*>(StateAllocator.Allocate());
+}
+
+void Game::FreeState(StateInfo* state)
+{
+    StateAllocator.Free(state);
+}
 
 void Game::Initialize()
 {
@@ -55,21 +66,23 @@ void Game::Initialize()
 }
 
 Game::Game()
-    : _positionStates(new std::deque<StateInfo>(1))
+    : _parentState(nullptr)
+    , _currentState(AllocateState())
     , _previousPositions(INetwork::InputPreviousPositionCount)
     , _previousPositionsOldest(0)
 
 {
-    _position.set(Config::StartingPosition, false /* isChess960 */, &_positionStates->back(), Threads.main());
+    _position.set(Config::StartingPosition, false /* isChess960 */, _currentState, Threads.main());
 }
 
 Game::Game(const std::string& fen, const std::vector<Move>& moves)
-    : _positionStates(new std::deque<StateInfo>(1))
+    : _parentState(nullptr)
+    , _currentState(AllocateState())
     , _previousPositions(INetwork::InputPreviousPositionCount)
     , _previousPositionsOldest(0)
 
 {
-    _position.set(fen, false /* isChess960 */, &_positionStates->back(), Threads.main());
+    _position.set(fen, false /* isChess960 */, _currentState, Threads.main());
 
     for (Move move : moves)
     {
@@ -79,7 +92,8 @@ Game::Game(const std::string& fen, const std::vector<Move>& moves)
 
 Game::Game(const Game& other)
     : _position(other._position)
-    , _positionStates(new std::deque<StateInfo>())
+    , _parentState(other._currentState) // Don't delete the parent game's states.
+    , _currentState(other._currentState)
     , _previousPositions(other._previousPositions)
     , _previousPositionsOldest(other._previousPositionsOldest)
 {
@@ -91,7 +105,8 @@ Game& Game::operator=(const Game& other)
     assert(&other != this);
 
     _position = other._position;
-    _positionStates.reset(new std::deque<StateInfo>());
+    _parentState = other._currentState; // Don't delete the parent game's states.
+    _currentState = other._currentState;
     _previousPositions = other._previousPositions;
     _previousPositionsOldest = other._previousPositionsOldest;
 
@@ -100,10 +115,14 @@ Game& Game::operator=(const Game& other)
 
 Game::Game(Game&& other) noexcept
     : _position(other._position)
-    , _positionStates(std::move(other._positionStates))
+    , _parentState(other._parentState)
+    , _currentState(other._currentState)
     , _previousPositions(std::move(other._previousPositions))
     , _previousPositionsOldest(other._previousPositionsOldest)
 {
+    other._parentState = nullptr;
+    other._currentState = nullptr;
+
     assert(&other != this);
 }
 
@@ -112,15 +131,27 @@ Game& Game::operator=(Game&& other) noexcept
     assert(&other != this);
 
     _position = other._position;
-    _positionStates = std::move(other._positionStates);
+    _parentState = other._parentState;
+    _currentState = other._currentState;
     _previousPositions = std::move(other._previousPositions);
     _previousPositionsOldest = other._previousPositionsOldest;
+
+    other._parentState = nullptr;
+    other._currentState = nullptr;
 
     return *this;
 }
 
 Game::~Game()
 {
+    // This is only safe because Game StateInfos are pooled, so it's safe to access pointers after "deleting".
+    StateInfo* current = _currentState;
+    while (current != _parentState)
+    {
+        assert(current);
+        FreeState(current);
+        current = current->previous;
+    }
 }
 
 Color Game::ToPlay() const
@@ -133,8 +164,8 @@ void Game::ApplyMove(Move move)
     _previousPositions[_previousPositionsOldest] = _position;
     _previousPositionsOldest = (_previousPositionsOldest + 1) % INetwork::InputPreviousPositionCount;
 
-    _positionStates->emplace_back();
-    _position.do_move(move, _positionStates->back());
+    _currentState = AllocateState();
+    _position.do_move(move, *_currentState);
 }
 
 int Game::Ply() const

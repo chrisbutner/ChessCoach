@@ -126,14 +126,14 @@ void ChessCoachPgnToGames::ConvertAll()
     }
 
     // Distribute PGN paths.
-    for (auto&& entry : std::filesystem::directory_iterator(_inputDirectory))
+    for (const auto& entry : std::filesystem::directory_iterator(_inputDirectory))
     {
         if (entry.path().extension().string() == ".pgn")
         {
             {
                 std::lock_guard lock(_pgnQueueMutex);
 
-                _pgnQueue.emplace(std::move(entry));
+                _pgnQueue.emplace(entry);
             }
             _totalFileCount++;
         }

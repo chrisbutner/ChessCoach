@@ -72,36 +72,106 @@ public:
 private:
 
     std::optional<int> _value;
-    std::function<float(float)> _mateScore;
+    float _mateTerm;
 };
 
-class Node
+template <typename T>
+class SiblingIterator
+{
+public:
+
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = int;
+    using pointer = T*;
+    using reference = T&;
+
+public:
+
+    SiblingIterator(T* current)
+        : _current(current)
+    {
+    }
+
+    SiblingIterator& operator++()
+    {
+        _current = _current->nextSibling;
+        return *this;
+    }
+
+    SiblingIterator operator++(int)
+    {
+        SiblingIterator pre = *this;
+        _current = _current->nextSibling;
+        return pre;
+    }
+
+    T& operator*()
+    {
+        return *_current;
+    }
+
+    T* operator->()
+    {
+        return _current;
+    }
+
+    bool operator==(const SiblingIterator& other)
+    {
+        return (_current == other._current);
+    }
+
+    bool operator!=(const SiblingIterator& other)
+    {
+        return (_current != other._current);
+    }
+
+private:
+
+    T* _current;
+};
+
+struct Node
 {
 public:
 
     static const size_t BlockSizeBytes = 64 * 1024 * 1024; // 64 MiB
     thread_local static PoolAllocator<Node, BlockSizeBytes> Allocator;
 
+    using iterator = SiblingIterator<Node>;
+    using const_iterator = SiblingIterator<const Node>;
+
 public:
 
-    Node(float setPrior);
+    Node(Move setMove, float setPrior);
 
     void* operator new(size_t byteCount);
     void operator delete(void* memory) noexcept;
 
+    iterator begin();
+    iterator end();
+    const_iterator begin() const;
+    const_iterator end() const;
+    const_iterator cbegin() const;
+    const_iterator cend() const;
+
     bool IsExpanded() const;
     float Value() const;
 
+    int CountChildren() const;
+
 public:
 
-    std::map<Move, Node*> children;
-    std::pair<Move, Node*> bestChild;
+    Move move;
     float prior;
     int visitCount;
     int visitingCount;
     float valueSum;
     TerminalValue terminalValue;
     bool expanding;
+    Node* bestChild;
+    Node* firstChild;
+    Node* nextSibling;
 };
 
 enum class SelfPlayState
@@ -183,7 +253,7 @@ public:
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
-    void PruneExcept(Node* root, Node* except);
+    void PruneExcept(Node* root, const Node* except);
     void PruneAll();
     void UpdateSearchRootPly();
 
@@ -242,16 +312,16 @@ public:
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(int index);
-    std::pair<Move, Node*> RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-        std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheChunk*& cacheStore);
+    Node* RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+        std::vector<Node*>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
-    std::pair<Move, Node*> SelectMove(const SelfPlayGame& game) const;
-    std::pair<Move, Node*> SelectChild(const Node* node) const;
+    Node* SelectMove(const SelfPlayGame& game) const;
+    Node* SelectChild(Node* node) const;
     float CalculateUcbScore(const Node* parent, const Node* child) const;
-    void Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value);
-    void BackpropagateMate(const std::vector<std::pair<Move, Node*>>& searchPath);
-    void FixPrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath, Node* node);
-    void UpdatePrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath);
+    void Backpropagate(const std::vector<Node*>& searchPath, float value);
+    void BackpropagateMate(const std::vector<Node*>& searchPath);
+    void FixPrincipleVariation(const std::vector<Node*>& searchPath, Node* node);
+    void UpdatePrincipleVariation(const std::vector<Node*>& searchPath);
     void ValidatePrincipleVariation(const Node* root);
     bool WorseThan(const Node* lhs, const Node* rhs) const;
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
@@ -289,6 +359,8 @@ private:
 
     const NetworkConfig* _networkConfig;
     Storage* _storage;
+    float _explorationRateBase;
+    float _explorationRateInit;
 
     std::vector<SelfPlayState> _states;
     std::vector<INetwork::InputPlanes> _images;
@@ -299,7 +371,7 @@ private:
     std::vector<SelfPlayGame> _scratchGames;
     std::vector<std::chrono::time_point<std::chrono::high_resolution_clock>> _gameStarts;
     std::vector<int> _mctsSimulations;
-    std::vector<std::vector<std::pair<Move, Node*>>> _searchPaths;
+    std::vector<std::vector<Node*>> _searchPaths;
     std::vector<PredictionCacheChunk*> _cacheStores;
 
     SearchConfig _searchConfig;

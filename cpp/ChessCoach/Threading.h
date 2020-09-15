@@ -6,7 +6,7 @@
 #include <condition_variable>
 #include <atomic>
 
-template <class T>
+template <typename T>
 class SyncQueue
 {
 public:

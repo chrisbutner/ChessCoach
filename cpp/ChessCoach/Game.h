@@ -9,6 +9,7 @@
 #include <Stockfish/position.h>
 
 #include "Network.h"
+#include "PoolAllocator.h"
 
 constexpr const static float CHESSCOACH_VALUE_WIN = 1.0f;
 constexpr const static float CHESSCOACH_VALUE_DRAW = 0.5f;
@@ -18,6 +19,12 @@ constexpr const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
 class Game
 {
 public:
+
+    static const size_t BlockSizeBytes = 64 * 1024 * 1024; // 64 MiB
+    thread_local static PoolAllocator<StateInfo, BlockSizeBytes> StateAllocator;
+
+    static StateInfo* AllocateState();
+    static void FreeState(StateInfo* state);
 
     static void Initialize();
 
@@ -143,7 +150,8 @@ protected:
 
     // Used for both real and scratch games.
     Position _position;
-    StateListPtr _positionStates;
+    StateInfo* _parentState;
+    StateInfo* _currentState;
     std::vector<Position> _previousPositions;
     int _previousPositionsOldest;
 };

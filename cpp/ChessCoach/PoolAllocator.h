@@ -29,7 +29,7 @@ struct Chunk
     Chunk* next;
 };
 
-template <class T, size_t BlockSizeBytes, size_t MaxBlocks = std::numeric_limits<size_t>::max()>
+template <typename T, size_t BlockSizeBytes, size_t MaxBlocks = std::numeric_limits<size_t>::max()>
 class PoolAllocator
 {
 public:

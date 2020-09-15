@@ -38,7 +38,7 @@ int TerminalValue::OpponentMateIn(int n)
 
 TerminalValue::TerminalValue()
     : _value()
-    , _mateScore([](float) { return 0.f; })
+    , _mateTerm(0.f)
 {
 }
 
@@ -54,8 +54,7 @@ TerminalValue& TerminalValue::operator=(const int value)
     if (value > 0)
     {
         const int mateNSaturated = std::min(static_cast<int>(Game::UcbMateTerm.size() - 1), value);
-        const float mateTerm = Game::UcbMateTerm[mateNSaturated];
-        _mateScore = [mateTerm](float explorationRate) { return explorationRate * mateTerm; };
+        _mateTerm = Game::UcbMateTerm[mateNSaturated];
     }
     else
     {
@@ -69,7 +68,7 @@ TerminalValue& TerminalValue::operator=(const int value)
         // preferring slower opponent mates (in the worst case).
         //
         // Also, no adjustment for draws at the moment.
-        _mateScore = [](float) { return 0.f; };
+        _mateTerm = 0.f;
     }
 
     return *this;
@@ -128,19 +127,22 @@ int TerminalValue::EitherMateN() const
 
 float TerminalValue::MateScore(float explorationRate) const
 {
-    return _mateScore(explorationRate);
+    return (explorationRate * _mateTerm);
 }
 
 thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
 
-Node::Node(float setPrior)
-    : bestChild(MOVE_NONE, nullptr)
+Node::Node(Move setMove, float setPrior)
+    : move(setMove)
     , prior(setPrior)
     , visitCount(0)
     , visitingCount(0)
     , valueSum(0.f)
     , terminalValue{}
     , expanding(false)
+    , bestChild(nullptr)
+    , firstChild(nullptr)
+    , nextSibling(nullptr)
 {
     assert(!std::isnan(setPrior));
 }
@@ -155,9 +157,39 @@ void Node::operator delete(void* ptr) noexcept
     Allocator.Free(ptr);
 }
 
+Node::iterator Node::begin()
+{
+    return iterator(firstChild);
+}
+
+Node::iterator Node::end()
+{
+    return iterator(nullptr);
+}
+
+Node::const_iterator Node::begin() const
+{
+    return const_iterator(firstChild);
+}
+
+Node::const_iterator Node::end() const
+{
+    return const_iterator(nullptr);
+}
+
+Node::const_iterator Node::cbegin() const
+{
+    return const_iterator(firstChild);
+}
+
+Node::const_iterator Node::cend() const
+{
+    return const_iterator(nullptr);
+}
+
 bool Node::IsExpanded() const
 {
-    return !children.empty();
+    return (firstChild != nullptr);
 }
 
 float Node::Value() const
@@ -169,6 +201,11 @@ float Node::Value() const
     }
 
     return (valueSum / visitCount);
+}
+
+int Node::CountChildren() const
+{
+    return std::distance(begin(), end());
 }
 
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
@@ -188,7 +225,7 @@ SelfPlayGame::SelfPlayGame()
 
 SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
     : Game()
-    , _root(new Node(0.f))
+    , _root(new Node(MOVE_NONE, 0.f))
     , _tryHard(false)
     , _image(image)
     , _value(value)
@@ -201,7 +238,7 @@ SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork:
 SelfPlayGame::SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard,
     INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
     : Game(fen, moves)
-    , _root(new Node(0.f))
+    , _root(new Node(MOVE_NONE, 0.f))
     , _tryHard(tryHard)
     , _image(image)
     , _value(value)
@@ -329,14 +366,14 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     // they could be visited multiple times as a terminal draw, then become non-terminal as the game progresses
     // past the first occurence of the position and get expanded. Pack the terminal visit count into the Node
     // to speed this up if required.
-    if (_root->children.empty())
+    if (!_root->IsExpanded())
     {
         _root->visitCount = 0;
     }
     else
     {
-        _root->visitCount = std::transform_reduce(_root->children.begin(), _root->children.end(),
-            0, std::plus<>(), [](const auto& pair) { return pair.second->visitCount; });
+        _root->visitCount = std::transform_reduce(_root->begin(), _root->end(),
+            0, std::plus<>(), [](const Node& node) { return node.visitCount; });
     }
 }
 
@@ -486,12 +523,18 @@ void SelfPlayGame::Expand(int moveCount)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
+    assert(root->firstChild == nullptr);
+    assert(moveCount > 0);
 
-    for (int i = 0; i < moveCount; i++)
+    assert(_position.legal(_expandAndEvaluate_moves[0].move));
+    Node* lastSibling = new Node(_expandAndEvaluate_moves[0].move, _cachedPriors[0]);
+    root->firstChild = lastSibling;
+    for (int i = 1; i < moveCount; i++)
     {
         const Move move = _expandAndEvaluate_moves[i].move;
         assert(_position.legal(move));
-        root->children[move] = new Node(_cachedPriors[i]);
+        lastSibling->nextSibling = new Node(move, _cachedPriors[i]);
+        lastSibling = lastSibling->nextSibling;
     }
 }
 
@@ -542,9 +585,9 @@ void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float> visits;
     const int sumChildVisits = _root->visitCount;
-    for (const auto& pair : _root->children)
+    for (const Node& child : *_root)
     {
-        visits[pair.first] = static_cast<float>(pair.second->visitCount) / sumChildVisits;
+        visits[child.move] = static_cast<float>(child.visitCount) / sumChildVisits;
     }
     // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
     _mctsValues.push_back(FlipValue(_root->Value()));
@@ -567,7 +610,7 @@ SavedGame SelfPlayGame::Save() const
     return SavedGame(Result(), _history, _mctsValues, _childVisits);
 }
 
-void SelfPlayGame::PruneExcept(Node* root, Node* except)
+void SelfPlayGame::PruneExcept(Node* root, const Node* except)
 {
     if (!root)
     {
@@ -578,11 +621,12 @@ void SelfPlayGame::PruneExcept(Node* root, Node* except)
     assert(_root != root);
     assert(_root == except);
 
-    for (auto& pair : root->children)
+    // This is only safe because Nodes are pooled, so it's safe to access pointers after "deleting".
+    for (Node& child : *root)
     {
-        if (pair.second != except)
+        if (&child != except)
         {
-            PruneAllInternal(pair.second);
+            PruneAllInternal(&child);
         }
     }
     delete root;
@@ -603,9 +647,10 @@ void SelfPlayGame::PruneAll()
 
 void SelfPlayGame::PruneAllInternal(Node* root)
 {
-    for (auto& pair : root->children)
+    // This is only safe because Nodes are pooled, so it's safe to access pointers after "deleting".
+    for (Node& child : *root)
     {
-        PruneAllInternal(pair.second);
+        PruneAllInternal(&child);
     }
     delete root;
 }
@@ -623,6 +668,8 @@ Move SelfPlayGame::ParseSan(const std::string& san)
 SelfPlayWorker::SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage)
     : _networkConfig(&networkConfig)
     , _storage(storage)
+    , _explorationRateBase(networkConfig.SelfPlay.ExplorationRateBase)
+    , _explorationRateInit(networkConfig.SelfPlay.ExplorationRateInit)
     , _states(networkConfig.SelfPlay.PredictionBatchSize)
     , _images(networkConfig.SelfPlay.PredictionBatchSize)
     , _values(networkConfig.SelfPlay.PredictionBatchSize)
@@ -719,16 +766,25 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
         const Move move = moves[i];
         Node* root = game.Root();
 
-        std::map<Move, Node*>::iterator child;
-        if (root && ((child = root->children.find(move)) != root->children.end()))
+        Node* newRoot = nullptr;
+        for (Node& child : *root)
+        {
+            if (move == child.move)
+            {
+                newRoot = &child;
+                break;
+            }
+        }
+
+        if (newRoot)
         {
             // Preserve the existing sub-tree.
-            game.ApplyMoveWithRoot(move, child->second);
-            game.PruneExcept(root, child->second);
+            game.ApplyMoveWithRoot(move, newRoot);
+            game.PruneExcept(root, newRoot);
         }
         else
         {
-            Node* newRoot = ((i == (moves.size() - 1)) ? new Node(0.f) : nullptr);
+            Node* newRoot = ((i == (moves.size() - 1)) ? new Node(MOVE_NONE, 0.f) : nullptr);
             game.PruneAll();
             game.ApplyMoveWithRoot(move, newRoot);
         }
@@ -916,8 +972,8 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSp
     }
 
     // Pick a best move and judge points.
-    const auto [bestMove, _] = SelectMove(_games[0]);
-    return JudgeStrengthTestPosition(spec, bestMove);
+    const Node* bestMove = SelectMove(_games[0]);
+    return JudgeStrengthTestPosition(spec, bestMove->move);
 }
 
 int SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move)
@@ -960,16 +1016,16 @@ void SelfPlayWorker::Play(int index)
     while (!IsTerminal(game))
     {
         Node* root = game.Root();
-        std::pair<Move, Node*> selected = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
+        Node* selected = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             return;
         }
 
-        assert(selected.second != nullptr);
+        assert(selected != nullptr);
         game.StoreSearchStatistics();
-        game.ApplyMoveWithRootAndHistory(selected.first, selected.second);
-        game.PruneExcept(root, selected.second /* == game.Root() */);
+        game.ApplyMoveWithRootAndHistory(selected->move, selected);
+        game.PruneExcept(root, selected /* == game.Root() */);
         _searchState.principleVariationChanged = true; // First move in PV is now gone.
     }
 
@@ -998,8 +1054,8 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
     //PredictionCache::Instance.PrintDebugInfo();
 }
 
-std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-    std::vector<std::pair<Move, Node*>>& searchPath, PredictionCacheChunk*& cacheStore)
+Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+    std::vector<Node*>& searchPath, PredictionCacheChunk*& cacheStore)
 {
     // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
     // We need to break out and check for PV changes, search stopping, etc. However, need to keep number
@@ -1021,33 +1077,33 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             {
                 assert(game.TryHard());
                 _searchState.failedNodeCount++;
-                return std::pair(MOVE_NONE, nullptr);
+                return nullptr;
             }
 
             scratchGame = game;
             searchPath.clear();
-            searchPath.push_back(std::pair(MOVE_NONE, scratchGame.Root()));
+            searchPath.push_back(scratchGame.Root());
             scratchGame.Root()->visitingCount++;
 
             while (scratchGame.Root()->IsExpanded())
             {
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration, just fix up visitingCounts.
-                std::pair<Move, Node*> selected = SelectChild(scratchGame.Root());
-                if (!selected.second)
+                Node* selected = SelectChild(scratchGame.Root());
+                if (!selected)
                 {
                     assert(game.TryHard());
-                    for (auto& [move, node] : searchPath)
+                    for (Node* node : searchPath)
                     {
                         node->visitingCount--;
                     }
                     _searchState.failedNodeCount++;
-                    return std::pair(MOVE_NONE, nullptr);
+                    return nullptr;
                 }
 
-                scratchGame.ApplyMoveWithRoot(selected.first, selected.second);
+                scratchGame.ApplyMoveWithRoot(selected->move, selected);
                 searchPath.push_back(selected /* == scratchGame.Root() */);
-                selected.second->visitingCount++;
+                selected->visitingCount++;
             }
         }
 
@@ -1059,7 +1115,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
             // once the network evaluation/priors come back, but is not yet seen as expanded by
             // parallel searches. Set "expanding" to mark it off-limits.
             scratchGame.Root()->expanding = true;
-            return std::pair(MOVE_NONE, nullptr);
+            return nullptr;
         }
 
         // Finished actually expanding children, or never needed to wait for an evaluation/priors
@@ -1112,7 +1168,7 @@ std::pair<Move, Node*> SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame&
 void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
 {
     std::gamma_distribution<float> gamma(Config().SelfPlay.RootDirichletAlpha, 1.f);
-    std::vector<float> noise(game.Root()->children.size());
+    std::vector<float> noise(game.Root()->CountChildren());
 
     float noiseSum = 0.f;
     for (int i = 0; i < noise.size(); i++)
@@ -1122,57 +1178,56 @@ void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
     }
 
     int childIndex = 0;
-    for (auto& [move, child] : game.Root()->children)
+    for (Node& child : *game.Root())
     {
         const float normalized = (noise[childIndex++] / noiseSum);
         assert(!std::isnan(normalized));
         assert(!std::isinf(normalized));
-        child->prior = (child->prior * (1 - Config().SelfPlay.RootExplorationFraction) + normalized * Config().SelfPlay.RootExplorationFraction);
+        child.prior = (child.prior * (1 - Config().SelfPlay.RootExplorationFraction) + normalized * Config().SelfPlay.RootExplorationFraction);
     }
 }
 
-std::pair<Move, Node*> SelfPlayWorker::SelectMove(const SelfPlayGame& game) const
+Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game) const
 {
     if (!game.TryHard() && (game.Ply() < Config().SelfPlay.NumSampingMoves))
     {
         // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
         const int sumChildVisits = game.Root()->visitCount;
         int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random::Engine);
-        for (const auto& pair : game.Root()->children)
+        for (Node& child : *game.Root())
         {
-            const int visitCount = pair.second->visitCount;
-            if (sample < visitCount)
+            if (sample < child.visitCount)
             {
-                return pair;
+                return &child;
             }
-            sample -= visitCount;
+            sample -= child.visitCount;
         }
         assert(false);
-        return std::pair(MOVE_NONE, nullptr);
+        return nullptr;
     }
     else
     {
         // Use temperature=0; i.e., just select the best (most-visited, overridden by mates).
-        assert(game.Root()->bestChild.second);
+        assert(game.Root()->bestChild);
         return game.Root()->bestChild;
     }
 }
 
 // It's possible because of nodes marked off-limits via "expanding"
 // that this method cannot select a child, instead returning NONE/nullptr.
-std::pair<Move, Node*> SelfPlayWorker::SelectChild(const Node* parent) const
+Node* SelfPlayWorker::SelectChild(Node* parent) const
 {
     float maxUcbScore = -std::numeric_limits<float>::infinity();
-    std::pair<Move, Node*> max = std::pair(MOVE_NONE, nullptr);
-    for (const auto& pair : parent->children)
+    Node* max = nullptr;
+    for (Node& child : *parent)
     {
-        if (!pair.second->expanding)
+        if (!child.expanding)
         {
-            const float ucbScore = CalculateUcbScore(parent, pair.second);
+            const float ucbScore = CalculateUcbScore(parent, &child);
             if (ucbScore > maxUcbScore)
             {
                 maxUcbScore = ucbScore;
-                max = pair;
+                max = &child;
             }
         }
     }
@@ -1188,7 +1243,7 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     const float parentVirtualExploration = static_cast<float>(parent->visitCount + parent->visitingCount);
     const float childVirtualExploration = static_cast<float>(child->visitCount + child->visitingCount);
     const float explorationRate =
-        (::logf((parentVirtualExploration + Config().SelfPlay.ExplorationRateBase + 1.f) / Config().SelfPlay.ExplorationRateBase) + Config().SelfPlay.ExplorationRateInit) *
+        (::logf((parentVirtualExploration + _explorationRateBase + 1.f) / _explorationRateBase) + _explorationRateInit) *
         ::sqrtf(parentVirtualExploration) / (childVirtualExploration + 1.f);
 
     // (a) prior score
@@ -1200,10 +1255,10 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     return (child->Value() + priorScore + mateScore);
 }
 
-void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& searchPath, float value)
+void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float value)
 {
     // Each ply has a different player, so flip each time.
-    for (auto& [move, node] : searchPath)
+    for (Node* node : searchPath)
     {
         node->visitingCount--;
         node->visitCount++;
@@ -1212,7 +1267,7 @@ void SelfPlayWorker::Backpropagate(const std::vector<std::pair<Move, Node*>>& se
     }
 }
 
-void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>& searchPath)
+void SelfPlayWorker::BackpropagateMate(const std::vector<Node*>& searchPath)
 {
     // To calculate mate values for the tree from scratch we'd need to follow two rules:
     // - If *any* children are a MateIn<N...M> then the parent is an OpponentMateIn<N> (prefer to mate faster).
@@ -1222,13 +1277,13 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>
     bool childIsMate = true;
     for (int i = static_cast<int>(searchPath.size()) - 2; i >= 0; i--)
     {
-        Node* parent = searchPath[i].second;
+        Node* parent = searchPath[i];
 
         if (childIsMate)
         {
             // The child in the searchPath just became a mate, or a faster mate.
             // Does this make the parent an opponent mate or faster opponent mate?
-            const Node* child = searchPath[i + 1].second;
+            const Node* child = searchPath[i + 1];
             const int newMateN = child->terminalValue.MateN();
             assert(newMateN > 0);
             if (!parent->terminalValue.IsOpponentMateInN() ||
@@ -1245,7 +1300,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>
                     // It's tempting to try validate the principle variation after this fix, but we
                     // may still be waiting to update it after backpropagating visit counts and mates.
                     // This is only a local fix that ensures that the overall update will be valid.
-                    FixPrincipleVariation(searchPath, searchPath[grandparentIndex].second);
+                    FixPrincipleVariation(searchPath, searchPath[grandparentIndex]);
                 }
             }
             else
@@ -1259,9 +1314,9 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>
             // Always check all children. This could do nothing, make the parent a new mate, or
             // make the parent a faster mate, depending on which child just got updated.
             int longestChildOpponentMateN = std::numeric_limits<int>::min();
-            for (const auto& [move, child] : parent->children)
+            for (const Node& child : *parent)
             {
-                const int childOpponentMateN = child->terminalValue.OpponentMateN();
+                const int childOpponentMateN = child.terminalValue.OpponentMateN();
                 if (childOpponentMateN <= 0)
                 {
                     return;
@@ -1278,14 +1333,14 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<std::pair<Move, Node*>>
     }
 }
 
-void SelfPlayWorker::FixPrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath, Node* parent)
+void SelfPlayWorker::FixPrincipleVariation(const std::vector<Node*>& searchPath, Node* parent)
 {
     bool updatedBestChild = false;
-    for (const auto& pair : parent->children)
+    for (Node& child : *parent)
     {
-        if (WorseThan(parent->bestChild.second, pair.second))
+        if (WorseThan(parent->bestChild, &child))
         {
-            parent->bestChild = pair;
+            parent->bestChild = &child;
             updatedBestChild = true;
         }
     }
@@ -1295,12 +1350,12 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<std::pair<Move, Nod
     {
         for (int i = 0; i < searchPath.size() - 1; i++)
         {
-            if (searchPath[i].second == parent)
+            if (searchPath[i] == parent)
             {
                 _searchState.principleVariationChanged = true;
                 break;
             }
-            if (searchPath[i].second->bestChild.second != searchPath[i + 1].second)
+            if (searchPath[i]->bestChild != searchPath[i + 1])
             {
                 break;
             }
@@ -1308,19 +1363,19 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<std::pair<Move, Nod
     }
 }
 
-void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<std::pair<Move, Node*>>& searchPath)
+void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<Node*>& searchPath)
 {
     bool isPrincipleVariation = true;
     for (int i = 0; i < searchPath.size() - 1; i++)
     {
-        if (WorseThan(searchPath[i].second->bestChild.second, searchPath[i + 1].second))
+        if (WorseThan(searchPath[i]->bestChild, searchPath[i + 1]))
         {
-            searchPath[i].second->bestChild = searchPath[i + 1];
+            searchPath[i]->bestChild = searchPath[i + 1];
             _searchState.principleVariationChanged |= isPrincipleVariation;
         }
         else
         {
-            isPrincipleVariation &= (searchPath[i].second->bestChild.second == searchPath[i + 1].second);
+            isPrincipleVariation &= (searchPath[i]->bestChild == searchPath[i + 1]);
         }
     }
 }
@@ -1329,14 +1384,14 @@ void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
 {
     while (root)
     {
-        for (const auto& pair : root->children)
+        for (const Node& child : *root)
         {
-            if (pair.second->visitCount > 0)
+            if (child.visitCount > 0)
             {
-                assert(!WorseThan(root->bestChild.second, pair.second));
+                assert(!WorseThan(root->bestChild, &child));
             }
         }
-        root = root->bestChild.second;
+        root = root->bestChild;
     }
 }
 
@@ -1550,9 +1605,9 @@ void SelfPlayWorker::OnSearchFinished()
     _searchState.searching = false;
 
     // Print the final PV info and bestmove.
-    auto [move, node] = SelectMove(_games[0]);
+    const Node* bestMove = SelectMove(_games[0]);
     PrintPrincipleVariation();
-    std::cout << "bestmove " << UCI::move(move, false /* chess960 */) << std::endl;
+    std::cout << "bestmove " << UCI::move(bestMove->move, false /* chess960 */) << std::endl;
 
     // Lock around (a) checking "searchUpdated" and (b) clearing "search". We want to clear
     // "search" in order to go back to sleep but only if it's still the existing search.
@@ -1580,7 +1635,7 @@ void SelfPlayWorker::CheckPrintInfo()
 void SelfPlayWorker::CheckTimeControl()
 {
     // Always do at least 1-2 simulations so that a "best" move exists.
-    if (!_games[0].Root()->bestChild.second)
+    if (!_games[0].Root()->bestChild)
     {
         return;
     }
@@ -1631,15 +1686,15 @@ void SelfPlayWorker::PrintPrincipleVariation()
     Node* node = _games[0].Root();
     std::vector<Move> principleVariation;
 
-    if (!node->bestChild.second)
+    if (!node->bestChild)
     {
         return;
     }
 
-    while (node->bestChild.second)
+    while (node->bestChild)
     {
-        principleVariation.push_back(node->bestChild.first);
-        node = node->bestChild.second;
+        principleVariation.push_back(node->bestChild->move);
+        node = node->bestChild;
     }
 
     auto now = std::chrono::high_resolution_clock::now();
@@ -1647,7 +1702,7 @@ void SelfPlayWorker::PrintPrincipleVariation()
     _searchState.lastPrincipleVariationPrint = now;
 
     // Value is from the parent's perspective, so that's already correct for the root perspective
-    const Node* pvFirst = _games[0].Root()->bestChild.second;
+    const Node* pvFirst = _games[0].Root()->bestChild;
     const int eitherMateN = pvFirst->terminalValue.EitherMateN();
     const float value = pvFirst->Value();
     const int depth = static_cast<int>(principleVariation.size());
