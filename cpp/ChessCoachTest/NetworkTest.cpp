@@ -22,18 +22,27 @@ TEST(Network, Policy)
 
     // Give 5 visits evenly across legal moves, then the rest to the first move.
     const int evenCount = 5;
+    Node* lastSibling = nullptr;
     for (Move move : legalMoves)
     {
-        Node* child = new Node(0.f);
+        Node* child = new Node(move, 0.f);
         child->visitCount += evenCount;
-        game.Root()->children[move] = child;
+        if (lastSibling)
+        {
+            lastSibling->nextSibling = child;
+        }
+        else
+        {
+            game.Root()->firstChild = child;
+        }
+        lastSibling = child;
     }
     Move firstMove = *legalMoves.begin();
-    game.Root()->children[firstMove]->visitCount += (networkConfig.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
+    game.Root()->firstChild->visitCount += (networkConfig.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
 
     // Generate policy labels. Make sure that legal moves are non-zero and the rest are zero.
     game.StoreSearchStatistics();
-    game.ApplyMoveWithRootAndHistory(firstMove, game.Root()->children[firstMove]);
+    game.ApplyMoveWithRootAndHistory(firstMove, game.Root()->firstChild);
     game.Complete();
     INetwork::OutputPlanes labels = game.GeneratePolicy(game.Save().childVisits[0]);
     
@@ -72,26 +81,14 @@ TEST(Network, ImagePieceHistoryPlanes)
 
     // Ensure that the final history plane is all zeros.
     std::unique_ptr<INetwork::InputPlanes> image1(std::make_unique<INetwork::InputPlanes>(game.GenerateImage()));
-    const INetwork::Plane startingPositionOurPawns = (*image1)[currentPositionPlanes + 0];
+    const INetwork::PackedPlane startingPositionOurPawns = (*image1)[currentPositionPlanes + 0];
     for (int i = 0; i < INetwork::InputPlanesPerPosition; i++)
     {
-        for (int rank = 0; rank < INetwork::BoardSide; rank++)
-        {
-            for (int file = 0; file < INetwork::BoardSide; file++)
-            {
-                EXPECT_EQ((*image1)[finalHistoryPlanes + i][rank][file], 0.f);
-            }
-        }
+        EXPECT_EQ((*image1)[finalHistoryPlanes + i], 0);
     }
 
     // Make a move. Ensure that the final history our-pawns plane equals the starting position's.
     game.ApplyMove(make_move(SQ_E2, SQ_E4));
     std::unique_ptr<INetwork::InputPlanes> image2(std::make_unique<INetwork::InputPlanes>(game.GenerateImage()));
-    for (int rank = 0; rank < INetwork::BoardSide; rank++)
-    {
-        for (int file = 0; file < INetwork::BoardSide; file++)
-        {
-            EXPECT_EQ((*image2)[finalHistoryPlanes + 0][rank][file], startingPositionOurPawns[rank][file]);
-        }
-    }
+    EXPECT_EQ((*image2)[finalHistoryPlanes + 0], startingPositionOurPawns);
 }

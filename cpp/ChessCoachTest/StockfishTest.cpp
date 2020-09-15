@@ -58,6 +58,20 @@ TEST(Stockfish, EmptyPosition)
             EXPECT_EQ(position.piece_on(make_square(file, rank)), NO_PIECE);
         }
     }
+
+    EXPECT_EQ(position.pieces(WHITE, PAWN), 0);
+    EXPECT_EQ(position.pieces(WHITE, KNIGHT), 0);
+    EXPECT_EQ(position.pieces(WHITE, BISHOP), 0);
+    EXPECT_EQ(position.pieces(WHITE, ROOK), 0);
+    EXPECT_EQ(position.pieces(WHITE, QUEEN), 0);
+    EXPECT_EQ(position.pieces(WHITE, KING), 0);
+
+    EXPECT_EQ(position.pieces(BLACK, PAWN), 0);
+    EXPECT_EQ(position.pieces(BLACK, KNIGHT), 0);
+    EXPECT_EQ(position.pieces(BLACK, BISHOP), 0);
+    EXPECT_EQ(position.pieces(BLACK, ROOK), 0);
+    EXPECT_EQ(position.pieces(BLACK, QUEEN), 0);
+    EXPECT_EQ(position.pieces(BLACK, KING), 0);
 }
 
 TEST(Stockfish, EmptyGamePositionHistory)

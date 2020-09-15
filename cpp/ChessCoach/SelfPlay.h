@@ -158,6 +158,7 @@ public:
     bool IsExpanded() const;
     float Value() const;
 
+    Node* Child(Move move);
     int CountChildren() const;
 
 public:

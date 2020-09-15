@@ -25,6 +25,8 @@ class ChessCoachModel:
   transformer_num_words = 5000 # Arbitrary for now
   transformer_max_length = 128 # Arbitrary for now
 
+  no_progress_saturation_count = 99.0
+
   input_name = "Input"
   output_value_name = "OutputValue"
   output_mcts_value_name = "OutputMctsValue"
@@ -56,6 +58,16 @@ class ChessCoachModel:
     conv2d = tf.keras.layers.Conv2D(filters=self.filter_count // 2, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=name + "/conv2d")
     return lambda x: tf.concat([attention(x), conv2d(x)], axis=1)
+
+  def unpack_planes(self, x):
+    shape = x.get_shape()
+    x = tf.expand_dims(x, -1)
+    mask = tf.bitwise.left_shift(tf.ones([], dtype=tf.int64), tf.range(64, dtype=tf.int64))
+    x = tf.bitwise.bitwise_and(x, mask)
+    x = tf.cast(x, tf.bool)
+    x = tf.cast(x, tf.float32)
+    x = tf.reshape(x, [-1, int(shape[1]), self.board_side, self.board_side])
+    return x
 
   def stem(self, x):
     # Initial convolutional layer
@@ -111,11 +123,25 @@ class ChessCoachModel:
     encoder = tf.transpose(x, [0, 2, 1], name=output_name)
     return encoder
 
-  def build(self, config):
-    input = tf.keras.layers.Input(shape=(self.input_planes_count, self.board_side, self.board_side), dtype="float32", name=self.input_name)
+  def build(self, config, residual_count=None, filter_count=None, dense_count=None):
+    if residual_count:
+      self.residual_count = residual_count
+    if filter_count:
+      self.filter_count = filter_count
+    if dense_count:
+      self.dense_count = dense_count
+    
+    input = tf.keras.layers.Input(shape=(self.input_planes_count), dtype=tf.int64, name=self.input_name)
+
+    # Unpack bit-planes of (batch, 101) int64 to (batch, 101, 8, 8) float32.
+    # However, the final plane is a special case, not to be bit-unpacked, but instead interpreted as an integer
+    # to be normalized via the no-progress saturation count (99).
+    standard_planes = self.unpack_planes(input[:, :-1])
+    special_planes = tf.cast(input[:, -1:], tf.float32)[:, :, tf.newaxis, tf.newaxis] / tf.fill([1, self.board_side, self.board_side], self.no_progress_saturation_count)
+    planes = tf.concat([standard_planes, special_planes], axis=1)
 
     # Stem
-    stem = self.stem(input)
+    stem = self.stem(planes)
 
     # Residual tower
     tower = self.tower(stem, config)
@@ -132,6 +158,11 @@ class ChessCoachModel:
     commentary_encoder = self.commentary_encoder_head(tower, "commentary_encoder", self.output_commentary_encoder_name)
 
     return tf.keras.Model(input, [value, mcts_value, policy, reply_policy, commentary_encoder])
+
+  def build_student(self, config):
+    model = self.build(config, residual_count=4, filter_count=64, dense_count=128)
+    model = tf.keras.Model(model.input, [model.outputs[0], model.outputs[2]])
+    return model
 
   def subset_play(self, model):
     return tf.keras.Model(model.input, model.outputs[:4])

@@ -25,9 +25,12 @@ struct INetwork
     static const int InputPlanesFloatCount = PlaneFloatCount * InputPlaneCount;
     static const int OutputPlanesFloatCount = PlaneFloatCount * OutputPlaneCount;
 
-    typedef std::array <std::array<float, BoardSide>, BoardSide> Plane;
-    typedef std::array<Plane, InputPlaneCount> InputPlanes;
-    typedef std::array<Plane, OutputPlaneCount> OutputPlanes;
+    // Would use uint64_t but TensorFlow isn't a fan when saving/loading SavedModels.
+    // Bit representation is the same for implicit casting on common platforms (implementation-defined).
+    using PackedPlane = int64_t;
+    using Plane = std::array<std::array<float, BoardSide>, BoardSide>;
+    using InputPlanes = std::array<PackedPlane, InputPlaneCount>;
+    using OutputPlanes = std::array<Plane, OutputPlaneCount>;
 
     constexpr static uint8_t QuantizeProbability(float probability01)
     {

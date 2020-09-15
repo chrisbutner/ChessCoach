@@ -224,7 +224,7 @@ Key Game::GenerateImageKey() const
 #pragma warning(disable:6262) // Ignore stack warning, caller can emplace to heap via RVO.
 INetwork::InputPlanes Game::GenerateImage() const
 {
-    INetwork::InputPlanes image = {};
+    INetwork::InputPlanes image;
     int nextPlane = 0;
 
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
@@ -249,31 +249,16 @@ INetwork::InputPlanes Game::GenerateImage() const
 
     // Castling planes 96-99
     assert(nextPlane == 96);
-    if (_position.can_castle(toPlay & KING_SIDE))
-    {
-        FillPlane(image[nextPlane], 1.f);
-    }
-    nextPlane++;
-    if (_position.can_castle(toPlay & QUEEN_SIDE))
-    {
-        FillPlane(image[nextPlane], 1.f);
-    }
-    nextPlane++;
-    if (_position.can_castle(~toPlay & KING_SIDE))
-    {
-        FillPlane(image[nextPlane], 1.f);
-    }
-    nextPlane++;
-    if (_position.can_castle(~toPlay & QUEEN_SIDE))
-    {
-        FillPlane(image[nextPlane], 1.f);
-    }
-    nextPlane++;
+    FillPlane(image[nextPlane++], _position.can_castle(toPlay & KING_SIDE));
+    FillPlane(image[nextPlane++], _position.can_castle(toPlay & QUEEN_SIDE));
+    FillPlane(image[nextPlane++], _position.can_castle(~toPlay & KING_SIDE));
+    FillPlane(image[nextPlane++], _position.can_castle(~toPlay & QUEEN_SIDE));
 
     // No-progress plane 100
+    // This is a special case, not to be bit-unpacked, but instead interpreted as an integer
+    // to be normalized via the no-progress saturation count (99).
     assert(nextPlane == 100);
-    const float normalizedFiftyRuleCount = std::min(1.f, static_cast<float>(_position.rule50_count()) / NoProgressSaturationCount);
-    FillPlane(image[nextPlane++], normalizedFiftyRuleCount);
+    image[nextPlane++] = _position.rule50_count();
 
     static_assert(INetwork::InputPreviousPositionCount == 7);
     static_assert(INetwork::InputPlanesPerPosition == 12);
@@ -312,27 +297,33 @@ void Game::GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, co
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = position.side_to_move();
 
-    for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
+    image[planeOffset + 0] = position.pieces(toPlay, PAWN);
+    image[planeOffset + 1] = position.pieces(toPlay, KNIGHT);
+    image[planeOffset + 2] = position.pieces(toPlay, BISHOP);
+    image[planeOffset + 3] = position.pieces(toPlay, ROOK);
+    image[planeOffset + 4] = position.pieces(toPlay, QUEEN);
+    image[planeOffset + 5] = position.pieces(toPlay, KING);
+
+    image[planeOffset + 6] = position.pieces(~toPlay, PAWN);
+    image[planeOffset + 7] = position.pieces(~toPlay, KNIGHT);
+    image[planeOffset + 8] = position.pieces(~toPlay, BISHOP);
+    image[planeOffset + 9] = position.pieces(~toPlay, ROOK);
+    image[planeOffset + 10] = position.pieces(~toPlay, QUEEN);
+    image[planeOffset + 11] = position.pieces(~toPlay, KING);
+
+    // Piece colors are already conditionally flipped via toPlay/~toPlay ordering. Flip all vertically if BLACK to play.
+    if (toPlay == BLACK)
     {
-        for (File file = FILE_A; file <= FILE_H; ++file)
+        for (int i = planeOffset; i < planeOffset + 12; i++)
         {
-            const Piece piece = FlipPiece[toPlay][position.piece_on(FlipSquare(toPlay, make_square(file, rank)))];
-            const int plane = ImagePiecePlane[piece];
-            if (plane != NO_PLANE)
-            {
-                // If any auxilary info is added to position planes then they won't both be 12 anymore.
-                const int piecePlanesPerPosition = 12;
-                static_assert(piecePlanesPerPosition <= INetwork::InputPlanesPerPosition);
-                assert((plane >= 0) && (plane < piecePlanesPerPosition));
-                image[planeOffset + plane][rank][file] = 1.f;
-            }
+            image[i] = FlipBoard(image[i]);
         }
     }
 }
 
-void Game::FillPlane(INetwork::Plane& plane, float value) const
+void Game::FillPlane(INetwork::PackedPlane& plane, bool value) const
 {
-    std::fill(&plane[0][0], &plane[0][0] + INetwork::PlaneFloatCount, value);
+    plane = FillPlanePacked[static_cast<int>(value)];
 }
 
 Key Game::Rotate(Key key, unsigned int distance) const

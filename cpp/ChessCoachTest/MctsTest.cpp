@@ -45,19 +45,19 @@ std::vector<Node*> GeneratePrincipleVariation(const SelfPlayWorker& selfPlayWork
 
     while (node)
     {
-        for (const auto& pair : node->children)
+        for (const Node& child : *node)
         {
-            if (pair.second->visitCount > 0)
+            if (child.visitCount > 0)
             {
-                const bool bestIsNotBest = selfPlayWorker.WorseThan(node->bestChild.second, pair.second);
+                const bool bestIsNotBest = selfPlayWorker.WorseThan(node->bestChild, &child);
                 if (bestIsNotBest) throw std::runtime_error("bestIsNotBest false");
             }
         }
-        if (node->bestChild.second)
+        if (node->bestChild)
         {
-            principleVariation.push_back(node->bestChild.second);
+            principleVariation.push_back(node->bestChild);
         }
-        node = node->bestChild.second;
+        node = node->bestChild;
     }
 
     return principleVariation;
@@ -67,9 +67,19 @@ void MockExpand(Node* node, int count)
 {
     const float prior = (1.f / count);
 
+    Node* lastSibling = nullptr;
     for (int i = 0; i < count; i++)
     {
-        node->children[Move(i)] = new Node(prior);
+        Node* child = new Node(Move(i), prior);
+        if (lastSibling)
+        {
+            lastSibling->nextSibling = child;
+        }
+        else
+        {
+            node->firstChild = child;
+        }
+        lastSibling = child;
     }
 }
 
@@ -182,7 +192,7 @@ TEST(Mcts, MateComparisons)
 
     // Set up nodes from expected worst to best.
     const int nodeCount = 7;
-    Node nodes[nodeCount] = { {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f}, {0.f} };
+    Node nodes[nodeCount] = { {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f} };
     nodes[0].terminalValue = TerminalValue::OpponentMateIn<2>();
     nodes[1].terminalValue = TerminalValue::OpponentMateIn<4>();
     nodes[2].visitCount = 10;
@@ -219,67 +229,67 @@ TEST(Mcts, MateProving)
 
     // Expand a small tree (1 root, 3 ply1, 9 ply2).
     MockExpand(game->Root(), 3);
-    MockExpand(game->Root()->children[Move(0)], 3);
-    MockExpand(game->Root()->children[Move(1)], 3);
-    MockExpand(game->Root()->children[Move(2)], 3);
+    MockExpand(game->Root()->Child(Move(0)), 3);
+    MockExpand(game->Root()->Child(Move(1)), 3);
+    MockExpand(game->Root()->Child(Move(2)), 3);
 
     // Selectively deepen two leaves.
-    MockExpand(game->Root()->children[Move(1)]->children[Move(1)], 1);
-    MockExpand(game->Root()->children[Move(1)]->children[Move(1)]->children[Move(0)], 1);
-    MockExpand(game->Root()->children[Move(2)]->children[Move(2)], 1);
-    MockExpand(game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)], 1);
-    MockExpand(game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)], 1);
-    MockExpand(game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)]->children[Move(0)], 1);
+    MockExpand(game->Root()->Child(Move(1))->Child(Move(1)), 1);
+    MockExpand(game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)), 1);
+    MockExpand(game->Root()->Child(Move(2))->Child(Move(2)), 1);
+    MockExpand(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0)), 1);
+    MockExpand(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)), 1);
+    MockExpand(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1);
 
     // Expect that root and ply2child0 are non-terminal.
     CheckNonTerminal(game->Root());
-    CheckNonTerminal(game->Root()->children[Move(0)]->children[Move(0)]);
+    CheckNonTerminal(game->Root()->Child(Move(0))->Child(Move(0)));
 
     // Make ply2child0 a mate-in-1 (M1) and backpropagate.
-    game->Root()->children[Move(0)]->children[Move(0)]->terminalValue = TerminalValue::MateIn<1>();
+    game->Root()->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { MOVE_NONE, game->Root()},
-        { Move(0), game->Root()->children[Move(0)] },
-        { Move(0), game->Root()->children[Move(0)]->children[Move(0)] }});
-    CheckMateN(game->Root()->children[Move(0)]->children[Move(0)], 1);
-    CheckOpponentMateN(game->Root()->children[Move(0)], 1);
+        { game->Root()},
+        { game->Root()->Child(Move(0)) },
+        { game->Root()->Child(Move(0))->Child(Move(0)) }});
+    CheckMateN(game->Root()->Child(Move(0))->Child(Move(0)), 1);
+    CheckOpponentMateN(game->Root()->Child(Move(0)), 1);
     CheckNonTerminal(game->Root());
 
     // Make ply2child1 a draw.
-    game->Root()->children[Move(0)]->children[Move(1)]->terminalValue = TerminalValue::Draw();
-    CheckDraw(game->Root()->children[Move(0)]->children[Move(1)]);
+    game->Root()->Child(Move(0))->Child(Move(1))->terminalValue = TerminalValue::Draw();
+    CheckDraw(game->Root()->Child(Move(0))->Child(Move(1)));
 
     // Make ply2child5 a mate-in-2 (M2) and backpropagate.
-    game->Root()->children[Move(1)]->children[Move(1)]->children[Move(0)]->children[Move(0)]->terminalValue = TerminalValue::MateIn<1>();
+    game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { MOVE_NONE, game->Root()},
-        { Move(1), game->Root()->children[Move(1)] },
-        { Move(1), game->Root()->children[Move(1)]->children[Move(1)] },
-        { Move(0), game->Root()->children[Move(1)]->children[Move(1)]->children[Move(0)] },
-        { Move(0), game->Root()->children[Move(1)]->children[Move(1)]->children[Move(0)]->children[Move(0)] }});
-    CheckMateN(game->Root()->children[Move(1)]->children[Move(1)]->children[Move(0)]->children[Move(0)], 1);
-    CheckOpponentMateN(game->Root()->children[Move(1)]->children[Move(1)]->children[Move(0)], 1);
-    CheckMateN(game->Root()->children[Move(1)]->children[Move(1)], 2);
-    CheckOpponentMateN(game->Root()->children[Move(1)], 2);
+        { game->Root()},
+        { game->Root()->Child(Move(1)) },
+        { game->Root()->Child(Move(1))->Child(Move(1)) },
+        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)) },
+        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)) }});
+    CheckMateN(game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)), 1);
+    CheckOpponentMateN(game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)), 1);
+    CheckMateN(game->Root()->Child(Move(1))->Child(Move(1)), 2);
+    CheckOpponentMateN(game->Root()->Child(Move(1)), 2);
     CheckNonTerminal(game->Root());
 
     // Make ply2child8 a mate-in-3 (M3) and backpropagate.
     // This should cause the root to get recognized as a mate-in-4 (M4).
-    game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)]->children[Move(0)]->children[Move(0)]->terminalValue = TerminalValue::MateIn<1>();
+    game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { MOVE_NONE, game->Root()},
-        { Move(2), game->Root()->children[Move(2)] },
-        { Move(2), game->Root()->children[Move(2)]->children[Move(2)] },
-        { Move(0), game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)] },
-        { Move(0), game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)] },
-        { Move(0), game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)]->children[Move(0)] },
-        { Move(0), game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)]->children[Move(0)]->children[Move(0)] }});
-    CheckMateN(game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)]->children[Move(0)]->children[Move(0)], 1);
-    CheckOpponentMateN(game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)]->children[Move(0)], 1);
-    CheckMateN(game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)]->children[Move(0)], 2);
-    CheckOpponentMateN(game->Root()->children[Move(2)]->children[Move(2)]->children[Move(0)], 2);
-    CheckMateN(game->Root()->children[Move(2)]->children[Move(2)], 3);
-    CheckOpponentMateN(game->Root()->children[Move(2)], 3);
+        { game->Root()},
+        { game->Root()->Child(Move(2)) },
+        { game->Root()->Child(Move(2))->Child(Move(2)) },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0)) },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)) },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)) },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)) }});
+    CheckMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1);
+    CheckOpponentMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1);
+    CheckMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)), 2);
+    CheckOpponentMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0)), 2);
+    CheckMateN(game->Root()->Child(Move(2))->Child(Move(2)), 3);
+    CheckOpponentMateN(game->Root()->Child(Move(2)), 3);
     CheckMateN(game->Root(), 4);
 
     game->PruneAll();
@@ -304,8 +314,8 @@ TEST(Mcts, TwofoldRepetition)
     Node* node = game->Root();
     for (Move move : moves)
     {
-        nodes.emplace_back(new Node(1.f));
-        node = node->children[move] = nodes.back();
+        nodes.push_back(new Node(move, 1.f));
+        node = node->firstChild = nodes.back();
     }
 
     // Apply the moves and evaluate the 2-repetition as a draw using the

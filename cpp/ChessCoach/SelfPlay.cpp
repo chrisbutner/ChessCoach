@@ -203,6 +203,18 @@ float Node::Value() const
     return (valueSum / visitCount);
 }
 
+Node* Node::Child(Move move)
+{
+    for (Node& child : *this)
+    {
+        if (child.move == move)
+        {
+            return &child;
+        }
+    }
+    return nullptr;
+}
+
 int Node::CountChildren() const
 {
     return std::distance(begin(), end());

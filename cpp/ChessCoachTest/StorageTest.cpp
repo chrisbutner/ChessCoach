@@ -10,9 +10,12 @@
 
 void ApplyMove(SelfPlayGame& game, Move move)
 {
-    Node* child = new Node(0.f);
-    child->visitCount++;
-    game.Root()->children[move] = child;
+    Node* child = new Node(move, 0.f);
+    game.Root()->firstChild = child;
+    for (Node* node = game.Root(); node != nullptr; node = node->firstChild)
+    {
+        node->visitCount++;
+    }
     game.StoreSearchStatistics();
     game.ApplyMoveWithRootAndHistory(move, child);
 }

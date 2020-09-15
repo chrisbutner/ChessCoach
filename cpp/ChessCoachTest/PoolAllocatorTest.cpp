@@ -44,7 +44,7 @@ TEST(PoolAllocator, Node)
     // Create all nodes, expect the allocator to create new blocks as needed.
     for (int i = 0; i < itemCount; i++)
     {
-        Node* node = new Node(0.f);
+        Node* node = new Node(MOVE_NONE, 0.f);
         EXPECT_NE(node, nullptr); // Just use the return value, expect std::bad_alloc on failure anyway.
     }
 

@@ -1,3 +1,19 @@
+TODO - current
+- (PERF2) Write a unit test that allocates multiple layers of nodes, deletes, allocates, etc., and ensures that allocations are still in order (pool logic)
+	- also can point last sibling at root and unrecurse deletion
+- (PERF3) Double threads for uniform (only hitting 50% util) but check again on real networks
+
+- test _byteswap_uint64 on linux
+- FlipBoard unit test
+- need to re-test UCI preserving subtrees after changes
+- perf test UCI before/after all the changes
+
+- dumb - I'm flipping each history plane independently - should they be in sync with current plane?
+	- A/B supervised test run
+
+TODO - knowledge distillation
+- prototype, quantify improvement to self-play game generation (selfplay generation) vs. quality loss (supervised data)
+
 TODO - next
 - get back to training encoder too after confirmed working
 - try wrap main engine loop with @tf.function too?
@@ -59,6 +75,10 @@ Self-play performance
 - try distilling to a smaller network for self-play predictions
 - TensorRT may be the best bet, even without int8 - see if it's worth the mess, maybe revisit dual-booting
 
+Dev performance
+- try make loading prediction network lazy
+- try make game loading lazy (matching the window, reaping as it moves)
+
 UCI (#2)
 - try to increase in-thread parallelism without sacrificing STS strength
 	- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
@@ -109,10 +129,6 @@ UCI (#3)
 		- test with M1 position with M1 prior artifically set low for ply 0
 		- also strength-test
 	- forced draw propagation if it'll help
-- implement endgame tablebases (for UCI; self-play could be dangerous, needs more thought)
-	- see if we can reuse stockfish probing
-	- for self-play, definitely don't cut games short, play it out
-	- need it to make mistakes in the endgame to learn, best play isn't enough - need noise or temperature
 - implement worthwhile options (work out hash, TT vs. prediction cache)
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
@@ -123,6 +139,10 @@ Scalability
 
 Deployment
 - installers, instructions, progress indicators, error handling, etc.
+
+Publishing
+- write-ups
+- website - game-in-10, one at a time, people can watch, comments shown for each move
 
 Low priority
 - see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
@@ -139,3 +159,6 @@ Won't do
 - Richer UCI features like multiPV
 - GUI for play/debug, only UCI debug commands
 - CPU optimization - not measurable enough while GPU-dominated
+- endgame tablebases (e.g. leveraging Stockfish probing code)
+	- UCI: not interesting enough, others can add if going for pure strength
+	- Training: complicated, scope too large - self-play needs to make mistakes to learn imbalances

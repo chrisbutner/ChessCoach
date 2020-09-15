@@ -57,6 +57,11 @@ public:
         return Square(static_cast<int>(square) ^ FlipSquareMask[color]);
     }
 
+    static Bitboard FlipBoard(Bitboard board)
+    {
+        return _byteswap_uint64(board);
+    }
+
     constexpr static float FlipValue(Color toPlay, float value)
     {
         return (toPlay == WHITE) ? value : FlipValue(value);
@@ -78,16 +83,9 @@ public:
     constexpr const static int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
     constexpr const static int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
 
-    // TODO: Later optimization idea to benchmark: could allocate one extra plane,
-    // let the -1s go in without branching, then pass [1] reinterpreted to consumers
-    const static int NO_PLANE = -1;
-    const static int InputPiecePlaneCount = 12;
+    constexpr const static INetwork::PackedPlane FillPlanePacked[COLOR_NB] = { 0, static_cast<int64_t>(0xFFFFFFFFFFFFFFFFULL) };
 
-    constexpr static int ImagePiecePlane[PIECE_NB] =
-    {
-        NO_PLANE, 0, 1, 2, 3, 4, 5, NO_PLANE,
-        NO_PLANE, 6, 7, 8, 9, 10, 11, NO_PLANE,
-    };
+    const static int NO_PLANE = -1;
 
     // UnderpromotionPlane[Piece - KNIGHT][to - from - NORTH_WEST]
     constexpr static int UnderpromotionPlane[3][3] =
@@ -143,7 +141,7 @@ public:
 private:
 
     void GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, const Position& position) const;
-    void FillPlane(INetwork::Plane& plane, float value) const;
+    void FillPlane(INetwork::PackedPlane& plane, bool value) const;
     Key Rotate(Key key, unsigned int distance) const;
 
 protected:

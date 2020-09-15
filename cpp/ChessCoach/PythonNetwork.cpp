@@ -83,9 +83,9 @@ void PythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* valu
     PythonContext context;
 
     // Make the predict call.
-    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
+    npy_intp imageDims[2]{ batchSize, InputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
+        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
     PyCallAssert(pythonImages);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction, pythonImages, nullptr);
@@ -123,9 +123,9 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     PythonContext context;
 
     // Make the predict call.
-    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
+    npy_intp imageDims[2]{ batchSize, InputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
+        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
     PyCallAssert(pythonImages);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_predictCommentaryBatchFunction, pythonImages, nullptr);
@@ -159,9 +159,9 @@ void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSi
     PyObject* pythonStep = PyLong_FromLong(step);
     PyCallAssert(pythonStep);
 
-    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
+    npy_intp imageDims[2]{ batchSize, InputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
+        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
     PyCallAssert(pythonImages);
 
     npy_intp valueDims[1]{ batchSize };
@@ -214,9 +214,9 @@ void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* i
     PyObject* pythonStep = PyLong_FromLong(step);
     PyCallAssert(pythonStep);
 
-    npy_intp imageDims[4]{ batchSize, InputPlaneCount, BoardSide, BoardSide };
+    npy_intp imageDims[2]{ batchSize, InputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_FLOAT32, images);
+        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
     PyCallAssert(pythonImages);
 
     // Pack the strings contiguously.
