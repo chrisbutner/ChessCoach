@@ -59,7 +59,11 @@ public:
 
     static Bitboard FlipBoard(Bitboard board)
     {
+#ifdef CHESSCOACH_WINDOWS
         return _byteswap_uint64(board);
+#else
+        return __builtin_bswap64(board);
+#endif
     }
 
     constexpr static float FlipValue(Color toPlay, float value)

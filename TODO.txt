@@ -1,13 +1,4 @@
 TODO - current
-- (PERF2) Write a unit test that allocates multiple layers of nodes, deletes, allocates, etc., and ensures that allocations are still in order (pool logic)
-	- also can point last sibling at root and unrecurse deletion
-- (PERF3) Double threads for uniform (only hitting 50% util) but check again on real networks
-
-- test _byteswap_uint64 on linux
-- FlipBoard unit test
-- need to re-test UCI preserving subtrees after changes
-- perf test UCI before/after all the changes
-
 - dumb - I'm flipping each history plane independently - should they be in sync with current plane?
 	- A/B supervised test run
 
@@ -102,6 +93,7 @@ CPU+GPU integration performance:
 	  like double-buffer games? might just be equivalent to doubling threads though. seem to be
 	  limited by Node memory use now. anyway, think about it.
 - buffer fstreams for windows
+- for Nodes can point last sibling at root and unrecurse deletion (sacrificing breadth-at-once)
 
 Code quality
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
@@ -153,6 +145,9 @@ Revisit
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
 - any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 	- while not full hit rate should be higher? add some new metrics
+
+Bugs
+- Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 
 Won't do
 - TPUs or mixed mode (focus is on single desktop, GTX 1080 compatibility)

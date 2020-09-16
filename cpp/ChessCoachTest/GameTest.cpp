@@ -39,3 +39,24 @@ TEST(Game, Flip)
         EXPECT_EQ(Game::FlipPiece[BLACK][blackPieces[i]], whitePieces[i]);
     }
 }
+
+TEST(Game, FlipBoard)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    // Flip the board and flip back.
+    Game startingPosition;
+    Position position = startingPosition.DebugPosition();
+    Bitboard whitePawns = position.pieces(WHITE, PAWN);
+    Bitboard flipWhitePawns1 = Game::FlipBoard(whitePawns);
+    Bitboard flipWhitePawns2 = Game::FlipBoard(flipWhitePawns1);
+    EXPECT_NE(whitePawns, flipWhitePawns1);
+    EXPECT_EQ(whitePawns, flipWhitePawns2);
+
+    // Do the Stockfish debug flip, expect the same except colors reversed.
+    Bitboard flipBlackPawns = Game::FlipBoard(position.pieces(BLACK, PAWN));
+    position.flip();
+    Bitboard debugFlipWhitePawns = position.pieces(WHITE, PAWN);
+    EXPECT_EQ(flipBlackPawns, debugFlipWhitePawns);
+}

@@ -353,13 +353,13 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
             _selfPlayWorker->DebugGame(0, &game, nullptr, nullptr, nullptr);
 
             Node* root = game->Root();
-            for (auto& [move, child] : root->children)
+            for (const Node& child : *root)
             {
-                std::cout << Pgn::San(game->DebugPosition(), move, true /* showCheckmate */)
-                    << " prior=" << child->prior
-                    << " value=" << child->Value()
-                    << " ucb=" << _selfPlayWorker->CalculateUcbScore(root, child)
-                    << " visits=" << (child->visitCount + child->visitingCount)
+                std::cout << Pgn::San(game->DebugPosition(), child.move, true /* showCheckmate */)
+                    << " prior=" << child.prior
+                    << " value=" << child.Value()
+                    << " ucb=" << _selfPlayWorker->CalculateUcbScore(root, &child)
+                    << " visits=" << (child.visitCount + child.visitingCount)
                     << std::endl;
             }
         }
