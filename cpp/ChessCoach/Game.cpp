@@ -144,13 +144,13 @@ Game& Game::operator=(Game&& other) noexcept
 
 Game::~Game()
 {
-    // This is only safe because Game StateInfos are pooled, so it's safe to access pointers after "deleting".
     StateInfo* current = _currentState;
     while (current != _parentState)
     {
         assert(current);
-        FreeState(current);
+        StateInfo* free = current;
         current = current->previous;
+        FreeState(free);
     }
 }
 

@@ -622,7 +622,7 @@ SavedGame SelfPlayGame::Save() const
     return SavedGame(Result(), _history, _mctsValues, _childVisits);
 }
 
-void SelfPlayGame::PruneExcept(Node* root, const Node* except)
+void SelfPlayGame::PruneExcept(Node* root, Node*& except)
 {
     if (!root)
     {
@@ -633,15 +633,16 @@ void SelfPlayGame::PruneExcept(Node* root, const Node* except)
     assert(_root != root);
     assert(_root == except);
 
-    // This is only safe because Nodes are pooled, so it's safe to access pointers after "deleting".
-    for (Node& child : *root)
-    {
-        if (&child != except)
-        {
-            PruneAllInternal(&child);
-        }
-    }
-    delete root;
+    // Minimize fragmentation by cloning "except" and pruning the original.
+    _root = new Node(*except);
+    _root->nextSibling = nullptr;
+
+    // Don't let "except"'s descendants get pruned when the original is deleted.
+    except->firstChild = nullptr;
+
+    // Prune, then update the caller's "except" pointer (now deleted) to the clone.
+    PruneAllInternal(root);
+    except = _root;
 }
 
 void SelfPlayGame::PruneAll()
@@ -657,14 +658,22 @@ void SelfPlayGame::PruneAll()
     _root = nullptr;
 }
 
-void SelfPlayGame::PruneAllInternal(Node* root)
+// Delete siblings contiguously. For now they'll still end up reversed in the PoolAllocator
+// but if benchmarking ends up better later, a "recycling" staging area can be used to correct.
+void SelfPlayGame::PruneAllInternal(Node* node)
 {
-    // This is only safe because Nodes are pooled, so it's safe to access pointers after "deleting".
-    for (Node& child : *root)
+    Node* parent = node;
+    while (parent)
     {
-        PruneAllInternal(&child);
+        if (parent->firstChild) PruneAllInternal(parent->firstChild);
+        parent = parent->nextSibling;
     }
-    delete root;
+    while (node)
+    {
+        Node* prune = node;
+        node = node->nextSibling;
+        delete prune;
+    }
 }
 
 void SelfPlayGame::UpdateSearchRootPly()

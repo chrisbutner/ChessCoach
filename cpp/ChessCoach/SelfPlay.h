@@ -254,7 +254,7 @@ public:
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
-    void PruneExcept(Node* root, const Node* except);
+    void PruneExcept(Node* root, Node*& except);
     void PruneAll();
     void UpdateSearchRootPly();
 
