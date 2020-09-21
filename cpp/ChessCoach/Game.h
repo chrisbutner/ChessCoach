@@ -144,6 +144,7 @@ public:
 
 private:
 
+    void Free();
     void GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, const Position& position) const;
     void FillPlane(INetwork::PackedPlane& plane, bool value) const;
     Key Rotate(Key key, unsigned int distance) const;

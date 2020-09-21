@@ -104,6 +104,9 @@ Game& Game::operator=(const Game& other)
 {
     assert(&other != this);
 
+    // Free existing allocations before assigning.
+    Free();
+
     _position = other._position;
     _parentState = other._currentState; // Don't delete the parent game's states.
     _currentState = other._currentState;
@@ -130,6 +133,9 @@ Game& Game::operator=(Game&& other) noexcept
 {
     assert(&other != this);
 
+    // Free existing allocations before assigning.
+    Free();
+
     _position = other._position;
     _parentState = other._parentState;
     _currentState = other._currentState;
@@ -144,14 +150,7 @@ Game& Game::operator=(Game&& other) noexcept
 
 Game::~Game()
 {
-    StateInfo* current = _currentState;
-    while (current != _parentState)
-    {
-        assert(current);
-        StateInfo* free = current;
-        current = current->previous;
-        FreeState(free);
-    }
+    Free();
 }
 
 Color Game::ToPlay() const
@@ -290,6 +289,25 @@ float Game::StockfishEvaluation() const
     const Value centipawns = Eval::evaluate(_position);
     const float probability = CentipawnsToProbability(static_cast<float>(centipawns));
     return probability;
+}
+
+void Game::Free()
+{
+    // Delete any states allocated purely in this game branch, but not any in the parent
+    // (i.e. when created by copy constructor/copy assignment and _parentState is not null).
+    StateInfo* current = _currentState;
+    while (current != _parentState)
+    {
+        assert(current);
+        StateInfo* free = current;
+        current = current->previous;
+        FreeState(free);
+    }
+
+    _currentState = nullptr;
+    _parentState = nullptr;
+
+    // Nodes are freed outside of Game objects because they outlive the games through MCTS tree reuse.
 }
 
 void Game::GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, const Position& position) const

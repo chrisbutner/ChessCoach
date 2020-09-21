@@ -139,7 +139,7 @@ TEST(Mcts, NodeLeaks)
     SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
 
 // Allocations are only tracked with DEBUG.
-#ifdef DEBUG
+#ifdef _DEBUG
     auto [currentBefore, peakBefore] = Node::Allocator.DebugAllocations();
     EXPECT_EQ(currentBefore, 0);
     EXPECT_EQ(peakBefore, 0);
@@ -148,10 +148,36 @@ TEST(Mcts, NodeLeaks)
     PlayGame(selfPlayWorker, [](auto&) {});
 
 // Allocations are only tracked with DEBUG.
-#ifdef DEBUG
+#ifdef _DEBUG
     auto [currentAfter, peakAfter] = Node::Allocator.DebugAllocations();
     EXPECT_EQ(currentAfter, 0);
     EXPECT_GT(peakAfter, 0);
+#endif
+}
+
+TEST(Mcts, StateLeaks)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+
+    // Allocations are only tracked with DEBUG.
+#ifdef _DEBUG
+    auto [currentBefore, peakBefore] = Game::StateAllocator.DebugAllocations();
+#endif
+
+    PlayGame(selfPlayWorker, [](auto&) {});
+
+    // Clear the scratch game.
+    selfPlayWorker.DebugResetGame(0);
+
+    // Allocations are only tracked with DEBUG.
+#ifdef _DEBUG
+    auto [currentAfter, peakAfter] = Game::StateAllocator.DebugAllocations();
+    EXPECT_EQ(currentAfter, currentBefore);
+    EXPECT_GT(peakAfter, 0);
+    EXPECT_GE(peakAfter, peakBefore);
 #endif
 }
 

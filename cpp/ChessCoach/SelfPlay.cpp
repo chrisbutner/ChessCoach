@@ -1455,6 +1455,13 @@ SearchState& SelfPlayWorker::DebugSearchState()
     return _searchState;
 }
 
+// Doesn't try to clear or set up games appropriately, just resets allocations.
+void SelfPlayWorker::DebugResetGame(int index)
+{
+    _games[index] = SelfPlayGame();
+    _scratchGames[index] = SelfPlayGame();
+}
+
 void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
 {
     // Create the network on the worker thread (slow).

@@ -327,6 +327,7 @@ public:
     bool WorseThan(const Node* lhs, const Node* rhs) const;
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
     SearchState& DebugSearchState();
+    void DebugResetGame(int index);
 
     void Search(std::function<INetwork* ()> networkFactory);
     void WarmUpPredictions(INetwork* network, int batchSize);
