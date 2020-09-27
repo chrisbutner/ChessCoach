@@ -6,13 +6,13 @@ from transformer import Transformer
 from layers import Residual
 import os
 
-class ChessCoachModel:
+class ModelBuilder:
   
   board_side = 8
   input_planes_count = 101
   output_planes_count = 73
-  residual_count = 10
-  filter_count = 128
+  residual_count = 19
+  filter_count = 256
   attention_heads = 8
   dense_count = 256
   weight_decay = 1e-4
@@ -160,12 +160,16 @@ class ChessCoachModel:
     return tf.keras.Model(input, [value, mcts_value, policy, reply_policy, commentary_encoder])
 
   def build_student(self, config):
-    model = self.build(config, residual_count=4, filter_count=64, dense_count=128)
-    model = tf.keras.Model(model.input, [model.outputs[0], model.outputs[2]])
-    return model
+    return self.build(config, residual_count=8, filter_count=64, dense_count=128)
 
-  def subset_play(self, model):
+  def subset_train(self, model):
     return tf.keras.Model(model.input, model.outputs[:4])
+  
+  def subset_predict_teacher(self, model):
+    return tf.keras.Model(model.input, model.outputs[:4])
+
+  def subset_predict_student(self, model):
+    return tf.keras.Model(model.input, model.outputs[0:4:2])
 
   def subset_commentary_encoder(self, model):
     return tf.keras.Model(model.input, model.outputs[4:])

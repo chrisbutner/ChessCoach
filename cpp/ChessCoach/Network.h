@@ -12,6 +12,12 @@ constexpr static const float NETWORK_VALUE_WIN = 1.f;
 constexpr static const float NETWORK_VALUE_DRAW = 0.f;
 constexpr static const float NETWORK_VALUE_LOSS = -1.f;
 
+enum class NetworkType
+{
+    Teacher,
+    Student,
+};
+
 struct INetwork
 {
     static const int InputPreviousPositionCount = 7;
@@ -78,9 +84,9 @@ struct INetwork
 
     virtual void PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images) = 0;
-    virtual void TrainBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+    virtual void TrainBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
         OutputPlanes* policies, OutputPlanes* replyPolicies) = 0;
-    virtual void ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+    virtual void ValidateBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
         OutputPlanes* policies, OutputPlanes* replyPolicies) = 0;
     virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments) = 0;
     virtual void LogScalars(int step, int scalarCount, std::string* names, float* values) = 0;

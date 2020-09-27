@@ -22,7 +22,7 @@ public:
 private:
 
     void PlayGames(WorkCoordinator& workCoordinator, int gameCount);
-    void TrainNetwork(SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
+    void TrainNetwork(SelfPlayWorker& worker, INetwork* network, NetworkType networkType, int stepCount, int checkpoint);
     void TrainNetworkWithCommentary(SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
     Window CalculateWindow(const NetworkConfig& config, int totalGamesCount, int networkCount, int network);
 };
@@ -141,7 +141,7 @@ void ChessCoachTrain::TrainChessCoach()
 
         // Train the network.
         const int checkpoint = (n * config.Training.CheckpointInterval);
-        TrainNetwork(*selfPlayWorkers.front(), network.get(), config.Training.CheckpointInterval, checkpoint);
+        TrainNetwork(*selfPlayWorkers.front(), network.get(), NetworkType::Teacher, config.Training.CheckpointInterval, checkpoint);
 
         // Clear the prediction cache to prepare for the new network.
         if (gamesToPlay > 0)
@@ -162,11 +162,11 @@ void ChessCoachTrain::PlayGames(WorkCoordinator& workCoordinator, int gameCount)
     workCoordinator.WaitForWorkers();
 }
 
-void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
+void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* network, NetworkType networkType, int stepCount, int checkpoint)
 {
     std::cout << "Training..." << std::endl;
 
-    selfPlayWorker.TrainNetwork(network, stepCount, checkpoint);
+    selfPlayWorker.TrainNetwork(network, networkType, stepCount, checkpoint);
 }
 
 void ChessCoachTrain::TrainNetworkWithCommentary(SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)

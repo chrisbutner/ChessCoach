@@ -53,8 +53,10 @@ PythonNetwork::PythonNetwork()
 
     _predictBatchFunction = LoadFunction(module, "predict_batch");
     _predictCommentaryBatchFunction = LoadFunction(module, "predict_commentary_batch");
-    _trainBatchFunction = LoadFunction(module, "train_batch");
-    _validateBatchFunction = LoadFunction(module, "validate_batch");
+    _trainBatchTeacherFunction = LoadFunction(module, "train_batch_teacher");
+    _trainBatchStudentFunction = LoadFunction(module, "train_batch_student");
+    _validateBatchTeacherFunction = LoadFunction(module, "validate_batch_teacher");
+    _validateBatchStudentFunction = LoadFunction(module, "validate_batch_student");
     _trainCommentaryBatchFunction = LoadFunction(module, "train_commentary_batch");
     _logScalarsFunction = LoadFunction(module, "log_scalars");
     _loadNetworkFunction = LoadFunction(module, "load_network");
@@ -72,8 +74,10 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_loadNetworkFunction);
     Py_XDECREF(_logScalarsFunction);
     Py_XDECREF(_trainCommentaryBatchFunction);
-    Py_XDECREF(_validateBatchFunction);
-    Py_XDECREF(_trainBatchFunction);
+    Py_XDECREF(_validateBatchStudentFunction);
+    Py_XDECREF(_validateBatchTeacherFunction);
+    Py_XDECREF(_trainBatchStudentFunction);
+    Py_XDECREF(_trainBatchTeacherFunction);
     Py_XDECREF(_predictCommentaryBatchFunction);
     Py_XDECREF(_predictBatchFunction);
 }
@@ -195,16 +199,18 @@ void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSi
     Py_DECREF(pythonStep);
 }
 
-void PythonNetwork::TrainBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+void PythonNetwork::TrainBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
     OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch(_trainBatchFunction, step, batchSize, images, values, mctsValues, policies, replyPolicies);
+    TrainValidateBatch((networkType == NetworkType::Teacher) ? _trainBatchTeacherFunction : _trainBatchStudentFunction,
+        step, batchSize, images, values, mctsValues, policies, replyPolicies);
 }
 
-void PythonNetwork::ValidateBatch(int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
+void PythonNetwork::ValidateBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
     OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch(_validateBatchFunction, step, batchSize, images, values, mctsValues, policies, replyPolicies);
+    TrainValidateBatch((networkType == NetworkType::Teacher) ? _validateBatchTeacherFunction : _validateBatchStudentFunction,
+        step, batchSize, images, values, mctsValues, policies, replyPolicies);
 }
 
 void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments)

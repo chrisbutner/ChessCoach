@@ -4,35 +4,26 @@
 
 [network]
 
-training_network_name = "test"
-uci_network_name = "test"
+training_network_name = "supervised9"
+uci_network_name = "supervised9"
 
 [[networks]]
 
-    name = "test"
-
+    name = "supervised9"
+    
     [networks.training]
 
-    validation_interval = 10
-    checkpoint_interval = 500
-
-[[networks]]
-
-    name = "supervised8"
-
-    [networks.training]
-
-    steps = 63000
+    steps = 160_000
     num_games = 2_000_000
     games_path_training = "Games/Supervised"
 
-    window_size_start = 250_000
-    window_size_finish = 250_000
+    window_size_start = 2_000_000
+    window_size_finish = 2_000_000
 
     [networks.training.learning_rate_schedule]
 
-    steps = [0, 15_000, 30_000, 50_000]
-    rates = [1e-1, 1e-2, 1e-3, 1e-4]
+    steps = [0, 40_000, 80_000, 120_000]
+    rates = [2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5]
 
 [[networks]]
 
@@ -70,7 +61,7 @@ uci_network_name = "test"
 [training]
 
 architecture = "conv2d"
-batch_size = 2048
+batch_size = 512
 commentary_batch_size = 512
 steps = 1_400_000
 pgn_interval = 100
@@ -99,7 +90,7 @@ rates = [1e-1, 1e-2, 1e-3, 1e-4]
 [self_play]
 
 num_workers = 4
-prediction_batch_size = 128
+prediction_batch_size = 256
 
 num_sampling_moves = 30
 max_moves = 512

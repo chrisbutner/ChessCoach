@@ -307,8 +307,8 @@ public:
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
     void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset);
-    void TrainNetwork(INetwork* network, int stepCount, int checkpoint);
-    void ValidateNetwork(INetwork* network, int step);
+    void TrainNetwork(INetwork* network, NetworkType networkType, int stepCount, int checkpoint);
+    void ValidateNetwork(INetwork* network, NetworkType networkType, int step);
     void TrainNetworkWithCommentary(INetwork* network, int stepCount, int checkpoint);
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;

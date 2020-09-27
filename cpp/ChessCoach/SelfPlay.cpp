@@ -816,7 +816,7 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
     game.UpdateSearchRootPly();
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoint)
+void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, int stepCount, int checkpoint)
 {
     // Train for "stepCount" steps.
     auto startTrain = std::chrono::high_resolution_clock::now();
@@ -824,13 +824,13 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     for (int step = startStep; step <= checkpoint; step++)
     {
         TrainingBatch* batch = _storage->SampleBatch(GameType_Training);
-        network->TrainBatch(step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(),
+        network->TrainBatch(networkType, step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(),
             batch->mctsValues.data(), batch->policies.data(), batch->replyPolicies.data());
 
         // Validate the network every "ValidationInterval" steps.
         if ((step % _networkConfig->Training.ValidationInterval) == 0)
         {
-            ValidateNetwork(network, step);
+            ValidateNetwork(network, networkType, step);
         }
     }
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
@@ -849,13 +849,13 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, int stepCount, int checkpoi
     }
 }
 
-void SelfPlayWorker::ValidateNetwork(INetwork* network, int step)
+void SelfPlayWorker::ValidateNetwork(INetwork* network, NetworkType networkType, int step)
 {
     // Measure validation loss/accuracy using one batch.
     if (_storage->GamesPlayed(GameType_Validation) > 0)
     {
         TrainingBatch* validationBatch = _storage->SampleBatch(GameType_Validation);
-        network->ValidateBatch(step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(),
+        network->ValidateBatch(networkType, step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(),
             validationBatch->mctsValues.data(), validationBatch->policies.data(), validationBatch->replyPolicies.data());
     }
 }
