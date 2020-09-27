@@ -226,8 +226,6 @@ class Transformer(tf.keras.Model):
 
 # --- Training ---
 
-optimizer = tf.keras.optimizers.Adam() # TODO: TEMP
-
 def create_look_ahead_mask(size):
   mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
   return mask  # (seq_len, seq_len)
@@ -249,7 +247,7 @@ train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
     name='train_accuracy')
 
 @tf.function
-def train_step(encoder, decoder, inp, tar):
+def train_step(optimizer, encoder, decoder, inp, tar):
   train_loss.reset_states()
   train_accuracy.reset_states()
 
@@ -258,17 +256,13 @@ def train_step(encoder, decoder, inp, tar):
   
   look_ahead_mask = create_look_ahead_mask(tf.shape(tar_inp)[1])
 
-  # TODO: Temporarily only training decoder
-  
-  enc_output = encoder(inp)
   with tf.GradientTape() as tape:
-    #enc_output = encoder(inp)
+    enc_output = encoder(inp)
     predictions, _ = decoder(tar_inp, enc_output,
                                  True, look_ahead_mask)
     loss = loss_function(tar_real, predictions)
 
-  #trainable_variables = encoder.trainable_variables + decoder.trainable_variables
-  trainable_variables = decoder.trainable_variables
+  trainable_variables = encoder.trainable_variables + decoder.trainable_variables
   gradients = tape.gradient(loss, trainable_variables)    
   optimizer.apply_gradients(zip(gradients, trainable_variables))
   

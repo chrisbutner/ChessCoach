@@ -359,6 +359,12 @@ class TeacherNetwork(Network):
   def __init__(self, name):
     super().__init__("teacher", name)
 
+    # Set up the commentary optimizer in advance, for use with GradientTape in transformer.py.
+    commentary_learning_rate = get_commentary_learning_rate(config.training_network["learning_rate_schedule"], 0)
+    self.commentary_optimizer = tf.keras.optimizers.SGD(
+      learning_rate=commentary_learning_rate,
+      momentum=config.training_network["momentum"])
+
   # The teacher network also deals with commentary.
   def save(self, step):
     # Even if no commentary training has happened yet, save a fresh decoder, etc. at least.
@@ -458,6 +464,10 @@ def get_learning_rate(schedule, step):
       break
   return rate
 
+def get_commentary_learning_rate(schedule, step):
+  ratio = config.training_network["commentary_batch_size"] / config.training_network["batch_size"]
+  return ratio * get_learning_rate(schedule, step)
+
 def predict_batch(images):
   images = tf.constant(images)
   value, policy = networks.student.predict_batch(images)
@@ -549,22 +559,22 @@ def validate_batch_student(step, images, values, mcts_values, policies, reply_po
 
 def train_commentary_batch(step, images, comments):
   networks.teacher.ensure_commentary()
-  
-  # TODO: Set LR if adam->SGD_momentum
-  #learning_rate = get_learning_rate(config.training_network["learning_rate_schedule"], step)
-  #K.set_value(commentary_optimizer.lr, learning_rate)
+
+  commentary_learning_rate = get_commentary_learning_rate(config.training_network["learning_rate_schedule"], step)
+  K.set_value(networks.teacher.commentary_optimizer.lr, commentary_learning_rate)
 
   do_log_training = ((step % config.training_network["validation_interval"]) == 0)
   comments = [f"{ModelBuilder.token_start} {c.decode('utf-8')} {ModelBuilder.token_end}" for c in comments]
   comments = networks.teacher.commentary_tokenizer.texts_to_sequences(comments)
   comments = tf.keras.preprocessing.sequence.pad_sequences(comments, padding="post")
   losses = transformer.train_step(
+    networks.teacher.commentary_optimizer,
     networks.teacher.model_commentary_encoder.model,
     networks.teacher.model_commentary_decoder.model,
     images,
     comments)
   if do_log_training:
-    log_training_commentary("training", networks.teacher.tensorboard_writer_training, step, losses)
+    log_training_commentary("training", networks.teacher.tensorboard_writer_training, step, losses, networks.teacher.model_commentary_decoder.model)
 
 def log_scalars(step, names, values):
   # Somewhat arbitrary but log to teacher/training.
@@ -590,16 +600,13 @@ def log_training(type, writer, step, losses, model):
     log_weights(model)
     writer.flush()
 
-def log_training_commentary(type, writer, step, losses):
+def log_training_commentary(type, writer, step, losses, model):
   log(f"Loss: {losses[0]:.4f}, Accuracy: {losses[1]:.4f} ({type})")
-  # TODO: log commentary training to tensorboard
-  # with writer.as_default():
-  #   tf.summary.experimental.set_step(step)
-  #   if should_log_graph(step):
-  #     tf.summary.trace_export("model")
-  #   log_loss_accuracy(losses)
-  #   log_weights()
-  #   writer.flush()
+  with writer.as_default():
+    tf.summary.experimental.set_step(step)
+    log_loss_accuracy_commentary(losses)
+    log_weights(model)
+    writer.flush()
 
 def log_loss_accuracy(losses):
   # Fix losses: only total includes loss weighting.
@@ -616,6 +623,12 @@ def log_loss_accuracy(losses):
   with tf.name_scope("accuracy"):
     tf.summary.scalar("policy accuracy", losses[5])
     tf.summary.scalar("reply policy accuracy", losses[6])
+
+def log_loss_accuracy_commentary(losses):
+  with tf.name_scope("loss"):
+    tf.summary.scalar("commentary loss", losses[0])
+  with tf.name_scope("accuracy"):
+    tf.summary.scalar("commentary accuracy", losses[1])
 
 def log_weights(model):
   for layer in model.layers:

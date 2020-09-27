@@ -62,7 +62,7 @@ uci_network_name = "supervised9"
 
 architecture = "conv2d"
 batch_size = 512
-commentary_batch_size = 512
+commentary_batch_size = 256
 steps = 1_400_000
 pgn_interval = 100
 validation_interval = 100

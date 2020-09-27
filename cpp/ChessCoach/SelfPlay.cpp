@@ -787,13 +787,18 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
         const Move move = moves[i];
         Node* root = game.Root();
 
+        // The root may be null after taking the "else" branch below (child not explored)
+        // on a previous iteration.
         Node* newRoot = nullptr;
-        for (Node& child : *root)
+        if (root)
         {
-            if (move == child.move)
+            for (Node& child : *root)
             {
-                newRoot = &child;
-                break;
+                if (move == child.move)
+                {
+                    newRoot = &child;
+                    break;
+                }
             }
         }
 

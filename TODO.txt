@@ -1,6 +1,6 @@
 TODO - next
-- clean up commentary TODOs, tensorboard, etc.
 - properly set up schedule in C++, split teacher vs. student saving/step management
+	- save teacher/student separately OR save one after full cycle
 - investigate self-play (student) MCTS time - seems to be double expected, 30 vs. 15, for 4*256
 
 TODO - knowledge distillation
