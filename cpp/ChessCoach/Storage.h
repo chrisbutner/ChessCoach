@@ -16,17 +16,6 @@
 #include "ReplayBuffer.h"
 #include "Pipeline.h"
 
-enum GameType
-{
-    GameType_Training,
-    GameType_Validation,
-
-    GameType_Count,
-};
-
-constexpr const char* GameTypeNames[GameType_Count] = { "Training", "Validation" };
-static_assert(GameType_Count == 2);
-
 class Storage
 {
 private:
@@ -53,7 +42,7 @@ private:
 public:
 
     Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
-    Storage(const NetworkConfig& networkConfig,
+    Storage(const NetworkConfig& networkConfig, const std::filesystem::path& gamesSupervisedPath,
         const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesValidationPath,
         const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath);
 

@@ -16,7 +16,6 @@ public:
     SavedGame& AddGame(SavedGame&& game);
     int GameCount() const;
     bool SampleBatch(TrainingBatch& batch) const;
-    const SavedGame& SampleGame() const;
 
 private:
 

@@ -28,6 +28,8 @@ void Basic(GameType gameType)
     std::filesystem::path tempPath = std::filesystem::temp_directory_path();
     
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
+    std::filesystem::path gamesSupervisedPath = tempPath / std::tmpnam(nullptr);
+    std::filesystem::create_directory(gamesSupervisedPath);
     std::filesystem::path gamesTrainingPath = tempPath / std::tmpnam(nullptr);
     std::filesystem::create_directory(gamesTrainingPath);
     std::filesystem::path gamesValidationPath = tempPath / std::tmpnam(nullptr);
@@ -38,7 +40,8 @@ void Basic(GameType gameType)
     std::filesystem::create_directory(networksPath);
 #pragma warning(default:4996) // Internal buffer is immediately consumed and detached.
 
-    std::unique_ptr<Storage> storage1(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage1(new Storage(Config::TrainingNetwork,
+        gamesSupervisedPath, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
 
     // Expect zero games in a new, temporary directory.
 
@@ -69,7 +72,8 @@ void Basic(GameType gameType)
 
     // Load a second Storage over the same directories and check that game loads.
 
-    std::unique_ptr<Storage> storage2(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage2(new Storage(Config::TrainingNetwork,
+        gamesSupervisedPath, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
     EXPECT_EQ(storage2->GamesPlayed(gameType), 1);
@@ -83,6 +87,8 @@ void SampleBatch(GameType gameType)
     std::filesystem::path tempPath = std::filesystem::temp_directory_path();
 
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
+    std::filesystem::path gamesSupervisedPath = tempPath / std::tmpnam(nullptr);
+    std::filesystem::create_directory(gamesSupervisedPath);
     std::filesystem::path gamesTrainingPath = tempPath / std::tmpnam(nullptr);
     std::filesystem::create_directory(gamesTrainingPath);
     std::filesystem::path gamesValidationPath = tempPath / std::tmpnam(nullptr);
@@ -94,7 +100,8 @@ void SampleBatch(GameType gameType)
 #pragma warning(default:4996) // Internal buffer is immediately consumed and detached.
 
     // Set up storage and a simple sampling window.
-    std::unique_ptr<Storage> storage1(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage1(new Storage(Config::TrainingNetwork,
+        gamesSupervisedPath, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
     storage1->SetWindow(gameType, { 0, 1, 1 });
 
     // Expect zero games in a new, temporary directory.
@@ -130,7 +137,8 @@ void SampleBatch(GameType gameType)
 
     // Load a second Storage over the same directories with a simple sampling window and check that the game loads.
 
-    std::unique_ptr<Storage> storage2(new Storage(Config::TrainingNetwork, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
+    std::unique_ptr<Storage> storage2(new Storage(Config::TrainingNetwork,
+        gamesSupervisedPath, gamesTrainingPath, gamesValidationPath, pgnsPath, networksPath));
     storage2->SetWindow(gameType, { 0, 1, 1 });
     storage2->LoadExistingGames(gameType, std::numeric_limits<int>::max());
 
@@ -149,6 +157,13 @@ void SampleBatch(GameType gameType)
     EXPECT_EQ(gameBlackToPlay.GeneratePolicy(saved.childVisits[1]), batch->policies[indexBlackToPlay]);
 }
 
+static_assert(GameType_Count == 3);
+
+TEST(Storage, Basic_Supervised)
+{
+    Basic(GameType_Supervised);
+}
+
 TEST(Storage, Basic_Training)
 {
     Basic(GameType_Training);
@@ -157,6 +172,11 @@ TEST(Storage, Basic_Training)
 TEST(Storage, Basic_Validation)
 {
     Basic(GameType_Validation);
+}
+
+TEST(Storage, SampleBatch_Supervised)
+{
+    SampleBatch(GameType_Supervised);
 }
 
 TEST(Storage, SampleBatch_Training)

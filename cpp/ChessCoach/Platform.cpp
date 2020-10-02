@@ -43,7 +43,7 @@ std::string Platform::GetEnvironmentVariable(const char* name)
 void Platform::SetEnvironmentVariable(const char* name, const char* value)
 {
 #ifdef CHESSCOACH_WINDOWS
-    _putenv_s(name, value);
+    ::_putenv_s(name, value);
 #else
     ::setenv(name, value, 1);
 #endif

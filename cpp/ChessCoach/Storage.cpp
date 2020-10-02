@@ -23,9 +23,11 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
 {
     const std::filesystem::path rootPath = Platform::UserDataPath();
 
-    static_assert(GameType_Count == 2);
+    static_assert(GameType_Count == 3);
+    _gamesPaths[GameType_Supervised] = MakePath(rootPath, networkConfig.Training.GamesPathSupervised);
     _gamesPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.GamesPathTraining);
     _gamesPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.GamesPathValidation);
+    _commentaryPaths[GameType_Supervised] = MakePath(rootPath, networkConfig.Training.CommentaryPathSupervised);
     _commentaryPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.CommentaryPathTraining);
     _commentaryPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.CommentaryPathValidation);
     _pgnsPath = MakePath(rootPath, miscConfig.Paths_Pgns);
@@ -36,7 +38,7 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
 }
 
 // Used for testing
-Storage::Storage(const NetworkConfig& networkConfig,
+Storage::Storage(const NetworkConfig& networkConfig, const std::filesystem::path& gamesSupervisedPath,
     const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesValidationPath,
     const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath)
     : _gameFileCount{}
@@ -47,19 +49,20 @@ Storage::Storage(const NetworkConfig& networkConfig,
     , _trainingCommentaryBatchSize(networkConfig.Training.CommentaryBatchSize)
     , _pgnInterval(networkConfig.Training.PgnInterval)
     , _vocabularyFilename() // TODO: Update with commentary unit tests
-    , _gamesPaths{ gamesTrainPath, gamesValidationPath }
-    , _commentaryPaths { "", "" } // TODO: Update with commentary unit tests
+    , _gamesPaths{ gamesSupervisedPath, gamesTrainPath, gamesValidationPath }
+    , _commentaryPaths { "", "", "" } // TODO: Update with commentary unit tests
     , _pgnsPath(pgnsPath)
     , _networksPath(networksPath)
 {
-    static_assert(GameType_Count == 2);
+    static_assert(GameType_Count == 3);
 
     InitializePipelines(networkConfig);
 }
 
 void Storage::InitializePipelines(const NetworkConfig& networkConfig)
 {
-    static_assert(GameType_Count == 2);
+    static_assert(GameType_Count == 3);
+    _pipelines[GameType_Supervised].Initialize(_games[GameType_Supervised], networkConfig.Training.BatchSize, 2 /* workerCount */);
     _pipelines[GameType_Training].Initialize(_games[GameType_Training], networkConfig.Training.BatchSize, 2 /* workerCount */);
     _pipelines[GameType_Validation].Initialize(_games[GameType_Validation], networkConfig.Training.BatchSize, 2 /* workerCount */);
 }
@@ -377,7 +380,7 @@ std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const
 void Storage::LoadCommentary()
 {
     const Preprocessor preprocessor;
-    const GameType gameType = GameType_Training; // TODO: Always training for now
+    const GameType gameType = GameType_Supervised; // TODO: Always supervised for now
 
     _commentary.games.clear();
     _commentary.comments.clear();

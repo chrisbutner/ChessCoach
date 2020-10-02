@@ -2,8 +2,52 @@
 #define _CONFIG_H_
 
 #include <string>
+#include <vector>
 
 #define SAMPLE_BATCH_FIXED 0
+
+enum StageType
+{
+    StageType_Play,
+    StageType_Train,
+    StageType_TrainCommentary,
+    StageType_Save,
+    StageType_StrengthTest,
+
+    StageType_Count,
+};
+constexpr const char* StageTypeNames[StageType_Count] = { "Play", "Train", "TrainCommentary", "Save", "StrengthTest" };
+static_assert(StageType_Count == 5);
+
+enum NetworkType
+{
+    NetworkType_Teacher,
+    NetworkType_Student,
+
+    NetworkType_Count,
+};
+constexpr const char* NetworkTypeNames[NetworkType_Count] = { "Teacher", "Student" };
+static_assert(NetworkType_Count == 2);
+
+enum GameType
+{
+    GameType_Supervised,
+    GameType_Training,
+    GameType_Validation,
+
+    GameType_Count,
+};
+constexpr const char* GameTypeNames[GameType_Count] = { "Supervised", "Training", "Validation" };
+static_assert(GameType_Count == 3);
+
+struct StageConfig
+{
+    StageType Stage;
+    NetworkType Target;
+    GameType Type;
+    int WindowSizeStart;
+    int WindowSizeFinish;
+};
 
 struct TrainingConfig
 {
@@ -15,11 +59,12 @@ struct TrainingConfig
     int CheckpointInterval;
     int StrengthTestInterval;
     int NumGames;
-    int WindowSizeStart;
-    int WindowSizeFinish;
+    std::vector<StageConfig> Stages;
     std::string VocabularyFilename;
+    std::string GamesPathSupervised;
     std::string GamesPathTraining;
     std::string GamesPathValidation;
+    std::string CommentaryPathSupervised;
     std::string CommentaryPathTraining;
     std::string CommentaryPathValidation;
 };

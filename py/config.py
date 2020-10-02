@@ -35,10 +35,14 @@ class Config(object):
     self.training_network = { **defaults, **overrides }
     self.training_network["name"] = training_network_name
 
-    # Build the learning rate schedule dictionary.
+    # Build the learning rate schedule dictionaries
     self.training_network["learning_rate_schedule"] = list(zip(
       self.training_network["learning_rate_schedule"]["steps"],
       self.training_network["learning_rate_schedule"]["rates"]))
+
+    self.training_network["commentary_learning_rate_schedule"] = list(zip(
+      self.training_network["commentary_learning_rate_schedule"]["steps"],
+      self.training_network["commentary_learning_rate_schedule"]["rates"]))
     
     # Also make some miscellaneous config available.
     self.misc = {
@@ -46,8 +50,10 @@ class Config(object):
     }
 
     # Root all paths.
+    self.training_network["games_path_supervised"] = self.make_path(self.training_network["games_path_supervised"])
     self.training_network["games_path_training"] = self.make_path(self.training_network["games_path_training"])
     self.training_network["games_path_validation"] = self.make_path(self.training_network["games_path_validation"])
+    self.training_network["commentary_path_supervised"] = self.make_path(self.training_network["commentary_path_supervised"])
     self.training_network["commentary_path_training"] = self.make_path(self.training_network["commentary_path_training"])
     self.training_network["commentary_path_validation"] = self.make_path(self.training_network["commentary_path_validation"])
     for key, value in self.misc["paths"].items():

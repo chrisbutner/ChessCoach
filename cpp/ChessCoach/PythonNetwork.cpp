@@ -51,16 +51,19 @@ PythonNetwork::PythonNetwork()
     PyObject* module = PyImport_ImportModule("network");
     PyCallAssert(module);
 
-    _predictBatchFunction = LoadFunction(module, "predict_batch");
+    _predictBatchFunction[NetworkType_Teacher] = LoadFunction(module, "predict_batch_teacher");
+    _predictBatchFunction[NetworkType_Student] = LoadFunction(module, "predict_batch_student");
     _predictCommentaryBatchFunction = LoadFunction(module, "predict_commentary_batch");
-    _trainBatchTeacherFunction = LoadFunction(module, "train_batch_teacher");
-    _trainBatchStudentFunction = LoadFunction(module, "train_batch_student");
-    _validateBatchTeacherFunction = LoadFunction(module, "validate_batch_teacher");
-    _validateBatchStudentFunction = LoadFunction(module, "validate_batch_student");
+    _trainBatchFunction[NetworkType_Teacher] = LoadFunction(module, "train_batch_teacher");
+    _trainBatchFunction[NetworkType_Student] = LoadFunction(module, "train_batch_student");
+    _validateBatchFunction[NetworkType_Teacher] = LoadFunction(module, "validate_batch_teacher");
+    _validateBatchFunction[NetworkType_Student] = LoadFunction(module, "validate_batch_student");
     _trainCommentaryBatchFunction = LoadFunction(module, "train_commentary_batch");
-    _logScalarsFunction = LoadFunction(module, "log_scalars");
+    _logScalarsFunction[NetworkType_Teacher] = LoadFunction(module, "log_scalars_teacher");
+    _logScalarsFunction[NetworkType_Student] = LoadFunction(module, "log_scalars_student");
     _loadNetworkFunction = LoadFunction(module, "load_network");
-    _saveNetworkFunction = LoadFunction(module, "save_network");
+    _saveNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_network_teacher");
+    _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
 
     Py_DECREF(module);
     Py_DECREF(pythonPath);
@@ -70,19 +73,22 @@ PythonNetwork::PythonNetwork()
 
 PythonNetwork::~PythonNetwork()
 {
-    Py_XDECREF(_saveNetworkFunction);
+    Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
+    Py_XDECREF(_saveNetworkFunction[NetworkType_Teacher]);
     Py_XDECREF(_loadNetworkFunction);
-    Py_XDECREF(_logScalarsFunction);
+    Py_XDECREF(_logScalarsFunction[NetworkType_Student]);
+    Py_XDECREF(_logScalarsFunction[NetworkType_Teacher]);
     Py_XDECREF(_trainCommentaryBatchFunction);
-    Py_XDECREF(_validateBatchStudentFunction);
-    Py_XDECREF(_validateBatchTeacherFunction);
-    Py_XDECREF(_trainBatchStudentFunction);
-    Py_XDECREF(_trainBatchTeacherFunction);
+    Py_XDECREF(_validateBatchFunction[NetworkType_Student]);
+    Py_XDECREF(_validateBatchFunction[NetworkType_Teacher]);
+    Py_XDECREF(_trainBatchFunction[NetworkType_Student]);
+    Py_XDECREF(_trainBatchFunction[NetworkType_Teacher]);
     Py_XDECREF(_predictCommentaryBatchFunction);
-    Py_XDECREF(_predictBatchFunction);
+    Py_XDECREF(_predictBatchFunction[NetworkType_Student]);
+    Py_XDECREF(_predictBatchFunction[NetworkType_Teacher]);
 }
 
-void PythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
+void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     PythonContext context;
 
@@ -92,7 +98,7 @@ void PythonNetwork::PredictBatch(int batchSize, InputPlanes* images, float* valu
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
     PyCallAssert(pythonImages);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction, pythonImages, nullptr);
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction[networkType], pythonImages, nullptr);
     PyCallAssert(tupleResult);
 
     // Extract the values.
@@ -202,15 +208,13 @@ void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSi
 void PythonNetwork::TrainBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
     OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch((networkType == NetworkType::Teacher) ? _trainBatchTeacherFunction : _trainBatchStudentFunction,
-        step, batchSize, images, values, mctsValues, policies, replyPolicies);
+    TrainValidateBatch(_trainBatchFunction[networkType], step, batchSize, images, values, mctsValues, policies, replyPolicies);
 }
 
 void PythonNetwork::ValidateBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
     OutputPlanes* policies, OutputPlanes* replyPolicies)
 {
-    TrainValidateBatch((networkType == NetworkType::Teacher) ? _validateBatchTeacherFunction : _validateBatchStudentFunction,
-        step, batchSize, images, values, mctsValues, policies, replyPolicies);
+    TrainValidateBatch(_validateBatchFunction[networkType], step, batchSize, images, values, mctsValues, policies, replyPolicies);
 }
 
 void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments)
@@ -257,7 +261,7 @@ void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* i
 
 }
 
-void PythonNetwork::LogScalars(int step, int scalarCount, std::string* names, float* values)
+void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values)
 {
     PythonContext context;
 
@@ -290,7 +294,7 @@ void PythonNetwork::LogScalars(int step, int scalarCount, std::string* names, fl
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
     PyCallAssert(pythonValues);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_logScalarsFunction, pythonStep, pythonNames, pythonValues, nullptr);
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_logScalarsFunction[networkType], pythonStep, pythonNames, pythonValues, nullptr);
     PyCallAssert(tupleResult);
 
     Py_DECREF(tupleResult);
@@ -312,14 +316,14 @@ void PythonNetwork::LoadNetwork(const char* networkName)
     Py_DECREF(pythonNetworkName);
 }
 
-void PythonNetwork::SaveNetwork(int checkpoint)
+void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
 {
     PythonContext context;
 
     PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
     PyCallAssert(pythonCheckpoint);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_saveNetworkFunction, pythonCheckpoint, nullptr);
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_saveNetworkFunction[networkType], pythonCheckpoint, nullptr);
     PyCallAssert(tupleResult);
 
     Py_DECREF(tupleResult);

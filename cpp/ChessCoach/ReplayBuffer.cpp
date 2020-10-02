@@ -92,13 +92,6 @@ bool ReplayBuffer::SampleBatch(TrainingBatch& batch) const
     return true;
 }
 
-const SavedGame& ReplayBuffer::SampleGame() const
-{
-    std::discrete_distribution gameDistribution = CalculateGameDistribution();
-    const int gameIndex = (gameDistribution(Random::Engine) + _window.TrainingGameMin);
-    return _games[gameIndex];
-}
-
 std::discrete_distribution<int> ReplayBuffer::CalculateGameDistribution() const
 {
     const int gameCount = static_cast<int>(_games.size());

@@ -307,9 +307,11 @@ public:
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
     void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset);
-    void TrainNetwork(INetwork* network, NetworkType networkType, int stepCount, int checkpoint);
+    void TrainNetwork(INetwork* network, NetworkType networkType, GameType gameType, int stepCount, int checkpoint);
     void ValidateNetwork(INetwork* network, NetworkType networkType, int step);
     void TrainNetworkWithCommentary(INetwork* network, int stepCount, int checkpoint);
+    void SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint);
+    void StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint);
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(int index);
@@ -330,7 +332,7 @@ public:
     void DebugResetGame(int index);
 
     void Search(std::function<INetwork* ()> networkFactory);
-    void WarmUpPredictions(INetwork* network, int batchSize);
+    void WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
     void SignalDebug(bool debug);
     void SignalPosition(std::string&& fen, std::vector<Move>&& moves);
     void SignalSearchGo(const TimeControl& timeControl);
@@ -339,8 +341,8 @@ public:
     void SignalComment();
     void WaitUntilReady();
 
-    void StrengthTest(INetwork* network, int step);
-    std::tuple<int, int, int> StrengthTest(INetwork* network, const std::filesystem::path& epdPath, int moveTimeMs);
+    void StrengthTest(INetwork* network, NetworkType networkType, int step);
+    std::tuple<int, int, int> StrengthTest(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs);
 
 private:
 
@@ -354,7 +356,7 @@ private:
     void SearchPlay(int mctsParallelism);
     void CommentOnPosition(INetwork* network);
 
-    int StrengthTestPosition(INetwork* network, const StrengthTestSpec& spec, int moveTimeMs);
+    int StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs);
     int JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move);
 
 private:

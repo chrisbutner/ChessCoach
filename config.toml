@@ -4,55 +4,175 @@
 
 [network]
 
-training_network_name = "supervised9"
-uci_network_name = "supervised9"
+training_network_name = "chesscoach1"
+uci_network_name = "chesscoach1"
 
 [[networks]]
 
-    name = "supervised9"
+    name = "chesscoach1"
     
     [networks.training]
 
-    steps = 160_000
-    num_games = 2_000_000
-    games_path_training = "Games/Supervised"
+    stages = [
+        # Self-play
+        { stage = "play", window_size_start = 12_500, window_size_finish = 1_000_000 },
 
-    window_size_start = 2_000_000
-    window_size_finish = 2_000_000
+        # Train supervised, self-play and commentary, teacher
+        { stage = "train", target = "teacher", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000 },
+        { stage = "train", target = "teacher", type = "training", window_size_start = 12_500, window_size_finish = 1_000_000 },
+        { stage = "train_commentary", target = "teacher", type = "supervised" },
+        { stage = "save", target = "teacher" },
 
-    [networks.training.learning_rate_schedule]
+        # Distill supervised and self-play to student
+        { stage = "train", target = "student", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000 },
+        { stage = "train", target = "student", type = "training", window_size_start = 12_500, window_size_finish = 1_000_000 },
+        { stage = "save", target = "student" },
 
-    steps = [0, 40_000, 80_000, 120_000]
-    rates = [2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5]
-
-[[networks]]
-
-    name = "selfplay3"
-
-    [networks.training]
-
-    validation_interval = 10
-    checkpoint_interval = 100
-    strength_test_interval = 500
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "teacher" },
+        { stage = "strength_test", target = "student" },
+    ]
 
 [[networks]]
 
-    name = "tiny1"
+    name = "supervised1"
+    
+    [networks.training]
+
+    stages = [
+        # Train supervised, teacher
+        { stage = "train", target = "teacher", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000 },
+        { stage = "save", target = "teacher" },
+
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "teacher" },
+    ]
+
+[[networks]]
+
+    name = "selfplay1"
 
     [networks.training]
 
-    batch_size = 512
-    commentary_batch_size = 128
+    stages = [
+        # Self-play
+        { stage = "play", window_size_start = 12_500, window_size_finish = 1_000_000 },
+
+        # Train self-play, teacher then distill
+        { stage = "train", target = "teacher", type = "training", window_size_start = 12_500, window_size_finish = 1_000_000 },
+        { stage = "save", target = "teacher" },
+        { stage = "train", target = "student", type = "training", window_size_start = 12_500, window_size_finish = 1_000_000 },
+        { stage = "save", target = "student" },
+
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "teacher" },
+        { stage = "strength_test", target = "student" },
+    ]
+
+[[networks]]
+
+    name = "commentary1"
+    
+    [networks.training]
+
+    stages = [
+        # Train commentary, teacher
+        { stage = "train_commentary", target = "teacher", type = "supervised" },
+        { stage = "save", target = "teacher" },
+    ]
+
+[[networks]]
+
+    name = "chesscoach-tiny1"
+
+    [networks.training]
+
     steps = 100
-    validation_interval = 10
-    checkpoint_interval = 10
-    strength_test_interval = 100
     num_games = 100
+
+    validation_interval = 50
+    checkpoint_interval = 50
+    strength_test_interval = 100
+
+    stages = [
+        # Self-play
+        { stage = "play", window_size_start = 50, window_size_finish = 100 },
+
+        # Train supervised, self-play and commentary, teacher
+        { stage = "train", target = "teacher", type = "supervised", window_size_start = 100, window_size_finish = 100 },
+        { stage = "train", target = "teacher", type = "training", window_size_start = 50, window_size_finish = 100 },
+        { stage = "train_commentary", target = "teacher", type = "supervised" },
+        { stage = "save", target = "teacher" },
+
+        # Distill supervised and self-play to student
+        { stage = "train", target = "student", type = "supervised", window_size_start = 100, window_size_finish = 100 },
+        { stage = "train", target = "student", type = "training", window_size_start = 50, window_size_finish = 100 },
+        { stage = "save", target = "student" },
+
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "teacher" },
+        { stage = "strength_test", target = "student" },
+    ]
 
     [networks.self_play]
 
-    num_workers = 1
-    prediction_batch_size = 10
+    num_workers = 2
+    prediction_batch_size = 50
+
+[[networks]]
+
+    name = "supervised-tiny1"
+    
+    [networks.training]
+
+    steps = 100
+    num_games = 100
+
+    validation_interval = 50
+    checkpoint_interval = 50
+    strength_test_interval = 100
+
+    stages = [
+        # Train supervised, teacher
+        { stage = "train", target = "teacher", type = "supervised", window_size_start = 100, window_size_finish = 100 },
+        { stage = "save", target = "teacher" },
+
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "teacher" },
+    ]
+
+[[networks]]
+
+    name = "selfplay-tiny1"
+
+    [networks.training]
+
+    steps = 100
+    num_games = 100
+
+    validation_interval = 50
+    checkpoint_interval = 50
+    strength_test_interval = 100
+
+    stages = [
+        # Self-play
+        { stage = "play", window_size_start = 50, window_size_finish = 100 },
+
+        # Train self-play, teacher then distill
+        { stage = "train", target = "teacher", type = "training", window_size_start = 50, window_size_finish = 100 },
+        { stage = "save", target = "teacher" },
+        { stage = "train", target = "student", type = "training", window_size_start = 50, window_size_finish = 100 },
+        { stage = "save", target = "student" },
+
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "teacher" },
+        { stage = "strength_test", target = "student" },
+    ]
+
+    [networks.self_play]
+
+    num_workers = 2
+    prediction_batch_size = 50
 
 ###############################################################################
 #     Default training and self-play configuration. Networks can override.    #
@@ -63,29 +183,35 @@ uci_network_name = "supervised9"
 architecture = "conv2d"
 batch_size = 512
 commentary_batch_size = 256
-steps = 1_400_000
+steps = 160_000
 pgn_interval = 100
 validation_interval = 100
 checkpoint_interval = 1000
 strength_test_interval = 5000
-num_games = 44_000_000
-window_size_start = 31_428
-window_size_finish = 1_000_000
+num_games = 2_000_000
 value_loss_weight = 0.1
 mcts_value_loss_weight = 0.015
 policy_loss_weight = 1.0
 reply_policy_loss_weight = 0.15
 momentum = 0.9
 vocabulary_filename = "vocabulary.txt"
+games_path_supervised = "Games/Supervised"
 games_path_training = "Games/Training"
 games_path_validation = "Games/Validation"
-commentary_path_training = "Data/Commentary"
+commentary_path_supervised = "Data/Commentary"
+commentary_path_training = ""
 commentary_path_validation = ""
+stages = []
 
 [training.learning_rate_schedule]
 
-steps = [0, 200_000, 600_000, 1_000_000]
-rates = [1e-1, 1e-2, 1e-3, 1e-4]
+steps = [0, 40_000, 80_000, 120_000]
+rates = [1e-2, 1e-3, 1e-4, 1e-5]
+
+[training.commentary_learning_rate_schedule]
+
+steps = [0, 40_000, 80_000, 120_000]
+rates = [1e-4, 1e-5, 1e-6, 1e-7]
 
 [self_play]
 

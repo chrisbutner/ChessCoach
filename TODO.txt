@@ -1,19 +1,25 @@
-TODO - next
-- properly set up schedule in C++, split teacher vs. student saving/step management
-	- save teacher/student separately OR save one after full cycle
-- investigate self-play (student) MCTS time - seems to be double expected, 30 vs. 15, for 4*256
+TODO - experiments
+- 3x rotation ablations
+- try undo 0.1 value loss weight for self-play, keep for supervised
+- probably move commentary training to before supervised/self-play
+- (reach out to lc0 guy in the 2 threads, ask about value loss)
 
 TODO - knowledge distillation
 - full testing - quantify improvement to self-play game generation (selfplay generation) vs. quality loss (supervised data)
+- try improve schedule, e.g.:
+	- measure the impact of each training type - maybe an artificial validation batch after each
+	- experiment with learning rates, e.g. commentary
+	- experiment with tighter interleaving of the rotation (detach from saving somehow)
 - try make the student a bit deeper - already hugely smaller with 64 vs. 256 filters
 - can make prediction-saving even lazier - only save/reload on-demand, not with each save
+- after enough schedule/etc. experiments, think about mixing in some stockfish eval again to speed up early training
 
-TODO - supervised general
-- increase window (e.g. 500k or 1mil)
-- make windows walk over learning rates, not full training length (e.g. each rate is an epoch)
+TODO - speed up feedback loop
+- do a slow run for a few days at least as a control
+- get playout cap randomization (Wu) in ASAP to get game numbers up (esp. for value) and compare
+- try vectorize/GPU UCT calcs
 
 TODO - next - commentary
-- get back to training encoder too after confirmed working
 - try wrap main engine loop with @tf.function too?
 - wrap <start>/<end> in graph mode - Transformer article
 - cull attention weight plumbing
@@ -34,11 +40,7 @@ TODO - text quality
 - try encode before + after positions - comment on the move, not the position
 	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
 
-TODO - major work
-- try out rotating supervised <-> commentary, compare to supervised alone for same step count
-
 TODO
-- try out triple rotation of supervised/selfplay/commentary
 - try out "sleeping" in the rotation - train random noise, different distributions
 - get to minimum-viable-selfplay
 	- get to piece value understanding ASAP, try out specific A/B positions
@@ -64,12 +66,12 @@ Once value loss is convering below 0.4 on big network:
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 
 Once self-play is actually learning fast enough, as a control, maybe try the following:
-- playout cap randomization (Wu)
 - forced playouts/pruning (Wu)
 - SE (lc0) or SE-ish-as-bias (Wu)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
 - try varying 800 sims in endgames/curriculum
 - try 1 vs. 8 value head filters again
+- like Wu/lc0, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
 
 Self-play performance
 - try shrink Node memory
@@ -142,7 +144,6 @@ Publishing
 - website - game-in-10, one at a time, people can watch, comments shown for each move
 
 Low priority
-- see if it's more efficient saving/loading checkpoints (measure save/load time, prediction time, disk savings)
 - structured binding, check all pairs
 
 Revisit

@@ -10,12 +10,60 @@
 
 using TomlValue = toml::basic_value<toml::discard_comments, std::map, std::vector>;
 
+const std::map<std::string, StageType> StageTypeLookup = {
+    { "play", StageType_Play },
+    { "train", StageType_Train },
+    { "train_commentary", StageType_TrainCommentary },
+    { "save", StageType_Save },
+    { "strength_test", StageType_StrengthTest },
+};
+
+const std::map<std::string, NetworkType> NetworkTypeLookup = {
+    { "teacher", NetworkType_Teacher },
+    { "student", NetworkType_Student },
+    { "", NetworkType_Count },
+};
+
+const std::map<std::string, GameType> GameTypeLookup = {
+    { "supervised", GameType_Supervised },
+    { "training", GameType_Training },
+    { "validation", GameType_Validation },
+    { "", GameType_Count },
+};
+static_assert(GameType_Count == 3);
+
+std::vector<StageConfig> ParseStages(const TomlValue& config)
+{
+    std::vector<TomlValue> configStages = config.as_array();
+    std::vector<StageConfig> stages(configStages.size());
+    
+    for (int i = 0; i < configStages.size(); i++)
+    {
+        // Required (find)
+        stages[i].Stage = StageTypeLookup.at(toml::find<std::string>(configStages[i], "stage"));
+
+        // Optional (find_or)
+        stages[i].Target = NetworkTypeLookup.at(toml::find_or<std::string>(configStages[i], "target", ""));
+        stages[i].Type = GameTypeLookup.at(toml::find_or<std::string>(configStages[i], "type", ""));
+        stages[i].WindowSizeStart = toml::find_or<int>(configStages[i], "window_size_start", 0);
+        stages[i].WindowSizeFinish = toml::find_or<int>(configStages[i], "window_size_finish", 0);
+    }
+
+    return stages;
+}
+
 struct DefaultPolicy
 {
     template <typename T>
     T Find(const TomlValue& config, const toml::key& key, const T& defaultValue) const
     {
         return toml::find<T>(config, key);
+    }
+
+    template <>
+    std::vector<StageConfig> Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& defaultValue) const
+    {
+        return ParseStages(config.at(key));
     }
 };
 
@@ -25,6 +73,23 @@ struct OverridePolicy
     T Find(const TomlValue& config, const toml::key& key, const T& defaultValue) const
     {
         return toml::find_or(config, key, defaultValue);
+    }
+
+    template <>
+    std::vector<StageConfig> Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& defaultValue) const
+    {
+        if (!config.is_table())
+        {
+            return defaultValue;
+        }
+
+        const auto& table = config.as_table();
+        if (table.count(key) == 0)
+        {
+            return defaultValue;
+        }
+
+        return ParseStages(config.at(key));
     }
 };
 
@@ -41,11 +106,14 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     training.CheckpointInterval = policy.template Find<int>(config, "checkpoint_interval", defaults.CheckpointInterval);
     training.StrengthTestInterval = policy.template Find<int>(config, "strength_test_interval", defaults.StrengthTestInterval);
     training.NumGames = policy.template Find<int>(config, "num_games", defaults.NumGames);
-    training.WindowSizeStart = policy.template Find<int>(config, "window_size_start", defaults.WindowSizeStart);
-    training.WindowSizeFinish = policy.template Find<int>(config, "window_size_finish", defaults.WindowSizeFinish);
+
+    training.Stages = policy.template Find<std::vector<StageConfig>>(config, "stages", defaults.Stages);
+
     training.VocabularyFilename = policy.template Find<std::string>(config, "vocabulary_filename", defaults.VocabularyFilename);
+    training.GamesPathSupervised = policy.template Find<std::string>(config, "games_path_supervised", defaults.GamesPathSupervised);
     training.GamesPathTraining = policy.template Find<std::string>(config, "games_path_training", defaults.GamesPathTraining);
     training.GamesPathValidation = policy.template Find<std::string>(config, "games_path_validation", defaults.GamesPathValidation);
+    training.CommentaryPathSupervised = policy.template Find<std::string>(config, "commentary_path_supervised", defaults.CommentaryPathSupervised);
     training.CommentaryPathTraining = policy.template Find<std::string>(config, "commentary_path_training", defaults.CommentaryPathTraining);
     training.CommentaryPathValidation = policy.template Find<std::string>(config, "commentary_path_validation", defaults.CommentaryPathValidation);
 
@@ -136,6 +204,10 @@ void Config::Initialize()
     {
         network->SelfPlay.NumWorkers = 1;
         network->SelfPlay.PredictionBatchSize = 1;
+        if (!network->Training.GamesPathSupervised.empty())
+        {
+            network->Training.GamesPathSupervised = "Debug/" + network->Training.GamesPathSupervised;
+        }
         if (!network->Training.GamesPathTraining.empty())
         {
             network->Training.GamesPathTraining = "Debug/" + network->Training.GamesPathTraining;

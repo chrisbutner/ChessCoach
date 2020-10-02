@@ -9,7 +9,7 @@ class ChessCoachStrengthTest : public ChessCoach
 {
 public:
 
-    ChessCoachStrengthTest(const std::filesystem::path& epdPath, int moveTimeMs, float slopeArg, float interceptArg);
+    ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs, float slopeArg, float interceptArg);
 
     void Initialize();
 
@@ -17,6 +17,7 @@ public:
 
 private:
 
+    NetworkType _networkType;
     std::filesystem::path _epdPath;
     int _moveTimeMs;
     float _slope;
@@ -25,6 +26,8 @@ private:
 
 int main(int argc, char* argv[])
 {
+    std::string network;
+    NetworkType networkType = NetworkType_Count;
     std::string epdPath;
     int moveTimeMs;
     float slope;
@@ -34,6 +37,7 @@ int main(int argc, char* argv[])
     {
         TCLAP::CmdLine cmd("ChessCoachStrengthTest: Tests ChessCoach using a provided .epd file to generate a score and optionally a rating", ' ', "0.9");
 
+        TCLAP::ValueArg<std::string> networkArg("n", "network", "Network to test, teacher or student", false /* req */, "student", "string");
         TCLAP::ValueArg<std::string> epdArg("e", "epd", "Path to the .epd file to test", true /* req */, "", "string");
         TCLAP::ValueArg<int> moveTimeArg("t", "movetime", "Move time per position (ms)", true /* req */, 0, "whole number");
         TCLAP::ValueArg<float> slopeArg("s", "slope", "Slope for linear rating calculation based on score", false /* req */, 0.f, "decimal");
@@ -44,8 +48,24 @@ int main(int argc, char* argv[])
         cmd.add(slopeArg);
         cmd.add(moveTimeArg);
         cmd.add(epdArg);
+        cmd.add(networkArg);
 
         cmd.parse(argc, argv);
+
+        network = networkArg.getValue();
+        if (network == "teacher")
+        {
+            networkType = NetworkType_Teacher;
+        }
+        else if (network == "student")
+        {
+            networkType = NetworkType_Student;
+        }
+        else
+        {
+            std::cerr << "Expected 'teacher' or 'student' for 'network argument" << std::endl;
+            return 1;
+        }
 
         epdPath = epdArg.getValue();
         moveTimeMs = moveTimeArg.getValue();
@@ -55,9 +75,10 @@ int main(int argc, char* argv[])
     catch (TCLAP::ArgException& e)
     {
         std::cerr << "Error: " << e.error() << " for argument " << e.argId() << std::endl;
+        return 1;
     }
 
-    ChessCoachStrengthTest strengthTest(epdPath, moveTimeMs, slope, intercept);
+    ChessCoachStrengthTest strengthTest(networkType, epdPath, moveTimeMs, slope, intercept);
 
     strengthTest.PrintExceptions();
     strengthTest.Initialize();
@@ -69,8 +90,9 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-ChessCoachStrengthTest::ChessCoachStrengthTest(const std::filesystem::path& epdPath, int moveTimeMs, float slope, float intercept)
-    : _epdPath(epdPath)
+ChessCoachStrengthTest::ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs, float slope, float intercept)
+    : _networkType(networkType)
+    , _epdPath(epdPath)
     , _moveTimeMs(moveTimeMs)
     , _slope(slope)
     , _intercept(intercept)
@@ -103,7 +125,7 @@ void ChessCoachStrengthTest::StrengthTest()
 
     const auto start = std::chrono::high_resolution_clock::now();
 
-    const auto [score, total, positions] = worker.StrengthTest(network.get(), _epdPath, _moveTimeMs);
+    const auto [score, total, positions] = worker.StrengthTest(network.get(), _networkType, _epdPath, _moveTimeMs);
 
     const float secondsExpected = std::chrono::duration<float>(std::chrono::duration<float, std::milli>(_moveTimeMs * positions)).count();
     const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();

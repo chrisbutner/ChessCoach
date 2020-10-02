@@ -721,6 +721,9 @@ void SelfPlayWorker::ResetGames()
 
 void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* network)
 {
+    // Use the faster student network for self-play.
+    const NetworkType networkType = NetworkType_Student;
+
     while (true)
     {
         // Wait until games are required.
@@ -750,7 +753,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
             }
 
             // GPU work
-            network->PredictBatch(_networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+            network->PredictBatch(networkType, _networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
         }
     }
 }
@@ -821,14 +824,14 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
     game.UpdateSearchRootPly();
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, int stepCount, int checkpoint)
+void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, GameType gameType, int stepCount, int checkpoint)
 {
     // Train for "stepCount" steps.
     auto startTrain = std::chrono::high_resolution_clock::now();
     const int startStep = (checkpoint - stepCount + 1);
     for (int step = startStep; step <= checkpoint; step++)
     {
-        TrainingBatch* batch = _storage->SampleBatch(GameType_Training);
+        TrainingBatch* batch = _storage->SampleBatch(gameType);
         network->TrainBatch(networkType, step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(),
             batch->mctsValues.data(), batch->policies.data(), batch->replyPolicies.data());
 
@@ -841,17 +844,6 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, in
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
     const float trainTimePerStep = (trainTime / stepCount);
     std::cout << "Trained steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
-
-    // Save the network and reload it for predictions.
-    network->SaveNetwork(checkpoint);
-
-    // Strength-test the engine every "StrengthTestInterval" steps.
-    assert(_networkConfig->Training.StrengthTestInterval > _networkConfig->Training.CheckpointInterval);
-    assert((_networkConfig->Training.StrengthTestInterval % _networkConfig->Training.CheckpointInterval) == 0);
-    if ((checkpoint % _networkConfig->Training.StrengthTestInterval) == 0)
-    {
-        StrengthTest(network, checkpoint);
-    }
 }
 
 void SelfPlayWorker::ValidateNetwork(INetwork* network, NetworkType networkType, int step)
@@ -884,12 +876,26 @@ void SelfPlayWorker::TrainNetworkWithCommentary(INetwork* network, int stepCount
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
     const float trainTimePerStep = (trainTime / stepCount);
     std::cout << "Trained commentary steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
-
-    // Save the network and reload it for predictions.
-    network->SaveNetwork(checkpoint);
 }
 
-void SelfPlayWorker::StrengthTest(INetwork* network, int step)
+void SelfPlayWorker::SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint)
+{
+    // Save the network to (a) allow stopping and resuming, and (b) give the prediction network the latest weights.
+    network->SaveNetwork(networkType, checkpoint);
+}
+
+void SelfPlayWorker::StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint)
+{
+    // Strength-test the engine every "StrengthTestInterval" steps.
+    assert(_networkConfig->Training.StrengthTestInterval >= _networkConfig->Training.CheckpointInterval);
+    assert((_networkConfig->Training.StrengthTestInterval % _networkConfig->Training.CheckpointInterval) == 0);
+    if ((checkpoint % _networkConfig->Training.StrengthTestInterval) == 0)
+    {
+        StrengthTest(network, networkType, checkpoint);
+    }
+}
+
+void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, int step)
 {
     std::map<std::string, int> testResults;
     std::map<std::string, int> testPositions;
@@ -911,7 +917,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
             const std::string testName = entry.path().stem().string();
             const int moveTimeMs = ((testName == stsName) ? 200 : 1000);
 
-            const auto [score, total, positions] = StrengthTest(network, entry.path(), moveTimeMs);
+            const auto [score, total, positions] = StrengthTest(network, networkType, entry.path(), moveTimeMs);
             testResults[testName] = score;
             testPositions[testName] = positions;
         }
@@ -934,38 +940,41 @@ void SelfPlayWorker::StrengthTest(INetwork* network, int step)
     names.emplace_back("strength/" + stsName + "_rating");
     values.push_back(stsRating);
     std::cout << names.back() << ": " << values.back() << std::endl;
-    network->LogScalars(step, static_cast<int>(names.size()), names.data(), values.data());
+    network->LogScalars(networkType, step, static_cast<int>(names.size()), names.data(), values.data());
 }
 
 // Returns (score, total, positions).
-std::tuple<int, int, int> SelfPlayWorker::StrengthTest(INetwork* network, const std::filesystem::path& epdPath, int moveTimeMs)
+std::tuple<int, int, int> SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs)
 {
     int score = 0;
     int total = 0;
     int positions = 0;
 
-    // Clear the prediction cache for consistent results.
+    // Make sure that the prediction cache is clear, for consistent results.
     PredictionCache::Instance.Clear();
 
     // Warm up the GIL and predictions.
-    WarmUpPredictions(network, 1);
+    WarmUpPredictions(network, networkType, 1);
 
     const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
     positions = static_cast<int>(specs.size());
 
     for (const StrengthTestSpec& spec : specs)
     {
-        const int points = StrengthTestPosition(network, spec, moveTimeMs);
+        const int points = StrengthTestPosition(network, networkType, spec, moveTimeMs);
         score += points;
         total += (spec.points.empty() ? 1 : *std::max_element(spec.points.begin(), spec.points.end()));
     }
+
+    // Clean up after ourselves, e.g. for self-play during training rotations.
+    PredictionCache::Instance.Clear();
 
     return std::tuple(score, total, positions);
 }
 
 // For best-move tests returns 1 if correct or 0 if incorrect.
 // For points/alternative tests returns N points or 0 if incorrect.
-int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSpec& spec, int moveTimeMs)
+int SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs)
 {
     // Set up the position.
     _games[0].PruneAll();
@@ -990,8 +999,9 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, const StrengthTestSp
     // Run the search.
     while (_searchState.searching)
     {
+        // Use the specified network type for predictions.
         SearchPlay(mctsParallelism);
-        network->PredictBatch(mctsParallelism, _images.data(), _values.data(), _policies.data());
+        network->PredictBatch(networkType, mctsParallelism, _images.data(), _values.data(), _policies.data());
 
         // TODO: Only check every N times
         CheckTimeControl();
@@ -1070,6 +1080,7 @@ void SelfPlayWorker::SaveToStorageAndLog(int index)
 {
     const SelfPlayGame& game = _games[index];
 
+    // Always save games to the GameType_Training store.
     const int ply = game.Ply();
     const float result = game.Result();
     const int gameNumber = _storage->AddGame(GameType_Training, game.Save());
@@ -1472,8 +1483,11 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     // Create the network on the worker thread (slow).
     std::unique_ptr<INetwork> network(networkFactory());
 
+    // Use the faster student network for UCI predictions.
+    const NetworkType networkType = NetworkType_Student;
+
     // Warm up the GIL and predictions.
-    WarmUpPredictions(network.get(), 1);
+    WarmUpPredictions(network.get(), networkType, 1);
 
     // Start with the position "updated" to the starting position in case of a naked "go" command.
     {
@@ -1530,7 +1544,7 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
             while (!_searchConfig.quit && !_searchConfig.positionUpdated && _searchState.searching)
             {
                 SearchPlay(mctsParallelism);
-                network->PredictBatch(mctsParallelism, _images.data(), _values.data(), _policies.data());
+                network->PredictBatch(networkType, mctsParallelism, _images.data(), _values.data(), _policies.data());
 
                 CheckPrintInfo();
 
@@ -1547,9 +1561,9 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     _games[0].PruneAll();
 }
 
-void SelfPlayWorker::WarmUpPredictions(INetwork* network, int batchSize)
+void SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize)
 {
-    network->PredictBatch(batchSize, _images.data(), _values.data(), _policies.data());
+    network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());
 }
 
 void SelfPlayWorker::UpdatePosition()

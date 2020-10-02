@@ -30,7 +30,7 @@ def test_train_commentary():
   network.load_network(network.config.training_network["name"])
   network.train_commentary_batch(step=1, images=images, comments=comments)
 
-def test_predict():
+def test_predict(teacher):
   import network
   from model import ModelBuilder
   import numpy
@@ -38,7 +38,8 @@ def test_predict():
   images = numpy.zeros((batch_size, ModelBuilder.input_planes_count), dtype=numpy.int64)
 
   network.load_network(network.config.training_network["name"])
-  network.predict_batch(images)
+  predict_batch_method = network.predict_batch_teacher if teacher else network.predict_batch_student
+  predict_batch_method(images)
 
 def test_predict_commentary():
   import network
@@ -50,17 +51,18 @@ def test_predict_commentary():
   network.load_network(network.config.training_network["name"])
   network.predict_commentary_batch(images)
 
-def create_save_training_network():
+def create_save_training_network(teacher):
   import network
   from model import ModelBuilder
 
-  network.networks.network_name = network.config.training_network["name"]
-  network.save_network(0)
+  network.networks.name = network.config.training_network["name"]
+  save_network_method = network.save_network_teacher if teacher else network.save_network_student
+  save_network_method(0)
 
 print("Starting Python-ChessCoach")
 test_train(teacher=True)
 #test_train(teacher=False)
 #test_train_commentary()
-#test_predict()
+#test_predict(teacher=True)
 #test_predict_commentary()
-#create_save_training_network()
+#create_save_training_network(teacher=True)

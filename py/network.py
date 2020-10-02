@@ -59,6 +59,9 @@ class Model:
   def load_weights(self, model_path):
     raise NotImplementedError
 
+  def predict_batch_raw(self, images):
+    raise NotImplementedError
+
   def predict_batch(self, images):
     raise NotImplementedError
 
@@ -75,7 +78,7 @@ class UniformModel(Model):
     self.latest_values = None
     self.latest_policies = None
 
-  def predict_batch(self, images):
+  def predict_batch_raw(self, images):
     # Check both separately because of threading
     values = self.latest_values
     policies = self.latest_policies
@@ -92,6 +95,9 @@ class UniformModel(Model):
       return values, policies, values, policies
     else:
       raise ValueError
+
+  def predict_batch(self, images):
+    return self.predict_batch_raw(images)
 
 class KerasModel(Model):
 
@@ -140,7 +146,7 @@ class TensorFlowModel(Model):
     model = tf.saved_model.load(model_path)
     return cls(model)
 
-  def predict_batch(self, images):
+  def predict_batch_raw(self, images):
     prediction = self.function(images)
     if self.num_outputs == 2:
       values, policies = \
@@ -152,8 +158,26 @@ class TensorFlowModel(Model):
         prediction[ModelBuilder.output_value_name], \
         prediction[ModelBuilder.output_policy_name], \
         prediction[ModelBuilder.output_mcts_value_name], \
-        prediction[ModelBuilder.output_reply_policy_name],
+        prediction[ModelBuilder.output_reply_policy_name]
       return values, mcts_values, policies, reply_policies
+    else:
+      raise ValueError
+
+  def predict_batch(self, images):
+    images = tf.constant(images)
+    prediction = self.function(images)
+    if self.num_outputs == 2:
+      values, policies = \
+        prediction[ModelBuilder.output_value_name], \
+        prediction[ModelBuilder.output_policy_name]
+      return values.numpy(), policies.numpy()
+    elif self.num_outputs == 4:
+      values, mcts_values, policies, reply_policies = \
+        prediction[ModelBuilder.output_value_name], \
+        prediction[ModelBuilder.output_policy_name], \
+        prediction[ModelBuilder.output_mcts_value_name], \
+        prediction[ModelBuilder.output_reply_policy_name]
+      return values.numpy(), mcts_values.numpy(), policies.numpy(), reply_policies.numpy()
     else:
       raise ValueError
 
@@ -187,6 +211,10 @@ class Network:
     tensorboard_network_path = os.path.join(config.misc["paths"]["tensorboard"], self._name, self.network_type)
     self.tensorboard_writer_training = tf.summary.create_file_writer(os.path.join(tensorboard_network_path, "training"))
     self.tensorboard_writer_validation = tf.summary.create_file_writer(os.path.join(tensorboard_network_path, "validation"))
+
+  def predict_batch_raw(self, images):
+    self.ensure_prediction()
+    return self.model_predict.predict_batch_raw(images)
 
   def predict_batch(self, images):
     self.ensure_prediction()
@@ -360,7 +388,7 @@ class TeacherNetwork(Network):
     super().__init__("teacher", name)
 
     # Set up the commentary optimizer in advance, for use with GradientTape in transformer.py.
-    commentary_learning_rate = get_commentary_learning_rate(config.training_network["learning_rate_schedule"], 0)
+    commentary_learning_rate = get_commentary_learning_rate(config.training_network["commentary_learning_rate_schedule"], 0)
     self.commentary_optimizer = tf.keras.optimizers.SGD(
       learning_rate=commentary_learning_rate,
       momentum=config.training_network["momentum"])
@@ -468,10 +496,13 @@ def get_commentary_learning_rate(schedule, step):
   ratio = config.training_network["commentary_batch_size"] / config.training_network["batch_size"]
   return ratio * get_learning_rate(schedule, step)
 
-def predict_batch(images):
-  images = tf.constant(images)
+def predict_batch_teacher(images):
+  value, policy, _, _ = networks.teacher.predict_batch(images)
+  return value, policy
+
+def predict_batch_student(images):
   value, policy = networks.student.predict_batch(images)
-  return numpy.array(value), numpy.array(policy)
+  return value, policy
 
 def predict_commentary_batch(images):
   # Predict commentary using training network for now.
@@ -520,7 +551,7 @@ def train_batch_student(step, images, values, mcts_values, policies, reply_polic
 
   # Get the soft targets from the teacher and combine with the provided hard targets.
   images = tf.constant(images)
-  _, teacher_policies, _, teacher_reply_policies = networks.teacher.predict_batch(images)
+  _, teacher_policies, _, teacher_reply_policies = networks.teacher.predict_batch_raw(images)
   policies = tf.stack([teacher_policies, policies])
   reply_policies = tf.stack([teacher_reply_policies, reply_policies])
 
@@ -547,7 +578,7 @@ def validate_batch_student(step, images, values, mcts_values, policies, reply_po
 
   # Get the soft targets from the teacher and combine with the provided hard targets.
   images = tf.constant(images)
-  _, teacher_policies, _, teacher_reply_policies = networks.teacher.predict_batch(images)
+  _, teacher_policies, _, teacher_reply_policies = networks.teacher.predict_batch_raw(images)
   policies = tf.stack([teacher_policies, policies])
   reply_policies = tf.stack([teacher_reply_policies, reply_policies])
 
@@ -560,7 +591,7 @@ def validate_batch_student(step, images, values, mcts_values, policies, reply_po
 def train_commentary_batch(step, images, comments):
   networks.teacher.ensure_commentary()
 
-  commentary_learning_rate = get_commentary_learning_rate(config.training_network["learning_rate_schedule"], step)
+  commentary_learning_rate = get_commentary_learning_rate(config.training_network["commentary_learning_rate_schedule"], step)
   K.set_value(networks.teacher.commentary_optimizer.lr, commentary_learning_rate)
 
   do_log_training = ((step % config.training_network["validation_interval"]) == 0)
@@ -576,9 +607,14 @@ def train_commentary_batch(step, images, comments):
   if do_log_training:
     log_training_commentary("training", networks.teacher.tensorboard_writer_training, step, losses, networks.teacher.model_commentary_decoder.model)
 
-def log_scalars(step, names, values):
-  # Somewhat arbitrary but log to teacher/training.
-  with networks.teacher.tensorboard_writer_training.as_default():
+def log_scalars_teacher(step, names, values):
+  log_scalars(networks.teacher, step, names, values)
+
+def log_scalars_student(step, names, values):
+  log_scalars(networks.student, step, names, values)
+
+def log_scalars(network, step, names, values):
+  with network.tensorboard_writer_validation.as_default():
     tf.summary.experimental.set_step(step)
     for name, value in zip(names, values):
       tf.summary.scalar(name.decode("utf-8"), value)
@@ -639,9 +675,14 @@ def log_weights(model):
 def load_network(network_name):
   networks.name = network_name
 
-def save_network(checkpoint):
-  networks.teacher.save(checkpoint)
-  networks.student.save(checkpoint)
+def save_network_teacher(checkpoint):
+  save_network(networks.teacher, checkpoint)
+  
+def save_network_student(checkpoint):
+  save_network(networks.student, checkpoint)
+
+def save_network(network, checkpoint):
+  network.save(checkpoint)
 
 config = Config()
 networks = Networks()

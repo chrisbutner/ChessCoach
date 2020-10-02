@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <algorithm>
+#include <functional>
 
 #include <Stockfish/bitboard.h>
 #include <Stockfish/position.h>
@@ -21,10 +22,14 @@ public:
 
 private:
 
-    void PlayGames(WorkCoordinator& workCoordinator, int gameCount);
-    void TrainNetwork(SelfPlayWorker& worker, INetwork* network, NetworkType networkType, int stepCount, int checkpoint);
-    void TrainNetworkWithCommentary(SelfPlayWorker& worker, INetwork* network, int stepCount, int checkpoint);
-    Window CalculateWindow(const NetworkConfig& config, int totalGamesCount, int networkCount, int network);
+    void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator);
+    void StageTrain(const StageConfig& stage, Storage& storage, Window trainingWindow,
+        SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint);
+    void StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint);
+    void StageSave(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
+    void StageStrengthTest(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
+
+    Window CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int totalGamesCount, int networkCount, int network);
 };
 
 int main(int argc, char* argv[])
@@ -46,7 +51,6 @@ void ChessCoachTrain::TrainChessCoach()
     const NetworkConfig& config = Config::TrainingNetwork;
     std::unique_ptr<INetwork> network(CreateNetwork(config));
     Storage storage(config, Config::Misc);
-    bool loadedGames = false;
 
     // Start self-play worker threads.
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
@@ -70,120 +74,150 @@ void ChessCoachTrain::TrainChessCoach()
     const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
     const int startingNetwork = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
 
-    // TODO: TEMP commentary training loop
-    for (int n = startingNetwork + 1; n <= networkCount; n++)
-    {
-        // Configure the replay buffer windows for position sampling (neural network training).
-        const Window trainingWindow = CalculateWindow(config, totalGamesCount, networkCount, n);
-        const Window fullWindow = { 0, std::numeric_limits<int>::max(), config.Training.BatchSize };
-        storage.SetWindow(GameType_Training, trainingWindow);
-        storage.SetWindow(GameType_Validation, fullWindow);
-        static_assert(GameType_Count == 2);
+    // Load games, up to the total number required for training.
+    // It can be dangerous to download partial games then self-play, since new games overwrite the ones not yet loaded,
+    // but self-play shouldn't need to generate any games beyond the total required for training anyway.
+    storage.LoadExistingGames(GameType_Supervised, totalGamesCount);
+    storage.LoadExistingGames(GameType_Training, totalGamesCount);
+    storage.LoadExistingGames(GameType_Validation, totalGamesCount);
 
-        //// Load games if we haven't yet.
-        //if (!loadedGames)
-        //{
-        //    loadedGames = true;
-        //    storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
-        //    storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
-        //}
-
-        //// Play self-play games (skip if we already have enough to train this checkpoint).
-        //const int gameTarget = trainingWindow.TrainingGameMax;
-        //const int gameCount = storage.GamesPlayed(GameType_Training);
-        //const int gamesToPlay = std::max(0, gameTarget - gameCount);
-        //if (gamesToPlay > 0)
-        //{
-        //    PlayGames(workCoordinator, gamesToPlay);
-        //}
-
-        //// Train the network.
-        //const int checkpoint = (n * config.Training.CheckpointInterval);
-        //TrainNetwork(*selfPlayWorkers.front(), network.get(), config.Training.CheckpointInterval, checkpoint);
-
-        const int checkpoint = (n * config.Training.CheckpointInterval);
-        TrainNetworkWithCommentary(*selfPlayWorkers.front(), network.get(), config.Training.CheckpointInterval, checkpoint);
-
-        //// Clear the prediction cache to prepare for the new network.
-        //if (gamesToPlay > 0)
-        //{
-        //    PredictionCache::Instance.PrintDebugInfo();
-        //    PredictionCache::Instance.Clear();
-        //}
-    }
+    // Always use full window for validation.
+    const int minimumSamplableGames = std::min(totalGamesCount, config.Training.BatchSize);
+    const Window fullWindow = { 0, std::numeric_limits<int>::max(), minimumSamplableGames };
+    storage.SetWindow(GameType_Validation, fullWindow);
 
     // Run through all checkpoints with n in [1, networkCount].
     for (int n = startingNetwork + 1; n <= networkCount; n++)
     {
-        // Configure the replay buffer windows for position sampling (neural network training).
-        const Window trainingWindow = CalculateWindow(config, totalGamesCount, networkCount, n);
-        const Window fullWindow = { 0, std::numeric_limits<int>::max(), config.Training.BatchSize };
-        storage.SetWindow(GameType_Training, trainingWindow);
-        storage.SetWindow(GameType_Validation, fullWindow);
-        static_assert(GameType_Count == 2);
-
-        // Load games if we haven't yet.
-        if (!loadedGames)
-        {
-            loadedGames = true;
-            storage.LoadExistingGames(GameType_Training, std::numeric_limits<int>::max());
-            storage.LoadExistingGames(GameType_Validation, std::numeric_limits<int>::max());
-        }
-
-        // Play self-play games (skip if we already have enough to train this checkpoint).
-        const int gameTarget = trainingWindow.TrainingGameMax;
-        const int gameCount = storage.GamesPlayed(GameType_Training);
-        const int gamesToPlay = std::max(0, gameTarget - gameCount);
-        if (gamesToPlay > 0)
-        {
-            PlayGames(workCoordinator, gamesToPlay);
-        }
-
-        // Train the network.
         const int checkpoint = (n * config.Training.CheckpointInterval);
-        TrainNetwork(*selfPlayWorkers.front(), network.get(), NetworkType::Teacher, config.Training.CheckpointInterval, checkpoint);
 
-        // Clear the prediction cache to prepare for the new network.
-        if (gamesToPlay > 0)
+        // Run through all stages in the checkpoint.
+        for (const StageConfig& stage : config.Training.Stages)
         {
-            PredictionCache::Instance.PrintDebugInfo();
-            PredictionCache::Instance.Clear();
+            // Calculate the replay buffer window for position sampling (network training).
+            const Window trainingWindow = CalculateWindow(config, stage, totalGamesCount, networkCount, n);
+            
+            // Run the stage.
+            switch (stage.Stage)
+            {
+            case StageType_Play:
+                StagePlay(stage, storage, trainingWindow, workCoordinator);
+                break;
+            case StageType_Train:
+                StageTrain(stage, storage, trainingWindow, *selfPlayWorkers.front(), network.get(),
+                    config.Training.CheckpointInterval, checkpoint);
+                break;
+            case StageType_TrainCommentary:
+                StageTrainCommentary(stage, *selfPlayWorkers.front(), network.get(),
+                    config.Training.CheckpointInterval, checkpoint);
+                break;
+            case StageType_Save:
+                StageSave(stage, *selfPlayWorkers.front(), network.get(), checkpoint);
+                break;
+            case StageType_StrengthTest:
+                StageStrengthTest(stage, *selfPlayWorkers.front(), network.get(), checkpoint);
+                break;
+            }
         }
     }
 }
 
-void ChessCoachTrain::PlayGames(WorkCoordinator& workCoordinator, int gameCount)
+void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator)
 {
-    std::cout << "Playing " << gameCount << " games..." << std::endl;
-    assert(gameCount > 0);
+    // Log the stage info in a consistent format.
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << trainingWindow.TrainingGameMin << " - "
+        << trainingWindow.TrainingGameMax << "]" << std::endl;
 
-    workCoordinator.ResetWorkItemsRemaining(gameCount);
+    // Always save games to the GameType_Training store.
+    const GameType gameType = GameType_Training;
 
+    // Need to play enough games to reach the training window maximum (skip if already enough).
+    const int gameTarget = trainingWindow.TrainingGameMax;
+    const int gameCount = storage.GamesPlayed(gameType);
+    const int gamesToPlay = std::max(0, gameTarget - gameCount);
+
+    std::cout << "Playing " << gamesToPlay << " games..." << std::endl;
+    if (gamesToPlay <= 0)
+    {
+        return;
+    }
+
+    // Play the games.
+    workCoordinator.ResetWorkItemsRemaining(gamesToPlay);
     workCoordinator.WaitForWorkers();
+
+    // Clear the prediction cache to prepare for the new network.
+    PredictionCache::Instance.PrintDebugInfo();
+    PredictionCache::Instance.Clear();
 }
 
-void ChessCoachTrain::TrainNetwork(SelfPlayWorker& selfPlayWorker, INetwork* network, NetworkType networkType, int stepCount, int checkpoint)
+void ChessCoachTrain::StageTrain(const StageConfig& stage, Storage& storage, Window trainingWindow,
+    SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
 {
+    // Log the stage info in a consistent format.
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "]["
+        << trainingWindow.TrainingGameMin << " - " << trainingWindow.TrainingGameMax << "]" << std::endl;
+
+    // Configure the replay buffer window for position sampling (network training).
+    storage.SetWindow(stage.Type, trainingWindow);
+
+    // Train the network.
     std::cout << "Training..." << std::endl;
-
-    selfPlayWorker.TrainNetwork(network, networkType, stepCount, checkpoint);
+    selfPlayWorker.TrainNetwork(network, stage.Target, stage.Type, stepCount, checkpoint);
 }
 
-void ChessCoachTrain::TrainNetworkWithCommentary(SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
+void ChessCoachTrain::StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
 {
-    std::cout << "Training commentary..." << std::endl;
+    // Log the stage info in a consistent format.
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "]" << std::endl;
 
+    // Only the teacher network supports commentary training.
+    assert(stage.Target == NetworkType_Teacher);
+    if (stage.Target != NetworkType_Teacher) throw std::runtime_error("Only the teacher network supports commentary training");
+
+    // Only supervised data supported in commentary training.
+    assert(stage.Type == GameType_Supervised);
+    if (stage.Type != GameType_Supervised) throw std::runtime_error("Only supervised data supported in commentary training");
+
+    // Train the main model and commentary decoder.
+    std::cout << "Training commentary..." << std::endl;
     selfPlayWorker.TrainNetworkWithCommentary(network, stepCount, checkpoint);
 }
 
-Window ChessCoachTrain::CalculateWindow(const NetworkConfig& config, int totalGamesCount, int networkCount, int network)
+void ChessCoachTrain::StageSave(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
 {
-    const int gamesPerNetworkAfterFirstWindow = ((totalGamesCount - config.Training.WindowSizeStart) / networkCount);
-    const int gameTarget = (config.Training.WindowSizeStart + ((network - 1) * gamesPerNetworkAfterFirstWindow));
-    const float t = (static_cast<float>(network - 1) / (networkCount - 1));
-    const int windowSize = static_cast<int>(config.Training.WindowSizeStart +
-        t * (config.Training.WindowSizeFinish - config.Training.WindowSizeStart));
+    // Log the stage info in a consistent format.
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "]" << std::endl;
+
+    // Save the network. It logs enough internally.
+    selfPlayWorker.SaveNetwork(network, stage.Target, checkpoint);
+}
+
+void ChessCoachTrain::StageStrengthTest(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
+{
+    // Log the stage info in a consistent format.
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "]" << std::endl;
+
+    // Potentially strength test the network, if the checkpoint is a multiple of the strength test interval.
+    selfPlayWorker.StrengthTestNetwork(network, stage.Target, checkpoint);
+}
+
+Window ChessCoachTrain::CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int totalGamesCount, int networkCount, int network)
+{
+    float t = 0.f;
+    int gameTarget = stageConfig.WindowSizeStart;
+
+    if (networkCount > 1)
+    {
+        const int gamesPerNetworkAfterFirstWindow = ((totalGamesCount - stageConfig.WindowSizeStart) / (networkCount - 1));
+        gameTarget = (stageConfig.WindowSizeStart + ((network - 1) * gamesPerNetworkAfterFirstWindow));
+        t = (static_cast<float>(network - 1) / (networkCount - 1));
+    }
+
+    const int windowSize = static_cast<int>(stageConfig.WindowSizeStart +
+        t * (stageConfig.WindowSizeFinish - stageConfig.WindowSizeStart));
+    const int minimumSamplableGames = std::min(gameTarget, config.Training.BatchSize);
 
     // Min is inclusive, max is exclusive, both 0-based.
-    return { std::max(0, gameTarget - windowSize), gameTarget, config.Training.BatchSize };
+    return { std::max(0, gameTarget - windowSize), gameTarget, minimumSamplableGames };
 }
