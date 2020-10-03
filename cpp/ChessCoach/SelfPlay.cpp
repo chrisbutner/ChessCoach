@@ -304,6 +304,8 @@ SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
     , _result(other._result)
 {
     assert(&other != this);
+
+    other._root = nullptr;
 }
 
 SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
@@ -322,6 +324,8 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
     _childVisits = std::move(other._childVisits);
     _history = std::move(other._history);
     _result = other._result;
+
+    other._root = nullptr;
 
     return *this;
 }
@@ -755,6 +759,12 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
             // GPU work
             network->PredictBatch(networkType, _networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
         }
+
+        // Clean up nodes.
+        for (int i = 0; i < _games.size(); i++)
+        {
+            _games[i].PruneAll();
+        }
     }
 }
 
@@ -1009,7 +1019,12 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkT
 
     // Pick a best move and judge points.
     const Node* bestMove = SelectMove(_games[0]);
-    return JudgeStrengthTestPosition(spec, bestMove->move);
+    const int points = JudgeStrengthTestPosition(spec, bestMove->move);
+
+    // Free nodes after strength testing (especially for the final position, for which there's no PruneAll/SetUpGame).
+    _games[0].PruneAll();
+
+    return points;
 }
 
 int SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move)
@@ -1553,6 +1568,8 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
 
                 UpdateSearch();
             }
+            // Don't free nodes here: leave them available for reuse/freeing with the next UpdatePosition(),
+            // and instead clean up below, when quitting.
             OnSearchFinished();
         }
     }
