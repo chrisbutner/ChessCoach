@@ -39,6 +39,9 @@ uci_network_name = "chesscoach1"
     
     [networks.training]
 
+    value_loss_weight = 0.1
+    mcts_value_loss_weight = 0.015
+
     stages = [
         # Train supervised, teacher
         { stage = "train", target = "teacher", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000 },
@@ -125,6 +128,9 @@ uci_network_name = "chesscoach1"
     
     [networks.training]
 
+    value_loss_weight = 0.1
+    mcts_value_loss_weight = 0.015
+
     steps = 100
     num_games = 100
 
@@ -189,8 +195,8 @@ validation_interval = 100
 checkpoint_interval = 1000
 strength_test_interval = 5000
 num_games = 2_000_000
-value_loss_weight = 0.1
-mcts_value_loss_weight = 0.015
+value_loss_weight = 1.0
+mcts_value_loss_weight = 0.15
 policy_loss_weight = 1.0
 reply_policy_loss_weight = 0.15
 momentum = 0.9
