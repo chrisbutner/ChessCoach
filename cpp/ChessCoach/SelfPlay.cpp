@@ -834,13 +834,15 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
     game.UpdateSearchRootPly();
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, GameType gameType, int stepCount, int checkpoint)
+void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, const std::vector<GameType>& gameTypes, int stepCount, int checkpoint)
 {
     // Train for "stepCount" steps.
     auto startTrain = std::chrono::high_resolution_clock::now();
     const int startStep = (checkpoint - stepCount + 1);
     for (int step = startStep; step <= checkpoint; step++)
     {
+        // Rotate through the specified game types.
+        const GameType gameType = gameTypes[step % gameTypes.size()];
         TrainingBatch* batch = _storage->SampleBatch(gameType);
         network->TrainBatch(networkType, step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(),
             batch->mctsValues.data(), batch->policies.data(), batch->replyPolicies.data());
@@ -927,7 +929,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
             const std::string testName = entry.path().stem().string();
             const int moveTimeMs = ((testName == stsName) ? 200 : 1000);
 
-            const auto [score, total, positions] = StrengthTest(network, networkType, entry.path(), moveTimeMs);
+            const auto [score, total, positions] = StrengthTestEpd(network, networkType, entry.path(), moveTimeMs);
             testResults[testName] = score;
             testPositions[testName] = positions;
         }
@@ -954,7 +956,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
 }
 
 // Returns (score, total, positions).
-std::tuple<int, int, int> SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs)
+std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs)
 {
     int score = 0;
     int total = 0;

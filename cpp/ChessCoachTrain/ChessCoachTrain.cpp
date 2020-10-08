@@ -2,13 +2,7 @@
 #include <thread>
 #include <algorithm>
 #include <functional>
-
-#include <Stockfish/bitboard.h>
-#include <Stockfish/position.h>
-#include <Stockfish/thread.h>
-#include <Stockfish/tt.h>
-#include <Stockfish/uci.h>
-#include <Stockfish/movegen.h>
+#include <numeric>
 
 #include <ChessCoach/ChessCoach.h>
 #include <ChessCoach/Threading.h>
@@ -23,13 +17,13 @@ public:
 private:
 
     void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator);
-    void StageTrain(const StageConfig& stage, Storage& storage, Window trainingWindow,
-        SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint);
+    void StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, const NetworkConfig& config, Storage& storage,
+        SelfPlayWorker& selfPlayWorker, INetwork* network, int networkCount, int n, int stepCount, int checkpoint);
     void StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint);
     void StageSave(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
     void StageStrengthTest(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
 
-    Window CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int totalGamesCount, int networkCount, int network);
+    Window CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int networkCount, int network);
 };
 
 int main(int argc, char* argv[])
@@ -70,19 +64,22 @@ void ChessCoachTrain::TrainChessCoach()
     workCoordinator.WaitForWorkers();
 
     // Plan full training and resume progress. If the network's step count isn't a multiple of the checkpoint interval, round down.
-    const int totalGamesCount = config.Training.NumGames;
     const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
     const int startingNetwork = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
 
-    // Load games, up to the total number required for training.
-    // It can be dangerous to download partial games then self-play, since new games overwrite the ones not yet loaded,
+    // Load games up to the highest number required for training. It's always safe to try load more games, but this can
+    // make e.g. tiny runs load way too many games, too slowly.
+    //
+    // It could be dangerous to download partial games then self-play, since new games overwrite the ones not yet loaded,
     // but self-play shouldn't need to generate any games beyond the total required for training anyway.
-    storage.LoadExistingGames(GameType_Supervised, totalGamesCount);
-    storage.LoadExistingGames(GameType_Training, totalGamesCount);
-    storage.LoadExistingGames(GameType_Validation, totalGamesCount);
+    const int maxNumGames = std::transform_reduce(config.Training.Stages.begin(), config.Training.Stages.end(),
+        0, [](int a, int b) { return std::max(a, b); }, [](const StageConfig& stage) { return stage.NumGames; });
+    storage.LoadExistingGames(GameType_Supervised, maxNumGames);
+    storage.LoadExistingGames(GameType_Training, maxNumGames);
+    storage.LoadExistingGames(GameType_Validation, maxNumGames);
 
     // Always use full window for validation.
-    const int minimumSamplableGames = std::min(totalGamesCount, config.Training.BatchSize);
+    const int minimumSamplableGames = std::min(maxNumGames, config.Training.BatchSize);
     const Window fullWindow = { 0, std::numeric_limits<int>::max(), minimumSamplableGames };
     storage.SetWindow(GameType_Validation, fullWindow);
 
@@ -92,31 +89,42 @@ void ChessCoachTrain::TrainChessCoach()
         const int checkpoint = (n * config.Training.CheckpointInterval);
 
         // Run through all stages in the checkpoint.
-        for (const StageConfig& stage : config.Training.Stages)
+        for (int i = 0; i < config.Training.Stages.size(); i++)
         {
-            // Calculate the replay buffer window for position sampling (network training).
-            const Window trainingWindow = CalculateWindow(config, stage, totalGamesCount, networkCount, n);
-            
             // Run the stage.
+            const StageConfig& stage = config.Training.Stages[i];
             switch (stage.Stage)
             {
             case StageType_Play:
+            {
+                // Calculate the replay buffer window for position sampling (network training)
+                // and play enough games to satisfy it.
+                const Window trainingWindow = CalculateWindow(config, stage, networkCount, n);
                 StagePlay(stage, storage, trainingWindow, workCoordinator);
                 break;
+            }
             case StageType_Train:
-                StageTrain(stage, storage, trainingWindow, *selfPlayWorkers.front(), network.get(),
-                    config.Training.CheckpointInterval, checkpoint);
+            {
+                StageTrain(config.Training.Stages, i, config, storage, *selfPlayWorkers.front(), network.get(),
+                    networkCount, n, config.Training.CheckpointInterval, checkpoint);
                 break;
+            }
             case StageType_TrainCommentary:
+            {
                 StageTrainCommentary(stage, *selfPlayWorkers.front(), network.get(),
                     config.Training.CheckpointInterval, checkpoint);
                 break;
+            }
             case StageType_Save:
+            {
                 StageSave(stage, *selfPlayWorkers.front(), network.get(), checkpoint);
                 break;
+            }
             case StageType_StrengthTest:
+            {
                 StageStrengthTest(stage, *selfPlayWorkers.front(), network.get(), checkpoint);
                 break;
+            }
             }
         }
     }
@@ -151,19 +159,41 @@ void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage
     PredictionCache::Instance.Clear();
 }
 
-void ChessCoachTrain::StageTrain(const StageConfig& stage, Storage& storage, Window trainingWindow,
-    SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
+void ChessCoachTrain::StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, const NetworkConfig& config, Storage& storage,
+    SelfPlayWorker& selfPlayWorker, INetwork* network, int networkCount, int n, int stepCount, int checkpoint)
 {
-    // Log the stage info in a consistent format.
-    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "]["
-        << trainingWindow.TrainingGameMin << " - " << trainingWindow.TrainingGameMax << "]" << std::endl;
+    const int first = stageIndex;
+    std::vector<GameType> gameTypes;
 
-    // Configure the replay buffer window for position sampling (network training).
-    storage.SetWindow(stage.Type, trainingWindow);
+    // Coalesce multiple adjacent "training" stages for the same target (e.g. "teacher" or "student")
+    // but potentially different types (e.g. "supervised" or "training") into a single rotation.
+    while ((stageIndex < stages.size()) &&
+        (stages[stageIndex].Stage == stages[first].Stage) &&
+        (stages[stageIndex].Target == stages[first].Target))
+    {
+        const StageConfig& stage = stages[stageIndex];
+        gameTypes.push_back(stage.Type);
+
+        // Calculate the replay buffer window for position sampling (network training).
+        // NOTE: Window settings for the same game type in a coalesced rotation must be the same (last will clobber).
+        const Window trainingWindow = CalculateWindow(config, stage, networkCount, n);
+
+        // Log the stage info in a consistent format (just use one line per game type).
+        std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "]["
+            << trainingWindow.TrainingGameMin << " - " << trainingWindow.TrainingGameMax << "]" << std::endl;
+
+        storage.SetWindow(stage.Type, trainingWindow);
+
+        // Skip past this stage in the outer training loop (mutable reference).
+        stageIndex++;
+    }
+
+    // The outer training loop will also increment the stageIndex, so correct for it.
+    stageIndex--;
 
     // Train the network.
     std::cout << "Training..." << std::endl;
-    selfPlayWorker.TrainNetwork(network, stage.Target, stage.Type, stepCount, checkpoint);
+    selfPlayWorker.TrainNetwork(network, stages[first].Target, gameTypes, stepCount, checkpoint);
 }
 
 void ChessCoachTrain::StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int stepCount, int checkpoint)
@@ -202,22 +232,24 @@ void ChessCoachTrain::StageStrengthTest(const StageConfig& stage, SelfPlayWorker
     selfPlayWorker.StrengthTestNetwork(network, stage.Target, checkpoint);
 }
 
-Window ChessCoachTrain::CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int totalGamesCount, int networkCount, int network)
+Window ChessCoachTrain::CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int networkCount, int network)
 {
-    float t = 0.f;
-    int gameTarget = stageConfig.WindowSizeStart;
+    // The starting window (subscript 0) mins at zero.
+    // The finishing window (subscript 1) maxes at totalGamesCount.
+    // Lerping the window min and max also lerps the window size correctly.
+    const int windowMin0 = 0;
+    const int windowMin1 = (stageConfig.NumGames - stageConfig.WindowSizeFinish);
+    const int windowMax0 = stageConfig.WindowSizeStart;
+    const int windowMax1 = stageConfig.NumGames;
 
-    if (networkCount > 1)
-    {
-        const int gamesPerNetworkAfterFirstWindow = ((totalGamesCount - stageConfig.WindowSizeStart) / (networkCount - 1));
-        gameTarget = (stageConfig.WindowSizeStart + ((network - 1) * gamesPerNetworkAfterFirstWindow));
-        t = (static_cast<float>(network - 1) / (networkCount - 1));
-    }
+    const float t = (networkCount > 1) ? 
+        (static_cast<float>(network - 1) / (networkCount - 1)) :
+        0.f;
 
-    const int windowSize = static_cast<int>(stageConfig.WindowSizeStart +
-        t * (stageConfig.WindowSizeFinish - stageConfig.WindowSizeStart));
-    const int minimumSamplableGames = std::min(gameTarget, config.Training.BatchSize);
+    const int windowMin = windowMin0 + static_cast<int>(t * (windowMin1 - windowMin0));
+    const int windowMax = windowMax0 + static_cast<int>(t * (windowMax1 - windowMax0));
+    const int minimumSamplableGames = std::min(windowMax, config.Training.BatchSize);
 
     // Min is inclusive, max is exclusive, both 0-based.
-    return { std::max(0, gameTarget - windowSize), gameTarget, minimumSamplableGames };
+    return { windowMin, windowMax, minimumSamplableGames };
 }

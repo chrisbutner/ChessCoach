@@ -47,6 +47,7 @@ std::vector<StageConfig> ParseStages(const TomlValue& config)
         stages[i].Type = GameTypeLookup.at(toml::find_or<std::string>(configStages[i], "type", ""));
         stages[i].WindowSizeStart = toml::find_or<int>(configStages[i], "window_size_start", 0);
         stages[i].WindowSizeFinish = toml::find_or<int>(configStages[i], "window_size_finish", 0);
+        stages[i].NumGames = toml::find_or<int>(configStages[i], "num_games", 0);
     }
 
     return stages;
@@ -105,7 +106,6 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     training.ValidationInterval = policy.template Find<int>(config, "validation_interval", defaults.ValidationInterval);
     training.CheckpointInterval = policy.template Find<int>(config, "checkpoint_interval", defaults.CheckpointInterval);
     training.StrengthTestInterval = policy.template Find<int>(config, "strength_test_interval", defaults.StrengthTestInterval);
-    training.NumGames = policy.template Find<int>(config, "num_games", defaults.NumGames);
 
     training.Stages = policy.template Find<std::vector<StageConfig>>(config, "stages", defaults.Stages);
 

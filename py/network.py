@@ -128,10 +128,10 @@ class KerasModel(Model):
   def train_batch(self, step, images, values, mcts_values, policies, reply_policies):
     learning_rate = get_learning_rate(config.training_network["learning_rate_schedule"], step)
     K.set_value(self.model.optimizer.lr, learning_rate)
-    return self.model.train_on_batch(images, [values, mcts_values, policies, reply_policies])
+    return self.model.train_on_batch(images, [values, mcts_values, policies, reply_policies], reset_metrics=False)
 
   def validate_batch(self, step, images, values, mcts_values, policies, reply_policies):
-    return self.model.test_on_batch(images, [values, mcts_values, policies, reply_policies])
+    return self.model.test_on_batch(images, [values, mcts_values, policies, reply_policies], reset_metrics=False)
 
 class TensorFlowModel(Model):
 
@@ -635,6 +635,9 @@ def log_training(type, writer, step, losses, model):
     log_loss_accuracy(losses)
     log_weights(model)
     writer.flush()
+
+  # Reset metrics after "validation_interval" training batches or 1 validation batch, ready for the next "validation_interval"/1.
+  model.reset_metrics()
 
 def log_training_commentary(type, writer, step, losses, model):
   log(f"Loss: {losses[0]:.4f}, Accuracy: {losses[1]:.4f} ({type})")

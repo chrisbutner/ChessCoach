@@ -125,7 +125,7 @@ void ChessCoachStrengthTest::StrengthTest()
 
     const auto start = std::chrono::high_resolution_clock::now();
 
-    const auto [score, total, positions] = worker.StrengthTest(network.get(), _networkType, _epdPath, _moveTimeMs);
+    const auto [score, total, positions] = worker.StrengthTestEpd(network.get(), _networkType, _epdPath, _moveTimeMs);
 
     const float secondsExpected = std::chrono::duration<float>(std::chrono::duration<float, std::milli>(_moveTimeMs * positions)).count();
     const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();

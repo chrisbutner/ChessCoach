@@ -47,6 +47,7 @@ struct StageConfig
     GameType Type;
     int WindowSizeStart;
     int WindowSizeFinish;
+    int NumGames;
 };
 
 struct TrainingConfig
@@ -58,7 +59,6 @@ struct TrainingConfig
     int ValidationInterval;
     int CheckpointInterval;
     int StrengthTestInterval;
-    int NumGames;
     std::vector<StageConfig> Stages;
     std::string VocabularyFilename;
     std::string GamesPathSupervised;
