@@ -388,8 +388,11 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     }
     else
     {
-        _root->visitCount = std::transform_reduce(_root->begin(), _root->end(),
-            0, std::plus<>(), [](const Node& node) { return node.visitCount; });
+        _root->visitCount = 0;
+        for (const Node& child : *_root)
+        {
+            _root->visitCount += child.visitCount;
+        }
     }
 }
 

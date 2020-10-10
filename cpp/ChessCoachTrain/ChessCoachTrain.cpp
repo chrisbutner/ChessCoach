@@ -72,8 +72,14 @@ void ChessCoachTrain::TrainChessCoach()
     //
     // It could be dangerous to download partial games then self-play, since new games overwrite the ones not yet loaded,
     // but self-play shouldn't need to generate any games beyond the total required for training anyway.
-    const int maxNumGames = std::transform_reduce(config.Training.Stages.begin(), config.Training.Stages.end(),
-        0, [](int a, int b) { return std::max(a, b); }, [](const StageConfig& stage) { return stage.NumGames; });
+    int maxNumGames = 0;
+    for (const StageConfig& stage : config.Training.Stages)
+    {
+        if (stage.NumGames > maxNumGames)
+        {
+            maxNumGames = stage.NumGames;
+        }
+    }
     storage.LoadExistingGames(GameType_Supervised, maxNumGames);
     storage.LoadExistingGames(GameType_Training, maxNumGames);
     storage.LoadExistingGames(GameType_Validation, maxNumGames);

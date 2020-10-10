@@ -60,13 +60,13 @@ struct DefaultPolicy
     {
         return toml::find<T>(config, key);
     }
-
-    template <>
-    std::vector<StageConfig> Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& defaultValue) const
-    {
-        return ParseStages(config.at(key));
-    }
 };
+
+template <>
+std::vector<StageConfig> DefaultPolicy::Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& defaultValue) const
+{
+    return ParseStages(config.at(key));
+}
 
 struct OverridePolicy
 {
@@ -75,24 +75,24 @@ struct OverridePolicy
     {
         return toml::find_or(config, key, defaultValue);
     }
-
-    template <>
-    std::vector<StageConfig> Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& defaultValue) const
-    {
-        if (!config.is_table())
-        {
-            return defaultValue;
-        }
-
-        const auto& table = config.as_table();
-        if (table.count(key) == 0)
-        {
-            return defaultValue;
-        }
-
-        return ParseStages(config.at(key));
-    }
 };
+
+template <>
+std::vector<StageConfig> OverridePolicy::Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& defaultValue) const
+{
+    if (!config.is_table())
+    {
+        return defaultValue;
+    }
+
+    const auto& table = config.as_table();
+    if (table.count(key) == 0)
+    {
+        return defaultValue;
+    }
+
+    return ParseStages(config.at(key));
+}
 
 template <typename Policy>
 TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, const TrainingConfig& defaults)

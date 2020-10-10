@@ -3,6 +3,9 @@ project('ChessCoach', 'cpp', version: '0.9.0', license: 'GPL3',
     'cpp_std=c++17',
   ])
 
+add_global_arguments('-lstdc++fs', language: 'cpp')
+add_global_link_arguments('-lstdc++fs', language: 'cpp')
+
 bindir = get_option('bindir')
 datadir = get_option('datadir')
 
