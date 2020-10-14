@@ -142,6 +142,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobufd.lib;$(SolutionDir)zlib\lib\zlibstaticd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>call $(SolutionDir)\postbuild.cmd $(SolutionDir) $(TargetDir)</Command>
@@ -161,6 +162,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobufd.lib;$(SolutionDir)zlib\lib\zlibstaticd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>call $(SolutionDir)\postbuild.cmd $(SolutionDir) $(TargetDir)</Command>
@@ -184,6 +186,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>call $(SolutionDir)\postbuild.cmd $(SolutionDir) $(TargetDir)</Command>
@@ -207,6 +210,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>call $(SolutionDir)\postbuild.cmd $(SolutionDir) $(TargetDir)</Command>
@@ -230,6 +234,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>call $(SolutionDir)\postbuild.cmd $(SolutionDir) $(TargetDir)</Command>
@@ -255,6 +260,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>call $(SolutionDir)\postbuild.cmd $(SolutionDir) $(TargetDir)</Command>

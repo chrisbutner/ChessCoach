@@ -100,29 +100,29 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <LibraryPath>$(SolutionDir)Lib\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoOpt|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoOpt|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -284,7 +284,7 @@
     <ClCompile Include="ChessCoach.cpp" />
     <ClCompile Include="Epd.cpp" />
     <ClCompile Include="Pgn.cpp" />
-    <ClCompile Include="Pipeline.cpp" />
+	<ClCompile Include="Pipeline.cpp" />
     <ClCompile Include="Platform.cpp" />
     <ClCompile Include="PoolAllocator.cpp" />
     <ClCompile Include="PredictionCache.cpp" />
@@ -296,12 +296,15 @@
     <ClCompile Include="SavedGame.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Storage.cpp" />
-    <ClCompile Include="ReplayBuffer.cpp" />
+	<ClCompile Include="ReplayBuffer.cpp" />
     <ClCompile Include="Threading.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\hunspell\hunspell.vcxproj">
       <Project>{450069ab-9f1f-4dab-afb0-80b044d7f82c}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\protobuf\protobuf.vcxproj">
+      <Project>{3fe4c01d-37eb-4af3-8fde-d92715ac6623}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Stockfish\Stockfish.vcxproj">
       <Project>{c90630fa-8861-415c-ab03-a4c44f1aa394}</Project>
@@ -311,7 +314,7 @@
     <ClInclude Include="ChessCoach.h" />
     <ClInclude Include="Epd.h" />
     <ClInclude Include="Pgn.h" />
-    <ClInclude Include="Pipeline.h" />
+	<ClInclude Include="Pipeline.h" />
     <ClInclude Include="Platform.h" />
     <ClInclude Include="PoolAllocator.h" />
     <ClInclude Include="PredictionCache.h" />
@@ -324,7 +327,7 @@
     <ClInclude Include="SavedGame.h" />
     <ClInclude Include="SelfPlay.h" />
     <ClInclude Include="Storage.h" />
-    <ClInclude Include="ReplayBuffer.h" />
+	<ClInclude Include="ReplayBuffer.h" />
     <ClInclude Include="Threading.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

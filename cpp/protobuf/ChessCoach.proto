@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+// Just distinguish from our other "Game" types. Can go more granular in future if needed.
+package message;
+
+message Position {
+    uint32 move = 1;
+    float mctsValue = 2;
+    repeated fixed64 image = 3 [packed=true];
+    repeated float policy = 4 [packed=true];
+}
+
+message Game {
+    float result = 1;
+    repeated Position positions = 2;
+}
+
+message Chunk {
+    repeated Game games = 1;
+}
