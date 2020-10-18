@@ -13,8 +13,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ChessCoachTrain", "ChessCoa
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{2F83C3F3-96F3-4B3A-80B6-ED446C68D0DC}"
 	ProjectSection(SolutionItems) = preProject
-		..\config.toml = ..\config.toml
 		protobuf\ChessCoach.proto = protobuf\ChessCoach.proto
+		..\config.toml = ..\config.toml
 		..\meson.build = ..\meson.build
 		..\TODO.txt = ..\TODO.txt
 	EndProjectSection
@@ -28,6 +28,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hunspell", "hunspell\hunspell.vcxproj", "{450069AB-9F1F-4DAB-AFB0-80B044D7F82C}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "protobuf", "protobuf\protobuf.vcxproj", "{3FE4C01D-37EB-4AF3-8FDE-D92715AC6623}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "crc32c", "crc32c\crc32c.vcxproj", "{E5385831-349A-4C52-B2EF-20147C4B0A66}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -147,6 +149,18 @@ Global
 		{3FE4C01D-37EB-4AF3-8FDE-D92715AC6623}.ReleaseNoOpt|x64.Build.0 = Release|x64
 		{3FE4C01D-37EB-4AF3-8FDE-D92715AC6623}.ReleaseNoOpt|x86.ActiveCfg = Release|Win32
 		{3FE4C01D-37EB-4AF3-8FDE-D92715AC6623}.ReleaseNoOpt|x86.Build.0 = Release|Win32
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Debug|x64.ActiveCfg = Debug|x64
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Debug|x64.Build.0 = Debug|x64
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Debug|x86.ActiveCfg = Debug|Win32
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Debug|x86.Build.0 = Debug|Win32
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Release|x64.ActiveCfg = Release|x64
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Release|x64.Build.0 = Release|x64
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Release|x86.ActiveCfg = Release|Win32
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.Release|x86.Build.0 = Release|Win32
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.ReleaseNoOpt|x64.ActiveCfg = Release|x64
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.ReleaseNoOpt|x64.Build.0 = Release|x64
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.ReleaseNoOpt|x86.ActiveCfg = Release|Win32
+		{E5385831-349A-4C52-B2EF-20147C4B0A66}.ReleaseNoOpt|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
