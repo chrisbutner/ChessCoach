@@ -1722,7 +1722,7 @@ void SelfPlayWorker::CheckTimeControl()
     const int64_t timeAllowed =
         (_searchState.timeControl.timeRemainingMs[toPlay] / Config::Misc.TimeControl_FractionOfRemaining)
         + _searchState.timeControl.incrementMs[toPlay]
-        - Config::Misc.TimeControl_SafetyBufferMs;
+        - Config::Misc.TimeControl_SafetyBufferMilliseconds;
     if (timeAllowed > 0)
     {
         if (searchTimeMs >= timeAllowed)

@@ -21,24 +21,28 @@ class Config:
     training_network_name = config["network"]["training_network_name"]
     assert training_network_name
     
-    # Make sure that the training network named is in the list of networks, and everything else is in place.
+    # Make sure that the training network named is in the list of networks, and expose the name.
     training_network_config = next(c for c in config["networks"] if c["name"] == training_network_name)
     assert(training_network_config)
-    overrides = training_network_config.get("training", {})
-    defaults = config.get("training", {})
+    self.training_network_name = training_network_name
+    
+    # Promote "training" and "self_play" to attributes and merge defaults and overrides.
+    training_overrides = training_network_config.get("training", {})
+    training_defaults = config.get("training", {})
+    self.training = { **training_defaults, **training_overrides }
 
-    # Merge the defaults and overrides. Collapse the "training" part and jam the "name" in.
-    self.training_network = { **defaults, **overrides }
-    self.training_network["name"] = training_network_name
+    self_play_overrides = training_network_config.get("self_play", {})
+    self_play_defaults = config.get("self_play", {})
+    self.self_play = { **self_play_defaults, **self_play_overrides }
 
     # Build the learning rate schedule dictionaries
-    self.training_network["learning_rate_schedule"] = list(zip(
-      self.training_network["learning_rate_schedule"]["steps"],
-      self.training_network["learning_rate_schedule"]["rates"]))
+    self.training["learning_rate_schedule"] = list(zip(
+      self.training["learning_rate_schedule"]["steps"],
+      self.training["learning_rate_schedule"]["rates"]))
 
-    self.training_network["commentary_learning_rate_schedule"] = list(zip(
-      self.training_network["commentary_learning_rate_schedule"]["steps"],
-      self.training_network["commentary_learning_rate_schedule"]["rates"]))
+    self.training["commentary_learning_rate_schedule"] = list(zip(
+      self.training["commentary_learning_rate_schedule"]["steps"],
+      self.training["commentary_learning_rate_schedule"]["rates"]))
     
     # Make some miscellaneous config available.
     self.misc = {
@@ -48,12 +52,12 @@ class Config:
 
     # Root all paths.
     self.data_root = self.determine_data_root()
-    self.training_network["games_path_supervised"] = self.make_path(self.training_network["games_path_supervised"])
-    self.training_network["games_path_training"] = self.make_path(self.training_network["games_path_training"])
-    self.training_network["games_path_validation"] = self.make_path(self.training_network["games_path_validation"])
-    self.training_network["commentary_path_supervised"] = self.make_path(self.training_network["commentary_path_supervised"])
-    self.training_network["commentary_path_training"] = self.make_path(self.training_network["commentary_path_training"])
-    self.training_network["commentary_path_validation"] = self.make_path(self.training_network["commentary_path_validation"])
+    self.training["games_path_supervised"] = self.make_path(self.training["games_path_supervised"])
+    self.training["games_path_training"] = self.make_path(self.training["games_path_training"])
+    self.training["games_path_validation"] = self.make_path(self.training["games_path_validation"])
+    self.training["commentary_path_supervised"] = self.make_path(self.training["commentary_path_supervised"])
+    self.training["commentary_path_training"] = self.make_path(self.training["commentary_path_training"])
+    self.training["commentary_path_validation"] = self.make_path(self.training["commentary_path_validation"])
     for key, value in self.misc["paths"].items():
       if not key.startswith("gcloud"):
         self.misc["paths"][key] = self.make_path(value)
@@ -87,8 +91,6 @@ class Config:
     return path
 
   def latest_network_path_for_type(self, network_name, network_type):
-    glob = self.join(self.misc["paths"]["networks"], network_name + "*", network_type)
+    glob = self.join(self.misc["paths"]["networks"], network_name + "_*", network_type)
     results = tf.io.gfile.glob(glob)
-    if results:
-      return os.path.dirname(max(results))
-    return None
+    return os.path.dirname(max(results)) if results else None

@@ -80,7 +80,7 @@ class ModelBuilder:
 
   def tower(self, x, config):
     # Residual layers
-    architecture = config.training_network["architecture"]
+    architecture = config.training["architecture"]
     architecture_layer = self.architecture_layers[architecture]
     residual = Residual([architecture_layer, architecture_layer], [architecture, architecture], self.filter_count, self.weight_decay)
     for i in range(self.residual_count):
@@ -107,7 +107,7 @@ class ModelBuilder:
     return x
 
   def policy_head(self, x, name, output_name, config):
-    architecture = config.training_network["architecture"]
+    architecture = config.training["architecture"]
     architecture_layer = self.architecture_layers[architecture]
     x = architecture_layer(name=f"{name}/{architecture}_{self.filter_count}")(x)
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"{name}/batchnorm")(x)
@@ -173,7 +173,7 @@ class ModelBuilder:
 
   def build_commentary_decoder(self, config, tokenizer=None):
     if not tokenizer:
-      vocabulary_path = config.join(config.training_network["commentary_path_supervised"], config.training_network["vocabulary_filename"])
+      vocabulary_path = config.join(config.training["commentary_path_supervised"], config.training["vocabulary_filename"])
       with open(vocabulary_path, 'r', errors="ignore") as f:
         comments = f.readlines()
       comments = [f"{self.token_start} {c} {self.token_end}" for c in comments]

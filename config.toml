@@ -230,18 +230,20 @@ root_exploration_fraction = 0.25
 exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
+network_update_check_interval_seconds = 300.0
+
 ###############################################################################
 #                       Miscellaneous configuration                           #
 ###############################################################################
 
 [prediction_cache]
 
-size_gb = 8
+size_gibibytes = 8
 max_ply = 24
 
 [time_control]
 
-safety_buffer_ms = 500
+safety_buffer_milliseconds = 500
 fraction_remaining = 20
 
 [search]

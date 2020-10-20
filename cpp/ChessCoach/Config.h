@@ -91,6 +91,8 @@ struct SelfPlayConfig
 
     float ExplorationRateBase;
     float ExplorationRateInit;
+
+    float NetworkUpdateCheckIntervalSeconds;
 };
 
 struct NetworkConfig
@@ -103,11 +105,11 @@ struct NetworkConfig
 struct MiscConfig
 {
     // Prediction cache
-    int PredictionCache_SizeGb;
+    int PredictionCache_SizeGibibytes;
     int PredictionCache_MaxPly;
 
     // Time control
-    int TimeControl_SafetyBufferMs;
+    int TimeControl_SafetyBufferMilliseconds;
     int TimeControl_FractionOfRemaining;
 
     // Search
@@ -117,6 +119,8 @@ struct MiscConfig
     int Storage_GamesPerChunk;
     
     // Paths
+    std::string Gcloud_Bucket;
+    std::string Gcloud_Prefix;
     std::string Paths_Networks;
     std::string Paths_TensorBoard;
     std::string Paths_Logs;

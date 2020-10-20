@@ -138,6 +138,8 @@ SelfPlayConfig ParseSelfPlay(const TomlValue& config, const Policy& policy, cons
     selfPlay.ExplorationRateBase = policy.template Find<float>(config, "exploration_rate_base", defaults.ExplorationRateBase);
     selfPlay.ExplorationRateInit = policy.template Find<float>(config, "exploration_rate_init", defaults.ExplorationRateInit);
 
+    selfPlay.NetworkUpdateCheckIntervalSeconds = policy.template Find<float>(config, "network_update_check_interval_seconds", defaults.NetworkUpdateCheckIntervalSeconds);
+        
     return selfPlay;
 }
 
@@ -145,16 +147,18 @@ MiscConfig ParseMisc(const TomlValue& config)
 {
     MiscConfig misc;
 
-    misc.PredictionCache_SizeGb = toml::find<int>(config, "prediction_cache", "size_gb");
+    misc.PredictionCache_SizeGibibytes = toml::find<int>(config, "prediction_cache", "size_gibibytes");
     misc.PredictionCache_MaxPly = toml::find<int>(config, "prediction_cache", "max_ply");
 
-    misc.TimeControl_SafetyBufferMs = toml::find<int>(config, "time_control", "safety_buffer_ms");
+    misc.TimeControl_SafetyBufferMilliseconds = toml::find<int>(config, "time_control", "safety_buffer_milliseconds");
     misc.TimeControl_FractionOfRemaining = toml::find<int>(config, "time_control", "fraction_remaining");
 
     misc.Search_MctsParallelism = toml::find<int>(config, "search", "mcts_parallelism");
 
     misc.Storage_GamesPerChunk = toml::find<int>(config, "storage", "games_per_chunk");
 
+    misc.Gcloud_Bucket = toml::find<std::string>(config, "paths", "gcloud_bucket");
+    misc.Gcloud_Prefix = toml::find<std::string>(config, "paths", "gcloud_prefix");
     misc.Paths_Networks = toml::find<std::string>(config, "paths", "networks");
     misc.Paths_TensorBoard = toml::find<std::string>(config, "paths", "tensorboard");
     misc.Paths_Logs = toml::find<std::string>(config, "paths", "logs");

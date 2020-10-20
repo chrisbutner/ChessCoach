@@ -45,8 +45,8 @@ class DatasetBuilder:
   # Result is from the first player's POV, including the starting position, and flips per player/position.
   def decompress_values(self, result, shape):
     same = tf.fill(shape, result)
-    flipped = tf.fill(shape, self.flip_value(result))
-    values = tf.concat([same[:, tf.newaxis], flipped[:, tf.newaxis]], axis=1)
+    flipped = self.flip_value(same)
+    values = tf.stack([same, flipped], axis=1)
     values = tf.reshape(values, [-1])
     values = values[:shape[0]]
     return values

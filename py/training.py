@@ -44,7 +44,7 @@ class Trainer:
     self.data_validation = None
     self.data_training_key = None
 
-    self.per_replica_batch_size = self.config.training_network["batch_size"]
+    self.per_replica_batch_size = self.config.training["batch_size"]
     self.global_batch_size = self.per_replica_batch_size * self.device_count
 
     self.log("Devices:", self.device_count)
@@ -75,41 +75,41 @@ class Trainer:
     return rate * multiplier
 
   def get_learning_rate(self, step):
-    schedule = self.config.training_network["learning_rate_schedule"]
+    schedule = self.config.training["learning_rate_schedule"]
     scale_learning_rate_with_batch_size = self.device_count
     return self.get_learning_rate_common(schedule, step, scale_learning_rate_with_batch_size)
 
   def get_commentary_learning_rate(self, step):
-    schedule = self.config.training_network["commentary_learning_rate_schedule"]
+    schedule = self.config.training["commentary_learning_rate_schedule"]
     scale_learning_rate_with_batch_size = self.device_count
-    commentary_multiplier = self.config.training_network["commentary_batch_size"] / self.config.training_network["batch_size"]
+    commentary_multiplier = self.config.training["commentary_batch_size"] / self.config.training["batch_size"]
     return self.get_learning_rate_common(schedule, step, scale_learning_rate_with_batch_size * commentary_multiplier)
 
   # The teacher network trains directly on supervised labels.
   def compile_teacher(self, model):
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=self.get_learning_rate(0),
-      momentum=self.config.training_network["momentum"])
+      momentum=self.config.training["momentum"])
     losses = ["mean_squared_error", "mean_squared_error", flat_categorical_crossentropy_from_logits, flat_categorical_crossentropy_from_logits]
-    loss_weights = [self.config.training_network["value_loss_weight"], self.config.training_network["mcts_value_loss_weight"],
-      self.config.training_network["policy_loss_weight"], self.config.training_network["reply_policy_loss_weight"]]
+    loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"],
+      self.config.training["policy_loss_weight"], self.config.training["reply_policy_loss_weight"]]
     metrics = [[], [], [flat_categorical_accuracy], [flat_categorical_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
     # Set up the commentary optimizer in advance, for use with GradientTape in transformer.py.
     self.commentary_optimizer = tf.keras.optimizers.SGD(
       learning_rate=self.get_commentary_learning_rate(0),
-      momentum=self.config.training_network["momentum"])
+      momentum=self.config.training["momentum"])
 
   # The student network trains on a combination of soft teacher labels and hard supervised labels.
   # Policy accuracy is still measured against the supervised labels.
   def compile_student(self, model):
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=self.get_learning_rate(0),
-      momentum=self.config.training_network["momentum"])
+      momentum=self.config.training["momentum"])
     losses = ["mean_squared_error", "mean_squared_error", student_policy_loss, student_policy_loss]
-    loss_weights = [self.config.training_network["value_loss_weight"], self.config.training_network["mcts_value_loss_weight"],
-      self.config.training_network["policy_loss_weight"], self.config.training_network["reply_policy_loss_weight"]]
+    loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"],
+      self.config.training["policy_loss_weight"], self.config.training["reply_policy_loss_weight"]]
     metrics = [[], [], [student_policy_accuracy], [student_policy_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
@@ -137,8 +137,8 @@ class Trainer:
     data_training_key = (gameTypes.tolist(), trainingWindows.tolist())
     if data_training_key != self.data_training_key:
       data_start = time.time()
-      globs_training = [self.config.join(self.config.training_network["games_path_supervised"], "*.chunk")] # TODO: hardcode supervised for now
-      globs_validation = [self.config.join(self.config.training_network["games_path_validation"], "*.chunk")]
+      globs_training = [self.config.join(self.config.training["games_path_supervised"], "*.chunk")] # TODO: hardcode supervised for now
+      globs_validation = [self.config.join(self.config.training["games_path_validation"], "*.chunk")]
       # TODO: Only first type for now
       self.data_training = iter(self.datasets.build_training_dataset(globs_training[0], trainingWindows[0], self.global_batch_size))
       self.data_validation = iter(self.datasets.build_validation_dataset(globs_validation[0], self.global_batch_size))
@@ -168,7 +168,7 @@ class Trainer:
     # Striding steps by the device count, so validate when at or just past the validation interval.
     # E.g. on a GPU, 1 device, 100 validation interval, steps 1, 2, 3, etc., validate on step 100.
     # E.g. on a TPU, 8 devices, 100 validation interval, steps 1, 9, 17, etc., validate on step 105.
-    return ((step % self.config.training_network["validation_interval"]) < self.device_count)
+    return ((step % self.config.training["validation_interval"]) < self.device_count)
 
   def train_batch(self, network, teacher_network, model, step, images, targets):
     # Prepare TensorBoard logging.
@@ -212,7 +212,7 @@ class Trainer:
   # def train_commentary_batch(self, step, images, comments):
   #   networks.teacher.ensure_commentary()
 
-  #   commentary_learning_rate = get_commentary_learning_rate(config.training_network["commentary_learning_rate_schedule"], step)
+  #   commentary_learning_rate = get_commentary_learning_rate(config.training["commentary_learning_rate_schedule"], step)
   #   K.set_value(networks.teacher.commentary_optimizer.lr, commentary_learning_rate)
 
   #   do_log_training = self.is_validation_step(step)
@@ -273,8 +273,8 @@ class Trainer:
       tf.summary.scalar("policy loss", losses[3])
       tf.summary.scalar("reply policy loss", losses[4])
       # Equivalent to tf.math.add_n(model.losses)
-      loss_weights = [self.config.training_network["value_loss_weight"], self.config.training_network["mcts_value_loss_weight"],
-        self.config.training_network["policy_loss_weight"], self.config.training_network["reply_policy_loss_weight"]]
+      loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"],
+        self.config.training["policy_loss_weight"], self.config.training["reply_policy_loss_weight"]]
       tf.summary.scalar("L2 loss", losses[0] - (losses[1] * loss_weights[0]) - (losses[2] * loss_weights[1]) - (losses[3] * loss_weights[2]) - (losses[4] * loss_weights[3])) 
     with tf.name_scope("accuracy"):
       tf.summary.scalar("policy accuracy", losses[5])

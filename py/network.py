@@ -52,6 +52,8 @@ from dataset import DatasetBuilder
 class Models:
   def __init__(self):
     self.full = None
+    self.full_weights_path = None
+    self.full_weights_last_check = None
     self.predict = None
     self.commentary_encoder = None
     self.commentary_decoder = None
@@ -87,7 +89,7 @@ class Network:
 
   @property
   def info(self):
-    path = self.config.latest_network_path_for_type(self.name, self.network_type)
+    path = self.latest_network_path()
     step_count = int(re.match(".*?([0-9]+)$", path).group(1)) if path else 0
     return (step_count,)
 
@@ -135,10 +137,12 @@ class Network:
   def ensure_full(self, device_index):
     with ensure_locks[device_index]:
       # The full model may already exist.
-      if self.models[device_index].full:
+      models = self.models[device_index]
+      if models.full:
         return
 
-      self.models[device_index].full = self.build_full(device_index)
+      models.full, models.full_weights_path = self.build_full(device_index)
+      models.full_weights_last_check = time.time()
   
   def build_full(self, log_device_context):
     # Either load it from disk, or create a new one.
@@ -146,20 +150,46 @@ class Network:
       network_path = self.latest_network_path()
       if network_path:
         log_name = self.get_log_name(network_path)
-        log(f"Loading model ({log_device_context}/{self.network_type}/full): {log_name}...")
+        log(f"Loading model ({log_device_context}/{self.network_type}/full): {log_name}")
         model_full_path = self.model_full_path(network_path)
         full = self.model_builder()
         full.load_weights(model_full_path)
-        log(f"Loaded model ({log_device_context}/{self.network_type}/full): {log_name}")
       else:
         log(f"Creating new model ({log_device_context}/{self.network_type}/full)")
         full = self.model_builder()
-      return full
+        model_full_path = None
+      return full, model_full_path
+
+  def maybe_check_update_full(self, device_index):
+    interval_seconds = self.config.self_play["network_update_check_interval_seconds"]
+    models = self.models[device_index]
+    now = time.time()
+    if (now - models.full_weights_last_check) > interval_seconds:
+      models.full_weights_last_check = now
+      self.check_update_full(device_index)
+
+  def check_update_full(self, device_index):
+    models = self.models[device_index]
+    network_path = self.latest_network_path()
+    if network_path:
+      # Weights paths for the same network name and type will be identical up until
+      # the 9-digit zero-padded step number, which we can compare lexicographically
+      # with greater meaning more recent, and coalescing the empty string for no weights
+      # (i.e. created from scratch).
+      model_full_path = self.model_full_path(network_path)
+      newer_weights_available = ((models.full_weights_path or "") < model_full_path)
+      if newer_weights_available:
+        log_name = self.get_log_name(network_path)
+        log(f"Updating model ({device_index}/{self.network_type}/full): {log_name}")
+        models.full.load_weights(model_full_path)
+        models.full_weights_path = model_full_path
 
   def ensure_prediction(self, device_index):
     with ensure_locks[device_index]:
       # The prediction model may already exist.
       if self.models[device_index].predict:
+        # Occasionally check for more recent weights to load.
+        self.maybe_check_update_full(device_index)
         return
 
       # Take the prediction subset from the full model.
@@ -172,7 +202,7 @@ class Network:
       return self.model_train
 
     # Build a full model.
-    self.model_train_full = self.build_full("training")
+    self.model_train_full, _ = self.build_full("training")
 
     # Take the training subset from the full model.
     self.model_train = ModelBuilder().subset_train(self.model_train_full)
@@ -191,6 +221,8 @@ class Network:
     with ensure_locks[device_index]:
       # The encoder, decoder and tokenizer may already exist.
       if self.models[device_index].commentary_encoder:
+        # Occasionally check for more recent weights to load.
+        self.maybe_check_update_full(device_index)
         return
 
       # Take the encoder subset from the full model.
@@ -202,7 +234,7 @@ class Network:
         network_path = self.latest_network_path()
         if network_path:
           log_name = self.get_log_name(network_path)
-          log(f"Loading model ({device_index}/{self.network_type}/commentary): {log_name}...")
+          log(f"Loading model ({device_index}/{self.network_type}/commentary): {log_name}")
 
           # Load the tokenizer first.
           commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
@@ -214,8 +246,6 @@ class Network:
           self.models[device_index].commentary_decoder = decoder
           model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
           self.models[device_index].commentary_decoder.load_weights(model_commentary_decoder_path)
-
-          log(f"Loaded model ({device_index}/{self.network_type}/commentary): {log_name}")
         else:
           log(f"Creating new model ({device_index}/{self.network_type}/commentary)")
           decoder, self.commentary_tokenizer = ModelBuilder().build_commentary_decoder(self.config)
@@ -226,15 +256,14 @@ class Network:
     log_name = self.get_log_name(network_path)
     log_device_context = "training"
 
-    # Save the full model.
-    log(f"Saving model ({log_device_context}/{self.network_type}/full): {log_name}...")
+    # Save the full model from training.
+    log(f"Saving model ({log_device_context}/{self.network_type}/full): {log_name}")
     model_full_path = self.model_full_path(network_path)
     self.model_train_full.save_weights(model_full_path, save_format="tf")
-    log(f"Saved model ({log_device_context}/{self.network_type}/full): {log_name}")
 
     # # Save the commentary decoder and tokenizer if they exist.
     # if self.models[device_index].commentary_decoder and self.commentary_tokenizer:
-    #   log(f"Saving model ({device_index}/{self.network_type}/commentary): {log_name}...")
+    #   log(f"Saving model ({device_index}/{self.network_type}/commentary): {log_name}")
 
     #   # Save the commentary decoder.
     #   model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
@@ -244,8 +273,6 @@ class Network:
     #   commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
     #   with open(commentary_tokenizer_path, 'w') as f:
     #     f.write(self.commentary_tokenizer.to_json())
-
-    #   log(f"Saved model ({device_index}/{self.network_type}/commentary): {log_name}")
 
   def get_log_name(self, network_path):
     return os.path.basename(os.path.normpath(network_path))
@@ -274,7 +301,7 @@ class Networks:
   def __init__(self, config, name="network"):
     self.config = config
 
-    # Set by C++ in load_network depending on use-case.
+    # Set by C++ via load_network depending on use-case.
     self._name = name
 
     # The teacher network uses the full 19*256 model.
