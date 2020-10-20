@@ -24,9 +24,9 @@ namespace crc32c {
 
 // Ask the hardware to prefetch the data at the given address into the L1 cache.
 inline void RequestPrefetch(const uint8_t* address) {
-// cbutner-modified-start
+// cbutner-start
 #if !defined(_MSC_VER) && HAVE_BUILTIN_PREFETCH
-// cbutner-modified-finish
+// cbutner-finish
   // Clang and GCC implement the __builtin_prefetch non-standard extension,
   // which maps to the best instruction on the target architecture.
   __builtin_prefetch(reinterpret_cast<const char*>(address), 0 /* Read only. */,

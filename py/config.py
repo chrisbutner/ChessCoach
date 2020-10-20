@@ -46,7 +46,8 @@ class Config(object):
     
     # Also make some miscellaneous config available.
     self.misc = {
-      "paths": config["paths"]
+      "paths": config["paths"],
+      "storage": config["storage"],
     }
 
     # Root all paths.

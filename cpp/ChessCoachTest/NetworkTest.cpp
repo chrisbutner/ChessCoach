@@ -76,13 +76,13 @@ TEST(Network, ImagePieceHistoryPlanes)
 
     Game game;
 
-    const int finalHistoryPlanes = (INetwork::InputPreviousPositionCount - 1) * INetwork::InputPlanesPerPosition;
-    const int currentPositionPlanes = INetwork::InputPreviousPositionCount * INetwork::InputPlanesPerPosition;
+    const int finalHistoryPlanes = (INetwork::InputPreviousPositionCount - 1) * INetwork::InputPiecePlanesPerPosition;
+    const int currentPositionPlanes = INetwork::InputPreviousPositionCount * INetwork::InputPiecePlanesPerPosition;
 
     // Ensure that the final history plane is all zeros.
     std::unique_ptr<INetwork::InputPlanes> image1(std::make_unique<INetwork::InputPlanes>(game.GenerateImage()));
     const INetwork::PackedPlane startingPositionOurPawns = (*image1)[currentPositionPlanes + 0];
-    for (int i = 0; i < INetwork::InputPlanesPerPosition; i++)
+    for (int i = 0; i < INetwork::InputPiecePlanesPerPosition; i++)
     {
         EXPECT_EQ((*image1)[finalHistoryPlanes + i], 0);
     }

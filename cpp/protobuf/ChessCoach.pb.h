@@ -31,6 +31,9 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
+#include <google/protobuf/map.h>  // IWYU pragma: export
+#include <google/protobuf/map_entry.h>
+#include <google/protobuf/map_field_inl.h>
 #include <google/protobuf/unknown_field_set.h>
 // @@protoc_insertion_point(includes)
 #include <google/protobuf/port_def.inc>
@@ -47,7 +50,7 @@ struct TableStruct_ChessCoach_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[3]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[11]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -55,42 +58,74 @@ struct TableStruct_ChessCoach_2eproto {
 };
 extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_ChessCoach_2eproto;
 namespace message {
-class Chunk;
-class ChunkDefaultTypeInternal;
-extern ChunkDefaultTypeInternal _Chunk_default_instance_;
-class Game;
-class GameDefaultTypeInternal;
-extern GameDefaultTypeInternal _Game_default_instance_;
-class Position;
-class PositionDefaultTypeInternal;
-extern PositionDefaultTypeInternal _Position_default_instance_;
+class BytesList;
+class BytesListDefaultTypeInternal;
+extern BytesListDefaultTypeInternal _BytesList_default_instance_;
+class Example;
+class ExampleDefaultTypeInternal;
+extern ExampleDefaultTypeInternal _Example_default_instance_;
+class Feature;
+class FeatureDefaultTypeInternal;
+extern FeatureDefaultTypeInternal _Feature_default_instance_;
+class FeatureList;
+class FeatureListDefaultTypeInternal;
+extern FeatureListDefaultTypeInternal _FeatureList_default_instance_;
+class FeatureLists;
+class FeatureListsDefaultTypeInternal;
+extern FeatureListsDefaultTypeInternal _FeatureLists_default_instance_;
+class FeatureLists_FeatureListEntry_DoNotUse;
+class FeatureLists_FeatureListEntry_DoNotUseDefaultTypeInternal;
+extern FeatureLists_FeatureListEntry_DoNotUseDefaultTypeInternal _FeatureLists_FeatureListEntry_DoNotUse_default_instance_;
+class Features;
+class FeaturesDefaultTypeInternal;
+extern FeaturesDefaultTypeInternal _Features_default_instance_;
+class Features_FeatureEntry_DoNotUse;
+class Features_FeatureEntry_DoNotUseDefaultTypeInternal;
+extern Features_FeatureEntry_DoNotUseDefaultTypeInternal _Features_FeatureEntry_DoNotUse_default_instance_;
+class FloatList;
+class FloatListDefaultTypeInternal;
+extern FloatListDefaultTypeInternal _FloatList_default_instance_;
+class Int64List;
+class Int64ListDefaultTypeInternal;
+extern Int64ListDefaultTypeInternal _Int64List_default_instance_;
+class SequenceExample;
+class SequenceExampleDefaultTypeInternal;
+extern SequenceExampleDefaultTypeInternal _SequenceExample_default_instance_;
 }  // namespace message
 PROTOBUF_NAMESPACE_OPEN
-template<> ::message::Chunk* Arena::CreateMaybeMessage<::message::Chunk>(Arena*);
-template<> ::message::Game* Arena::CreateMaybeMessage<::message::Game>(Arena*);
-template<> ::message::Position* Arena::CreateMaybeMessage<::message::Position>(Arena*);
+template<> ::message::BytesList* Arena::CreateMaybeMessage<::message::BytesList>(Arena*);
+template<> ::message::Example* Arena::CreateMaybeMessage<::message::Example>(Arena*);
+template<> ::message::Feature* Arena::CreateMaybeMessage<::message::Feature>(Arena*);
+template<> ::message::FeatureList* Arena::CreateMaybeMessage<::message::FeatureList>(Arena*);
+template<> ::message::FeatureLists* Arena::CreateMaybeMessage<::message::FeatureLists>(Arena*);
+template<> ::message::FeatureLists_FeatureListEntry_DoNotUse* Arena::CreateMaybeMessage<::message::FeatureLists_FeatureListEntry_DoNotUse>(Arena*);
+template<> ::message::Features* Arena::CreateMaybeMessage<::message::Features>(Arena*);
+template<> ::message::Features_FeatureEntry_DoNotUse* Arena::CreateMaybeMessage<::message::Features_FeatureEntry_DoNotUse>(Arena*);
+template<> ::message::FloatList* Arena::CreateMaybeMessage<::message::FloatList>(Arena*);
+template<> ::message::Int64List* Arena::CreateMaybeMessage<::message::Int64List>(Arena*);
+template<> ::message::SequenceExample* Arena::CreateMaybeMessage<::message::SequenceExample>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace message {
 
 // ===================================================================
 
-class Position PROTOBUF_FINAL :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.Position) */ {
+class BytesList PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.BytesList) */ {
  public:
-  inline Position() : Position(nullptr) {}
-  virtual ~Position();
+  inline BytesList() : BytesList(nullptr) {}
+  virtual ~BytesList();
 
-  Position(const Position& from);
-  Position(Position&& from) noexcept
-    : Position() {
+  BytesList(const BytesList& from);
+  BytesList(BytesList&& from) noexcept
+    : BytesList() {
     *this = ::std::move(from);
   }
 
-  inline Position& operator=(const Position& from) {
+  inline BytesList& operator=(const BytesList& from) {
     CopyFrom(from);
     return *this;
   }
-  inline Position& operator=(Position&& from) noexcept {
+  inline BytesList& operator=(BytesList&& from) noexcept {
     if (GetArena() == from.GetArena()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -108,20 +143,20 @@ class Position PROTOBUF_FINAL :
   static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
     return GetMetadataStatic().reflection;
   }
-  static const Position& default_instance();
+  static const BytesList& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const Position* internal_default_instance() {
-    return reinterpret_cast<const Position*>(
-               &_Position_default_instance_);
+  static inline const BytesList* internal_default_instance() {
+    return reinterpret_cast<const BytesList*>(
+               &_BytesList_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     0;
 
-  friend void swap(Position& a, Position& b) {
+  friend void swap(BytesList& a, BytesList& b) {
     a.Swap(&b);
   }
-  inline void Swap(Position* other) {
+  inline void Swap(BytesList* other) {
     if (other == this) return;
     if (GetArena() == other->GetArena()) {
       InternalSwap(other);
@@ -129,7 +164,7 @@ class Position PROTOBUF_FINAL :
       ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
     }
   }
-  void UnsafeArenaSwap(Position* other) {
+  void UnsafeArenaSwap(BytesList* other) {
     if (other == this) return;
     GOOGLE_DCHECK(GetArena() == other->GetArena());
     InternalSwap(other);
@@ -137,17 +172,17 @@ class Position PROTOBUF_FINAL :
 
   // implements Message ----------------------------------------------
 
-  inline Position* New() const final {
-    return CreateMaybeMessage<Position>(nullptr);
+  inline BytesList* New() const final {
+    return CreateMaybeMessage<BytesList>(nullptr);
   }
 
-  Position* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
-    return CreateMaybeMessage<Position>(arena);
+  BytesList* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<BytesList>(arena);
   }
   void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
   void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
-  void CopyFrom(const Position& from);
-  void MergeFrom(const Position& from);
+  void CopyFrom(const BytesList& from);
+  void MergeFrom(const BytesList& from);
   PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
   bool IsInitialized() const final;
 
@@ -161,13 +196,13 @@ class Position PROTOBUF_FINAL :
   inline void SharedCtor();
   inline void SharedDtor();
   void SetCachedSize(int size) const final;
-  void InternalSwap(Position* other);
+  void InternalSwap(BytesList* other);
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "message.Position";
+    return "message.BytesList";
   }
   protected:
-  explicit Position(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  explicit BytesList(::PROTOBUF_NAMESPACE_ID::Arena* arena);
   private:
   static void ArenaDtor(void* object);
   inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
@@ -187,108 +222,62 @@ class Position PROTOBUF_FINAL :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kImageFieldNumber = 3,
-    kPolicyFieldNumber = 4,
-    kMoveFieldNumber = 1,
-    kMctsValueFieldNumber = 2,
+    kValueFieldNumber = 1,
   };
-  // repeated fixed64 image = 3 [packed = true];
-  int image_size() const;
+  // repeated bytes value = 1;
+  int value_size() const;
   private:
-  int _internal_image_size() const;
+  int _internal_value_size() const;
   public:
-  void clear_image();
+  void clear_value();
+  const std::string& value(int index) const;
+  std::string* mutable_value(int index);
+  void set_value(int index, const std::string& value);
+  void set_value(int index, std::string&& value);
+  void set_value(int index, const char* value);
+  void set_value(int index, const void* value, size_t size);
+  std::string* add_value();
+  void add_value(const std::string& value);
+  void add_value(std::string&& value);
+  void add_value(const char* value);
+  void add_value(const void* value, size_t size);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>& value() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>* mutable_value();
   private:
-  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_image(int index) const;
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
-      _internal_image() const;
-  void _internal_add_image(::PROTOBUF_NAMESPACE_ID::uint64 value);
-  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
-      _internal_mutable_image();
-  public:
-  ::PROTOBUF_NAMESPACE_ID::uint64 image(int index) const;
-  void set_image(int index, ::PROTOBUF_NAMESPACE_ID::uint64 value);
-  void add_image(::PROTOBUF_NAMESPACE_ID::uint64 value);
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
-      image() const;
-  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
-      mutable_image();
-
-  // repeated float policy = 4 [packed = true];
-  int policy_size() const;
-  private:
-  int _internal_policy_size() const;
-  public:
-  void clear_policy();
-  private:
-  float _internal_policy(int index) const;
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
-      _internal_policy() const;
-  void _internal_add_policy(float value);
-  ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
-      _internal_mutable_policy();
-  public:
-  float policy(int index) const;
-  void set_policy(int index, float value);
-  void add_policy(float value);
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
-      policy() const;
-  ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
-      mutable_policy();
-
-  // uint32 move = 1;
-  void clear_move();
-  ::PROTOBUF_NAMESPACE_ID::uint32 move() const;
-  void set_move(::PROTOBUF_NAMESPACE_ID::uint32 value);
-  private:
-  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_move() const;
-  void _internal_set_move(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  const std::string& _internal_value(int index) const;
+  std::string* _internal_add_value();
   public:
 
-  // float mctsValue = 2;
-  void clear_mctsvalue();
-  float mctsvalue() const;
-  void set_mctsvalue(float value);
-  private:
-  float _internal_mctsvalue() const;
-  void _internal_set_mctsvalue(float value);
-  public:
-
-  // @@protoc_insertion_point(class_scope:message.Position)
+  // @@protoc_insertion_point(class_scope:message.BytesList)
  private:
   class _Internal;
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
-  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 > image_;
-  mutable std::atomic<int> _image_cached_byte_size_;
-  ::PROTOBUF_NAMESPACE_ID::RepeatedField< float > policy_;
-  mutable std::atomic<int> _policy_cached_byte_size_;
-  ::PROTOBUF_NAMESPACE_ID::uint32 move_;
-  float mctsvalue_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string> value_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_ChessCoach_2eproto;
 };
 // -------------------------------------------------------------------
 
-class Game PROTOBUF_FINAL :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.Game) */ {
+class FloatList PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.FloatList) */ {
  public:
-  inline Game() : Game(nullptr) {}
-  virtual ~Game();
+  inline FloatList() : FloatList(nullptr) {}
+  virtual ~FloatList();
 
-  Game(const Game& from);
-  Game(Game&& from) noexcept
-    : Game() {
+  FloatList(const FloatList& from);
+  FloatList(FloatList&& from) noexcept
+    : FloatList() {
     *this = ::std::move(from);
   }
 
-  inline Game& operator=(const Game& from) {
+  inline FloatList& operator=(const FloatList& from) {
     CopyFrom(from);
     return *this;
   }
-  inline Game& operator=(Game&& from) noexcept {
+  inline FloatList& operator=(FloatList&& from) noexcept {
     if (GetArena() == from.GetArena()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -306,20 +295,20 @@ class Game PROTOBUF_FINAL :
   static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
     return GetMetadataStatic().reflection;
   }
-  static const Game& default_instance();
+  static const FloatList& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const Game* internal_default_instance() {
-    return reinterpret_cast<const Game*>(
-               &_Game_default_instance_);
+  static inline const FloatList* internal_default_instance() {
+    return reinterpret_cast<const FloatList*>(
+               &_FloatList_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     1;
 
-  friend void swap(Game& a, Game& b) {
+  friend void swap(FloatList& a, FloatList& b) {
     a.Swap(&b);
   }
-  inline void Swap(Game* other) {
+  inline void Swap(FloatList* other) {
     if (other == this) return;
     if (GetArena() == other->GetArena()) {
       InternalSwap(other);
@@ -327,7 +316,7 @@ class Game PROTOBUF_FINAL :
       ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
     }
   }
-  void UnsafeArenaSwap(Game* other) {
+  void UnsafeArenaSwap(FloatList* other) {
     if (other == this) return;
     GOOGLE_DCHECK(GetArena() == other->GetArena());
     InternalSwap(other);
@@ -335,17 +324,17 @@ class Game PROTOBUF_FINAL :
 
   // implements Message ----------------------------------------------
 
-  inline Game* New() const final {
-    return CreateMaybeMessage<Game>(nullptr);
+  inline FloatList* New() const final {
+    return CreateMaybeMessage<FloatList>(nullptr);
   }
 
-  Game* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
-    return CreateMaybeMessage<Game>(arena);
+  FloatList* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<FloatList>(arena);
   }
   void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
   void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
-  void CopyFrom(const Game& from);
-  void MergeFrom(const Game& from);
+  void CopyFrom(const FloatList& from);
+  void MergeFrom(const FloatList& from);
   PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
   bool IsInitialized() const final;
 
@@ -359,13 +348,13 @@ class Game PROTOBUF_FINAL :
   inline void SharedCtor();
   inline void SharedDtor();
   void SetCachedSize(int size) const final;
-  void InternalSwap(Game* other);
+  void InternalSwap(FloatList* other);
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "message.Game";
+    return "message.FloatList";
   }
   protected:
-  explicit Game(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  explicit FloatList(::PROTOBUF_NAMESPACE_ID::Arena* arena);
   private:
   static void ArenaDtor(void* object);
   inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
@@ -385,67 +374,61 @@ class Game PROTOBUF_FINAL :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kPositionsFieldNumber = 2,
-    kResultFieldNumber = 1,
+    kValueFieldNumber = 1,
   };
-  // repeated .message.Position positions = 2;
-  int positions_size() const;
+  // repeated float value = 1 [packed = true];
+  int value_size() const;
   private:
-  int _internal_positions_size() const;
+  int _internal_value_size() const;
   public:
-  void clear_positions();
-  ::message::Position* mutable_positions(int index);
-  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Position >*
-      mutable_positions();
+  void clear_value();
   private:
-  const ::message::Position& _internal_positions(int index) const;
-  ::message::Position* _internal_add_positions();
+  float _internal_value(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
+      _internal_value() const;
+  void _internal_add_value(float value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
+      _internal_mutable_value();
   public:
-  const ::message::Position& positions(int index) const;
-  ::message::Position* add_positions();
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Position >&
-      positions() const;
+  float value(int index) const;
+  void set_value(int index, float value);
+  void add_value(float value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
+      value() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
+      mutable_value();
 
-  // float result = 1;
-  void clear_result();
-  float result() const;
-  void set_result(float value);
-  private:
-  float _internal_result() const;
-  void _internal_set_result(float value);
-  public:
-
-  // @@protoc_insertion_point(class_scope:message.Game)
+  // @@protoc_insertion_point(class_scope:message.FloatList)
  private:
   class _Internal;
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
-  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Position > positions_;
-  float result_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< float > value_;
+  mutable std::atomic<int> _value_cached_byte_size_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_ChessCoach_2eproto;
 };
 // -------------------------------------------------------------------
 
-class Chunk PROTOBUF_FINAL :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.Chunk) */ {
+class Int64List PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.Int64List) */ {
  public:
-  inline Chunk() : Chunk(nullptr) {}
-  virtual ~Chunk();
+  inline Int64List() : Int64List(nullptr) {}
+  virtual ~Int64List();
 
-  Chunk(const Chunk& from);
-  Chunk(Chunk&& from) noexcept
-    : Chunk() {
+  Int64List(const Int64List& from);
+  Int64List(Int64List&& from) noexcept
+    : Int64List() {
     *this = ::std::move(from);
   }
 
-  inline Chunk& operator=(const Chunk& from) {
+  inline Int64List& operator=(const Int64List& from) {
     CopyFrom(from);
     return *this;
   }
-  inline Chunk& operator=(Chunk&& from) noexcept {
+  inline Int64List& operator=(Int64List&& from) noexcept {
     if (GetArena() == from.GetArena()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -463,20 +446,20 @@ class Chunk PROTOBUF_FINAL :
   static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
     return GetMetadataStatic().reflection;
   }
-  static const Chunk& default_instance();
+  static const Int64List& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const Chunk* internal_default_instance() {
-    return reinterpret_cast<const Chunk*>(
-               &_Chunk_default_instance_);
+  static inline const Int64List* internal_default_instance() {
+    return reinterpret_cast<const Int64List*>(
+               &_Int64List_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     2;
 
-  friend void swap(Chunk& a, Chunk& b) {
+  friend void swap(Int64List& a, Int64List& b) {
     a.Swap(&b);
   }
-  inline void Swap(Chunk* other) {
+  inline void Swap(Int64List* other) {
     if (other == this) return;
     if (GetArena() == other->GetArena()) {
       InternalSwap(other);
@@ -484,7 +467,7 @@ class Chunk PROTOBUF_FINAL :
       ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
     }
   }
-  void UnsafeArenaSwap(Chunk* other) {
+  void UnsafeArenaSwap(Int64List* other) {
     if (other == this) return;
     GOOGLE_DCHECK(GetArena() == other->GetArena());
     InternalSwap(other);
@@ -492,17 +475,17 @@ class Chunk PROTOBUF_FINAL :
 
   // implements Message ----------------------------------------------
 
-  inline Chunk* New() const final {
-    return CreateMaybeMessage<Chunk>(nullptr);
+  inline Int64List* New() const final {
+    return CreateMaybeMessage<Int64List>(nullptr);
   }
 
-  Chunk* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
-    return CreateMaybeMessage<Chunk>(arena);
+  Int64List* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<Int64List>(arena);
   }
   void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
   void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
-  void CopyFrom(const Chunk& from);
-  void MergeFrom(const Chunk& from);
+  void CopyFrom(const Int64List& from);
+  void MergeFrom(const Int64List& from);
   PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
   bool IsInitialized() const final;
 
@@ -516,13 +499,13 @@ class Chunk PROTOBUF_FINAL :
   inline void SharedCtor();
   inline void SharedDtor();
   void SetCachedSize(int size) const final;
-  void InternalSwap(Chunk* other);
+  void InternalSwap(Int64List* other);
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "message.Chunk";
+    return "message.Int64List";
   }
   protected:
-  explicit Chunk(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  explicit Int64List(::PROTOBUF_NAMESPACE_ID::Arena* arena);
   private:
   static void ArenaDtor(void* object);
   inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
@@ -542,34 +525,1069 @@ class Chunk PROTOBUF_FINAL :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kGamesFieldNumber = 1,
+    kValueFieldNumber = 1,
   };
-  // repeated .message.Game games = 1;
-  int games_size() const;
+  // repeated int64 value = 1 [packed = true];
+  int value_size() const;
   private:
-  int _internal_games_size() const;
+  int _internal_value_size() const;
   public:
-  void clear_games();
-  ::message::Game* mutable_games(int index);
-  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Game >*
-      mutable_games();
+  void clear_value();
   private:
-  const ::message::Game& _internal_games(int index) const;
-  ::message::Game* _internal_add_games();
+  ::PROTOBUF_NAMESPACE_ID::int64 _internal_value(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >&
+      _internal_value() const;
+  void _internal_add_value(::PROTOBUF_NAMESPACE_ID::int64 value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >*
+      _internal_mutable_value();
   public:
-  const ::message::Game& games(int index) const;
-  ::message::Game* add_games();
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Game >&
-      games() const;
+  ::PROTOBUF_NAMESPACE_ID::int64 value(int index) const;
+  void set_value(int index, ::PROTOBUF_NAMESPACE_ID::int64 value);
+  void add_value(::PROTOBUF_NAMESPACE_ID::int64 value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >&
+      value() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >*
+      mutable_value();
 
-  // @@protoc_insertion_point(class_scope:message.Chunk)
+  // @@protoc_insertion_point(class_scope:message.Int64List)
  private:
   class _Internal;
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
-  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Game > games_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 > value_;
+  mutable std::atomic<int> _value_cached_byte_size_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_ChessCoach_2eproto;
+};
+// -------------------------------------------------------------------
+
+class Feature PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.Feature) */ {
+ public:
+  inline Feature() : Feature(nullptr) {}
+  virtual ~Feature();
+
+  Feature(const Feature& from);
+  Feature(Feature&& from) noexcept
+    : Feature() {
+    *this = ::std::move(from);
+  }
+
+  inline Feature& operator=(const Feature& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline Feature& operator=(Feature&& from) noexcept {
+    if (GetArena() == from.GetArena()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return GetMetadataStatic().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return GetMetadataStatic().reflection;
+  }
+  static const Feature& default_instance();
+
+  enum KindCase {
+    kBytesList = 1,
+    kFloatList = 2,
+    kInt64List = 3,
+    KIND_NOT_SET = 0,
+  };
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const Feature* internal_default_instance() {
+    return reinterpret_cast<const Feature*>(
+               &_Feature_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    3;
+
+  friend void swap(Feature& a, Feature& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(Feature* other) {
+    if (other == this) return;
+    if (GetArena() == other->GetArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(Feature* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline Feature* New() const final {
+    return CreateMaybeMessage<Feature>(nullptr);
+  }
+
+  Feature* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<Feature>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const Feature& from);
+  void MergeFrom(const Feature& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  inline void SharedCtor();
+  inline void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(Feature* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "message.Feature";
+  }
+  protected:
+  explicit Feature(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[kIndexInFileMessages];
+  }
+
+  public:
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kBytesListFieldNumber = 1,
+    kFloatListFieldNumber = 2,
+    kInt64ListFieldNumber = 3,
+  };
+  // .message.BytesList bytes_list = 1;
+  bool has_bytes_list() const;
+  private:
+  bool _internal_has_bytes_list() const;
+  public:
+  void clear_bytes_list();
+  const ::message::BytesList& bytes_list() const;
+  ::message::BytesList* release_bytes_list();
+  ::message::BytesList* mutable_bytes_list();
+  void set_allocated_bytes_list(::message::BytesList* bytes_list);
+  private:
+  const ::message::BytesList& _internal_bytes_list() const;
+  ::message::BytesList* _internal_mutable_bytes_list();
+  public:
+  void unsafe_arena_set_allocated_bytes_list(
+      ::message::BytesList* bytes_list);
+  ::message::BytesList* unsafe_arena_release_bytes_list();
+
+  // .message.FloatList float_list = 2;
+  bool has_float_list() const;
+  private:
+  bool _internal_has_float_list() const;
+  public:
+  void clear_float_list();
+  const ::message::FloatList& float_list() const;
+  ::message::FloatList* release_float_list();
+  ::message::FloatList* mutable_float_list();
+  void set_allocated_float_list(::message::FloatList* float_list);
+  private:
+  const ::message::FloatList& _internal_float_list() const;
+  ::message::FloatList* _internal_mutable_float_list();
+  public:
+  void unsafe_arena_set_allocated_float_list(
+      ::message::FloatList* float_list);
+  ::message::FloatList* unsafe_arena_release_float_list();
+
+  // .message.Int64List int64_list = 3;
+  bool has_int64_list() const;
+  private:
+  bool _internal_has_int64_list() const;
+  public:
+  void clear_int64_list();
+  const ::message::Int64List& int64_list() const;
+  ::message::Int64List* release_int64_list();
+  ::message::Int64List* mutable_int64_list();
+  void set_allocated_int64_list(::message::Int64List* int64_list);
+  private:
+  const ::message::Int64List& _internal_int64_list() const;
+  ::message::Int64List* _internal_mutable_int64_list();
+  public:
+  void unsafe_arena_set_allocated_int64_list(
+      ::message::Int64List* int64_list);
+  ::message::Int64List* unsafe_arena_release_int64_list();
+
+  void clear_kind();
+  KindCase kind_case() const;
+  // @@protoc_insertion_point(class_scope:message.Feature)
+ private:
+  class _Internal;
+  void set_has_bytes_list();
+  void set_has_float_list();
+  void set_has_int64_list();
+
+  inline bool has_kind() const;
+  inline void clear_has_kind();
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  union KindUnion {
+    KindUnion() {}
+    ::message::BytesList* bytes_list_;
+    ::message::FloatList* float_list_;
+    ::message::Int64List* int64_list_;
+  } kind_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 _oneof_case_[1];
+
+  friend struct ::TableStruct_ChessCoach_2eproto;
+};
+// -------------------------------------------------------------------
+
+class Features_FeatureEntry_DoNotUse : public ::PROTOBUF_NAMESPACE_ID::internal::MapEntry<Features_FeatureEntry_DoNotUse, 
+    std::string, ::message::Feature,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_STRING,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_MESSAGE,
+    0 > {
+public:
+  typedef ::PROTOBUF_NAMESPACE_ID::internal::MapEntry<Features_FeatureEntry_DoNotUse, 
+    std::string, ::message::Feature,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_STRING,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_MESSAGE,
+    0 > SuperType;
+  Features_FeatureEntry_DoNotUse();
+  explicit Features_FeatureEntry_DoNotUse(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  void MergeFrom(const Features_FeatureEntry_DoNotUse& other);
+  static const Features_FeatureEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const Features_FeatureEntry_DoNotUse*>(&_Features_FeatureEntry_DoNotUse_default_instance_); }
+  static bool ValidateKey(std::string* s) {
+    return ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(s->data(), static_cast<int>(s->size()), ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::PARSE, "message.Features.FeatureEntry.key");
+ }
+  static bool ValidateValue(void*) { return true; }
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& other) final;
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[4];
+  }
+
+  public:
+};
+
+// -------------------------------------------------------------------
+
+class Features PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.Features) */ {
+ public:
+  inline Features() : Features(nullptr) {}
+  virtual ~Features();
+
+  Features(const Features& from);
+  Features(Features&& from) noexcept
+    : Features() {
+    *this = ::std::move(from);
+  }
+
+  inline Features& operator=(const Features& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline Features& operator=(Features&& from) noexcept {
+    if (GetArena() == from.GetArena()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return GetMetadataStatic().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return GetMetadataStatic().reflection;
+  }
+  static const Features& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const Features* internal_default_instance() {
+    return reinterpret_cast<const Features*>(
+               &_Features_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    5;
+
+  friend void swap(Features& a, Features& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(Features* other) {
+    if (other == this) return;
+    if (GetArena() == other->GetArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(Features* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline Features* New() const final {
+    return CreateMaybeMessage<Features>(nullptr);
+  }
+
+  Features* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<Features>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const Features& from);
+  void MergeFrom(const Features& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  inline void SharedCtor();
+  inline void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(Features* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "message.Features";
+  }
+  protected:
+  explicit Features(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[kIndexInFileMessages];
+  }
+
+  public:
+
+  // nested types ----------------------------------------------------
+
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kFeatureFieldNumber = 1,
+  };
+  // map<string, .message.Feature> feature = 1;
+  int feature_size() const;
+  private:
+  int _internal_feature_size() const;
+  public:
+  void clear_feature();
+  private:
+  const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >&
+      _internal_feature() const;
+  ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >*
+      _internal_mutable_feature();
+  public:
+  const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >&
+      feature() const;
+  ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >*
+      mutable_feature();
+
+  // @@protoc_insertion_point(class_scope:message.Features)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::internal::MapField<
+      Features_FeatureEntry_DoNotUse,
+      std::string, ::message::Feature,
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_STRING,
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_MESSAGE,
+      0 > feature_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_ChessCoach_2eproto;
+};
+// -------------------------------------------------------------------
+
+class FeatureList PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.FeatureList) */ {
+ public:
+  inline FeatureList() : FeatureList(nullptr) {}
+  virtual ~FeatureList();
+
+  FeatureList(const FeatureList& from);
+  FeatureList(FeatureList&& from) noexcept
+    : FeatureList() {
+    *this = ::std::move(from);
+  }
+
+  inline FeatureList& operator=(const FeatureList& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline FeatureList& operator=(FeatureList&& from) noexcept {
+    if (GetArena() == from.GetArena()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return GetMetadataStatic().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return GetMetadataStatic().reflection;
+  }
+  static const FeatureList& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const FeatureList* internal_default_instance() {
+    return reinterpret_cast<const FeatureList*>(
+               &_FeatureList_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    6;
+
+  friend void swap(FeatureList& a, FeatureList& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(FeatureList* other) {
+    if (other == this) return;
+    if (GetArena() == other->GetArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(FeatureList* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline FeatureList* New() const final {
+    return CreateMaybeMessage<FeatureList>(nullptr);
+  }
+
+  FeatureList* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<FeatureList>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const FeatureList& from);
+  void MergeFrom(const FeatureList& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  inline void SharedCtor();
+  inline void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(FeatureList* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "message.FeatureList";
+  }
+  protected:
+  explicit FeatureList(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[kIndexInFileMessages];
+  }
+
+  public:
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kFeatureFieldNumber = 1,
+  };
+  // repeated .message.Feature feature = 1;
+  int feature_size() const;
+  private:
+  int _internal_feature_size() const;
+  public:
+  void clear_feature();
+  ::message::Feature* mutable_feature(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Feature >*
+      mutable_feature();
+  private:
+  const ::message::Feature& _internal_feature(int index) const;
+  ::message::Feature* _internal_add_feature();
+  public:
+  const ::message::Feature& feature(int index) const;
+  ::message::Feature* add_feature();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Feature >&
+      feature() const;
+
+  // @@protoc_insertion_point(class_scope:message.FeatureList)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Feature > feature_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_ChessCoach_2eproto;
+};
+// -------------------------------------------------------------------
+
+class FeatureLists_FeatureListEntry_DoNotUse : public ::PROTOBUF_NAMESPACE_ID::internal::MapEntry<FeatureLists_FeatureListEntry_DoNotUse, 
+    std::string, ::message::FeatureList,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_STRING,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_MESSAGE,
+    0 > {
+public:
+  typedef ::PROTOBUF_NAMESPACE_ID::internal::MapEntry<FeatureLists_FeatureListEntry_DoNotUse, 
+    std::string, ::message::FeatureList,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_STRING,
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_MESSAGE,
+    0 > SuperType;
+  FeatureLists_FeatureListEntry_DoNotUse();
+  explicit FeatureLists_FeatureListEntry_DoNotUse(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  void MergeFrom(const FeatureLists_FeatureListEntry_DoNotUse& other);
+  static const FeatureLists_FeatureListEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const FeatureLists_FeatureListEntry_DoNotUse*>(&_FeatureLists_FeatureListEntry_DoNotUse_default_instance_); }
+  static bool ValidateKey(std::string* s) {
+    return ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(s->data(), static_cast<int>(s->size()), ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::PARSE, "message.FeatureLists.FeatureListEntry.key");
+ }
+  static bool ValidateValue(void*) { return true; }
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& other) final;
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[7];
+  }
+
+  public:
+};
+
+// -------------------------------------------------------------------
+
+class FeatureLists PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.FeatureLists) */ {
+ public:
+  inline FeatureLists() : FeatureLists(nullptr) {}
+  virtual ~FeatureLists();
+
+  FeatureLists(const FeatureLists& from);
+  FeatureLists(FeatureLists&& from) noexcept
+    : FeatureLists() {
+    *this = ::std::move(from);
+  }
+
+  inline FeatureLists& operator=(const FeatureLists& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline FeatureLists& operator=(FeatureLists&& from) noexcept {
+    if (GetArena() == from.GetArena()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return GetMetadataStatic().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return GetMetadataStatic().reflection;
+  }
+  static const FeatureLists& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const FeatureLists* internal_default_instance() {
+    return reinterpret_cast<const FeatureLists*>(
+               &_FeatureLists_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    8;
+
+  friend void swap(FeatureLists& a, FeatureLists& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(FeatureLists* other) {
+    if (other == this) return;
+    if (GetArena() == other->GetArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(FeatureLists* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline FeatureLists* New() const final {
+    return CreateMaybeMessage<FeatureLists>(nullptr);
+  }
+
+  FeatureLists* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<FeatureLists>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const FeatureLists& from);
+  void MergeFrom(const FeatureLists& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  inline void SharedCtor();
+  inline void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(FeatureLists* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "message.FeatureLists";
+  }
+  protected:
+  explicit FeatureLists(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[kIndexInFileMessages];
+  }
+
+  public:
+
+  // nested types ----------------------------------------------------
+
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kFeatureListFieldNumber = 1,
+  };
+  // map<string, .message.FeatureList> feature_list = 1;
+  int feature_list_size() const;
+  private:
+  int _internal_feature_list_size() const;
+  public:
+  void clear_feature_list();
+  private:
+  const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >&
+      _internal_feature_list() const;
+  ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >*
+      _internal_mutable_feature_list();
+  public:
+  const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >&
+      feature_list() const;
+  ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >*
+      mutable_feature_list();
+
+  // @@protoc_insertion_point(class_scope:message.FeatureLists)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::internal::MapField<
+      FeatureLists_FeatureListEntry_DoNotUse,
+      std::string, ::message::FeatureList,
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_STRING,
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::TYPE_MESSAGE,
+      0 > feature_list_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_ChessCoach_2eproto;
+};
+// -------------------------------------------------------------------
+
+class Example PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.Example) */ {
+ public:
+  inline Example() : Example(nullptr) {}
+  virtual ~Example();
+
+  Example(const Example& from);
+  Example(Example&& from) noexcept
+    : Example() {
+    *this = ::std::move(from);
+  }
+
+  inline Example& operator=(const Example& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline Example& operator=(Example&& from) noexcept {
+    if (GetArena() == from.GetArena()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return GetMetadataStatic().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return GetMetadataStatic().reflection;
+  }
+  static const Example& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const Example* internal_default_instance() {
+    return reinterpret_cast<const Example*>(
+               &_Example_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    9;
+
+  friend void swap(Example& a, Example& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(Example* other) {
+    if (other == this) return;
+    if (GetArena() == other->GetArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(Example* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline Example* New() const final {
+    return CreateMaybeMessage<Example>(nullptr);
+  }
+
+  Example* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<Example>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const Example& from);
+  void MergeFrom(const Example& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  inline void SharedCtor();
+  inline void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(Example* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "message.Example";
+  }
+  protected:
+  explicit Example(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[kIndexInFileMessages];
+  }
+
+  public:
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kFeaturesFieldNumber = 1,
+  };
+  // .message.Features features = 1;
+  bool has_features() const;
+  private:
+  bool _internal_has_features() const;
+  public:
+  void clear_features();
+  const ::message::Features& features() const;
+  ::message::Features* release_features();
+  ::message::Features* mutable_features();
+  void set_allocated_features(::message::Features* features);
+  private:
+  const ::message::Features& _internal_features() const;
+  ::message::Features* _internal_mutable_features();
+  public:
+  void unsafe_arena_set_allocated_features(
+      ::message::Features* features);
+  ::message::Features* unsafe_arena_release_features();
+
+  // @@protoc_insertion_point(class_scope:message.Example)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::message::Features* features_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_ChessCoach_2eproto;
+};
+// -------------------------------------------------------------------
+
+class SequenceExample PROTOBUF_FINAL :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:message.SequenceExample) */ {
+ public:
+  inline SequenceExample() : SequenceExample(nullptr) {}
+  virtual ~SequenceExample();
+
+  SequenceExample(const SequenceExample& from);
+  SequenceExample(SequenceExample&& from) noexcept
+    : SequenceExample() {
+    *this = ::std::move(from);
+  }
+
+  inline SequenceExample& operator=(const SequenceExample& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline SequenceExample& operator=(SequenceExample&& from) noexcept {
+    if (GetArena() == from.GetArena()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return GetMetadataStatic().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return GetMetadataStatic().reflection;
+  }
+  static const SequenceExample& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const SequenceExample* internal_default_instance() {
+    return reinterpret_cast<const SequenceExample*>(
+               &_SequenceExample_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    10;
+
+  friend void swap(SequenceExample& a, SequenceExample& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(SequenceExample* other) {
+    if (other == this) return;
+    if (GetArena() == other->GetArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(SequenceExample* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline SequenceExample* New() const final {
+    return CreateMaybeMessage<SequenceExample>(nullptr);
+  }
+
+  SequenceExample* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<SequenceExample>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const SequenceExample& from);
+  void MergeFrom(const SequenceExample& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  inline void SharedCtor();
+  inline void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(SequenceExample* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "message.SequenceExample";
+  }
+  protected:
+  explicit SequenceExample(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+  private:
+  static ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadataStatic() {
+    ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&::descriptor_table_ChessCoach_2eproto);
+    return ::descriptor_table_ChessCoach_2eproto.file_level_metadata[kIndexInFileMessages];
+  }
+
+  public:
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kContextFieldNumber = 1,
+    kFeatureListsFieldNumber = 2,
+  };
+  // .message.Features context = 1;
+  bool has_context() const;
+  private:
+  bool _internal_has_context() const;
+  public:
+  void clear_context();
+  const ::message::Features& context() const;
+  ::message::Features* release_context();
+  ::message::Features* mutable_context();
+  void set_allocated_context(::message::Features* context);
+  private:
+  const ::message::Features& _internal_context() const;
+  ::message::Features* _internal_mutable_context();
+  public:
+  void unsafe_arena_set_allocated_context(
+      ::message::Features* context);
+  ::message::Features* unsafe_arena_release_context();
+
+  // .message.FeatureLists feature_lists = 2;
+  bool has_feature_lists() const;
+  private:
+  bool _internal_has_feature_lists() const;
+  public:
+  void clear_feature_lists();
+  const ::message::FeatureLists& feature_lists() const;
+  ::message::FeatureLists* release_feature_lists();
+  ::message::FeatureLists* mutable_feature_lists();
+  void set_allocated_feature_lists(::message::FeatureLists* feature_lists);
+  private:
+  const ::message::FeatureLists& _internal_feature_lists() const;
+  ::message::FeatureLists* _internal_mutable_feature_lists();
+  public:
+  void unsafe_arena_set_allocated_feature_lists(
+      ::message::FeatureLists* feature_lists);
+  ::message::FeatureLists* unsafe_arena_release_feature_lists();
+
+  // @@protoc_insertion_point(class_scope:message.SequenceExample)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::message::Features* context_;
+  ::message::FeatureLists* feature_lists_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_ChessCoach_2eproto;
 };
@@ -582,251 +1600,805 @@ class Chunk PROTOBUF_FINAL :
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif  // __GNUC__
-// Position
+// BytesList
 
-// uint32 move = 1;
-inline void Position::clear_move() {
-  move_ = 0u;
+// repeated bytes value = 1;
+inline int BytesList::_internal_value_size() const {
+  return value_.size();
 }
-inline ::PROTOBUF_NAMESPACE_ID::uint32 Position::_internal_move() const {
-  return move_;
+inline int BytesList::value_size() const {
+  return _internal_value_size();
 }
-inline ::PROTOBUF_NAMESPACE_ID::uint32 Position::move() const {
-  // @@protoc_insertion_point(field_get:message.Position.move)
-  return _internal_move();
+inline void BytesList::clear_value() {
+  value_.Clear();
 }
-inline void Position::_internal_set_move(::PROTOBUF_NAMESPACE_ID::uint32 value) {
-  
-  move_ = value;
+inline std::string* BytesList::add_value() {
+  // @@protoc_insertion_point(field_add_mutable:message.BytesList.value)
+  return _internal_add_value();
 }
-inline void Position::set_move(::PROTOBUF_NAMESPACE_ID::uint32 value) {
-  _internal_set_move(value);
-  // @@protoc_insertion_point(field_set:message.Position.move)
+inline const std::string& BytesList::_internal_value(int index) const {
+  return value_.Get(index);
 }
-
-// float mctsValue = 2;
-inline void Position::clear_mctsvalue() {
-  mctsvalue_ = 0;
+inline const std::string& BytesList::value(int index) const {
+  // @@protoc_insertion_point(field_get:message.BytesList.value)
+  return _internal_value(index);
 }
-inline float Position::_internal_mctsvalue() const {
-  return mctsvalue_;
+inline std::string* BytesList::mutable_value(int index) {
+  // @@protoc_insertion_point(field_mutable:message.BytesList.value)
+  return value_.Mutable(index);
 }
-inline float Position::mctsvalue() const {
-  // @@protoc_insertion_point(field_get:message.Position.mctsValue)
-  return _internal_mctsvalue();
+inline void BytesList::set_value(int index, const std::string& value) {
+  // @@protoc_insertion_point(field_set:message.BytesList.value)
+  value_.Mutable(index)->assign(value);
 }
-inline void Position::_internal_set_mctsvalue(float value) {
-  
-  mctsvalue_ = value;
+inline void BytesList::set_value(int index, std::string&& value) {
+  // @@protoc_insertion_point(field_set:message.BytesList.value)
+  value_.Mutable(index)->assign(std::move(value));
 }
-inline void Position::set_mctsvalue(float value) {
-  _internal_set_mctsvalue(value);
-  // @@protoc_insertion_point(field_set:message.Position.mctsValue)
+inline void BytesList::set_value(int index, const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  value_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:message.BytesList.value)
 }
-
-// repeated fixed64 image = 3 [packed = true];
-inline int Position::_internal_image_size() const {
-  return image_.size();
+inline void BytesList::set_value(int index, const void* value, size_t size) {
+  value_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:message.BytesList.value)
 }
-inline int Position::image_size() const {
-  return _internal_image_size();
+inline std::string* BytesList::_internal_add_value() {
+  return value_.Add();
 }
-inline void Position::clear_image() {
-  image_.Clear();
+inline void BytesList::add_value(const std::string& value) {
+  value_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:message.BytesList.value)
 }
-inline ::PROTOBUF_NAMESPACE_ID::uint64 Position::_internal_image(int index) const {
-  return image_.Get(index);
+inline void BytesList::add_value(std::string&& value) {
+  value_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:message.BytesList.value)
 }
-inline ::PROTOBUF_NAMESPACE_ID::uint64 Position::image(int index) const {
-  // @@protoc_insertion_point(field_get:message.Position.image)
-  return _internal_image(index);
+inline void BytesList::add_value(const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  value_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:message.BytesList.value)
 }
-inline void Position::set_image(int index, ::PROTOBUF_NAMESPACE_ID::uint64 value) {
-  image_.Set(index, value);
-  // @@protoc_insertion_point(field_set:message.Position.image)
+inline void BytesList::add_value(const void* value, size_t size) {
+  value_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:message.BytesList.value)
 }
-inline void Position::_internal_add_image(::PROTOBUF_NAMESPACE_ID::uint64 value) {
-  image_.Add(value);
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>&
+BytesList::value() const {
+  // @@protoc_insertion_point(field_list:message.BytesList.value)
+  return value_;
 }
-inline void Position::add_image(::PROTOBUF_NAMESPACE_ID::uint64 value) {
-  _internal_add_image(value);
-  // @@protoc_insertion_point(field_add:message.Position.image)
-}
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
-Position::_internal_image() const {
-  return image_;
-}
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >&
-Position::image() const {
-  // @@protoc_insertion_point(field_list:message.Position.image)
-  return _internal_image();
-}
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
-Position::_internal_mutable_image() {
-  return &image_;
-}
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::uint64 >*
-Position::mutable_image() {
-  // @@protoc_insertion_point(field_mutable_list:message.Position.image)
-  return _internal_mutable_image();
-}
-
-// repeated float policy = 4 [packed = true];
-inline int Position::_internal_policy_size() const {
-  return policy_.size();
-}
-inline int Position::policy_size() const {
-  return _internal_policy_size();
-}
-inline void Position::clear_policy() {
-  policy_.Clear();
-}
-inline float Position::_internal_policy(int index) const {
-  return policy_.Get(index);
-}
-inline float Position::policy(int index) const {
-  // @@protoc_insertion_point(field_get:message.Position.policy)
-  return _internal_policy(index);
-}
-inline void Position::set_policy(int index, float value) {
-  policy_.Set(index, value);
-  // @@protoc_insertion_point(field_set:message.Position.policy)
-}
-inline void Position::_internal_add_policy(float value) {
-  policy_.Add(value);
-}
-inline void Position::add_policy(float value) {
-  _internal_add_policy(value);
-  // @@protoc_insertion_point(field_add:message.Position.policy)
-}
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
-Position::_internal_policy() const {
-  return policy_;
-}
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
-Position::policy() const {
-  // @@protoc_insertion_point(field_list:message.Position.policy)
-  return _internal_policy();
-}
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
-Position::_internal_mutable_policy() {
-  return &policy_;
-}
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
-Position::mutable_policy() {
-  // @@protoc_insertion_point(field_mutable_list:message.Position.policy)
-  return _internal_mutable_policy();
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>*
+BytesList::mutable_value() {
+  // @@protoc_insertion_point(field_mutable_list:message.BytesList.value)
+  return &value_;
 }
 
 // -------------------------------------------------------------------
 
-// Game
+// FloatList
 
-// float result = 1;
-inline void Game::clear_result() {
-  result_ = 0;
+// repeated float value = 1 [packed = true];
+inline int FloatList::_internal_value_size() const {
+  return value_.size();
 }
-inline float Game::_internal_result() const {
-  return result_;
+inline int FloatList::value_size() const {
+  return _internal_value_size();
 }
-inline float Game::result() const {
-  // @@protoc_insertion_point(field_get:message.Game.result)
-  return _internal_result();
+inline void FloatList::clear_value() {
+  value_.Clear();
 }
-inline void Game::_internal_set_result(float value) {
-  
-  result_ = value;
+inline float FloatList::_internal_value(int index) const {
+  return value_.Get(index);
 }
-inline void Game::set_result(float value) {
-  _internal_set_result(value);
-  // @@protoc_insertion_point(field_set:message.Game.result)
+inline float FloatList::value(int index) const {
+  // @@protoc_insertion_point(field_get:message.FloatList.value)
+  return _internal_value(index);
 }
-
-// repeated .message.Position positions = 2;
-inline int Game::_internal_positions_size() const {
-  return positions_.size();
+inline void FloatList::set_value(int index, float value) {
+  value_.Set(index, value);
+  // @@protoc_insertion_point(field_set:message.FloatList.value)
 }
-inline int Game::positions_size() const {
-  return _internal_positions_size();
+inline void FloatList::_internal_add_value(float value) {
+  value_.Add(value);
 }
-inline void Game::clear_positions() {
-  positions_.Clear();
+inline void FloatList::add_value(float value) {
+  _internal_add_value(value);
+  // @@protoc_insertion_point(field_add:message.FloatList.value)
 }
-inline ::message::Position* Game::mutable_positions(int index) {
-  // @@protoc_insertion_point(field_mutable:message.Game.positions)
-  return positions_.Mutable(index);
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
+FloatList::_internal_value() const {
+  return value_;
 }
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Position >*
-Game::mutable_positions() {
-  // @@protoc_insertion_point(field_mutable_list:message.Game.positions)
-  return &positions_;
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >&
+FloatList::value() const {
+  // @@protoc_insertion_point(field_list:message.FloatList.value)
+  return _internal_value();
 }
-inline const ::message::Position& Game::_internal_positions(int index) const {
-  return positions_.Get(index);
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
+FloatList::_internal_mutable_value() {
+  return &value_;
 }
-inline const ::message::Position& Game::positions(int index) const {
-  // @@protoc_insertion_point(field_get:message.Game.positions)
-  return _internal_positions(index);
-}
-inline ::message::Position* Game::_internal_add_positions() {
-  return positions_.Add();
-}
-inline ::message::Position* Game::add_positions() {
-  // @@protoc_insertion_point(field_add:message.Game.positions)
-  return _internal_add_positions();
-}
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Position >&
-Game::positions() const {
-  // @@protoc_insertion_point(field_list:message.Game.positions)
-  return positions_;
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< float >*
+FloatList::mutable_value() {
+  // @@protoc_insertion_point(field_mutable_list:message.FloatList.value)
+  return _internal_mutable_value();
 }
 
 // -------------------------------------------------------------------
 
-// Chunk
+// Int64List
 
-// repeated .message.Game games = 1;
-inline int Chunk::_internal_games_size() const {
-  return games_.size();
+// repeated int64 value = 1 [packed = true];
+inline int Int64List::_internal_value_size() const {
+  return value_.size();
 }
-inline int Chunk::games_size() const {
-  return _internal_games_size();
+inline int Int64List::value_size() const {
+  return _internal_value_size();
 }
-inline void Chunk::clear_games() {
-  games_.Clear();
+inline void Int64List::clear_value() {
+  value_.Clear();
 }
-inline ::message::Game* Chunk::mutable_games(int index) {
-  // @@protoc_insertion_point(field_mutable:message.Chunk.games)
-  return games_.Mutable(index);
+inline ::PROTOBUF_NAMESPACE_ID::int64 Int64List::_internal_value(int index) const {
+  return value_.Get(index);
 }
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Game >*
-Chunk::mutable_games() {
-  // @@protoc_insertion_point(field_mutable_list:message.Chunk.games)
-  return &games_;
+inline ::PROTOBUF_NAMESPACE_ID::int64 Int64List::value(int index) const {
+  // @@protoc_insertion_point(field_get:message.Int64List.value)
+  return _internal_value(index);
 }
-inline const ::message::Game& Chunk::_internal_games(int index) const {
-  return games_.Get(index);
+inline void Int64List::set_value(int index, ::PROTOBUF_NAMESPACE_ID::int64 value) {
+  value_.Set(index, value);
+  // @@protoc_insertion_point(field_set:message.Int64List.value)
 }
-inline const ::message::Game& Chunk::games(int index) const {
-  // @@protoc_insertion_point(field_get:message.Chunk.games)
-  return _internal_games(index);
+inline void Int64List::_internal_add_value(::PROTOBUF_NAMESPACE_ID::int64 value) {
+  value_.Add(value);
 }
-inline ::message::Game* Chunk::_internal_add_games() {
-  return games_.Add();
+inline void Int64List::add_value(::PROTOBUF_NAMESPACE_ID::int64 value) {
+  _internal_add_value(value);
+  // @@protoc_insertion_point(field_add:message.Int64List.value)
 }
-inline ::message::Game* Chunk::add_games() {
-  // @@protoc_insertion_point(field_add:message.Chunk.games)
-  return _internal_add_games();
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >&
+Int64List::_internal_value() const {
+  return value_;
 }
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Game >&
-Chunk::games() const {
-  // @@protoc_insertion_point(field_list:message.Chunk.games)
-  return games_;
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >&
+Int64List::value() const {
+  // @@protoc_insertion_point(field_list:message.Int64List.value)
+  return _internal_value();
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >*
+Int64List::_internal_mutable_value() {
+  return &value_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< ::PROTOBUF_NAMESPACE_ID::int64 >*
+Int64List::mutable_value() {
+  // @@protoc_insertion_point(field_mutable_list:message.Int64List.value)
+  return _internal_mutable_value();
+}
+
+// -------------------------------------------------------------------
+
+// Feature
+
+// .message.BytesList bytes_list = 1;
+inline bool Feature::_internal_has_bytes_list() const {
+  return kind_case() == kBytesList;
+}
+inline bool Feature::has_bytes_list() const {
+  return _internal_has_bytes_list();
+}
+inline void Feature::set_has_bytes_list() {
+  _oneof_case_[0] = kBytesList;
+}
+inline void Feature::clear_bytes_list() {
+  if (_internal_has_bytes_list()) {
+    if (GetArena() == nullptr) {
+      delete kind_.bytes_list_;
+    }
+    clear_has_kind();
+  }
+}
+inline ::message::BytesList* Feature::release_bytes_list() {
+  // @@protoc_insertion_point(field_release:message.Feature.bytes_list)
+  if (_internal_has_bytes_list()) {
+    clear_has_kind();
+      ::message::BytesList* temp = kind_.bytes_list_;
+    if (GetArena() != nullptr) {
+      temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+    }
+    kind_.bytes_list_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline const ::message::BytesList& Feature::_internal_bytes_list() const {
+  return _internal_has_bytes_list()
+      ? *kind_.bytes_list_
+      : *reinterpret_cast< ::message::BytesList*>(&::message::_BytesList_default_instance_);
+}
+inline const ::message::BytesList& Feature::bytes_list() const {
+  // @@protoc_insertion_point(field_get:message.Feature.bytes_list)
+  return _internal_bytes_list();
+}
+inline ::message::BytesList* Feature::unsafe_arena_release_bytes_list() {
+  // @@protoc_insertion_point(field_unsafe_arena_release:message.Feature.bytes_list)
+  if (_internal_has_bytes_list()) {
+    clear_has_kind();
+    ::message::BytesList* temp = kind_.bytes_list_;
+    kind_.bytes_list_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline void Feature::unsafe_arena_set_allocated_bytes_list(::message::BytesList* bytes_list) {
+  clear_kind();
+  if (bytes_list) {
+    set_has_bytes_list();
+    kind_.bytes_list_ = bytes_list;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:message.Feature.bytes_list)
+}
+inline ::message::BytesList* Feature::_internal_mutable_bytes_list() {
+  if (!_internal_has_bytes_list()) {
+    clear_kind();
+    set_has_bytes_list();
+    kind_.bytes_list_ = CreateMaybeMessage< ::message::BytesList >(GetArena());
+  }
+  return kind_.bytes_list_;
+}
+inline ::message::BytesList* Feature::mutable_bytes_list() {
+  // @@protoc_insertion_point(field_mutable:message.Feature.bytes_list)
+  return _internal_mutable_bytes_list();
+}
+
+// .message.FloatList float_list = 2;
+inline bool Feature::_internal_has_float_list() const {
+  return kind_case() == kFloatList;
+}
+inline bool Feature::has_float_list() const {
+  return _internal_has_float_list();
+}
+inline void Feature::set_has_float_list() {
+  _oneof_case_[0] = kFloatList;
+}
+inline void Feature::clear_float_list() {
+  if (_internal_has_float_list()) {
+    if (GetArena() == nullptr) {
+      delete kind_.float_list_;
+    }
+    clear_has_kind();
+  }
+}
+inline ::message::FloatList* Feature::release_float_list() {
+  // @@protoc_insertion_point(field_release:message.Feature.float_list)
+  if (_internal_has_float_list()) {
+    clear_has_kind();
+      ::message::FloatList* temp = kind_.float_list_;
+    if (GetArena() != nullptr) {
+      temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+    }
+    kind_.float_list_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline const ::message::FloatList& Feature::_internal_float_list() const {
+  return _internal_has_float_list()
+      ? *kind_.float_list_
+      : *reinterpret_cast< ::message::FloatList*>(&::message::_FloatList_default_instance_);
+}
+inline const ::message::FloatList& Feature::float_list() const {
+  // @@protoc_insertion_point(field_get:message.Feature.float_list)
+  return _internal_float_list();
+}
+inline ::message::FloatList* Feature::unsafe_arena_release_float_list() {
+  // @@protoc_insertion_point(field_unsafe_arena_release:message.Feature.float_list)
+  if (_internal_has_float_list()) {
+    clear_has_kind();
+    ::message::FloatList* temp = kind_.float_list_;
+    kind_.float_list_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline void Feature::unsafe_arena_set_allocated_float_list(::message::FloatList* float_list) {
+  clear_kind();
+  if (float_list) {
+    set_has_float_list();
+    kind_.float_list_ = float_list;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:message.Feature.float_list)
+}
+inline ::message::FloatList* Feature::_internal_mutable_float_list() {
+  if (!_internal_has_float_list()) {
+    clear_kind();
+    set_has_float_list();
+    kind_.float_list_ = CreateMaybeMessage< ::message::FloatList >(GetArena());
+  }
+  return kind_.float_list_;
+}
+inline ::message::FloatList* Feature::mutable_float_list() {
+  // @@protoc_insertion_point(field_mutable:message.Feature.float_list)
+  return _internal_mutable_float_list();
+}
+
+// .message.Int64List int64_list = 3;
+inline bool Feature::_internal_has_int64_list() const {
+  return kind_case() == kInt64List;
+}
+inline bool Feature::has_int64_list() const {
+  return _internal_has_int64_list();
+}
+inline void Feature::set_has_int64_list() {
+  _oneof_case_[0] = kInt64List;
+}
+inline void Feature::clear_int64_list() {
+  if (_internal_has_int64_list()) {
+    if (GetArena() == nullptr) {
+      delete kind_.int64_list_;
+    }
+    clear_has_kind();
+  }
+}
+inline ::message::Int64List* Feature::release_int64_list() {
+  // @@protoc_insertion_point(field_release:message.Feature.int64_list)
+  if (_internal_has_int64_list()) {
+    clear_has_kind();
+      ::message::Int64List* temp = kind_.int64_list_;
+    if (GetArena() != nullptr) {
+      temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+    }
+    kind_.int64_list_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline const ::message::Int64List& Feature::_internal_int64_list() const {
+  return _internal_has_int64_list()
+      ? *kind_.int64_list_
+      : *reinterpret_cast< ::message::Int64List*>(&::message::_Int64List_default_instance_);
+}
+inline const ::message::Int64List& Feature::int64_list() const {
+  // @@protoc_insertion_point(field_get:message.Feature.int64_list)
+  return _internal_int64_list();
+}
+inline ::message::Int64List* Feature::unsafe_arena_release_int64_list() {
+  // @@protoc_insertion_point(field_unsafe_arena_release:message.Feature.int64_list)
+  if (_internal_has_int64_list()) {
+    clear_has_kind();
+    ::message::Int64List* temp = kind_.int64_list_;
+    kind_.int64_list_ = nullptr;
+    return temp;
+  } else {
+    return nullptr;
+  }
+}
+inline void Feature::unsafe_arena_set_allocated_int64_list(::message::Int64List* int64_list) {
+  clear_kind();
+  if (int64_list) {
+    set_has_int64_list();
+    kind_.int64_list_ = int64_list;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:message.Feature.int64_list)
+}
+inline ::message::Int64List* Feature::_internal_mutable_int64_list() {
+  if (!_internal_has_int64_list()) {
+    clear_kind();
+    set_has_int64_list();
+    kind_.int64_list_ = CreateMaybeMessage< ::message::Int64List >(GetArena());
+  }
+  return kind_.int64_list_;
+}
+inline ::message::Int64List* Feature::mutable_int64_list() {
+  // @@protoc_insertion_point(field_mutable:message.Feature.int64_list)
+  return _internal_mutable_int64_list();
+}
+
+inline bool Feature::has_kind() const {
+  return kind_case() != KIND_NOT_SET;
+}
+inline void Feature::clear_has_kind() {
+  _oneof_case_[0] = KIND_NOT_SET;
+}
+inline Feature::KindCase Feature::kind_case() const {
+  return Feature::KindCase(_oneof_case_[0]);
+}
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// Features
+
+// map<string, .message.Feature> feature = 1;
+inline int Features::_internal_feature_size() const {
+  return feature_.size();
+}
+inline int Features::feature_size() const {
+  return _internal_feature_size();
+}
+inline void Features::clear_feature() {
+  feature_.Clear();
+}
+inline const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >&
+Features::_internal_feature() const {
+  return feature_.GetMap();
+}
+inline const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >&
+Features::feature() const {
+  // @@protoc_insertion_point(field_map:message.Features.feature)
+  return _internal_feature();
+}
+inline ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >*
+Features::_internal_mutable_feature() {
+  return feature_.MutableMap();
+}
+inline ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::Feature >*
+Features::mutable_feature() {
+  // @@protoc_insertion_point(field_mutable_map:message.Features.feature)
+  return _internal_mutable_feature();
+}
+
+// -------------------------------------------------------------------
+
+// FeatureList
+
+// repeated .message.Feature feature = 1;
+inline int FeatureList::_internal_feature_size() const {
+  return feature_.size();
+}
+inline int FeatureList::feature_size() const {
+  return _internal_feature_size();
+}
+inline void FeatureList::clear_feature() {
+  feature_.Clear();
+}
+inline ::message::Feature* FeatureList::mutable_feature(int index) {
+  // @@protoc_insertion_point(field_mutable:message.FeatureList.feature)
+  return feature_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Feature >*
+FeatureList::mutable_feature() {
+  // @@protoc_insertion_point(field_mutable_list:message.FeatureList.feature)
+  return &feature_;
+}
+inline const ::message::Feature& FeatureList::_internal_feature(int index) const {
+  return feature_.Get(index);
+}
+inline const ::message::Feature& FeatureList::feature(int index) const {
+  // @@protoc_insertion_point(field_get:message.FeatureList.feature)
+  return _internal_feature(index);
+}
+inline ::message::Feature* FeatureList::_internal_add_feature() {
+  return feature_.Add();
+}
+inline ::message::Feature* FeatureList::add_feature() {
+  // @@protoc_insertion_point(field_add:message.FeatureList.feature)
+  return _internal_add_feature();
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::message::Feature >&
+FeatureList::feature() const {
+  // @@protoc_insertion_point(field_list:message.FeatureList.feature)
+  return feature_;
+}
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// FeatureLists
+
+// map<string, .message.FeatureList> feature_list = 1;
+inline int FeatureLists::_internal_feature_list_size() const {
+  return feature_list_.size();
+}
+inline int FeatureLists::feature_list_size() const {
+  return _internal_feature_list_size();
+}
+inline void FeatureLists::clear_feature_list() {
+  feature_list_.Clear();
+}
+inline const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >&
+FeatureLists::_internal_feature_list() const {
+  return feature_list_.GetMap();
+}
+inline const ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >&
+FeatureLists::feature_list() const {
+  // @@protoc_insertion_point(field_map:message.FeatureLists.feature_list)
+  return _internal_feature_list();
+}
+inline ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >*
+FeatureLists::_internal_mutable_feature_list() {
+  return feature_list_.MutableMap();
+}
+inline ::PROTOBUF_NAMESPACE_ID::Map< std::string, ::message::FeatureList >*
+FeatureLists::mutable_feature_list() {
+  // @@protoc_insertion_point(field_mutable_map:message.FeatureLists.feature_list)
+  return _internal_mutable_feature_list();
+}
+
+// -------------------------------------------------------------------
+
+// Example
+
+// .message.Features features = 1;
+inline bool Example::_internal_has_features() const {
+  return this != internal_default_instance() && features_ != nullptr;
+}
+inline bool Example::has_features() const {
+  return _internal_has_features();
+}
+inline void Example::clear_features() {
+  if (GetArena() == nullptr && features_ != nullptr) {
+    delete features_;
+  }
+  features_ = nullptr;
+}
+inline const ::message::Features& Example::_internal_features() const {
+  const ::message::Features* p = features_;
+  return p != nullptr ? *p : *reinterpret_cast<const ::message::Features*>(
+      &::message::_Features_default_instance_);
+}
+inline const ::message::Features& Example::features() const {
+  // @@protoc_insertion_point(field_get:message.Example.features)
+  return _internal_features();
+}
+inline void Example::unsafe_arena_set_allocated_features(
+    ::message::Features* features) {
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::PROTOBUF_NAMESPACE_ID::MessageLite*>(features_);
+  }
+  features_ = features;
+  if (features) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:message.Example.features)
+}
+inline ::message::Features* Example::release_features() {
+  
+  ::message::Features* temp = features_;
+  features_ = nullptr;
+  if (GetArena() != nullptr) {
+    temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+  }
+  return temp;
+}
+inline ::message::Features* Example::unsafe_arena_release_features() {
+  // @@protoc_insertion_point(field_release:message.Example.features)
+  
+  ::message::Features* temp = features_;
+  features_ = nullptr;
+  return temp;
+}
+inline ::message::Features* Example::_internal_mutable_features() {
+  
+  if (features_ == nullptr) {
+    auto* p = CreateMaybeMessage<::message::Features>(GetArena());
+    features_ = p;
+  }
+  return features_;
+}
+inline ::message::Features* Example::mutable_features() {
+  // @@protoc_insertion_point(field_mutable:message.Example.features)
+  return _internal_mutable_features();
+}
+inline void Example::set_allocated_features(::message::Features* features) {
+  ::PROTOBUF_NAMESPACE_ID::Arena* message_arena = GetArena();
+  if (message_arena == nullptr) {
+    delete features_;
+  }
+  if (features) {
+    ::PROTOBUF_NAMESPACE_ID::Arena* submessage_arena =
+      ::PROTOBUF_NAMESPACE_ID::Arena::GetArena(features);
+    if (message_arena != submessage_arena) {
+      features = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
+          message_arena, features, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  features_ = features;
+  // @@protoc_insertion_point(field_set_allocated:message.Example.features)
+}
+
+// -------------------------------------------------------------------
+
+// SequenceExample
+
+// .message.Features context = 1;
+inline bool SequenceExample::_internal_has_context() const {
+  return this != internal_default_instance() && context_ != nullptr;
+}
+inline bool SequenceExample::has_context() const {
+  return _internal_has_context();
+}
+inline void SequenceExample::clear_context() {
+  if (GetArena() == nullptr && context_ != nullptr) {
+    delete context_;
+  }
+  context_ = nullptr;
+}
+inline const ::message::Features& SequenceExample::_internal_context() const {
+  const ::message::Features* p = context_;
+  return p != nullptr ? *p : *reinterpret_cast<const ::message::Features*>(
+      &::message::_Features_default_instance_);
+}
+inline const ::message::Features& SequenceExample::context() const {
+  // @@protoc_insertion_point(field_get:message.SequenceExample.context)
+  return _internal_context();
+}
+inline void SequenceExample::unsafe_arena_set_allocated_context(
+    ::message::Features* context) {
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::PROTOBUF_NAMESPACE_ID::MessageLite*>(context_);
+  }
+  context_ = context;
+  if (context) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:message.SequenceExample.context)
+}
+inline ::message::Features* SequenceExample::release_context() {
+  
+  ::message::Features* temp = context_;
+  context_ = nullptr;
+  if (GetArena() != nullptr) {
+    temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+  }
+  return temp;
+}
+inline ::message::Features* SequenceExample::unsafe_arena_release_context() {
+  // @@protoc_insertion_point(field_release:message.SequenceExample.context)
+  
+  ::message::Features* temp = context_;
+  context_ = nullptr;
+  return temp;
+}
+inline ::message::Features* SequenceExample::_internal_mutable_context() {
+  
+  if (context_ == nullptr) {
+    auto* p = CreateMaybeMessage<::message::Features>(GetArena());
+    context_ = p;
+  }
+  return context_;
+}
+inline ::message::Features* SequenceExample::mutable_context() {
+  // @@protoc_insertion_point(field_mutable:message.SequenceExample.context)
+  return _internal_mutable_context();
+}
+inline void SequenceExample::set_allocated_context(::message::Features* context) {
+  ::PROTOBUF_NAMESPACE_ID::Arena* message_arena = GetArena();
+  if (message_arena == nullptr) {
+    delete context_;
+  }
+  if (context) {
+    ::PROTOBUF_NAMESPACE_ID::Arena* submessage_arena =
+      ::PROTOBUF_NAMESPACE_ID::Arena::GetArena(context);
+    if (message_arena != submessage_arena) {
+      context = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
+          message_arena, context, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  context_ = context;
+  // @@protoc_insertion_point(field_set_allocated:message.SequenceExample.context)
+}
+
+// .message.FeatureLists feature_lists = 2;
+inline bool SequenceExample::_internal_has_feature_lists() const {
+  return this != internal_default_instance() && feature_lists_ != nullptr;
+}
+inline bool SequenceExample::has_feature_lists() const {
+  return _internal_has_feature_lists();
+}
+inline void SequenceExample::clear_feature_lists() {
+  if (GetArena() == nullptr && feature_lists_ != nullptr) {
+    delete feature_lists_;
+  }
+  feature_lists_ = nullptr;
+}
+inline const ::message::FeatureLists& SequenceExample::_internal_feature_lists() const {
+  const ::message::FeatureLists* p = feature_lists_;
+  return p != nullptr ? *p : *reinterpret_cast<const ::message::FeatureLists*>(
+      &::message::_FeatureLists_default_instance_);
+}
+inline const ::message::FeatureLists& SequenceExample::feature_lists() const {
+  // @@protoc_insertion_point(field_get:message.SequenceExample.feature_lists)
+  return _internal_feature_lists();
+}
+inline void SequenceExample::unsafe_arena_set_allocated_feature_lists(
+    ::message::FeatureLists* feature_lists) {
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::PROTOBUF_NAMESPACE_ID::MessageLite*>(feature_lists_);
+  }
+  feature_lists_ = feature_lists;
+  if (feature_lists) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:message.SequenceExample.feature_lists)
+}
+inline ::message::FeatureLists* SequenceExample::release_feature_lists() {
+  
+  ::message::FeatureLists* temp = feature_lists_;
+  feature_lists_ = nullptr;
+  if (GetArena() != nullptr) {
+    temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+  }
+  return temp;
+}
+inline ::message::FeatureLists* SequenceExample::unsafe_arena_release_feature_lists() {
+  // @@protoc_insertion_point(field_release:message.SequenceExample.feature_lists)
+  
+  ::message::FeatureLists* temp = feature_lists_;
+  feature_lists_ = nullptr;
+  return temp;
+}
+inline ::message::FeatureLists* SequenceExample::_internal_mutable_feature_lists() {
+  
+  if (feature_lists_ == nullptr) {
+    auto* p = CreateMaybeMessage<::message::FeatureLists>(GetArena());
+    feature_lists_ = p;
+  }
+  return feature_lists_;
+}
+inline ::message::FeatureLists* SequenceExample::mutable_feature_lists() {
+  // @@protoc_insertion_point(field_mutable:message.SequenceExample.feature_lists)
+  return _internal_mutable_feature_lists();
+}
+inline void SequenceExample::set_allocated_feature_lists(::message::FeatureLists* feature_lists) {
+  ::PROTOBUF_NAMESPACE_ID::Arena* message_arena = GetArena();
+  if (message_arena == nullptr) {
+    delete feature_lists_;
+  }
+  if (feature_lists) {
+    ::PROTOBUF_NAMESPACE_ID::Arena* submessage_arena =
+      ::PROTOBUF_NAMESPACE_ID::Arena::GetArena(feature_lists);
+    if (message_arena != submessage_arena) {
+      feature_lists = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
+          message_arena, feature_lists, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  feature_lists_ = feature_lists;
+  // @@protoc_insertion_point(field_set_allocated:message.SequenceExample.feature_lists)
 }
 
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

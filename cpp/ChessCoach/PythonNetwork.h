@@ -15,6 +15,9 @@
 #include <Python.h>
 #endif
 
+#define PY_ARRAY_UNIQUE_SYMBOL ChessCoach_ArrayApi
+#define NO_IMPORT_ARRAY
+
 class PythonContext
 {
 private:
@@ -32,15 +35,17 @@ class PythonNetwork : public INetwork
 {
 public:
 
+    static void PyAssert(bool result);
+
+public:
+
     PythonNetwork();
     virtual ~PythonNetwork();
 
     virtual void PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images);
-    virtual void TrainBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-        OutputPlanes* policies, OutputPlanes* replyPolicies);
-    virtual void ValidateBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-        OutputPlanes* policies, OutputPlanes* replyPolicies);
+    virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
+        std::vector<Window>& trainingWindows, int step, int checkpoint);
     virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments);
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values);
     virtual void LoadNetwork(const char* networkName);
@@ -48,17 +53,13 @@ public:
 
 private:
 
-    void TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-        OutputPlanes* policies, OutputPlanes* replyPolicies);
     PyObject* LoadFunction(PyObject* module, const char* name);
-    void PyCallAssert(bool result);
 
 private:
 
     PyObject* _predictBatchFunction[NetworkType_Count];
     PyObject* _predictCommentaryBatchFunction;
-    PyObject* _trainBatchFunction[NetworkType_Count];
-    PyObject* _validateBatchFunction[NetworkType_Count];
+    PyObject* _trainFunction[NetworkType_Count];
     PyObject* _trainCommentaryBatchFunction;
     PyObject* _logScalarsFunction[NetworkType_Count];
     PyObject* _loadNetworkFunction;

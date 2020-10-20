@@ -87,7 +87,7 @@ public:
     constexpr const static int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
     constexpr const static int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
 
-    constexpr const static INetwork::PackedPlane FillPlanePacked[COLOR_NB] = { 0, static_cast<int64_t>(0xFFFFFFFFFFFFFFFFULL) };
+    constexpr const static INetwork::PackedPlane FillPlanePacked[COLOR_NB] = { 0, static_cast<INetwork::PackedPlane>(0xFFFFFFFFFFFFFFFFULL) };
 
     const static int NO_PLANE = -1;
 
@@ -132,10 +132,14 @@ public:
     Color ToPlay() const;
     void ApplyMove(Move move);
     int Ply() const;
-    float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
     Key GenerateImageKey() const;
-    INetwork::InputPlanes GenerateImage() const;
-    INetwork::OutputPlanes GeneratePolicy(const std::map<Move, float>& childVisits) const;
+    void GenerateImage(INetwork::InputPlanes& imageOut) const;
+    void GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::PackedPlane* auxiliaryOut) const;
+    float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
+    float& PolicyValue(INetwork::PlanesPointerFlat policyInOut, Move move) const;
+    float& PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const;
+    void GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::OutputPlanes& policyOut) const;
+    void GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const;
     bool StockfishCanEvaluate() const;
     float StockfishEvaluation() const;
 
@@ -145,7 +149,7 @@ public:
 private:
 
     void Free();
-    void GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, const Position& position) const;
+    void GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position) const;
     void FillPlane(INetwork::PackedPlane& plane, bool value) const;
     Key Rotate(Key key, unsigned int distance) const;
 

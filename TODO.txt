@@ -1,14 +1,49 @@
-Next
-- start training on cloud?
-- maybe not random walk, just wrapping window?
-- switch to a random-ish walk over games/moves
-	- always move at least 1 game, but need much more coverage, approximating window size - work out how
-	- files - fix 2k max, keep a fixed size header of move counts, only keep one file in memory at a time, etc.
-	- flush pipeline when changing window, if convenient
-- try make game loading lazy (matching the window, reaping as it moves)
-- try make the student a bit deeper - already hugely smaller with 64 vs. 256 filters (benchmark NPS)
-- create tensorboard_writer_training, etc. lazily (less TB spam)
-- can make prediction-saving even lazier - only save/reload on-demand, not with each save
+Training
+- gs:// path rooting and file writing
+- test full supervised training run on TPU, including resuming training
+
+Self-play
+- make sure prediction network can update and be used (i.e. changes reflected after training despite tf.function tracing)
+	- explicitly reload weights from gs:// I think, and use the same idea locally even if same process
+- need to rotate supervised/self-play still in training.py
+
+Builds
+- protoc gen (generator example on meson github)
+
+Tests
+- fix compilation in win + linux (reload proj, uncomment meson)
+- get passing
+- rewrite storage tests (maybe compare compressed to old uncompresed code (dead though))
+- add unit test for unique queen/knight indexing into planes
+
+Self-play
+- *** CPU/mcts times going up over time, again, important to check for node/stateinfo leaks ***
+	- need to be able to let TPU machines run
+- move uniform to pre-PythonNetwork C++
+- validate that games aren't garbage - look at PGNs
+- switch to multiple MCTS threads per python thread (2:1 should be fine if prediction cache on)
+
+Commentary
+- write an exe to convert commentary to protobufs
+- make sure commentary still working (training, prediction)
+
+Check in
+- make sure main.py all working on GPU + TPU
+- make sure tests all passing
+- make sure all exe tools working, debug/release
+
+AFTER CHECK-IN, FIND A HOME LATER
+- print config summary when starting a run
+- move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
+- don't need to copy vectors into SavedGame, see if the struct is still useful at all, maybe just richer callbacks
+- try also batching across examples in dataset.py
+- need to solve pipeline threading issues again, make sure Cuda >= 90% locally
+- throw away positions before expensive decompression in dataset.py, keep all/more games, keep fewer positions
+- relinquish prediction cache memory while training? increase cycle/shuffle?
+- implement warmup, first few hundred steps on TPU are insane validation-wise
+
+Apply for cloud resources
+- look up the FAQ again
 
 Training improvements
 - playout cap randomization (Wu)
@@ -18,6 +53,7 @@ Training improvements
 - try 1 vs. 8 vs. 32 value head filters again
 	- lc0/Wu seem to use similar conv filters for policy and value heads?
 	- lc0 was thinking fully connected layer may be needed for policy head when network isn't deep enough to cross board well (may not apply for distillation)
+- try a run with masked policy loss (valid moves only) once there's enough data to compare
 
 Value experiments
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
@@ -71,7 +107,15 @@ Training - later
 - like Wu/lc0, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
 - stochastic weight averaging
 
+TPUs - later
+- try make the student a bit deeper - already hugely smaller with 64 vs. 256 filters (benchmark self-play and UCI, GPU and TPU, not much headroom on GTX 1080 though)
+- try C++ API if we still need more games, could do it linux-only
+	(maybe https://github.com/FloopCZ/tensorflow_cc)
+	(Q4? https://github.com/tensorflow/tensorflow/issues/42614)
+	(include file tip https://stackoverflow.com/questions/42898577/list-of-headers-to-use-tensorflow-c-api-using-libtensorflow-cc-so)
+
 UCI (#2)
+- tune on GPU and TPU (methods below)
 - try to increase in-thread parallelism without sacrificing STS strength
 	- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
 	- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
@@ -83,6 +127,7 @@ UCI (#2)
 	- if dangerous time left, take mate-in-N rather than trying to find faster
 
 CPU+GPU integration performance:
+- maybe deparallelize SelfPlayWorker arrays
 - try shrink Node memory
 - try vectorize/GPU softmax/UCT calcs
 - break down MCTS timing details just in case anything's off (just use sampling)
@@ -97,6 +142,7 @@ CPU+GPU integration performance:
 
 Code quality
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
+- switch to vcpkg for windows dependencies
 - fix _ in network names - split on final _
 - factor out all-exist ringbuffer with foreach iteration (begin/end)
 - privatize C++ methods (got too python-brained)
@@ -129,6 +175,7 @@ UCI (#3)
 
 Deployment
 - installers, instructions, progress indicators, error handling, etc.
+- linux unit test script
 
 Publishing
 - write-ups
@@ -148,7 +195,6 @@ Bugs
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
 
 Won't do
-- TPUs or mixed mode (focus is on single desktop, GTX 1080 compatibility)
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
 - Richer UCI features like multiPV
 - GUI for play/debug, only UCI debug commands

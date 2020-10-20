@@ -284,7 +284,6 @@
     <ClCompile Include="ChessCoach.cpp" />
     <ClCompile Include="Epd.cpp" />
     <ClCompile Include="Pgn.cpp" />
-	<ClCompile Include="Pipeline.cpp" />
     <ClCompile Include="Platform.cpp" />
     <ClCompile Include="PoolAllocator.cpp" />
     <ClCompile Include="PredictionCache.cpp" />
@@ -296,10 +295,12 @@
     <ClCompile Include="SavedGame.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Storage.cpp" />
-	<ClCompile Include="ReplayBuffer.cpp" />
     <ClCompile Include="Threading.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\crc32c\crc32c.vcxproj">
+      <Project>{e5385831-349a-4c52-b2ef-20147c4b0a66}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\hunspell\hunspell.vcxproj">
       <Project>{450069ab-9f1f-4dab-afb0-80b044d7f82c}</Project>
     </ProjectReference>
@@ -314,7 +315,6 @@
     <ClInclude Include="ChessCoach.h" />
     <ClInclude Include="Epd.h" />
     <ClInclude Include="Pgn.h" />
-	<ClInclude Include="Pipeline.h" />
     <ClInclude Include="Platform.h" />
     <ClInclude Include="PoolAllocator.h" />
     <ClInclude Include="PredictionCache.h" />
@@ -327,7 +327,6 @@
     <ClInclude Include="SavedGame.h" />
     <ClInclude Include="SelfPlay.h" />
     <ClInclude Include="Storage.h" />
-	<ClInclude Include="ReplayBuffer.h" />
     <ClInclude Include="Threading.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

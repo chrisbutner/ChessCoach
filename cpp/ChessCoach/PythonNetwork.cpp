@@ -21,12 +21,6 @@ PythonContext::PythonContext()
     {
         PyEval_RestoreThread(ThreadState);
     }
-
-    // Ensure numpy is initialized.
-    if (!PyArray_API)
-    {
-        _import_array();
-    }
 }
 
 PythonContext::~PythonContext()
@@ -40,24 +34,22 @@ PythonNetwork::PythonNetwork()
     PythonContext context;
 
     PyObject* sys = PyImport_ImportModule("sys");
-    PyCallAssert(sys);
+    PyAssert(sys);
     PyObject* sysPath = PyObject_GetAttrString(sys, "path");
-    PyCallAssert(sysPath);
+    PyAssert(sysPath);
     PyObject* pythonPath = PyUnicode_FromString(Platform::InstallationScriptPath().string().c_str());
-    PyCallAssert(pythonPath);
+    PyAssert(pythonPath);
     const int error = PyList_Append(sysPath, pythonPath);
-    PyCallAssert(!error);
+    PyAssert(!error);
 
     PyObject* module = PyImport_ImportModule("network");
-    PyCallAssert(module);
+    PyAssert(module);
 
     _predictBatchFunction[NetworkType_Teacher] = LoadFunction(module, "predict_batch_teacher");
     _predictBatchFunction[NetworkType_Student] = LoadFunction(module, "predict_batch_student");
     _predictCommentaryBatchFunction = LoadFunction(module, "predict_commentary_batch");
-    _trainBatchFunction[NetworkType_Teacher] = LoadFunction(module, "train_batch_teacher");
-    _trainBatchFunction[NetworkType_Student] = LoadFunction(module, "train_batch_student");
-    _validateBatchFunction[NetworkType_Teacher] = LoadFunction(module, "validate_batch_teacher");
-    _validateBatchFunction[NetworkType_Student] = LoadFunction(module, "validate_batch_student");
+    _trainFunction[NetworkType_Teacher] = LoadFunction(module, "train_teacher");
+    _trainFunction[NetworkType_Student] = LoadFunction(module, "train_student");
     _trainCommentaryBatchFunction = LoadFunction(module, "train_commentary_batch");
     _logScalarsFunction[NetworkType_Teacher] = LoadFunction(module, "log_scalars_teacher");
     _logScalarsFunction[NetworkType_Student] = LoadFunction(module, "log_scalars_student");
@@ -79,10 +71,8 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_logScalarsFunction[NetworkType_Student]);
     Py_XDECREF(_logScalarsFunction[NetworkType_Teacher]);
     Py_XDECREF(_trainCommentaryBatchFunction);
-    Py_XDECREF(_validateBatchFunction[NetworkType_Student]);
-    Py_XDECREF(_validateBatchFunction[NetworkType_Teacher]);
-    Py_XDECREF(_trainBatchFunction[NetworkType_Student]);
-    Py_XDECREF(_trainBatchFunction[NetworkType_Teacher]);
+    Py_XDECREF(_trainFunction[NetworkType_Student]);
+    Py_XDECREF(_trainFunction[NetworkType_Teacher]);
     Py_XDECREF(_predictCommentaryBatchFunction);
     Py_XDECREF(_predictBatchFunction[NetworkType_Student]);
     Py_XDECREF(_predictBatchFunction[NetworkType_Teacher]);
@@ -96,14 +86,14 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
     npy_intp imageDims[2]{ batchSize, InputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
-    PyCallAssert(pythonImages);
+    PyAssert(pythonImages);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction[networkType], pythonImages, nullptr);
-    PyCallAssert(tupleResult);
+    PyAssert(tupleResult);
 
     // Extract the values.
     PyObject* pythonValues = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
-    PyCallAssert(PyArray_Check(pythonValues));
+    PyAssert(PyArray_Check(pythonValues));
 
     PyArrayObject* pythonValuesArray = reinterpret_cast<PyArrayObject*>(pythonValues);
     float* pythonValuesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonValuesArray));
@@ -116,7 +106,7 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
 
     // Extract the policies.
     PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
-    PyCallAssert(PyArray_Check(pythonPolicies));
+    PyAssert(PyArray_Check(pythonPolicies));
 
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
     float* pythonPoliciesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonPoliciesArray));
@@ -136,11 +126,11 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     npy_intp imageDims[2]{ batchSize, InputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
-    PyCallAssert(pythonImages);
+    PyAssert(pythonImages);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_predictCommentaryBatchFunction, pythonImages, nullptr);
-    PyCallAssert(result);
-    PyCallAssert(PyArray_Check(result));
+    PyAssert(result);
+    PyAssert(PyArray_Check(result));
 
     // Extract the values.
     PyArrayObject* pythonCommentsArray = reinterpret_cast<PyArrayObject*>(result);
@@ -157,64 +147,37 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     return comments;
 }
 
-void PythonNetwork::TrainValidateBatch(PyObject* function, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-    OutputPlanes* policies, OutputPlanes* replyPolicies)
+void PythonNetwork::Train(NetworkType networkType, std::vector<GameType>& gameTypes,
+    std::vector<Window>& trainingWindows, int step, int checkpoint)
 {
     PythonContext context;
 
-    // MCTS deals with probabilities in [0, 1]. Network deals with tanh outputs/targets in (-1, 1)/[-1, 1].
-    MapProbabilities01To11(batchSize, values);
-    MapProbabilities01To11(batchSize, mctsValues);
+    npy_intp gameTypesDims[1]{ static_cast<int>(gameTypes.size()) };
+    PyObject* pythonGameTypes = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(gameTypesDims), gameTypesDims, NPY_INT32, gameTypes.data());
+    PyAssert(pythonGameTypes);
+
+    const int windowClassIntFieldCount = 2;
+    npy_intp trainingWindowsDims[2]{ static_cast<int>(trainingWindows.size()), windowClassIntFieldCount };
+    PyObject* pythonTrainingWindows = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(trainingWindowsDims), trainingWindowsDims, NPY_INT32, trainingWindows.data());
+    PyAssert(pythonTrainingWindows);
 
     PyObject* pythonStep = PyLong_FromLong(step);
-    PyCallAssert(pythonStep);
+    PyAssert(pythonStep);
 
-    npy_intp imageDims[2]{ batchSize, InputPlaneCount };
-    PyObject* pythonImages = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
-    PyCallAssert(pythonImages);
+    PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
+    PyAssert(pythonCheckpoint);
 
-    npy_intp valueDims[1]{ batchSize };
-    PyObject* pythonValues = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
-    PyCallAssert(pythonValues);
-
-    PyObject* pythonMctsValues = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, mctsValues);
-    PyCallAssert(pythonMctsValues);
-
-    npy_intp policyDims[4]{ batchSize, OutputPlaneCount, BoardSide, BoardSide };
-    PyObject* pythonPolicies = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policies);
-    PyCallAssert(pythonPolicies);
-
-    PyObject* pythonReplyPolicies = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, replyPolicies);
-    PyCallAssert(pythonReplyPolicies);
-
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(function, pythonStep, pythonImages,
-        pythonValues, pythonMctsValues, pythonPolicies, pythonReplyPolicies, nullptr);
-    PyCallAssert(tupleResult);
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainFunction[networkType], pythonGameTypes, pythonTrainingWindows,
+        pythonStep, pythonCheckpoint, nullptr);
+    PyAssert(tupleResult);
 
     Py_DECREF(tupleResult);
-    Py_DECREF(pythonReplyPolicies);
-    Py_DECREF(pythonPolicies);
-    Py_DECREF(pythonMctsValues);
-    Py_DECREF(pythonValues);
-    Py_DECREF(pythonImages);
+    Py_DECREF(pythonCheckpoint);
     Py_DECREF(pythonStep);
-}
-
-void PythonNetwork::TrainBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-    OutputPlanes* policies, OutputPlanes* replyPolicies)
-{
-    TrainValidateBatch(_trainBatchFunction[networkType], step, batchSize, images, values, mctsValues, policies, replyPolicies);
-}
-
-void PythonNetwork::ValidateBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-    OutputPlanes* policies, OutputPlanes* replyPolicies)
-{
-    TrainValidateBatch(_validateBatchFunction[networkType], step, batchSize, images, values, mctsValues, policies, replyPolicies);
+    Py_DECREF(pythonTrainingWindows);
+    Py_DECREF(pythonGameTypes);
 }
 
 void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments)
@@ -222,12 +185,12 @@ void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* i
     PythonContext context;
 
     PyObject* pythonStep = PyLong_FromLong(step);
-    PyCallAssert(pythonStep);
+    PyAssert(pythonStep);
 
     npy_intp imageDims[2]{ batchSize, InputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
-    PyCallAssert(pythonImages);
+    PyAssert(pythonImages);
 
     // Pack the strings contiguously.
     int longestString = 0;
@@ -248,11 +211,11 @@ void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* i
     npy_intp commentDims[1]{ batchSize };
     PyObject* pythonComments = PyArray_New(&PyArray_Type, Py_ARRAY_LENGTH(commentDims), commentDims,
         NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
-    PyCallAssert(pythonComments);
+    PyAssert(pythonComments);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainCommentaryBatchFunction, pythonStep, pythonImages,
         pythonComments, nullptr);
-    PyCallAssert(tupleResult);
+    PyAssert(tupleResult);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonComments);
@@ -266,7 +229,7 @@ void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCoun
     PythonContext context;
 
     PyObject* pythonStep = PyLong_FromLong(step);
-    PyCallAssert(pythonStep);
+    PyAssert(pythonStep);
 
     // Pack the strings contiguously.
     int longestString = 0;
@@ -287,15 +250,15 @@ void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCoun
     npy_intp nameDims[1]{ scalarCount };
     PyObject* pythonNames = PyArray_New(&PyArray_Type, Py_ARRAY_LENGTH(nameDims), nameDims,
         NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
-    PyCallAssert(pythonNames);
+    PyAssert(pythonNames);
 
     npy_intp valueDims[1]{ scalarCount };
     PyObject* pythonValues = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
-    PyCallAssert(pythonValues);
+    PyAssert(pythonValues);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_logScalarsFunction[networkType], pythonStep, pythonNames, pythonValues, nullptr);
-    PyCallAssert(tupleResult);
+    PyAssert(tupleResult);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonValues);
@@ -310,7 +273,7 @@ void PythonNetwork::LoadNetwork(const char* networkName)
     PyObject* pythonNetworkName = PyUnicode_FromString(networkName);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_loadNetworkFunction, pythonNetworkName, nullptr);
-    PyCallAssert(tupleResult);
+    PyAssert(tupleResult);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonNetworkName);
@@ -321,10 +284,10 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
     PythonContext context;
 
     PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
-    PyCallAssert(pythonCheckpoint);
+    PyAssert(pythonCheckpoint);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_saveNetworkFunction[networkType], pythonCheckpoint, nullptr);
-    PyCallAssert(tupleResult);
+    PyAssert(tupleResult);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonCheckpoint);
@@ -333,12 +296,12 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
 PyObject* PythonNetwork::LoadFunction(PyObject* module, const char* name)
 {
     PyObject* function = PyObject_GetAttrString(module, name);
-    PyCallAssert(function);
-    PyCallAssert(PyCallable_Check(function));
+    PyAssert(function);
+    PyAssert(PyCallable_Check(function));
     return function;
 }
 
-void PythonNetwork::PyCallAssert(bool result)
+void PythonNetwork::PyAssert(bool result)
 {
     if (!result)
     {

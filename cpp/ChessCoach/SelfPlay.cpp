@@ -504,7 +504,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         }
 
         // Prepare for a prediction from the network.
-        *_image = GenerateImage();
+        GenerateImage(*_image);
         state = SelfPlayState::WaitingForPrediction;
         return std::numeric_limits<float>::quiet_NaN();
     }
@@ -736,6 +736,9 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
         // Wait until games are required.
         workCoordinator.WaitForWorkItems();
 
+        // Warm up the GIL and predictions, and reclaim training memory.
+        WarmUpPredictions(network, networkType, 1);
+
         // Clear away old games in progress to ensure that new ones use the new network.
         ResetGames();
 
@@ -837,60 +840,40 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
     game.UpdateSearchRootPly();
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, const std::vector<GameType>& gameTypes, int stepCount, int checkpoint)
+void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, std::vector<GameType>& gameTypes,
+    std::vector<Window>& trainingWindows, int step, int checkpoint)
 {
-    // Train for "stepCount" steps.
+    // Delegate to Python.
+    std::cout << "Training steps " << step << "-" << checkpoint << "..." << std::endl;
     auto startTrain = std::chrono::high_resolution_clock::now();
-    const int startStep = (checkpoint - stepCount + 1);
-    for (int step = startStep; step <= checkpoint; step++)
-    {
-        // Rotate through the specified game types.
-        const GameType gameType = gameTypes[step % gameTypes.size()];
-        TrainingBatch* batch = _storage->SampleBatch(gameType);
-        network->TrainBatch(networkType, step, _networkConfig->Training.BatchSize, batch->images.data(), batch->values.data(),
-            batch->mctsValues.data(), batch->policies.data(), batch->replyPolicies.data());
-
-        // Validate the network every "ValidationInterval" steps.
-        if ((step % _networkConfig->Training.ValidationInterval) == 0)
-        {
-            ValidateNetwork(network, networkType, step);
-        }
-    }
+    network->Train(networkType, gameTypes, trainingWindows, step, checkpoint);
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
+    const int stepCount = (checkpoint - step + 1);
     const float trainTimePerStep = (trainTime / stepCount);
-    std::cout << "Trained steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
+    std::cout << "Trained steps " << step << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
 }
 
-void SelfPlayWorker::ValidateNetwork(INetwork* network, NetworkType networkType, int step)
+void SelfPlayWorker::TrainNetworkWithCommentary(INetwork* network, int step, int checkpoint)
 {
-    // Measure validation loss/accuracy using one batch.
-    if (_storage->GamesPlayed(GameType_Validation) > 0)
-    {
-        TrainingBatch* validationBatch = _storage->SampleBatch(GameType_Validation);
-        network->ValidateBatch(networkType, step, _networkConfig->Training.BatchSize, validationBatch->images.data(), validationBatch->values.data(),
-            validationBatch->mctsValues.data(), validationBatch->policies.data(), validationBatch->replyPolicies.data());
-    }
-}
+    // TODO: Call into python
 
-void SelfPlayWorker::TrainNetworkWithCommentary(INetwork* network, int stepCount, int checkpoint)
-{
-    // Train for "stepCount" steps.
-    auto startTrain = std::chrono::high_resolution_clock::now();
-    const int startStep = (checkpoint - stepCount + 1);
-    for (int step = startStep; step <= checkpoint; step++)
-    {
-        CommentaryTrainingBatch* batch = _storage->SampleCommentaryBatch();
-        if (!batch)
-        {
-            std::cout << "No commentary available, skipping training" << std::endl;
-            return;
-        }
+    //// Train for "stepCount" steps.
+    //auto startTrain = std::chrono::high_resolution_clock::now();
+    //const int startStep = (checkpoint - stepCount + 1);
+    //for (int step = startStep; step <= checkpoint; step++)
+    //{
+    //    CommentaryTrainingBatch* batch = _storage->SampleCommentaryBatch();
+    //    if (!batch)
+    //    {
+    //        std::cout << "No commentary available, skipping training" << std::endl;
+    //        return;
+    //    }
 
-        network->TrainCommentaryBatch(step, _networkConfig->Training.CommentaryBatchSize, batch->images.data(), batch->comments.data());
-    }
-    const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
-    const float trainTimePerStep = (trainTime / stepCount);
-    std::cout << "Trained commentary steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
+    //    network->TrainCommentaryBatch(step, _networkConfig->Training.CommentaryBatchSize, batch->images.data(), batch->comments.data());
+    //}
+    //const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
+    //const float trainTimePerStep = (trainTime / stepCount);
+    //std::cout << "Trained commentary steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
 }
 
 void SelfPlayWorker::SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint)
@@ -968,7 +951,7 @@ std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, Net
     // Make sure that the prediction cache is clear, for consistent results.
     PredictionCache::Instance.Clear();
 
-    // Warm up the GIL and predictions.
+    // Warm up the GIL and predictions, and reclaim training memory.
     WarmUpPredictions(network, networkType, 1);
 
     const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
@@ -1506,7 +1489,7 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     // Use the faster student network for UCI predictions.
     const NetworkType networkType = NetworkType_Student;
 
-    // Warm up the GIL and predictions.
+    // Warm up the GIL and predictions, and reclaim training memory.
     WarmUpPredictions(network.get(), networkType, 1);
 
     // Start with the position "updated" to the starting position in case of a naked "go" command.
@@ -1583,6 +1566,11 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     _games[0].PruneAll();
 }
 
+// Predicting a batch will trigger the following:
+// - initializing Python thread state
+// - creating models and loading weights on this thread's assigned TPU/GPU device
+// - tracing tf.functions on this thread's assigned TPU/GPU device
+// - clearing any cached training data to free up memory for self-play or strength testing (may be extremely slow at the moment)
 void SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize)
 {
     network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());
@@ -1897,7 +1885,7 @@ void SelfPlayWorker::SearchPlay(int mctsParallelism)
 
 void SelfPlayWorker::CommentOnPosition(INetwork* network)
 {
-    _images[0] = _games[0].GenerateImage();
+    _games[0].GenerateImage(_images[0]);
     const std::vector<std::string> comments = network->PredictCommentaryBatch(1, _images.data());
     std::cout << comments[0] << std::endl;
 }

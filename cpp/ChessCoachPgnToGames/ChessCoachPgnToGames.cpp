@@ -13,7 +13,8 @@
 #include <ChessCoach/Storage.h>
 #include <ChessCoach/Pgn.h>
 
-// ~15k (MSVC), ~71k (GCC) games per second on i7-6700, Samsung SSD 950 PRO 512GB.
+// Custom binary format: ~15k (MSVC/Win), ~71k (GCC/Linux) games per second on i7-6700, Samsung SSD 950 PRO 512GB.
+// Compressed protobuf/planes: ~7.8k (MSVC/Win), ~11.5k (GCC/Linux) games per second on i7-6700, Samsung SSD 950 PRO 512GB.
 // Could probably be trivially improved by lessening PGN queue mutex contention.
 // Haven't investigated platform/compiler differences, probably easy gains.
 class ChessCoachPgnToGames : public ChessCoach
@@ -29,6 +30,7 @@ public:
 private:
 
     void ConvertPgns();
+    void SaveChunk(const Game& startingPosition, std::vector<SavedGame>& games);
 
 private:
 
@@ -163,6 +165,7 @@ void ChessCoachPgnToGames::ConvertAll()
 
 void ChessCoachPgnToGames::ConvertPgns()
 {
+    const Game startingPosition;
     std::vector<SavedGame> games;
 
     while (true)
@@ -195,11 +198,9 @@ void ChessCoachPgnToGames::ConvertPgns()
                 games.emplace_back(std::move(game));
                 pgnGamesConverted++;
 
-                if (games.size() >= Config::Misc.Storage_MaxGamesPerFile)
+                if (games.size() >= Config::Misc.Storage_GamesPerChunk)
                 {
-                    const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGamesFilename(++_latestGamesNumber));
-                    Storage::SaveMultipleGamesToDisk(gamePath, games);
-                    games.clear();
+                    SaveChunk(startingPosition, games);
                 }
             });
 
@@ -213,8 +214,13 @@ void ChessCoachPgnToGames::ConvertPgns()
 
     if (!games.empty())
     {
-        const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateGamesFilename(++_latestGamesNumber));
-        Storage::SaveMultipleGamesToDisk(gamePath, games);
-        games.clear();
+        SaveChunk(startingPosition, games);
     }
+}
+
+void ChessCoachPgnToGames::SaveChunk(const Game& startingPosition, std::vector<SavedGame>& games)
+{
+    const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateChunkFilename(++_latestGamesNumber));
+    Storage::SaveChunk(startingPosition, gamePath, games);
+    games.clear();
 }

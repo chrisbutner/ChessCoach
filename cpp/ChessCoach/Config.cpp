@@ -153,7 +153,7 @@ MiscConfig ParseMisc(const TomlValue& config)
 
     misc.Search_MctsParallelism = toml::find<int>(config, "search", "mcts_parallelism");
 
-    misc.Storage_MaxGamesPerFile = toml::find<int>(config, "storage", "max_games_per_file");
+    misc.Storage_GamesPerChunk = toml::find<int>(config, "storage", "games_per_chunk");
 
     misc.Paths_Networks = toml::find<std::string>(config, "paths", "networks");
     misc.Paths_TensorBoard = toml::find<std::string>(config, "paths", "tensorboard");

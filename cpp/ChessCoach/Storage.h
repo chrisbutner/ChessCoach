@@ -8,36 +8,33 @@
 #include <vector>
 #include <functional>
 #include <fstream>
+#include <atomic>
 
 #include <Stockfish/position.h>
 
 #include "Network.h"
 #include "Game.h"
-#include "ReplayBuffer.h"
-#include "Pipeline.h"
+#include "SavedGame.h"
+
+namespace google {
+    namespace protobuf {
+        class Message;
+        namespace io {
+            class ZeroCopyOutputStream;
+        }
+    }
+}
+
+namespace message {
+    class Example;
+}
 
 class Storage
 {
-private:
-
-
-    using Version = uint16_t;
-    using GameCount = uint16_t;
-    using MoveCount = uint16_t;
-
-    static const Version Version1 = 1;
-
 public:
 
-    static void SaveMultipleGamesToDisk(const std::filesystem::path& path, const std::vector<SavedGame>& games);
-    static std::string GenerateGamesFilename(int gamesNumber);
-
-private:
-
-    static int LoadFromDiskInternal(const std::filesystem::path& path,
-        std::function<void(SavedGame&&)> gameHandler, int maxLoadCount);
-    static void SaveToDiskInternal(std::ofstream& file, const SavedGame& game, GameCount newGameCountInFile);
-    static void SaveToDiskInternal(std::ofstream& file, const SavedGame& game);
+    static void SaveChunk(const Game& startingPosition, const std::filesystem::path& path, const std::vector<SavedGame>& games);
+    static std::string GenerateChunkFilename(int chunkNumber);
 
 public:
 
@@ -46,44 +43,32 @@ public:
         const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesValidationPath,
         const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath);
 
-    void LoadExistingGames(GameType gameType, int maxLoadCount);
     int AddGame(GameType gameType, SavedGame&& game);
-    TrainingBatch* SampleBatch(GameType gameType);
     int GamesPlayed(GameType gameType) const;
     int NetworkStepCount(const std::string& networkName) const;
     std::filesystem::path LogPath() const;
-    Window GetWindow(GameType gameType) const;
-    void SetWindow(GameType gameType, const Window& window);
-    CommentaryTrainingBatch* SampleCommentaryBatch();
         
 private:
 
-    void InitializePipelines(const NetworkConfig& networkConfig);
-    void SaveToDisk(GameType gameType, const SavedGame& game);
+    void SaveGame(GameType gameType, const SavedGame& game, int gameNumber);
+    static void PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut);
+    static void WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, std::string& buffer, const google::protobuf::Message& message);
+    static uint32_t MaskCrc32cForTfRecord(uint32_t crc32c);
     std::filesystem::path MakePath(const std::filesystem::path& root, const std::filesystem::path& path);
     void LoadCommentary();
 
 private:
 
     mutable std::mutex _mutex;
-    std::array<ReplayBuffer, GameType_Count> _games;
-    std::array<int, GameType_Count> _gameFileCount;
-    std::array<int, GameType_Count> _loadedGameCount;
-
-    std::array<std::ofstream, GameType_Count> _currentSaveFile;
-    std::array<int, GameType_Count> _currentSaveGameCount;
-
-    std::array<Pipeline, GameType_Count> _pipelines;
 
     SavedCommentary _commentary;
-    CommentaryTrainingBatch _commentaryBatch;
-    Game _startingPosition;
+    const Game _startingPosition;
 
-    int _trainingBatchSize;
-    int _trainingCommentaryBatchSize;
     int _pgnInterval;
 
     std::string _vocabularyFilename;
+    std::string _sessionPrefix;
+    std::atomic_int _sessionGameCount;
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
     std::array<std::filesystem::path, GameType_Count> _commentaryPaths;
     std::filesystem::path _pgnsPath;

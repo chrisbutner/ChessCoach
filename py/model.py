@@ -164,11 +164,8 @@ class ModelBuilder:
 
   def subset_train(self, model):
     return tf.keras.Model(model.input, model.outputs[:4])
-  
-  def subset_predict_teacher(self, model):
-    return tf.keras.Model(model.input, model.outputs[:4])
 
-  def subset_predict_student(self, model):
+  def subset_predict(self, model):
     return tf.keras.Model(model.input, model.outputs[0:4:2])
 
   def subset_commentary_encoder(self, model):

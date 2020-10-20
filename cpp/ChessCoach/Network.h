@@ -15,22 +15,27 @@ constexpr static const float NETWORK_VALUE_LOSS = -1.f;
 struct INetwork
 {
     static const int InputPreviousPositionCount = 7;
-    static const int InputPlanesPerPosition = 12;
+    static const int InputPiecePlanesPerPosition = 12;
+    static const int InputAuxiliaryPlaneCount = 5;
 
     static const int BoardSide = 8;
-    static const int InputPlaneCount = 101;
-    static const int OutputPlaneCount = 73;
+    static const int InputPlaneCount = (InputPreviousPositionCount + 1) * (InputPiecePlanesPerPosition) + InputAuxiliaryPlaneCount;
+    static const int OutputPlaneCount = (3 * 3) + (BoardSide * BoardSide); // UnderpromotionPlane + QueenKnightPlane
+    static_assert(InputPlaneCount == 101);
+    static_assert(OutputPlaneCount == 73);
 
     static const int PlaneFloatCount = BoardSide * BoardSide;
-    static const int InputPlanesFloatCount = PlaneFloatCount * InputPlaneCount;
     static const int OutputPlanesFloatCount = PlaneFloatCount * OutputPlaneCount;
 
-    // Would use uint64_t but TensorFlow isn't a fan when saving/loading SavedModels.
-    // Bit representation is the same for implicit casting on common platforms (implementation-defined).
-    using PackedPlane = int64_t;
+    // TensorFlow doesn't like uint64_t so interpret as tf.int64 in input tensors. Bit representation is the same.
+    using PackedPlane = uint64_t;
     using Plane = std::array<std::array<float, BoardSide>, BoardSide>;
     using InputPlanes = std::array<PackedPlane, InputPlaneCount>;
     using OutputPlanes = std::array<Plane, OutputPlaneCount>;
+
+    // Useful for serialization into others' data structures.
+    using PlanesPointer = float(*)[BoardSide][BoardSide];
+    using PlanesPointerFlat = float*;
 
     constexpr static uint8_t QuantizeProbability(float probability01)
     {
@@ -78,10 +83,8 @@ struct INetwork
 
     virtual void PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images) = 0;
-    virtual void TrainBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-        OutputPlanes* policies, OutputPlanes* replyPolicies) = 0;
-    virtual void ValidateBatch(NetworkType networkType, int step, int batchSize, InputPlanes* images, float* values, float* mctsValues,
-        OutputPlanes* policies, OutputPlanes* replyPolicies) = 0;
+    virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
+        std::vector<Window>& trainingWindows, int step, int checkpoint) = 0;
     virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments) = 0;
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values) = 0;
     virtual void LoadNetwork(const char* networkName) = 0;

@@ -40,6 +40,14 @@ enum GameType
 constexpr const char* GameTypeNames[GameType_Count] = { "Supervised", "Training", "Validation" };
 static_assert(GameType_Count == 3);
 
+struct Window
+{
+    // E.g. for 5000 games per network, with current window size of 10000, on network #4,
+    // set TrainingGameMin=10000, TrainingGameMax=20000.
+    int TrainingGameMin; // Inclusive, 0-based
+    int TrainingGameMax; // Exclusive, 0-based
+};
+
 struct StageConfig
 {
     StageType Stage;
@@ -106,7 +114,7 @@ struct MiscConfig
     int Search_MctsParallelism;
 
     // Storage
-    int Storage_MaxGamesPerFile;
+    int Storage_GamesPerChunk;
     
     // Paths
     std::string Paths_Networks;

@@ -15,7 +15,7 @@ public:
 
 protected:
 
-    int InitializePython();
+    void InitializePython();
     void InitializeStockfish();
     void InitializeChessCoach();
     void InitializePredictionCache();

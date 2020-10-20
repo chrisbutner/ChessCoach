@@ -7,22 +7,21 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "./crc32c_arm64.h"
-#include "./crc32c_arm64_check.h"
+// cbutner-start
 #include "./crc32c_internal.h"
 #include "./crc32c_sse42.h"
 #include "./crc32c_sse42_check.h"
+// cbutner-finish
 
 namespace crc32c {
 
 uint32_t Extend(uint32_t crc, const uint8_t* data, size_t count) {
+// cbutner-start
 #if HAVE_SSE42 && (defined(_M_X64) || defined(__x86_64__))
   static bool can_use_sse42 = CanUseSse42();
   if (can_use_sse42) return ExtendSse42(crc, data, count);
-#elif HAVE_ARM64_CRC32C
-  static bool can_use_arm64_crc32 = CanUseArm64Crc32();
-  if (can_use_arm64_crc32) return ExtendArm64(crc, data, count);
 #endif  // HAVE_SSE42 && (defined(_M_X64) || defined(__x86_64__))
+// cbutner-finish
 
   return ExtendPortable(crc, data, count);
 }

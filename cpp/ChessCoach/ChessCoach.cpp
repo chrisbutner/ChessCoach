@@ -10,6 +10,10 @@
 #include <Stockfish/uci.h>
 
 #include "PythonNetwork.h"
+#undef NO_IMPORT_ARRAY
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
+
 #include "Game.h"
 #include "PredictionCache.h"
 #include "PoolAllocator.h"
@@ -62,7 +66,7 @@ void ChessCoach::Finalize()
     FinalizeStockfish();
 }
 
-int ChessCoach::InitializePython()
+void ChessCoach::InitializePython()
 {
     // Work around a Python crash.
     const std::string pythonHome = Platform::GetEnvironmentVariable("PYTHONHOME");
@@ -77,10 +81,11 @@ int ChessCoach::InitializePython()
 
     Py_Initialize();
 
+    // Initialize numpy.
+    _import_array();
+
     // Release the implicit main-thread GIL.
     PythonContext context;
-
-    return 0;
 }
 
 void ChessCoach::InitializeStockfish()

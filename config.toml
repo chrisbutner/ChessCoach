@@ -250,7 +250,7 @@ mcts_parallelism = 16
 
 [storage]
 
-max_games_per_file = 2000
+games_per_chunk = 2000
 
 [paths]
 

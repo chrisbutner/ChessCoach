@@ -172,29 +172,6 @@ int Game::Ply() const
     return _position.game_ply();
 }
 
-float& Game::PolicyValue(INetwork::OutputPlanes& policy, Move move) const
-{
-    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
-    move = FlipMove(ToPlay(), move);
-    Square from = from_sq(move);
-    Square to = to_sq(move);
-
-    int plane;
-    PieceType promotion;
-    if ((type_of(move) == PROMOTION) && ((promotion = promotion_type(move)) != QUEEN))
-    {
-        plane = UnderpromotionPlane[promotion - KNIGHT][to - from - NORTH_WEST];
-        assert((plane >= 0) && (plane < INetwork::OutputPlaneCount));
-    }
-    else
-    {
-        plane = QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB];
-        assert((plane >= 0) && (plane < INetwork::OutputPlaneCount));
-    }
-
-    return policy[plane][rank_of(from)][file_of(from)];
-}
-
 Key Game::GenerateImageKey() const
 {
     // No need to flip anything for hash keys: for a particular position, it's always the same player to move.
@@ -220,10 +197,8 @@ Key Game::GenerateImageKey() const
     return key;
 }
 
-#pragma warning(disable:6262) // Ignore stack warning, caller can emplace to heap via RVO.
-INetwork::InputPlanes Game::GenerateImage() const
+void Game::GenerateImage(INetwork::InputPlanes& imageOut) const
 {
-    INetwork::InputPlanes image;
     int nextPlane = 0;
 
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
@@ -235,49 +210,118 @@ INetwork::InputPlanes Game::GenerateImage() const
     for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
     {
         const Position& position = _previousPositions[previousPositionIndex];
-        GeneratePiecePlanes(image, nextPlane, position);
+        GeneratePiecePlanes(imageOut.data(), nextPlane, position);
 
-        nextPlane += INetwork::InputPlanesPerPosition;
+        nextPlane += INetwork::InputPiecePlanesPerPosition;
         previousPositionIndex = (previousPositionIndex + 1) % INetwork::InputPreviousPositionCount;
     }
 
     // Add current position's pieces, planes 84-95.
     assert(nextPlane == 84);
-    GeneratePiecePlanes(image, nextPlane, _position);
-    nextPlane += INetwork::InputPlanesPerPosition;
+    GeneratePiecePlanes(imageOut.data(), nextPlane, _position);
+    nextPlane += INetwork::InputPiecePlanesPerPosition;
 
     // Castling planes 96-99
     assert(nextPlane == 96);
-    FillPlane(image[nextPlane++], _position.can_castle(toPlay & KING_SIDE));
-    FillPlane(image[nextPlane++], _position.can_castle(toPlay & QUEEN_SIDE));
-    FillPlane(image[nextPlane++], _position.can_castle(~toPlay & KING_SIDE));
-    FillPlane(image[nextPlane++], _position.can_castle(~toPlay & QUEEN_SIDE));
+    FillPlane(imageOut[nextPlane++], _position.can_castle(toPlay & KING_SIDE));
+    FillPlane(imageOut[nextPlane++], _position.can_castle(toPlay & QUEEN_SIDE));
+    FillPlane(imageOut[nextPlane++], _position.can_castle(~toPlay & KING_SIDE));
+    FillPlane(imageOut[nextPlane++], _position.can_castle(~toPlay & QUEEN_SIDE));
 
     // No-progress plane 100
     // This is a special case, not to be bit-unpacked, but instead interpreted as an integer
     // to be normalized via the no-progress saturation count (99).
     assert(nextPlane == 100);
-    image[nextPlane++] = _position.rule50_count();
+    imageOut[nextPlane++] = _position.rule50_count();
 
     static_assert(INetwork::InputPreviousPositionCount == 7);
-    static_assert(INetwork::InputPlanesPerPosition == 12);
+    static_assert(INetwork::InputPiecePlanesPerPosition == 12);
+    static_assert(INetwork::InputAuxiliaryPlaneCount == 5);
     static_assert(INetwork::InputPlaneCount == 101);
     assert(nextPlane == INetwork::InputPlaneCount);
-    return image;
 }
 
-INetwork::OutputPlanes Game::GeneratePolicy(const std::map<Move, float>& childVisits) const
+void Game::GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::PackedPlane* auxiliaryOut) const
 {
-    INetwork::OutputPlanes policy = {};
+    int nextPieces = 0;
 
-    for (auto pair : childVisits)
+    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
+    const Color toPlay = ToPlay();
+
+    // Add current position's pieces, planes 84-95 (becoming future positions' planes 72-83, 60-71, etc.).
+    GeneratePiecePlanes(piecesOut, nextPieces, _position);
+    nextPieces += INetwork::InputPiecePlanesPerPosition;
+
+    // Castling planes 96-99
+    int nextAuxiliary = 0;
+    FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(toPlay & KING_SIDE));
+    FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(toPlay & QUEEN_SIDE));
+    FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(~toPlay & KING_SIDE));
+    FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(~toPlay & QUEEN_SIDE));
+
+    // No-progress plane 100
+    // This is a special case, not to be bit-unpacked, but instead interpreted as an integer
+    // to be normalized via the no-progress saturation count (99).
+    auxiliaryOut[nextAuxiliary++] = _position.rule50_count();
+
+    assert(nextPieces == INetwork::InputPiecePlanesPerPosition);
+    assert(nextAuxiliary == INetwork::InputAuxiliaryPlaneCount);
+}
+
+float& Game::PolicyValue(INetwork::OutputPlanes& policyInOut, Move move) const
+{
+    return PolicyValue(reinterpret_cast<INetwork::PlanesPointer>(policyInOut.data()), move);
+}
+
+float& Game::PolicyValue(INetwork::PlanesPointerFlat policyInOut, Move move) const
+{
+    return PolicyValue(reinterpret_cast<INetwork::PlanesPointer>(policyInOut), move);
+}
+
+float& Game::PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const
+{
+    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
+    move = FlipMove(ToPlay(), move);
+    Square from = from_sq(move);
+    Square to = to_sq(move);
+
+    int plane;
+    PieceType promotion;
+    if ((type_of(move) == PROMOTION) && ((promotion = promotion_type(move)) != QUEEN))
     {
-        PolicyValue(policy, pair.first) = pair.second;
+        plane = UnderpromotionPlane[promotion - KNIGHT][to - from - NORTH_WEST];
+        assert((plane >= 0) && (plane < INetwork::OutputPlaneCount));
+    }
+    else
+    {
+        plane = QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB];
+        assert((plane >= 0) && (plane < INetwork::OutputPlaneCount));
     }
 
-    return policy;
+    return policyInOut[plane][rank_of(from)][file_of(from)];
 }
-#pragma warning(default:6262) // Ignore stack warning, caller can emplace to heap via RVO.
+
+void Game::GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::OutputPlanes& policyOut) const
+{
+    for (auto pair : childVisits)
+    {
+        PolicyValue(policyOut, pair.first) = pair.second;
+    }
+}
+
+void Game::GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const
+{
+    int i = 0;
+    for (auto& [move, value] : childVisits)
+    {
+        // Let "PolicyValue" generate a flat index via [plane][rank][file] and just never dereference.
+        const INetwork::PlanesPointerFlat zero = 0;
+        intptr_t distance = (&PolicyValue(zero, move) - zero);
+        policyIndicesOut[i] = static_cast<int>(distance);
+        policyValuesOut[i] = value;
+        i++;
+    }
+}
 
 bool Game::StockfishCanEvaluate() const
 {
@@ -310,31 +354,33 @@ void Game::Free()
     // Nodes are freed outside of Game objects because they outlive the games through MCTS tree reuse.
 }
 
-void Game::GeneratePiecePlanes(INetwork::InputPlanes& image, int planeOffset, const Position& position) const
+void Game::GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position) const
 {
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = position.side_to_move();
 
-    image[planeOffset + 0] = position.pieces(toPlay, PAWN);
-    image[planeOffset + 1] = position.pieces(toPlay, KNIGHT);
-    image[planeOffset + 2] = position.pieces(toPlay, BISHOP);
-    image[planeOffset + 3] = position.pieces(toPlay, ROOK);
-    image[planeOffset + 4] = position.pieces(toPlay, QUEEN);
-    image[planeOffset + 5] = position.pieces(toPlay, KING);
+    imageOut[planeOffset + 0] = position.pieces(toPlay, PAWN);
+    imageOut[planeOffset + 1] = position.pieces(toPlay, KNIGHT);
+    imageOut[planeOffset + 2] = position.pieces(toPlay, BISHOP);
+    imageOut[planeOffset + 3] = position.pieces(toPlay, ROOK);
+    imageOut[planeOffset + 4] = position.pieces(toPlay, QUEEN);
+    imageOut[planeOffset + 5] = position.pieces(toPlay, KING);
 
-    image[planeOffset + 6] = position.pieces(~toPlay, PAWN);
-    image[planeOffset + 7] = position.pieces(~toPlay, KNIGHT);
-    image[planeOffset + 8] = position.pieces(~toPlay, BISHOP);
-    image[planeOffset + 9] = position.pieces(~toPlay, ROOK);
-    image[planeOffset + 10] = position.pieces(~toPlay, QUEEN);
-    image[planeOffset + 11] = position.pieces(~toPlay, KING);
+    imageOut[planeOffset + 6] = position.pieces(~toPlay, PAWN);
+    imageOut[planeOffset + 7] = position.pieces(~toPlay, KNIGHT);
+    imageOut[planeOffset + 8] = position.pieces(~toPlay, BISHOP);
+    imageOut[planeOffset + 9] = position.pieces(~toPlay, ROOK);
+    imageOut[planeOffset + 10] = position.pieces(~toPlay, QUEEN);
+    imageOut[planeOffset + 11] = position.pieces(~toPlay, KING);
+
+    static_assert(INetwork::InputPiecePlanesPerPosition == 12);
 
     // Piece colors are already conditionally flipped via toPlay/~toPlay ordering. Flip all vertically if BLACK to play.
     if (toPlay == BLACK)
     {
-        for (int i = planeOffset; i < planeOffset + 12; i++)
+        for (int i = planeOffset; i < planeOffset + INetwork::InputPiecePlanesPerPosition; i++)
         {
-            image[i] = FlipBoard(image[i]);
+            imageOut[i] = FlipBoard(imageOut[i]);
         }
     }
 }
