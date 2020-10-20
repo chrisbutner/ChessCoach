@@ -173,7 +173,7 @@ class ModelBuilder:
 
   def build_commentary_decoder(self, config, tokenizer=None):
     if not tokenizer:
-      vocabulary_path = os.path.join(config.training_network["commentary_path_supervised"], config.training_network["vocabulary_filename"])
+      vocabulary_path = config.join(config.training_network["commentary_path_supervised"], config.training_network["vocabulary_filename"])
       with open(vocabulary_path, 'r', errors="ignore") as f:
         comments = f.readlines()
       comments = [f"{self.token_start} {c} {self.token_end}" for c in comments]

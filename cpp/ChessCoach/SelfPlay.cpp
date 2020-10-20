@@ -915,6 +915,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
             const std::string testName = entry.path().stem().string();
             const int moveTimeMs = ((testName == stsName) ? 200 : 1000);
 
+            std::cout << "Testing " << entry.path().filename() << "..." << std::endl;
             const auto [score, total, positions] = StrengthTestEpd(network, networkType, entry.path(), moveTimeMs);
             testResults[testName] = score;
             testPositions[testName] = positions;

@@ -133,11 +133,12 @@ class Trainer:
     K.set_value(model.optimizer.lr, self.get_learning_rate(starting_step))
 
     # Set up data pipelines, or re-use existing if not cleared by self-play.
-    data_training_key = (gameTypes, trainingWindows)
+    # Numpy hijacks == and bool testing and enforces any() or all(), so convert to lists first.
+    data_training_key = (gameTypes.tolist(), trainingWindows.tolist())
     if data_training_key != self.data_training_key:
       data_start = time.time()
-      globs_training = ["TODO"]
-      globs_validation = ["TODO"]
+      globs_training = [self.config.join(self.config.training_network["games_path_supervised"], "*.chunk")] # TODO: hardcode supervised for now
+      globs_validation = [self.config.join(self.config.training_network["games_path_validation"], "*.chunk")]
       # TODO: Only first type for now
       self.data_training = iter(self.datasets.build_training_dataset(globs_training[0], trainingWindows[0], self.global_batch_size))
       self.data_validation = iter(self.datasets.build_validation_dataset(globs_validation[0], self.global_batch_size))
@@ -230,41 +231,38 @@ class Trainer:
   def log_scalars(self, network, step, names, values):
     network.ensure_training()
     writer = network.tensorboard_writer_validation
-    if writer:
-      with writer.as_default():
-        tf.summary.experimental.set_step(step)
-        for name, value in zip(names, values):
-          tf.summary.scalar(name.decode("utf-8"), value)
+    with writer.as_default():
+      tf.summary.experimental.set_step(step)
+      for name, value in zip(names, values):
+        tf.summary.scalar(name.decode("utf-8"), value)
 
   def should_log_graph(self, step):
     return (step == 1)
 
   def log_training_prepare(self, step):
     if self.should_log_graph(step):
-      tf.summary.trace_on(graph=True, profiler=False) # TODO: Dangerous without if-writer check, remove all of those
+      tf.summary.trace_on(graph=True, profiler=False)
 
   def log_training(self, type, writer, step, losses, model):
     self.log(f"Loss: {losses[0]:.4f} (V: {losses[1]:.4f}, MV: {losses[2]:.4f}, P: {losses[3]:.4f}, RP: {losses[4]:.4f}), Acc. (P): {losses[5]:.4f}, Acc. (RP): {losses[6]:.4f} ({type})")
-    if writer:
-      with writer.as_default():
-        tf.summary.experimental.set_step(step)
-        if self.should_log_graph(step):
-          tf.summary.trace_export("model")
-        self.log_loss_accuracy(losses)
-        self.log_weights(model)
-        writer.flush()
+    with writer.as_default():
+      tf.summary.experimental.set_step(step)
+      if self.should_log_graph(step):
+        tf.summary.trace_export("model")
+      self.log_loss_accuracy(losses)
+      self.log_weights(model)
+      writer.flush()
 
     # Reset metrics after "validation_interval" training batches or 1 validation batch, ready for the next "validation_interval"/1.
     model.reset_metrics()
 
   def log_training_commentary(self, type, writer, step, losses, model):
     self.log(f"Loss: {losses[0]:.4f}, Accuracy: {losses[1]:.4f} ({type})")
-    if writer:
-      with writer.as_default():
-        tf.summary.experimental.set_step(step)
-        self.log_loss_accuracy_commentary(losses)
-        self.log_weights(model)
-        writer.flush()
+    with writer.as_default():
+      tf.summary.experimental.set_step(step)
+      self.log_loss_accuracy_commentary(losses)
+      self.log_weights(model)
+      writer.flush()
 
   def log_loss_accuracy(self, losses):
     # Fix losses: only total includes loss weighting.

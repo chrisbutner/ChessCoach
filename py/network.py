@@ -174,11 +174,9 @@ class Network:
     self.training_compiler(self.model_train)
 
     # Set up TensorBoard.
-    # TODO
-    if not tpu_strategy:
-      tensorboard_network_path = os.path.join(self.config.misc["paths"]["tensorboard"], self._name, self.network_type)
-      self.tensorboard_writer_training = tf.summary.create_file_writer(os.path.join(tensorboard_network_path, "training"))
-      self.tensorboard_writer_validation = tf.summary.create_file_writer(os.path.join(tensorboard_network_path, "validation"))
+    tensorboard_network_path = self.config.join(self.config.misc["paths"]["tensorboard"], self._name, self.network_type)
+    self.tensorboard_writer_training = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "training"))
+    self.tensorboard_writer_validation = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "validation"))
 
     return self.model_train
 
@@ -246,26 +244,21 @@ class Network:
     return os.path.basename(os.path.normpath(network_path))
 
   def latest_network_path(self):
-    parent_path = self.config.misc["paths"]["networks"]
-    _, directories, _ = next(os.walk(parent_path))
-    for directory in reversed(directories): # Only load the latest.
-      if directory.startswith(self.name + "_") and os.path.isdir(os.path.join(parent_path, directory, self.network_type)):
-        return os.path.join(parent_path, directory)
-    return None
+    return self.config.latest_network_path_for_type(self.name, self.network_type)
 
   def make_network_path(self, step):
     parent_path = self.config.misc["paths"]["networks"]
     directory_name = f"{self.name}_{str(step).zfill(9)}"
-    return os.path.join(parent_path, directory_name)
+    return self.config.join(parent_path, directory_name)
 
   def model_full_path(self, network_path):
-    return os.path.join(network_path, self.network_type, "model", "weights")
+    return self.config.join(network_path, self.network_type, "model", "weights")
 
   def model_commentary_decoder_path(self, network_path):
-    return os.path.join(network_path, self.network_type, "commentary_decoder", "weights")
+    return self.config.join(network_path, self.network_type, "commentary_decoder", "weights")
 
   def commentary_tokenizer_path(self, network_path):
-    return os.path.join(network_path, self.network_type, "commentary_tokenizer.json")
+    return self.config.join(network_path, self.network_type, "commentary_tokenizer.json")
 
 # --- Networks ---
 
@@ -351,14 +344,10 @@ def load_network(network_name):
   networks.name = network_name
 
 def save_network_teacher(checkpoint):
-  # TODO: Implement
-  if not tpu_strategy:
-    networks.teacher.save(checkpoint)
+  networks.teacher.save(checkpoint)
   
 def save_network_student(checkpoint):
-  # TODO: Implement
-  if not tpu_strategy:
-    networks.student.save(checkpoint)
+  networks.student.save(checkpoint)
 
 # --- Initialize ---
 
@@ -369,7 +358,7 @@ ensure_locks = [threading.RLock() for _ in devices]
 # Only create one TensorFlow/Keras model at a time, even if on different devices.
 model_creation_lock = threading.Lock()
 
-config = Config()
+config = Config(bool(tpu_strategy))
 networks = Networks(config)
 datasets = DatasetBuilder(config)
 trainer = Trainer(networks, tpu_strategy, devices, datasets)
