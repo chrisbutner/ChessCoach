@@ -1,7 +1,3 @@
-Training
-- gs:// path rooting and file writing
-- test full supervised training run on TPU, including resuming training
-
 Self-play
 - make sure prediction network can update and be used (i.e. changes reflected after training despite tf.function tracing)
 	- explicitly reload weights from gs:// I think, and use the same idea locally even if same process
@@ -193,6 +189,7 @@ Revisit
 Bugs
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
+- Possible problems resuming if e.g. student missing or strength tests didn't run, etc. - no per-stage completion checks
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)

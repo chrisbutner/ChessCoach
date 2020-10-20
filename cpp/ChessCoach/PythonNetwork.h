@@ -48,7 +48,7 @@ public:
         std::vector<Window>& trainingWindows, int step, int checkpoint);
     virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments);
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values);
-    virtual void LoadNetwork(const char* networkName);
+    virtual int LoadNetwork(const char* networkName);
     virtual void SaveNetwork(NetworkType networkType, int checkpoint);
 
 private:

@@ -87,7 +87,7 @@ struct INetwork
         std::vector<Window>& trainingWindows, int step, int checkpoint) = 0;
     virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments) = 0;
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values) = 0;
-    virtual void LoadNetwork(const char* networkName) = 0;
+    virtual int LoadNetwork(const char* networkName) = 0;
     virtual void SaveNetwork(NetworkType networkType, int checkpoint) = 0;
 };
 

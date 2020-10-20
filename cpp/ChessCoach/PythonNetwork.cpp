@@ -89,7 +89,7 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
     PyAssert(pythonImages);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction[networkType], pythonImages, nullptr);
-    PyAssert(tupleResult);
+    PyAssert(PyTuple_Check(tupleResult));
 
     // Extract the values.
     PyObject* pythonValues = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
@@ -129,7 +129,6 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     PyAssert(pythonImages);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_predictCommentaryBatchFunction, pythonImages, nullptr);
-    PyAssert(result);
     PyAssert(PyArray_Check(result));
 
     // Extract the values.
@@ -169,11 +168,11 @@ void PythonNetwork::Train(NetworkType networkType, std::vector<GameType>& gameTy
     PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
     PyAssert(pythonCheckpoint);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainFunction[networkType], pythonGameTypes, pythonTrainingWindows,
+    PyObject* result = PyObject_CallFunctionObjArgs(_trainFunction[networkType], pythonGameTypes, pythonTrainingWindows,
         pythonStep, pythonCheckpoint, nullptr);
-    PyAssert(tupleResult);
+    PyAssert(result);
 
-    Py_DECREF(tupleResult);
+    Py_DECREF(result);
     Py_DECREF(pythonCheckpoint);
     Py_DECREF(pythonStep);
     Py_DECREF(pythonTrainingWindows);
@@ -213,11 +212,11 @@ void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* i
         NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
     PyAssert(pythonComments);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_trainCommentaryBatchFunction, pythonStep, pythonImages,
+    PyObject* result = PyObject_CallFunctionObjArgs(_trainCommentaryBatchFunction, pythonStep, pythonImages,
         pythonComments, nullptr);
-    PyAssert(tupleResult);
+    PyAssert(result);
 
-    Py_DECREF(tupleResult);
+    Py_DECREF(result);
     Py_DECREF(pythonComments);
     Py_DECREF(pythonImages);
     Py_DECREF(pythonStep);
@@ -257,26 +256,34 @@ void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCoun
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
     PyAssert(pythonValues);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_logScalarsFunction[networkType], pythonStep, pythonNames, pythonValues, nullptr);
-    PyAssert(tupleResult);
+    PyObject* result = PyObject_CallFunctionObjArgs(_logScalarsFunction[networkType], pythonStep, pythonNames, pythonValues, nullptr);
+    PyAssert(result);
 
-    Py_DECREF(tupleResult);
+    Py_DECREF(result);
     Py_DECREF(pythonValues);
     Py_DECREF(pythonNames);
     Py_DECREF(pythonStep);
 }
 
-void PythonNetwork::LoadNetwork(const char* networkName)
+int PythonNetwork::LoadNetwork(const char* networkName)
 {
     PythonContext context;
 
     PyObject* pythonNetworkName = PyUnicode_FromString(networkName);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_loadNetworkFunction, pythonNetworkName, nullptr);
-    PyAssert(tupleResult);
+    PyTuple_Check(tupleResult);
+
+    // Extract the step count.
+    PyObject* pythonStepCount = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
+    PyAssert(PyLong_Check(pythonStepCount));
+
+    const int stepCount = PyLong_AsLong(pythonStepCount);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonNetworkName);
+
+    return stepCount;
 }
 
 void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
@@ -286,17 +293,16 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
     PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
     PyAssert(pythonCheckpoint);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_saveNetworkFunction[networkType], pythonCheckpoint, nullptr);
-    PyAssert(tupleResult);
+    PyObject* result = PyObject_CallFunctionObjArgs(_saveNetworkFunction[networkType], pythonCheckpoint, nullptr);
+    PyAssert(result);
 
-    Py_DECREF(tupleResult);
+    Py_DECREF(result);
     Py_DECREF(pythonCheckpoint);
 }
 
 PyObject* PythonNetwork::LoadFunction(PyObject* module, const char* name)
 {
     PyObject* function = PyObject_GetAttrString(module, name);
-    PyAssert(function);
     PyAssert(PyCallable_Check(function));
     return function;
 }

@@ -36,6 +36,7 @@ log(f"GPU devices: {[g.name for g in gpus]}")
 # --- Now it's safe for further imports ---
 
 import math
+import re
 import time
 import threading
 import numpy as np
@@ -83,6 +84,12 @@ class Network:
     self.model_train = None
     self.tensorboard_writer_training = None
     self.tensorboard_writer_validation = None
+
+  @property
+  def info(self):
+    path = self.config.latest_network_path_for_type(self.name, self.network_type)
+    step_count = int(re.match(".*?([0-9]+)$", path).group(1)) if path else 0
+    return (step_count,)
 
   @tf.function
   def tf_predict(self, device_index, images):
@@ -342,6 +349,7 @@ def log_scalars_student(step, names, values):
 
 def load_network(network_name):
   networks.name = network_name
+  return networks.teacher.info # Assume there's a saved teacher, if anything, and return its info.
 
 def save_network_teacher(checkpoint):
   networks.teacher.save(checkpoint)

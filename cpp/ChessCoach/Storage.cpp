@@ -33,24 +33,7 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
     _commentaryPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.CommentaryPathTraining);
     _commentaryPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.CommentaryPathValidation);
     _pgnsPath = MakePath(rootPath, miscConfig.Paths_Pgns);
-    _networksPath = MakePath(rootPath, miscConfig.Paths_Networks);
     _logsPath = MakePath(rootPath, miscConfig.Paths_Logs);
-
-    _sessionPrefix = "SESSION_"; // TODO: hostname plus GUID or timestamp
-}
-
-// Used for testing
-Storage::Storage(const NetworkConfig& networkConfig, const std::filesystem::path& gamesSupervisedPath,
-    const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesValidationPath,
-    const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath)
-    : _pgnInterval(networkConfig.Training.PgnInterval)
-    , _vocabularyFilename() // TODO: Update with commentary unit tests
-    , _gamesPaths{ gamesSupervisedPath, gamesTrainPath, gamesValidationPath }
-    , _commentaryPaths { "", "", "" } // TODO: Update with commentary unit tests
-    , _pgnsPath(pgnsPath)
-    , _networksPath(networksPath)
-{
-    static_assert(GameType_Count == 3);
 
     _sessionPrefix = "SESSION_"; // TODO: hostname plus GUID or timestamp
 }
@@ -78,32 +61,6 @@ int Storage::GamesPlayed(GameType gameType) const
 {
     // TODO: until chunking. should use OS-specific call to avoid iteration unless it doesn't.
     return static_cast<int>(std::distance(std::filesystem::directory_iterator(_gamesPaths[gameType]), std::filesystem::directory_iterator()));
-}
-
-int Storage::NetworkStepCount(const std::string& networkName) const
-{
-    const std::string prefix = networkName + "_";
-    std::filesystem::directory_entry lastEntry;
-    for (const auto& entry : std::filesystem::directory_iterator(_networksPath))
-    {
-        if (entry.path().filename().string().compare(0, prefix.size(), prefix) == 0)
-        {
-            lastEntry = entry;
-        }
-    }
-
-    if (lastEntry.path().empty())
-    {
-        return 0;
-    }
-
-    std::stringstream tokenizer(lastEntry.path().filename().string());
-    std::string ignore;
-    int networkStepCount;
-    std::getline(tokenizer, ignore, '_');
-    tokenizer >> networkStepCount;
-
-    return networkStepCount;
 }
 
 std::string Storage::GenerateChunkFilename(int chunkNumber)

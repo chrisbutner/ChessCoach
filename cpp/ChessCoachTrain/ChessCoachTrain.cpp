@@ -43,7 +43,8 @@ int main(int argc, char* argv[])
 void ChessCoachTrain::TrainChessCoach()
 {
     const NetworkConfig& config = Config::TrainingNetwork;
-    std::unique_ptr<INetwork> network(CreateNetwork(config));
+    int networkStepCount;
+    std::unique_ptr<INetwork> network(CreateNetworkWithInfo(config, networkStepCount));
     Storage storage(config, Config::Misc);
 
     // Start self-play worker threads.
@@ -65,7 +66,7 @@ void ChessCoachTrain::TrainChessCoach()
 
     // Plan full training and resume progress. If the network's step count isn't a multiple of the checkpoint interval, round down.
     const int networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
-    const int startingNetwork = (storage.NetworkStepCount(config.Name) / config.Training.CheckpointInterval);
+    const int startingNetwork = (networkStepCount / config.Training.CheckpointInterval);
 
     // Run through all checkpoints with n in [1, networkCount].
     for (int n = startingNetwork + 1; n <= networkCount; n++)

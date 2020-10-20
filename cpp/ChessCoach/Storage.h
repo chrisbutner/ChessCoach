@@ -39,13 +39,9 @@ public:
 public:
 
     Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
-    Storage(const NetworkConfig& networkConfig, const std::filesystem::path& gamesSupervisedPath,
-        const std::filesystem::path& gamesTrainPath, const std::filesystem::path& gamesValidationPath,
-        const std::filesystem::path& pgnsPath, const std::filesystem::path& networksPath);
 
     int AddGame(GameType gameType, SavedGame&& game);
     int GamesPlayed(GameType gameType) const;
-    int NetworkStepCount(const std::string& networkName) const;
     std::filesystem::path LogPath() const;
         
 private:
@@ -72,7 +68,6 @@ private:
     std::array<std::filesystem::path, GameType_Count> _gamesPaths;
     std::array<std::filesystem::path, GameType_Count> _commentaryPaths;
     std::filesystem::path _pgnsPath;
-    std::filesystem::path _networksPath;
     std::filesystem::path _logsPath;
 };
 
