@@ -153,7 +153,7 @@ class Network:
         log(f"Loading model ({log_device_context}/{self.network_type}/full): {log_name}")
         model_full_path = self.model_full_path(network_path)
         full = self.model_builder()
-        full.load_weights(model_full_path)
+        self.load_weights(full, model_full_path)
       else:
         log(f"Creating new model ({log_device_context}/{self.network_type}/full)")
         full = self.model_builder()
@@ -181,7 +181,7 @@ class Network:
       if newer_weights_available:
         log_name = self.get_log_name(network_path)
         log(f"Updating model ({device_index}/{self.network_type}/full): {log_name}")
-        models.full.load_weights(model_full_path)
+        self.load_weights(models.full, model_full_path)
         models.full_weights_path = model_full_path
 
   def ensure_prediction(self, device_index):
@@ -245,11 +245,27 @@ class Network:
           decoder, _ = ModelBuilder().build_commentary_decoder(self.config, self.commentary_tokenizer)
           self.models[device_index].commentary_decoder = decoder
           model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
-          self.models[device_index].commentary_decoder.load_weights(model_commentary_decoder_path)
+          self.load_weights(self.models[device_index].commentary_decoder, model_commentary_decoder_path)
         else:
           log(f"Creating new model ({device_index}/{self.network_type}/commentary)")
           decoder, self.commentary_tokenizer = ModelBuilder().build_commentary_decoder(self.config)
           self.models[device_index].commentary_decoder = decoder
+
+  # Storage may be slow, e.g. Google Cloud Storage, so retry.
+  # For now, sleep for 1 second, up to 10 retry attempts (11 total).
+  def load_weights(self, model, path):
+    try:
+      model.load_weights(path)
+      return
+    except:
+      for _ in range(10):
+        time.sleep(1.0)
+        try:
+          model.load_weights(path)
+          return
+        except:
+          pass
+    raise Exception("Failed to load weights from: {path}")
 
   def save(self, step):
     network_path = self.make_network_path(step)

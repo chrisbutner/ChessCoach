@@ -89,10 +89,12 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
     PyAssert(pythonImages);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_predictBatchFunction[networkType], pythonImages, nullptr);
+    PyAssert(tupleResult);
     PyAssert(PyTuple_Check(tupleResult));
 
     // Extract the values.
     PyObject* pythonValues = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonValues);
     PyAssert(PyArray_Check(pythonValues));
 
     PyArrayObject* pythonValuesArray = reinterpret_cast<PyArrayObject*>(pythonValues);
@@ -106,6 +108,7 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
 
     // Extract the policies.
     PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonPolicies);
     PyAssert(PyArray_Check(pythonPolicies));
 
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
@@ -129,6 +132,7 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     PyAssert(pythonImages);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_predictCommentaryBatchFunction, pythonImages, nullptr);
+    PyAssert(result);
     PyAssert(PyArray_Check(result));
 
     // Extract the values.
@@ -272,10 +276,12 @@ int PythonNetwork::LoadNetwork(const char* networkName)
     PyObject* pythonNetworkName = PyUnicode_FromString(networkName);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_loadNetworkFunction, pythonNetworkName, nullptr);
-    PyTuple_Check(tupleResult);
+    PyAssert(tupleResult);
+    PyAssert(PyTuple_Check(tupleResult));
 
     // Extract the step count.
     PyObject* pythonStepCount = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonStepCount);
     PyAssert(PyLong_Check(pythonStepCount));
 
     const int stepCount = PyLong_AsLong(pythonStepCount);
@@ -303,6 +309,7 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
 PyObject* PythonNetwork::LoadFunction(PyObject* module, const char* name)
 {
     PyObject* function = PyObject_GetAttrString(module, name);
+    PyAssert(function);
     PyAssert(PyCallable_Check(function));
     return function;
 }
