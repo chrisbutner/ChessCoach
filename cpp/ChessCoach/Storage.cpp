@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <chrono>
 #include <set>
+#include <ctime>
 
 #include <google/protobuf/io/gzip_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
@@ -19,88 +20,214 @@
 #include "Preprocessing.h"
 #include "Random.h"
 
-Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig)
-    : _pgnInterval(networkConfig.Training.PgnInterval)
+Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig, int trainingChunkCount)
+    : _trainingChunkCount(trainingChunkCount)
+    , _gamesPerChunk(miscConfig.Storage_GamesPerChunk)
+    , _pgnInterval(networkConfig.Training.PgnInterval)
     , _vocabularyFilename(networkConfig.Training.VocabularyFilename)
+    , _sessionGameCount(0)
+    , _sessionChunkCount(0)
 {
     const std::filesystem::path rootPath = Platform::UserDataPath();
 
-    static_assert(GameType_Count == 3);
-    _gamesPaths[GameType_Supervised] = MakePath(rootPath, networkConfig.Training.GamesPathSupervised);
-    _gamesPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.GamesPathTraining);
-    _gamesPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.GamesPathValidation);
-    _commentaryPaths[GameType_Supervised] = MakePath(rootPath, networkConfig.Training.CommentaryPathSupervised);
-    _commentaryPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.CommentaryPathTraining);
-    _commentaryPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.CommentaryPathValidation);
-    _pgnsPath = MakePath(rootPath, miscConfig.Paths_Pgns);
-    _logsPath = MakePath(rootPath, miscConfig.Paths_Logs);
+    _relativeTrainingGamePath = networkConfig.Training.GamesPathTraining;
+    _localTrainingGamePath = MakeLocalPath(rootPath, _relativeTrainingGamePath);
+    //static_assert(GameType_Count == 3);
+    //_commentaryPaths[GameType_Supervised] = MakePath(rootPath, networkConfig.Training.CommentaryPathSupervised);
+    //_commentaryPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.CommentaryPathTraining);
+    //_commentaryPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.CommentaryPathValidation);
+    _localLogsPath = MakeLocalPath(rootPath, miscConfig.Paths_Logs);
+    _relativePgnsPath = miscConfig.Paths_Pgns;
 
-    _sessionPrefix = "SESSION_"; // TODO: hostname plus GUID or timestamp
+    // Use a 32-bit session nonce to help differentiate this run from others. Still secondary to timestamp in ordering.
+    const std::string alphabet = "0123456789ABCDEF";
+    std::uniform_int_distribution<> distribution(0, static_cast<int>(alphabet.size()) - 1);
+    _sessionNonce = std::string(8, '\0');
+    for (char& c : _sessionNonce)
+    {
+        c = alphabet[distribution(Random::Engine)];
+    }
+
+    // Count training games previously played and saved locally without yet being chunked.
+    _trainingGameCount = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(_localTrainingGamePath))
+    {
+        if (entry.path().extension().string() == ".game")
+        {
+            _trainingGameCount++;
+        }
+    }
 }
 
-int Storage::AddGame(GameType gameType, SavedGame&& game)
+void Storage::Housekeep(INetwork* network)
 {
-    const int gameNumber = ++_sessionGameCount;
-    SaveGame(gameType, game, gameNumber);
+    // Try to chunk now in case we already have enough games (so zero would be played)
+    // but they failed to chunk previously.
+    if (_trainingGameCount >= _gamesPerChunk)
+    {
+        TryChunk(network);
+    }
+}
 
+// AddTrainingGame can be called from multiple self-play worker threads.
+int Storage::AddTrainingGame(INetwork* network, SavedGame&& game)
+{
+    // Give this game a number and filename.
+    const int gameNumber = ++_sessionGameCount;
+    const std::string filenameStem = GenerateFilename(gameNumber);
+
+    // Save locally for chunking later.
+    const std::filesystem::path localGamePath = _localTrainingGamePath / (filenameStem + ".game");
+    SaveChunk(_startingPosition, localGamePath, { game });
+
+    // Occasionally save PGNs to central storage.
     if ((gameNumber % _pgnInterval) == 0)
     {
-        std::stringstream suffix;
-        suffix << std::setfill('0') << std::setw(9) << gameNumber;
-        const std::string filename = _sessionPrefix + suffix.str() + ".pgn";
-        const std::filesystem::path pgnPath = _pgnsPath / filename;
+        const std::filesystem::path relativePgnPath = _relativePgnsPath / (filenameStem + ".pgn");
 
-        std::ofstream pgnFile = std::ofstream(pgnPath, std::ios::out);
-        Pgn::GeneratePgn(pgnFile, game);
+        std::stringstream buffer;
+        Pgn::GeneratePgn(buffer, game);
+
+        network->SaveFile(relativePgnPath.string(), buffer.str());
+    }
+
+    // When enough individual games have been saved, chunk and store centrally.
+    // Use the atomic_int to ensure that only one caller attempts to chunk, and
+    // assume that _gamesPerChunk is large enough that the chunking will finish
+    // well before it is time for the next one.
+    const int newTrainingGameCount = ++_trainingGameCount;
+    if ((newTrainingGameCount % _gamesPerChunk) == 0)
+    {
+        TryChunk(network);
     }
 
     return gameNumber;
 }
 
-int Storage::GamesPlayed(GameType gameType) const
+// Just in case anything went wrong with file I/O, etc. previously, attempt to
+// create as many chunks as we can here. This is still safe with the outer atomic_int
+// check as long as we finish before the next _gamesPerChunk cycle.
+void Storage::TryChunk(INetwork* network)
 {
-    // TODO: until chunking. should use OS-specific call to avoid iteration unless it doesn't.
-    return static_cast<int>(std::distance(std::filesystem::directory_iterator(_gamesPaths[gameType]), std::filesystem::directory_iterator()));
+    std::vector<std::filesystem::path> gamePaths;
+    for (const auto& entry : std::filesystem::directory_iterator(_localTrainingGamePath))
+    {
+        if (entry.path().extension().string() == ".game")
+        {
+            gamePaths.emplace_back(entry.path());
+        }
+        if (gamePaths.size() == _gamesPerChunk)
+        {
+            ChunkGames(network, gamePaths);
+            gamePaths.clear();
+        }
+    }
 }
 
-std::string Storage::GenerateChunkFilename(int chunkNumber)
+void Storage::ChunkGames(INetwork* network, std::vector<std::filesystem::path>& gamePaths)
 {
-    std::stringstream suffix;
-    suffix << std::setfill('0') << std::setw(9) << chunkNumber;
+    // Set up a buffer for the TFRecord file contents, compressing with zlib.
+    // Reserve 128 MB in advance, roughly enough to hold any chunk.
+    std::string buffer;
+    {
+        buffer.reserve(128 * 1024 * 1024);
+        google::protobuf::io::StringOutputStream chunkWrapped(&buffer);
+        google::protobuf::io::GzipOutputStream::Options zipOptions{};
+        zipOptions.format = google::protobuf::io::GzipOutputStream::ZLIB;
+        google::protobuf::io::GzipOutputStream chunkZip(&chunkWrapped, zipOptions);
 
-    return suffix.str() + ".chunk";
+        // Just decompress each individual game chunk with zlib and append to the chunk.
+        for (auto& path : gamePaths)
+        {
+            CFile gameFile(path, false /* write */);
+            google::protobuf::io::FileInputStream gameWrapped(gameFile.FileDescriptor());
+            google::protobuf::io::GzipInputStream gameZip(&gameWrapped, google::protobuf::io::GzipInputStream::ZLIB);
+
+            void* chunkBuffer;
+            const void* gameBuffer;
+            int chunkSize;
+            int gameSize;
+
+            // Ordering is important here: check short-lived "gameZip" first (is there data to read)
+            // then long-lived "chunkZip" (can we write it) so that "BackUp" is never missed.
+            while (gameZip.Next(&gameBuffer, &gameSize) && chunkZip.Next(&chunkBuffer, &chunkSize))
+            {
+                const int copySize = std::min(chunkSize, gameSize);
+                std::memcpy(chunkBuffer, gameBuffer, copySize);
+
+                chunkZip.BackUp(chunkSize - copySize);
+                gameZip.BackUp(gameSize - copySize);
+            }
+        }
+    }
+
+    // Write the chunk to central storage.
+    const int chunkNumber = ++_sessionChunkCount;
+    const std::string& filename = GenerateFilename(chunkNumber) + ".chunk";
+    const auto& relativePath = (_relativeTrainingGamePath / filename);
+    std::cout << "Chunking " << _gamesPerChunk << " games to " << filename << std::endl;
+    network->SaveFile(relativePath.string(), buffer);
+
+    // Delete the individual games.
+    for (auto& path : gamePaths)
+    {
+        std::filesystem::remove(path);
+    }
+
+    // Update stats.
+    _trainingChunkCount++;
+    _trainingGameCount -= _gamesPerChunk;
 }
-void Storage::SaveGame(GameType gameType, const SavedGame& game, int gameNumber)
+
+// Training is only done on chunks, not individual games, so round the target up to the nearest chunk.
+int Storage::TrainingGamesToPlay(int targetCount) const
+{
+    const int existingCount = ((_trainingChunkCount * _gamesPerChunk) + _trainingGameCount);
+    targetCount = (((targetCount + _gamesPerChunk - 1) / _gamesPerChunk) * _gamesPerChunk);
+    return std::max(0, targetCount - existingCount);
+}
+
+std::string Storage::GenerateSimpleChunkFilename(int chunkNumber)
 {
     std::stringstream suffix;
-    suffix << std::setfill('0') << std::setw(9) << gameNumber;
-    const std::string filename = _sessionPrefix + suffix.str() + ".game";
-    const std::filesystem::path gamePath = _gamesPaths[gameType] / filename;
+    suffix << std::setfill('0') << std::setw(9) << chunkNumber << ".chunk";
+    return suffix.str();
+}
 
-    SaveChunk(_startingPosition, gamePath, { game });
+std::string Storage::GenerateFilename(int number)
+{
+    std::stringstream filename;
+
+    // Format as "YYmmdd_HHMMSS_milliseconds_sessionnonce_number".
+    // E.g. "20201022_181546_008_24FFE8F502A72C8D_000000005"
+    const auto now = std::chrono::system_clock::now();
+    const auto milliseconds = (std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000);
+    const std::time_t time = std::chrono::system_clock::to_time_t(now);
+#pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
+    filename << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S");
+#pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
+    filename << "_" << std::setfill('0') << std::setw(3) << milliseconds << "_" << _sessionNonce << "_"
+        << std::setfill('0') << std::setw(9) << number;
+    
+    return filename.str();
 }
 
 void Storage::SaveChunk(const Game& startingPosition, const std::filesystem::path& path, const std::vector<SavedGame>& games)
 {
     // Compress the TFRecord file using zlib.
-    std::ofstream file(path, std::ios::out | std::ios::binary);
-    google::protobuf::io::OstreamOutputStream wrapped(&file);
+    CFile file(path, true /* write */);
+    google::protobuf::io::FileOutputStream wrapped(file.FileDescriptor());
     google::protobuf::io::GzipOutputStream::Options zipOptions{};
     zipOptions.format = google::protobuf::io::GzipOutputStream::ZLIB;
     google::protobuf::io::GzipOutputStream zip(&wrapped, zipOptions);
 
-    // Write an "Example" protobuf for each game as a TFRecord.
+    // Write a "tf.train.Example" protobuf for each game as a TFRecord.
     message::Example storeGame;
     std::string buffer;
     for (const SavedGame& game : games)
     {
         PopulateGame(startingPosition, game, storeGame);
         WriteTfRecord(zip, buffer, storeGame);
-    }
-
-    if (!file.good())
-    {
-        throw std::runtime_error("Failed to write to file: " + path.string());
     }
 }
 
@@ -226,12 +353,14 @@ uint32_t Storage::MaskCrc32cForTfRecord(uint32_t crc32c)
     return ((crc32c >> 15) | (crc32c << 17)) + 0xa282ead8ul;
 }
 
-std::filesystem::path Storage::LogPath() const
+std::filesystem::path Storage::LocalLogPath() const
 {
-    return _logsPath;
+    return _localLogsPath;
 }
 
-std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const std::filesystem::path& path)
+// We can only write to local paths from C++ and need to call in to Python to write to gs:// locations
+// when running on Google Cloud with TPUs. That's okay for local gathering/chunking of games, and UCI logging.
+std::filesystem::path Storage::MakeLocalPath(const std::filesystem::path& root, const std::filesystem::path& path)
 {
     // Empty paths have special meaning as N/A.
     if (path.empty())
@@ -251,55 +380,55 @@ std::filesystem::path Storage::MakePath(const std::filesystem::path& root, const
     return rooted;
 }
 
-void Storage::LoadCommentary()
-{
-    const Preprocessor preprocessor;
-    const GameType gameType = GameType_Supervised; // TODO: Always supervised for now
-
-    _commentary.games.clear();
-    _commentary.comments.clear();
-
-    // Load and pre-process commentary, culling empty/unreferenced comments and games.
-    for (auto&& entry : std::filesystem::recursive_directory_iterator(_commentaryPaths[gameType]))
-    {
-        if (entry.path().extension().string() == ".pgn")
-        {
-            std::ifstream pgnFile = std::ifstream(entry.path(), std::ios::in);
-            Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, Commentary&& commentary)
-                {
-                    int gameIndex = -1;
-                    for (auto comment : commentary.comments)
-                    {
-                        preprocessor.PreprocessComment(comment.comment);
-                        if (!comment.comment.empty())
-                        {
-                            if (gameIndex == -1)
-                            {
-                                _commentary.games.emplace_back(std::move(game));
-                                gameIndex = (static_cast<int>(_commentary.games.size()) - 1);
-                            }
-                            _commentary.comments.emplace_back(gameIndex, comment.moveIndex, std::move(comment.variationMoves), std::move(comment.comment));
-                        }
-                    }
-                });
-        }
-    }
-
-    // Generate a vocabulary document with unique comments.
-    std::set<std::string> vocabulary;
-    for (const SavedComment& comment : _commentary.comments)
-    {
-        vocabulary.insert(comment.comment);
-    }
-    const std::filesystem::path vocabularyPath = (_commentaryPaths[gameType] / _vocabularyFilename);
-    std::ofstream vocabularyFile = std::ofstream(vocabularyPath, std::ios::out);
-    for (const std::string& comment : vocabulary)
-    {
-        vocabularyFile << comment << std::endl;
-    }
-
-    std::cout << "Loaded " << _commentary.comments.size() << " move comments" << std::endl;
-}
+//void Storage::LoadCommentary()
+//{
+//    const Preprocessor preprocessor;
+//    const GameType gameType = GameType_Supervised; // TODO: Always supervised for now
+//
+//    _commentary.games.clear();
+//    _commentary.comments.clear();
+//
+//    // Load and pre-process commentary, culling empty/unreferenced comments and games.
+//    for (auto&& entry : std::filesystem::recursive_directory_iterator(_commentaryPaths[gameType]))
+//    {
+//        if (entry.path().extension().string() == ".pgn")
+//        {
+//            std::ifstream pgnFile = std::ifstream(entry.path(), std::ios::in);
+//            Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, Commentary&& commentary)
+//                {
+//                    int gameIndex = -1;
+//                    for (auto comment : commentary.comments)
+//                    {
+//                        preprocessor.PreprocessComment(comment.comment);
+//                        if (!comment.comment.empty())
+//                        {
+//                            if (gameIndex == -1)
+//                            {
+//                                _commentary.games.emplace_back(std::move(game));
+//                                gameIndex = (static_cast<int>(_commentary.games.size()) - 1);
+//                            }
+//                            _commentary.comments.emplace_back(gameIndex, comment.moveIndex, std::move(comment.variationMoves), std::move(comment.comment));
+//                        }
+//                    }
+//                });
+//        }
+//    }
+//
+//    // Generate a vocabulary document with unique comments.
+//    std::set<std::string> vocabulary;
+//    for (const SavedComment& comment : _commentary.comments)
+//    {
+//        vocabulary.insert(comment.comment);
+//    }
+//    const std::filesystem::path vocabularyPath = (_commentaryPaths[gameType] / _vocabularyFilename);
+//    std::ofstream vocabularyFile = std::ofstream(vocabularyPath, std::ios::out);
+//    for (const std::string& comment : vocabulary)
+//    {
+//        vocabularyFile << comment << std::endl;
+//    }
+//
+//    std::cout << "Loaded " << _commentary.comments.size() << " move comments" << std::endl;
+//}
 
 //CommentaryTrainingBatch* Storage::SampleCommentaryBatch()
 //{
@@ -318,7 +447,7 @@ void Storage::LoadCommentary()
 //    _commentaryBatch.images.resize(_trainingCommentaryBatchSize);
 //    _commentaryBatch.comments.resize(_trainingCommentaryBatchSize);
 //
-//    std::uniform_int_distribution<int> commentDistribution(0, static_cast<int>(_commentary.comments.size()) - 1);
+//    std::uniform_int_distribution<> commentDistribution(0, static_cast<int>(_commentary.comments.size()) - 1);
 //
 //    for (int i = 0; i < _commentaryBatch.images.size(); i++)
 //    {

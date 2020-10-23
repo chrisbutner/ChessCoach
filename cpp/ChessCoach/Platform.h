@@ -22,4 +22,17 @@ public:
 
 };
 
+class CFile
+{
+public:
+
+    CFile(const std::filesystem::path& path, bool write);
+    ~CFile();
+    int FileDescriptor() const;
+
+private:
+
+    int _fileDescriptor;
+};
+
 #endif // _PLATFORM_H_

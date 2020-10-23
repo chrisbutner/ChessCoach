@@ -1,7 +1,7 @@
-Self-play
-- make sure prediction network can update and be used (i.e. changes reflected after training despite tf.function tracing)
-	- explicitly reload weights from gs:// I think, and use the same idea locally even if same process
+NEXT
+- save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
 - need to rotate supervised/self-play still in training.py
+- implement warmup, first few hundred steps on TPU are insane validation-wise
 
 Builds
 - protoc gen (generator example on meson github)
@@ -36,10 +36,14 @@ AFTER CHECK-IN, FIND A HOME LATER
 - need to solve pipeline threading issues again, make sure Cuda >= 90% locally
 - throw away positions before expensive decompression in dataset.py, keep all/more games, keep fewer positions
 - relinquish prediction cache memory while training? increase cycle/shuffle?
-- implement warmup, first few hundred steps on TPU are insane validation-wise
+- anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
 
 Apply for cloud resources
 - look up the FAQ again
+
+Distributed self-play/training
+- set up some basic infrastructure, preemptibles, startup, roles, etc.
+- handle known issues like races with spliced network save/load
 
 Training improvements
 - playout cap randomization (Wu)
@@ -90,8 +94,6 @@ Additional head ideas:
 - king safety, mobility, etc.
 
 At 20-30k steps:
-- try warmup (Wu)
-	- seeing this more everywhere, FB game nets recently, etc., good justifications re: landscape/adaptive
 - test without mcts value/reply policy, see whether they truly help/hurt
 - try out "sleeping" in the rotation - train random noise, different distributions
 - make sure piece-value understanding is improving; think about standard A/B positions to log avg queen/rook/etc. value to tensorboard

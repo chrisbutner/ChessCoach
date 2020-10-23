@@ -753,7 +753,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
                 // In degenerate conditions whole games can finish in CPU via the prediction cache, so loop.
                 while ((_states[i] == SelfPlayState::Finished) && !workCoordinator.AllWorkItemsCompleted())
                 {
-                    SaveToStorageAndLog(i);
+                    SaveToStorageAndLog(network, i);
 
                     workCoordinator.OnWorkItemCompleted();
 
@@ -1080,14 +1080,13 @@ bool SelfPlayWorker::IsTerminal(const SelfPlayGame& game) const
     return (game.Root()->terminalValue.IsImmediate() || (game.Ply() >= Config().SelfPlay.MaxMoves));
 }
 
-void SelfPlayWorker::SaveToStorageAndLog(int index)
+void SelfPlayWorker::SaveToStorageAndLog(INetwork* network, int index)
 {
     const SelfPlayGame& game = _games[index];
 
-    // Always save games to the GameType_Training store.
     const int ply = game.Ply();
     const float result = game.Result();
-    const int gameNumber = _storage->AddGame(GameType_Training, game.Save());
+    const int gameNumber = _storage->AddTrainingGame(network, game.Save());
 
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);
@@ -1234,7 +1233,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game) const
     {
         // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
         const int sumChildVisits = game.Root()->visitCount;
-        int sample = std::uniform_int_distribution<int>(0, sumChildVisits - 1)(Random::Engine);
+        int sample = std::uniform_int_distribution<>(0, sumChildVisits - 1)(Random::Engine);
         for (Node& child : *game.Root())
         {
             if (sample < child.visitCount)

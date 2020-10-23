@@ -208,24 +208,6 @@ void Config::Initialize()
     {
         network->SelfPlay.NumWorkers = 1;
         network->SelfPlay.PredictionBatchSize = 1;
-        if (!network->Training.GamesPathSupervised.empty())
-        {
-            network->Training.GamesPathSupervised = "Debug/" + network->Training.GamesPathSupervised;
-        }
-        if (!network->Training.GamesPathTraining.empty())
-        {
-            network->Training.GamesPathTraining = "Debug/" + network->Training.GamesPathTraining;
-        }
-        if (!network->Training.GamesPathValidation.empty())
-        {
-            network->Training.GamesPathValidation = "Debug/" + network->Training.GamesPathValidation;
-        }
-    }
-    // Use the usual networks path, necessary and safe.
-    // Same with TensorBoard and Logs for now.
-    if (!Misc.Paths_Pgns.empty())
-    {
-        Misc.Paths_Pgns = "Debug/" + Misc.Paths_Pgns;
     }
 #endif
 }

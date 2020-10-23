@@ -56,6 +56,7 @@ PythonNetwork::PythonNetwork()
     _loadNetworkFunction = LoadFunction(module, "load_network");
     _saveNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_network_teacher");
     _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
+    _saveFileFunction = LoadFunction(module, "save_file");
 
     Py_DECREF(module);
     Py_DECREF(pythonPath);
@@ -65,6 +66,7 @@ PythonNetwork::PythonNetwork()
 
 PythonNetwork::~PythonNetwork()
 {
+    Py_XDECREF(_saveFileFunction);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Teacher]);
     Py_XDECREF(_loadNetworkFunction);
@@ -135,7 +137,7 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     PyAssert(result);
     PyAssert(PyArray_Check(result));
 
-    // Extract the values.
+    // Extract the comments.
     PyArrayObject* pythonCommentsArray = reinterpret_cast<PyArrayObject*>(result);
 
     std::vector<std::string> comments(batchSize);
@@ -269,27 +271,31 @@ void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCoun
     Py_DECREF(pythonStep);
 }
 
-int PythonNetwork::LoadNetwork(const char* networkName)
+void PythonNetwork::LoadNetwork(const std::string& networkName, int& stepCountOut, int& trainingChunkCountOut)
 {
     PythonContext context;
 
-    PyObject* pythonNetworkName = PyUnicode_FromString(networkName);
+    PyObject* pythonNetworkName = PyUnicode_FromStringAndSize(networkName.c_str(), networkName.size());
+    PyAssert(pythonNetworkName);
 
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_loadNetworkFunction, pythonNetworkName, nullptr);
     PyAssert(tupleResult);
     PyAssert(PyTuple_Check(tupleResult));
 
-    // Extract the step count.
+    // Extract info.
     PyObject* pythonStepCount = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
     PyAssert(pythonStepCount);
     PyAssert(PyLong_Check(pythonStepCount));
 
-    const int stepCount = PyLong_AsLong(pythonStepCount);
+    PyObject* pythonTrainingChunkCount = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonTrainingChunkCount);
+    PyAssert(PyLong_Check(pythonTrainingChunkCount));
+
+    stepCountOut = PyLong_AsLong(pythonStepCount);
+    trainingChunkCountOut = PyLong_AsLong(pythonTrainingChunkCount);
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonNetworkName);
-
-    return stepCount;
 }
 
 void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
@@ -304,6 +310,24 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
 
     Py_DECREF(result);
     Py_DECREF(pythonCheckpoint);
+}
+
+void PythonNetwork::SaveFile(const std::string& relativePath, const std::string& data)
+{
+    PythonContext context;
+
+    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.c_str(), relativePath.size());
+    PyAssert(pythonRelativePath);
+
+    PyObject* pythonData = PyBytes_FromStringAndSize(data.c_str(), data.size());
+    PyAssert(pythonData);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_saveFileFunction, pythonRelativePath, pythonData, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonData);
+    Py_DECREF(pythonRelativePath);
 }
 
 PyObject* PythonNetwork::LoadFunction(PyObject* module, const char* name)

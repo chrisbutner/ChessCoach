@@ -52,15 +52,15 @@ class Config:
 
     # Root all paths.
     self.data_root = self.determine_data_root()
-    self.training["games_path_supervised"] = self.make_path(self.training["games_path_supervised"])
-    self.training["games_path_training"] = self.make_path(self.training["games_path_training"])
-    self.training["games_path_validation"] = self.make_path(self.training["games_path_validation"])
-    self.training["commentary_path_supervised"] = self.make_path(self.training["commentary_path_supervised"])
-    self.training["commentary_path_training"] = self.make_path(self.training["commentary_path_training"])
-    self.training["commentary_path_validation"] = self.make_path(self.training["commentary_path_validation"])
+    self.training["games_path_supervised"] = self.make_dir_path(self.training["games_path_supervised"])
+    self.training["games_path_training"] = self.make_dir_path(self.training["games_path_training"])
+    self.training["games_path_validation"] = self.make_dir_path(self.training["games_path_validation"])
+    self.training["commentary_path_supervised"] = self.make_dir_path(self.training["commentary_path_supervised"])
+    self.training["commentary_path_training"] = self.make_dir_path(self.training["commentary_path_training"])
+    self.training["commentary_path_validation"] = self.make_dir_path(self.training["commentary_path_validation"])
     for key, value in self.misc["paths"].items():
       if not key.startswith("gcloud"):
-        self.misc["paths"][key] = self.make_path(value)
+        self.misc["paths"][key] = self.make_dir_path(value)
 
   def determine_data_root(self):
     if self.is_tpu:
@@ -75,6 +75,15 @@ class Config:
       data_root = self.join(data_home, "ChessCoach")
     return data_root
 
+  def make_dir_path(self, path):
+    path = self.make_path(path)
+
+    # Create directories (unless they're on gcloud storage).
+    if not self.is_tpu:
+      os.makedirs(path, exist_ok=True)
+
+    return path
+
   def make_path(self, path):
     # These need to be backslashes on Windows for TensorFlow's recursive creation code (tf.summary.create_file_writer).
     if not self.is_tpu and (platform.system() == "Windows"):
@@ -84,13 +93,17 @@ class Config:
     if not os.path.isabs(path):
       path = self.join(self.data_root, path)
 
-    # Create directories (unless they're on gcloud storage).
-    if not self.is_tpu:
-      os.makedirs(path, exist_ok=True)
-
     return path
 
   def latest_network_path_for_type(self, network_name, network_type):
     glob = self.join(self.misc["paths"]["networks"], network_name + "_*", network_type)
     results = tf.io.gfile.glob(glob)
     return os.path.dirname(max(results)) if results else None
+
+  def count_training_chunks(self):
+    glob = self.join(self.training["games_path_training"], "*.chunk")
+    return len(tf.io.gfile.glob(glob))
+
+  def save_file(self, relative_path, data):
+    path = self.make_path(relative_path)
+    tf.io.gfile.GFile(path, "wb").write(data)

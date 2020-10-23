@@ -44,8 +44,12 @@ void ChessCoachTrain::TrainChessCoach()
 {
     const NetworkConfig& config = Config::TrainingNetwork;
     int networkStepCount;
-    std::unique_ptr<INetwork> network(CreateNetworkWithInfo(config, networkStepCount));
-    Storage storage(config, Config::Misc);
+    int trainingChunkCount;
+    std::unique_ptr<INetwork> network(CreateNetworkWithInfo(config, networkStepCount, trainingChunkCount));
+    Storage storage(config, Config::Misc, trainingChunkCount);
+
+    // Take care of any game/chunk housekeeping from previous runs.
+    storage.Housekeep(network.get());
 
     // Start self-play worker threads.
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
@@ -125,9 +129,7 @@ void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage
     const GameType gameType = GameType_Training;
 
     // Need to play enough games to reach the training window maximum (skip if already enough).
-    const int gameTarget = trainingWindow.TrainingGameMax;
-    const int gameCount = storage.GamesPlayed(gameType);
-    const int gamesToPlay = std::max(0, gameTarget - gameCount);
+    const int gamesToPlay = storage.TrainingGamesToPlay(trainingWindow.TrainingGameMax);
 
     std::cout << "Playing " << gamesToPlay << " games..." << std::endl;
     if (gamesToPlay <= 0)

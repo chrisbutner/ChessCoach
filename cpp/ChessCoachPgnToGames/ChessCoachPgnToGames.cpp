@@ -220,7 +220,7 @@ void ChessCoachPgnToGames::ConvertPgns()
 
 void ChessCoachPgnToGames::SaveChunk(const Game& startingPosition, std::vector<SavedGame>& games)
 {
-    const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateChunkFilename(++_latestGamesNumber));
+    const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateSimpleChunkFilename(++_latestGamesNumber));
     Storage::SaveChunk(startingPosition, gamePath, games);
     games.clear();
 }

@@ -91,7 +91,8 @@ class Network:
   def info(self):
     path = self.latest_network_path()
     step_count = int(re.match(".*?([0-9]+)$", path).group(1)) if path else 0
-    return (step_count,)
+    training_chunk_count = config.count_training_chunks()
+    return (step_count, training_chunk_count)
 
   @tf.function
   def tf_predict(self, device_index, images):
@@ -399,6 +400,9 @@ def save_network_teacher(checkpoint):
   
 def save_network_student(checkpoint):
   networks.student.save(checkpoint)
+
+def save_file(relative_path, data):
+  config.save_file(relative_path, data)
 
 # --- Initialize ---
 

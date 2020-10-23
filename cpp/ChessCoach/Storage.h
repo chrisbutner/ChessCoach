@@ -34,24 +34,25 @@ class Storage
 public:
 
     static void SaveChunk(const Game& startingPosition, const std::filesystem::path& path, const std::vector<SavedGame>& games);
-    static std::string GenerateChunkFilename(int chunkNumber);
+    static std::string GenerateSimpleChunkFilename(int chunkNumber);
 
 public:
 
-    Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
-
-    int AddGame(GameType gameType, SavedGame&& game);
-    int GamesPlayed(GameType gameType) const;
-    std::filesystem::path LogPath() const;
+    Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig, int trainingChunkCount);
+    void Housekeep(INetwork* network);
+    int AddTrainingGame(INetwork* network, SavedGame&& game);
+    int TrainingGamesToPlay(int targetCount) const;
+    std::filesystem::path LocalLogPath() const;
         
 private:
 
-    void SaveGame(GameType gameType, const SavedGame& game, int gameNumber);
+    std::string GenerateFilename(int number);
+    void TryChunk(INetwork* network);
+    void ChunkGames(INetwork* network, std::vector<std::filesystem::path>& gamePaths);
     static void PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut);
     static void WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, std::string& buffer, const google::protobuf::Message& message);
     static uint32_t MaskCrc32cForTfRecord(uint32_t crc32c);
-    std::filesystem::path MakePath(const std::filesystem::path& root, const std::filesystem::path& path);
-    void LoadCommentary();
+    std::filesystem::path MakeLocalPath(const std::filesystem::path& root, const std::filesystem::path& path);
 
 private:
 
@@ -60,15 +61,21 @@ private:
     SavedCommentary _commentary;
     const Game _startingPosition;
 
+    std::atomic_int _trainingChunkCount;
+    std::atomic_int _trainingGameCount;
+    int _gamesPerChunk;
+
     int _pgnInterval;
 
     std::string _vocabularyFilename;
-    std::string _sessionPrefix;
+    std::string _sessionNonce;
     std::atomic_int _sessionGameCount;
-    std::array<std::filesystem::path, GameType_Count> _gamesPaths;
-    std::array<std::filesystem::path, GameType_Count> _commentaryPaths;
-    std::filesystem::path _pgnsPath;
-    std::filesystem::path _logsPath;
+    std::atomic_int _sessionChunkCount;
+    std::filesystem::path _relativeTrainingGamePath;
+    std::filesystem::path _localTrainingGamePath;
+    //std::array<std::filesystem::path, GameType_Count> _commentaryPaths;
+    std::filesystem::path _localLogsPath;
+    std::filesystem::path _relativePgnsPath;
 };
 
 #endif // _STORAGE_H_
