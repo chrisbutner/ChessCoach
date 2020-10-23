@@ -3,8 +3,13 @@ project('ChessCoach', 'cpp', version: '0.9.0', license: 'GPL3',
     'cpp_std=c++17',
   ])
 
-add_global_arguments('-lstdc++fs', '-msse4.2', language: 'cpp')
-add_global_link_arguments('-lstdc++fs', language: 'cpp')
+if get_option('buildtype') == 'release'
+    compiler = meson.get_compiler('cpp')
+    add_project_arguments(compiler.get_supported_arguments(['-march=native', '-O2', '-DNDEBUG', '-flto']), language: 'cpp')
+endif
+
+add_project_arguments('-lstdc++fs', '-msse4.2', language: 'cpp')
+add_project_link_arguments('-lstdc++fs', language: 'cpp')
 
 bindir = get_option('bindir')
 datadir = get_option('datadir')
