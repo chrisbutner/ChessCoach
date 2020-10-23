@@ -198,13 +198,13 @@ std::string Storage::GenerateFilename(int number)
 {
     std::stringstream filename;
 
-    // Format as "YYmmdd_HHMMSS_milliseconds_sessionnonce_number".
-    // E.g. "20201022_181546_008_24FFE8F502A72C8D_000000005"
+    // Format as "YYmmdd_HHMMSS_milliseconds_sessionnonce_number"; e.g. "20201022_181546_008_24FFE8F502A72C8D_000000005".
+    // Use UCT rather than local time for comparability across multiple machines, including a local/cloud mix.
     const auto now = std::chrono::system_clock::now();
     const auto milliseconds = (std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000);
     const std::time_t time = std::chrono::system_clock::to_time_t(now);
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
-    filename << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S");
+    filename << std::put_time(std::gmtime(&time), "%Y%m%d_%H%M%S");
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
     filename << "_" << std::setfill('0') << std::setw(3) << milliseconds << "_" << _sessionNonce << "_"
         << std::setfill('0') << std::setw(9) << number;
