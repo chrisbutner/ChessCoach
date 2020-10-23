@@ -376,23 +376,28 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     _history.push_back(move);
 
     // Adjust the visit count for the new root so that it matches the sum of child visits from now on.
-    // If the new root is a terminal node, reset to zero.
-    // Otherwise, sum child visits. For most nodes we could just decrement because the node was visited
+    //
+    // Sum child visits and assign. For most nodes we could just decrement because the node was visited
     // exactly once as a leaf before being expanded. However, 2-repetition draws complicate things because
     // they could be visited multiple times as a terminal draw, then become non-terminal as the game progresses
     // past the first occurence of the position and get expanded. Pack the terminal visit count into the Node
     // to speed this up if required.
-    if (!_root->IsExpanded())
+    //
+    // We also need to adjust the value sum down to match the smaller visit count, so that MCTS value
+    // stays accurate and in the [0, 1] range. It would be best to excise the original as-leaf neural
+    // network evaluation, but without adding additional Node fields/tracking that's already mixed in,
+    // so just average down to the new visit count.
+    const int previousVisitCount = _root->visitCount;
+
+    _root->visitCount = 0;
+    for (const Node& child : *_root)
     {
-        _root->visitCount = 0;
+        _root->visitCount += child.visitCount;
     }
-    else
+
+    if (previousVisitCount > 0)
     {
-        _root->visitCount = 0;
-        for (const Node& child : *_root)
-        {
-            _root->visitCount += child.visitCount;
-        }
+        _root->valueSum *= (static_cast<float>(_root->visitCount) / previousVisitCount);
     }
 }
 
@@ -1186,12 +1191,14 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // Expanding the search root is a special case. It happens at the very start of a game,
         // and then whenever a previously-unexplored node is reached as a root (like a 2-repetition,
         // or a child that wasn't visited, but alternatives were getting mated).
-        // We need to fix the root's visitCount so that it equals the sum of its children.
+        // We need to fix the root's visitCount so that it equals the sum of its children,
+        // and correspondingly fix valueSum so that MCTS value (root->Value()) makes sense.
         if (game.Root() == scratchGame.Root())
         {
             assert(game.Root()->visitCount == 1);
             assert(searchPath.size() == 1);
             game.Root()->visitCount = 0;
+            game.Root()->valueSum = 0.f;
 
             // Add exploration noise if not searching.
             if (!game.TryHard())
