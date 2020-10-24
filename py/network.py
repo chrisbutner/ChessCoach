@@ -107,7 +107,7 @@ class Network:
     return self.tf_predict(device_index, images)
 
   def predict_for_training_batch(self, images):
-    # Rely on caller to have ensured that the training model is set up.
+    self.ensure_training()
     return self.tf_predict_for_training(images)
 
   def predict_commentary_batch(self, device_index, images):
@@ -375,11 +375,11 @@ def predict_commentary_batch(images):
     # Always use the teacher network for commentary.
     return networks.teacher.predict_commentary_batch(device_index, images)
 
-def train_teacher(gameTypes, trainingWindows, step, checkpoint):
-  trainer.train_teacher(gameTypes, trainingWindows, step, checkpoint)
+def train_teacher(game_types, training_windows, step, checkpoint):
+  trainer.train(networks.teacher, None, game_types, training_windows, step, checkpoint)
 
-def train_student(gameTypes, trainingWindows, step, checkpoint):
-  trainer.train_student(gameTypes, trainingWindows, step, checkpoint)
+def train_student(game_types, training_windows, step, checkpoint):
+  trainer.train(networks.student, networks.teacher, game_types, training_windows, step, checkpoint)
 
 def train_commentary_batch(step, images, comments):
   pass # TODO

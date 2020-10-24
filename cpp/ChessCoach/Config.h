@@ -31,8 +31,8 @@ static_assert(NetworkType_Count == 2);
 
 enum GameType
 {
-    GameType_Supervised,
-    GameType_Training,
+    GameType_Supervised = 0, // Hard-coded in training.py
+    GameType_Training = 1, // Hard-coded in training.py
     GameType_Validation,
 
     GameType_Count,
@@ -63,6 +63,7 @@ struct TrainingConfig
     int BatchSize;
     int CommentaryBatchSize;
     int Steps;
+    int WarmupSteps;
     int PgnInterval;
     int ValidationInterval;
     int CheckpointInterval;

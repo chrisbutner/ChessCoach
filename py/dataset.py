@@ -122,14 +122,8 @@ class DatasetBuilder:
     dataset = dataset.flat_map(lambda x: self.parse_game(x, options))
     return dataset
 
-  def build_dataset(self, glob, window, options):
-    # Validate options.
-    kept_positions_per_chunk = self.games_per_chunk * self.positions_per_game * options.keep_game_proportion * options.keep_position_proportion
-    cycles_per_shuffle_buffer = options.position_shuffle_size / (options.cycle_length * kept_positions_per_chunk)
-    assert (cycles_per_shuffle_buffer >= 1.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect >= 1.0"
-    assert (cycles_per_shuffle_buffer < 2.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect < 2.0"
-
-    # Grab chunk filenames in the training window (needs to be ordered here).
+  def build_dataset_source(self, glob, window, options):
+    # Grab chunk filenames (they need to be ordered here).
     filenames = tf.io.gfile.glob(glob)
 
     # Restrict to the training window.
@@ -146,6 +140,23 @@ class DatasetBuilder:
     dataset = dataset.interleave(lambda x: self.parse_chunk(x, options), cycle_length=options.cycle_length,
       num_parallel_calls=tf.data.experimental.AUTOTUNE, deterministic=False)
 
+    # Repeat each source.
+    dataset = dataset.repeat()
+    return dataset
+
+  def build_dataset(self, sources, options):
+    # Validate options.
+    kept_positions_per_chunk = self.games_per_chunk * self.positions_per_game * options.keep_game_proportion * options.keep_position_proportion
+    cycles_per_shuffle_buffer = options.position_shuffle_size / (options.cycle_length * kept_positions_per_chunk)
+    assert (cycles_per_shuffle_buffer >= 1.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect >= 1.0"
+    assert (cycles_per_shuffle_buffer < 2.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect < 2.0"
+
+    # Use a deterministic interleave between dataset sources to ensure that the shuffle buffer
+    # gets an equal number of positions from each, even if the sources are differently sized.
+    # The block size doesn't matter too much as long as it's far smaller than the shuffle buffer size.
+    dataset = tf.data.Dataset.from_tensor_slices(sources)
+    dataset = dataset.interleave(lambda x: x, cycle_length=len(sources), block_length=options.global_batch_size)
+
     # Shuffle positions. This is still very necessary because we're exhausting each cycle of chunks before moving on to
     # the next cycle, etc., giving highly correlated positions so far. The buffer should be large enough to mix up multiple
     # cycles while still fitting on desktop and cloud hardware.
@@ -157,21 +168,22 @@ class DatasetBuilder:
     # allowing for greater I/O and CPU parallelism, so aim for cycles per shuffle buffer in [1, 2).
     dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
 
-    # Repeat and batch to the global size.
-    dataset = dataset.repeat()
+    # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
 
     # Prefetch batches.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
   
-  def build_training_dataset(self, glob, window, global_batch_size):
+  def build_training_dataset(self, globs, windows, global_batch_size):
     options = DatasetOptions(global_batch_size=global_batch_size)
-    return self.build_dataset(glob, window, options)
+    sources = [self.build_dataset_source(glob, window, options) for glob, window in zip(globs, windows)]
+    return self.build_dataset(sources, options)
 
-  def build_validation_dataset(self, glob, global_batch_size):
+  def build_validation_dataset(self, globs, global_batch_size):
     options = DatasetOptions(
       global_batch_size=global_batch_size,
       position_shuffle_size=2**12,
       keep_game_proportion=0.003125)
-    return self.build_dataset(glob, window=None, options=options)
+    sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
+    return self.build_dataset(sources, options)

@@ -102,6 +102,7 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     training.BatchSize = policy.template Find<int>(config, "batch_size", defaults.BatchSize);
     training.CommentaryBatchSize = policy.template Find<int>(config, "commentary_batch_size", defaults.CommentaryBatchSize);
     training.Steps = policy.template Find<int>(config, "steps", defaults.Steps);
+    training.WarmupSteps = policy.template Find<int>(config, "warmup_steps", defaults.WarmupSteps);
     training.PgnInterval = policy.template Find<int>(config, "pgn_interval", defaults.PgnInterval);
     training.ValidationInterval = policy.template Find<int>(config, "validation_interval", defaults.ValidationInterval);
     training.CheckpointInterval = policy.template Find<int>(config, "checkpoint_interval", defaults.CheckpointInterval);

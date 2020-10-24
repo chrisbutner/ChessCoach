@@ -1,7 +1,9 @@
-NEXT
-- save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
-- need to rotate supervised/self-play still in training.py
-- implement warmup, first few hundred steps on TPU are insane validation-wise
+Commentary
+- update tools to convert commentary to protobufs
+- make sure commentary still working (training, prediction)
+
+Full training
+- train "chesscoach6" locally and on TPU
 
 Builds
 - protoc gen (generator example on meson github)
@@ -16,12 +18,7 @@ Self-play
 - *** CPU/mcts times going up over time, again, important to check for node/stateinfo leaks ***
 	- need to be able to let TPU machines run
 - move uniform to pre-PythonNetwork C++
-- validate that games aren't garbage - look at PGNs
 - switch to multiple MCTS threads per python thread (2:1 should be fine if prediction cache on)
-
-Commentary
-- write an exe to convert commentary to protobufs
-- make sure commentary still working (training, prediction)
 
 Check in
 - make sure main.py all working on GPU + TPU
@@ -37,13 +34,15 @@ AFTER CHECK-IN, FIND A HOME LATER
 - throw away positions before expensive decompression in dataset.py, keep all/more games, keep fewer positions
 - relinquish prediction cache memory while training? increase cycle/shuffle?
 - anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
+- save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
+- overall run may hang or have 2k too few games if any .game files deleted now, think about live adjustment/different approach
 
 Apply for cloud resources
 - look up the FAQ again
 
 Distributed self-play/training
 - set up some basic infrastructure, preemptibles, startup, roles, etc.
-- handle known issues like races with spliced network save/load
+	- don't lose 1999 games when preemptible goes down
 
 Training improvements
 - playout cap randomization (Wu)

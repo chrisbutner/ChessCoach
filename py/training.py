@@ -1,6 +1,7 @@
 import time
 import tensorflow as tf
 from tensorflow.keras import backend as K
+import numpy as np
 
 knowledge_distillation_temperature = 2.0
 knowledge_distillation_teacher_weight = 0.7
@@ -39,10 +40,18 @@ class Trainer:
     self.tpu_strategy = tpu_strategy
     self.device_count = len(devices)
     self.commentary_optimizer = None
+
     self.datasets = datasets
     self.data_training = None
     self.data_validation = None
     self.data_training_key = None
+    self.data_globs = {
+      # GameType_Supervised (Config.h)
+      0: self.config.join(self.config.training["games_path_supervised"], "*.chunk"),
+      # GameType_Training (Config.h)
+      1: self.config.join(self.config.training["games_path_training"], "*.chunk"),
+    }
+    self.data_glob_validation = self.config.join(self.config.training["games_path_validation"], "*.chunk")
 
     self.per_replica_batch_size = self.config.training["batch_size"]
     self.global_batch_size = self.per_replica_batch_size * self.device_count
@@ -77,13 +86,15 @@ class Trainer:
   def get_learning_rate(self, step):
     schedule = self.config.training["learning_rate_schedule"]
     scale_learning_rate_with_batch_size = self.device_count
-    return self.get_learning_rate_common(schedule, step, scale_learning_rate_with_batch_size)
+    warmup = np.interp(step, [0, self.config.training["warmup_steps"]], [0.0, 1.0]).item()
+    return self.get_learning_rate_common(schedule, step, scale_learning_rate_with_batch_size * warmup)
 
   def get_commentary_learning_rate(self, step):
     schedule = self.config.training["commentary_learning_rate_schedule"]
     scale_learning_rate_with_batch_size = self.device_count
     commentary_multiplier = self.config.training["commentary_batch_size"] / self.config.training["batch_size"]
-    return self.get_learning_rate_common(schedule, step, scale_learning_rate_with_batch_size * commentary_multiplier)
+    warmup = np.interp(step, [0, self.config.training["warmup_steps"]], [0.0, 1.0]).item()
+    return self.get_learning_rate_common(schedule, step, scale_learning_rate_with_batch_size * commentary_multiplier * warmup)
 
   # The teacher network trains directly on supervised labels.
   def compile_teacher(self, model):
@@ -124,24 +135,19 @@ class Trainer:
     self.data_validation = None
     self.data_training_key = None
 
-  def train_teacher(self, gameTypes, trainingWindows, starting_step, checkpoint):
-    network = self.networks.teacher
+  def train(self, network, teacher_network, game_types, training_windows, starting_step, checkpoint):
     with self.strategy.scope():
       model = network.ensure_training()
 
-    # Set the learning rate. Checkpoints are small enough not to worry if it changes mid-way through.
-    K.set_value(model.optimizer.lr, self.get_learning_rate(starting_step))
-
     # Set up data pipelines, or re-use existing if not cleared by self-play.
     # Numpy hijacks == and bool testing and enforces any() or all(), so convert to lists first.
-    data_training_key = (gameTypes.tolist(), trainingWindows.tolist())
+    data_training_key = (game_types.tolist(), training_windows.tolist())
     if data_training_key != self.data_training_key:
       data_start = time.time()
-      globs_training = [self.config.join(self.config.training["games_path_supervised"], "*.chunk")] # TODO: hardcode supervised for now
-      globs_validation = [self.config.join(self.config.training["games_path_validation"], "*.chunk")]
-      # TODO: Only first type for now
-      self.data_training = iter(self.datasets.build_training_dataset(globs_training[0], trainingWindows[0], self.global_batch_size))
-      self.data_validation = iter(self.datasets.build_validation_dataset(globs_validation[0], self.global_batch_size))
+      globs_training = [self.data_globs[t] for t in game_types]
+      globs_validation = [self.data_glob_validation]
+      self.data_training = iter(self.datasets.build_training_dataset(globs_training, training_windows, self.global_batch_size))
+      self.data_validation = iter(self.datasets.build_validation_dataset(globs_validation, self.global_batch_size))
       self.data_training_key = data_training_key
       next(self.data_training)
       next(self.data_validation)
@@ -151,18 +157,17 @@ class Trainer:
     # E.g. on a GPU, 1 device, 1-1000 steps, range(1, 1001, 1), 1000 iterations
     # E.g. on a TPU, 8 devices, 1-1000 steps, range(1, 1001, 8), 125 iterations, 125*8=1000 effective iterations
     for step in range(starting_step, checkpoint + 1, self.device_count):
+      # Set the learning rate.
+      K.set_value(model.optimizer.lr, self.get_learning_rate(step))
+
       # Train.
       batch_training = next(self.data_training)
-      self.train_batch(network, teacher_network=None, model=model, step=step, images=batch_training[0], targets=batch_training[1])
+      self.train_batch(network, teacher_network, model, step, images=batch_training[0], targets=batch_training[1])
 
       # Sometimes validate.
       if self.is_validation_step(step):
         batch_validation = next(self.data_validation)
-        self.validate_batch(network, teacher_network=None, model=model, step=step, images=batch_validation[0], targets=batch_validation[1])
-
-  def train_student(self, gameTypes, trainingWindows, starting_step, checkpoint):
-    # TODO: Implement
-    pass
+        self.validate_batch(network, teacher_network, model, step, images=batch_validation[0], targets=batch_validation[1])
 
   def is_validation_step(self, step):
     # Striding steps by the device count, so validate when at or just past the validation interval.
@@ -178,7 +183,7 @@ class Trainer:
 
     # If a teacher was provided, predict soft targets and combine with the provided hard targets.
     if teacher_network:
-      _, teacher_policies, _, teacher_reply_policies = teacher_network.predict_for_training_batch(images)
+      _, _, teacher_policies, teacher_reply_policies = teacher_network.predict_for_training_batch(images)
       values, mcts_values, policies, reply_policies = targets
       policies = tf.stack([teacher_policies, policies])
       reply_policies = tf.stack([teacher_reply_policies, reply_policies])
@@ -197,7 +202,7 @@ class Trainer:
 
     # If a teacher was provided, predict soft targets and combine with the provided hard targets.
     if teacher_network:
-      _, teacher_policies, _, teacher_reply_policies = teacher_network.predict_for_training_batch(images)
+      _, _, teacher_policies, teacher_reply_policies = teacher_network.predict_for_training_batch(images)
       values, mcts_values, policies, reply_policies = targets
       policies = tf.stack([teacher_policies, policies])
       reply_policies = tf.stack([teacher_reply_policies, reply_policies])
