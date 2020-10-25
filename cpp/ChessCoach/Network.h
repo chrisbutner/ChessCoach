@@ -85,7 +85,7 @@ struct INetwork
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images) = 0;
     virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
         std::vector<Window>& trainingWindows, int step, int checkpoint) = 0;
-    virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments) = 0;
+    virtual void TrainCommentary(int step, int checkpoint) = 0;
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values) = 0;
     virtual void LoadNetwork(const std::string& networkName, int& stepCountOut, int& trainingChunkCountOut) = 0;
     virtual void SaveNetwork(NetworkType networkType, int checkpoint) = 0;

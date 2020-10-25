@@ -171,22 +171,23 @@ class ModelBuilder:
   def subset_commentary_encoder(self, model):
     return tf.keras.Model(model.input, model.outputs[4:])
 
-  def build_commentary_decoder(self, config, tokenizer=None):
-    if not tokenizer:
-      vocabulary_path = config.join(config.training["commentary_path_supervised"], config.training["vocabulary_filename"])
-      with open(vocabulary_path, 'r', errors="ignore") as f:
-        comments = f.readlines()
-      comments = [f"{self.token_start} {c} {self.token_end}" for c in comments]
-
-      tokenizer = tf.keras.preprocessing.text.Tokenizer(num_words=self.transformer_num_words, oov_token=self.token_unk, filters='!"#$%&()*+.,-/:;=?@[\\]^_`{|}~ ')
-      tokenizer.fit_on_texts(comments)
-      tokenizer.word_index[self.token_pad] = 0
-      tokenizer.index_word[0] = self.token_pad
-
+  def build_commentary_decoder(self, config):
     vocab_size = self.transformer_num_words + 1
     max_length = self.transformer_max_length
 
     transformer = Transformer(self.transformer_layers, self.transformer_filters, self.transformer_heads,
       self.transformer_feedforward, vocab_size, max_length, self.transformer_dropout_rate)
 
-    return transformer, tokenizer
+    return transformer
+
+  def build_tokenizer(self, config):
+    vocabulary_path = config.join(config.training["commentary_path_supervised"], config.training["vocabulary_filename"])
+    comments = tf.io.gfile.GFile(vocabulary_path, 'rb').readlines()
+    comments = [f'{self.token_start} {c.decode("utf-8", errors="ignore")} {self.token_end}' for c in comments]
+
+    tokenizer = tf.keras.preprocessing.text.Tokenizer(num_words=self.transformer_num_words, oov_token=self.token_unk, filters='!"#$%&()*+.,-/:;=?@[\\]^_`{|}~ ')
+    tokenizer.fit_on_texts(comments)
+    tokenizer.word_index[self.token_pad] = 0
+    tokenizer.index_word[0] = self.token_pad
+    return tokenizer
+    

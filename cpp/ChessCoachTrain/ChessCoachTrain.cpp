@@ -191,7 +191,6 @@ void ChessCoachTrain::StageTrainCommentary(const StageConfig& stage, SelfPlayWor
     if (stage.Type != GameType_Supervised) throw std::runtime_error("Only supervised data supported in commentary training");
 
     // Train the main model and commentary decoder.
-    std::cout << "Training commentary..." << std::endl;
     selfPlayWorker.TrainNetworkWithCommentary(network, step, checkpoint);
 }
 

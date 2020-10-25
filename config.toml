@@ -84,6 +84,11 @@ uci_network_name = "chesscoach6"
         { stage = "save", target = "teacher" },
     ]
 
+    [networks.training.commentary_learning_rate_schedule]
+
+    steps = [0, 40_000, 80_000, 120_000]
+    rates = [2e-2, 2e-3, 2e-4, 2e-5]
+
 [[networks]]
 
     name = "chesscoach-tiny1"
@@ -180,6 +185,30 @@ uci_network_name = "chesscoach6"
     num_workers = 2
     prediction_batch_size = 50
 
+[[networks]]
+
+    name = "commentary-tiny1"
+    
+    [networks.training]
+
+    steps = 100
+    warmup_steps = 10
+
+    validation_interval = 50
+    checkpoint_interval = 50
+    strength_test_interval = 100
+
+    stages = [
+        # Train commentary, teacher
+        { stage = "train_commentary", target = "teacher", type = "supervised" },
+        { stage = "save", target = "teacher" },
+    ]
+
+    [networks.training.commentary_learning_rate_schedule]
+
+    steps = [0, 40_000, 80_000, 120_000]
+    rates = [2e-2, 2e-3, 2e-4, 2e-5]
+
 ###############################################################################
 #     Default training and self-play configuration. Networks can override.    #
 ###############################################################################
@@ -217,7 +246,7 @@ rates = [2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5]
 [training.commentary_learning_rate_schedule]
 
 steps = [0, 40_000, 80_000, 120_000]
-rates = [1e-4, 1e-5, 1e-6, 1e-7]
+rates = [2e-4, 2e-5, 2e-6, 2e-7]
 
 [self_play]
 

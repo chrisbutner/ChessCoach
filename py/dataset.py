@@ -1,4 +1,5 @@
 import tensorflow as tf
+from model import ModelBuilder
 
 class DatasetOptions:
 
@@ -36,6 +37,11 @@ class DatasetBuilder:
     "policy_row_lengths": tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
     "policy_indices": tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
     "policy_values": tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
+  }
+
+  commentary_feature_map = {
+    "images": tf.io.FixedLenSequenceFeature([101], tf.int64, allow_missing=True),
+    "comments": tf.io.FixedLenSequenceFeature([], tf.string, allow_missing=True),
   }
 
   # Values are (-1, 0, 1) in Python/TensorFlow, (0, 0.5, 1) in C++/MCTS.
@@ -118,7 +124,7 @@ class DatasetBuilder:
     # Parse positions from games.
     #
     # As long as the shuffle buffer is large enough to hold at least one cycle's positions, after throw-aways, there's no point
-    # intentionally shuffling here, but the interleave is necessary for performance.
+    # intentionally shuffling here.
     dataset = dataset.flat_map(lambda x: self.parse_game(x, options))
     return dataset
 
@@ -187,3 +193,59 @@ class DatasetBuilder:
       keep_game_proportion=0.003125)
     sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
     return self.build_dataset(sources, options)
+
+  def parse_commentary_raw(self, serialized):
+    # Parse raw features from the tf.train.Example representing the commentary chunk.
+    example = tf.io.parse_single_example(serialized, self.commentary_feature_map)
+    images = example["images"]
+    comments = example["comments"]
+    return images, comments
+
+  def parse_sequences(self, comments, tokenizer):
+    comments = [f'{ModelBuilder.token_start} {c.decode("utf-8", errors="ignore")} {ModelBuilder.token_end}' for c in comments]
+    sequences = tokenizer.texts_to_sequences(comments)
+    sequences = tf.keras.preprocessing.sequence.pad_sequences(sequences, maxlen=ModelBuilder.transformer_max_length, padding="post")
+    return sequences
+
+  def parse_commentary(self, dataset, tokenizer):
+    for images, comments in dataset:
+      comments = self.parse_sequences(comments, tokenizer)
+      yield tf.data.Dataset.from_tensor_slices((images, comments))
+
+  # We run into a combination of problems here:
+  #
+  # (1) Once we start using tf.data.Dataset we have to stay in graph mode, since py_function
+  #     isn't allowed when working with TPUs.
+  # (2) Keras and third-party tokenizers don't work in graph mode.
+  # (3) TF.Text isn't supported on Windows and is allegedly planned for 2.4.
+  #
+  # Luckily, the entire dataset fits in memory for now, so parse, exit Dataset-land,
+  # tokenize, then re-enter.
+  def build_commentary_dataset(self, glob, global_batch_size, tokenizer, strategy):
+    # Grab chunk filenames.
+    filenames = tf.io.gfile.glob(glob)
+
+    # Parse images/comments then read back.
+    commentary_raw = tf.data.TFRecordDataset(filenames, compression_type=self.compression_type,
+      buffer_size=self.chunk_read_buffer_size, num_parallel_reads=tf.data.experimental.AUTOTUNE)
+    commentary_raw = commentary_raw.map(self.parse_commentary_raw)
+    commentary_raw = commentary_raw.as_numpy_iterator()
+
+    # Tokenize comments offline.
+    datasets = list(self.parse_commentary(commentary_raw, tokenizer))
+    dataset = tf.data.Dataset.from_tensor_slices(datasets)
+    dataset = dataset.flat_map(lambda x: x)
+
+    # Shuffle images/comments. Roughly 500k right now, just shuffle them all.
+    dataset = dataset.shuffle(2**19, reshuffle_each_iteration=True)
+
+    # Repeat and batch to the global size.
+    dataset = dataset.repeat()
+    dataset = dataset.batch(global_batch_size)
+
+    # Prefetch batches.
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    # Distribute for custom training.
+    dataset = strategy.experimental_distribute_dataset(dataset)
+    return dataset

@@ -860,25 +860,14 @@ void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, st
 
 void SelfPlayWorker::TrainNetworkWithCommentary(INetwork* network, int step, int checkpoint)
 {
-    // TODO: Call into python
-
-    //// Train for "stepCount" steps.
-    //auto startTrain = std::chrono::high_resolution_clock::now();
-    //const int startStep = (checkpoint - stepCount + 1);
-    //for (int step = startStep; step <= checkpoint; step++)
-    //{
-    //    CommentaryTrainingBatch* batch = _storage->SampleCommentaryBatch();
-    //    if (!batch)
-    //    {
-    //        std::cout << "No commentary available, skipping training" << std::endl;
-    //        return;
-    //    }
-
-    //    network->TrainCommentaryBatch(step, _networkConfig->Training.CommentaryBatchSize, batch->images.data(), batch->comments.data());
-    //}
-    //const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
-    //const float trainTimePerStep = (trainTime / stepCount);
-    //std::cout << "Trained commentary steps " << startStep << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
+    // Delegate to Python.
+    std::cout << "Training commentary steps " << step << "-" << checkpoint << "..." << std::endl;
+    auto startTrain = std::chrono::high_resolution_clock::now();
+    network->TrainCommentary(step, checkpoint);
+    const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
+    const int stepCount = (checkpoint - step + 1);
+    const float trainTimePerStep = (trainTime / stepCount);
+    std::cout << "Trained commentary steps " << step << "-" << checkpoint << ", total time " << trainTime << ", step time " << trainTimePerStep << std::endl;
 }
 
 void SelfPlayWorker::SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint)

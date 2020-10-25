@@ -233,21 +233,31 @@ def create_look_ahead_mask(size):
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
     from_logits=True, reduction='none')
 
-def loss_function(real, pred):
+def loss_function(real, pred, num_replicas):
   mask = tf.math.logical_not(tf.math.equal(real, 0))
   loss_ = loss_object(real, pred)
 
   mask = tf.cast(mask, dtype=loss_.dtype)
   loss_ *= mask
   
-  return tf.reduce_sum(loss_)/tf.reduce_sum(mask)
+  # The mask has shape (batch, sequence length), so reducing over it
+  # includes the per-replica batch size but not the global. Make up
+  # the difference, since losses will be summed across replicas.
+  return tf.reduce_sum(loss_) / tf.reduce_sum(mask) / num_replicas
 
-train_loss = tf.keras.metrics.Mean(name='train_loss')
-train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-    name='train_accuracy')
+train_loss = None
+train_accuracy = None
 
-@tf.function
-def train_step(optimizer, encoder, decoder, inp, tar):
+# TODO: Clean this all up later
+def create_metrics():
+  global train_loss
+  global train_accuracy
+  train_loss = tf.keras.metrics.Mean(name='train_loss')
+  train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
+      name='train_accuracy')
+
+# Avoid nested tf.function.
+def train_step(optimizer, encoder, decoder, inp, tar, num_replicas):
   train_loss.reset_states()
   train_accuracy.reset_states()
 
@@ -260,7 +270,7 @@ def train_step(optimizer, encoder, decoder, inp, tar):
     enc_output = encoder(inp)
     predictions, _ = decoder(tar_inp, enc_output,
                                  True, look_ahead_mask)
-    loss = loss_function(tar_real, predictions)
+    loss = loss_function(tar_real, predictions, num_replicas)
 
   trainable_variables = encoder.trainable_variables + decoder.trainable_variables
   gradients = tape.gradient(loss, trainable_variables)    

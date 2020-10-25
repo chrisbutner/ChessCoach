@@ -46,7 +46,7 @@ public:
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images);
     virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
         std::vector<Window>& trainingWindows, int step, int checkpoint);
-    virtual void TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments);
+    virtual void TrainCommentary(int step, int checkpoint);
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values);
     virtual void LoadNetwork(const std::string& networkName, int& stepCountOut, int& trainingChunkCountOut);
     virtual void SaveNetwork(NetworkType networkType, int checkpoint);
@@ -61,7 +61,7 @@ private:
     PyObject* _predictBatchFunction[NetworkType_Count];
     PyObject* _predictCommentaryBatchFunction;
     PyObject* _trainFunction[NetworkType_Count];
-    PyObject* _trainCommentaryBatchFunction;
+    PyObject* _trainCommentaryFunction;
     PyObject* _logScalarsFunction[NetworkType_Count];
     PyObject* _loadNetworkFunction;
     PyObject* _saveNetworkFunction[NetworkType_Count];

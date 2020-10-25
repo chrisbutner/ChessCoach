@@ -49,12 +49,17 @@ from dataset import DatasetBuilder
 
 # --- Network ---
 
-class Models:
+class PredictionModels:
   def __init__(self):
     self.full = None
     self.full_weights_path = None
     self.full_weights_last_check = None
     self.predict = None
+
+class TrainingModels:
+  def __init__(self):
+    self.full = None
+    self.train = None
     self.commentary_encoder = None
     self.commentary_decoder = None
     self.commentary_tokenizer = None
@@ -81,9 +86,8 @@ class Network:
     self.initialize()
 
   def initialize(self):
-    self.models = [Models() for _ in devices]
-    self.model_train_full = None
-    self.model_train = None
+    self.models_predict = [PredictionModels() for _ in devices]
+    self.models_train = TrainingModels()
     self.tensorboard_writer_training = None
     self.tensorboard_writer_validation = None
 
@@ -96,11 +100,11 @@ class Network:
 
   @tf.function
   def tf_predict(self, device_index, images):
-      return self.models[device_index].predict(images, training=False)
+      return self.models_predict[device_index].predict(images, training=False)
 
   @tf.function
   def tf_predict_for_training(self, images):
-      return self.model_train(images, training=False)
+      return self.models_train.train(images, training=False)
 
   def predict_batch(self, device_index, images):
     self.ensure_prediction(device_index)
@@ -110,12 +114,12 @@ class Network:
     self.ensure_training()
     return self.tf_predict_for_training(images)
 
-  def predict_commentary_batch(self, device_index, images):
-    networks.teacher.ensure_commentary(device_index)
+  def predict_commentary_batch(self, images):
+    networks.teacher.ensure_commentary()
 
-    encoder = self.models[device_index].commentary_encoder
-    decoder = self.models[device_index].commentary_decoder
-    tokenizer = self.commentary_tokenizer
+    encoder = self.models_train.commentary_encoder
+    decoder = self.models_train.commentary_decoder
+    tokenizer = self.models_train.commentary_tokenizer
 
     start_token = tokenizer.word_index[ModelBuilder.token_start]
     end_token = tokenizer.word_index[ModelBuilder.token_end]
@@ -138,7 +142,7 @@ class Network:
   def ensure_full(self, device_index):
     with ensure_locks[device_index]:
       # The full model may already exist.
-      models = self.models[device_index]
+      models = self.models_predict[device_index]
       if models.full:
         return
 
@@ -163,14 +167,14 @@ class Network:
 
   def maybe_check_update_full(self, device_index):
     interval_seconds = self.config.self_play["network_update_check_interval_seconds"]
-    models = self.models[device_index]
+    models = self.models_predict[device_index]
     now = time.time()
     if (now - models.full_weights_last_check) > interval_seconds:
       models.full_weights_last_check = now
       self.check_update_full(device_index)
 
   def check_update_full(self, device_index):
-    models = self.models[device_index]
+    models = self.models_predict[device_index]
     network_path = self.latest_network_path()
     if network_path:
       # Weights paths for the same network name and type will be identical up until
@@ -188,69 +192,66 @@ class Network:
   def ensure_prediction(self, device_index):
     with ensure_locks[device_index]:
       # The prediction model may already exist.
-      if self.models[device_index].predict:
+      if self.models_predict[device_index].predict:
         # Occasionally check for more recent weights to load.
         self.maybe_check_update_full(device_index)
         return
 
       # Take the prediction subset from the full model.
       self.ensure_full(device_index)
-      self.models[device_index].predict = ModelBuilder().subset_predict(self.models[device_index].full)
+      self.models_predict[device_index].predict = ModelBuilder().subset_predict(self.models_predict[device_index].full)
   
   def ensure_training(self):
     # The training subset may already exist.
-    if self.model_train:
-      return self.model_train
+    if self.models_train.train:
+      return self.models_train.train
 
     # Build a full model.
-    self.model_train_full, _ = self.build_full("training")
+    self.models_train.full, _ = self.build_full("training")
 
     # Take the training subset from the full model.
-    self.model_train = ModelBuilder().subset_train(self.model_train_full)
+    self.models_train.train = ModelBuilder().subset_train(self.models_train.full)
 
     # Compile the new subset for training.
-    self.training_compiler(self.model_train)
+    self.training_compiler(self.models_train.train)
 
     # Set up TensorBoard.
     tensorboard_network_path = self.config.join(self.config.misc["paths"]["tensorboard"], self._name, self.network_type)
     self.tensorboard_writer_training = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "training"))
     self.tensorboard_writer_validation = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "validation"))
 
-    return self.model_train
+    return self.models_train.train
 
-  def ensure_commentary(self, device_index):
-    with ensure_locks[device_index]:
-      # The encoder, decoder and tokenizer may already exist.
-      if self.models[device_index].commentary_encoder:
-        # Occasionally check for more recent weights to load.
-        self.maybe_check_update_full(device_index)
-        return
+  def ensure_commentary(self):
+    # The encoder, decoder and tokenizer may already exist.
+    if self.models_train.commentary_encoder:
+      return
 
-      # Take the encoder subset from the full model.
-      self.ensure_full(device_index)
-      self.models[device_index].commentary_encoder = ModelBuilder().subset_commentary_encoder(self.models[device_index].full)
+    # Take the encoder subset from the full training model.
+    self.ensure_training()
+    self.models_train.commentary_encoder = ModelBuilder().subset_commentary_encoder(self.models_train.full)
 
-      # Either load decoder and tokenizer from disk, or create new.
-      with model_creation_lock:
-        network_path = self.latest_network_path()
-        if network_path:
-          log_name = self.get_log_name(network_path)
-          log(f"Loading model ({device_index}/{self.network_type}/commentary): {log_name}")
+    # Either load decoder and tokenizer from disk, or create new.
+    with model_creation_lock:
+      log_device_context = "training"
+      network_path = self.latest_network_path()
+      if network_path:
+        log_name = self.get_log_name(network_path)
+        log(f"Loading model ({log_device_context}/{self.network_type}/commentary): {log_name}")
 
-          # Load the tokenizer first.
-          commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
-          with open(commentary_tokenizer_path, 'r') as f:
-              self.commentary_tokenizer = tf.keras.preprocessing.text.tokenizer_from_json(f.read())
+        # Load the decoder.
+        self.models_train.commentary_decoder = ModelBuilder().build_commentary_decoder(self.config)
+        model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
+        self.load_weights(self.models_train.commentary_decoder, model_commentary_decoder_path)
 
-          # Build the decoder using the tokenizer, then load weights.
-          decoder, _ = ModelBuilder().build_commentary_decoder(self.config, self.commentary_tokenizer)
-          self.models[device_index].commentary_decoder = decoder
-          model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
-          self.load_weights(self.models[device_index].commentary_decoder, model_commentary_decoder_path)
-        else:
-          log(f"Creating new model ({device_index}/{self.network_type}/commentary)")
-          decoder, self.commentary_tokenizer = ModelBuilder().build_commentary_decoder(self.config)
-          self.models[device_index].commentary_decoder = decoder
+        # Load the tokenizer.
+        commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
+        tokenizer_json = tf.io.gfile.GFile(commentary_tokenizer_path, 'r').read()
+        self.models_train.commentary_tokenizer = tf.keras.preprocessing.text.tokenizer_from_json(tokenizer_json)
+      else:
+        log(f"Creating new model ({log_device_context}/{self.network_type}/commentary)")
+        self.models_train.commentary_decoder = ModelBuilder().build_commentary_decoder(self.config)
+        self.models_train.commentary_tokenizer = ModelBuilder().build_tokenizer(self.config)
 
   # Storage may be slow, e.g. Google Cloud Storage, so retry.
   # For now, sleep for 1 second, up to 10 retry attempts (11 total).
@@ -266,7 +267,7 @@ class Network:
           return
         except:
           pass
-    raise Exception("Failed to load weights from: {path}")
+    raise Exception(f"Failed to load weights from: {path}")
 
   def save(self, step):
     network_path = self.make_network_path(step)
@@ -276,20 +277,20 @@ class Network:
     # Save the full model from training.
     log(f"Saving model ({log_device_context}/{self.network_type}/full): {log_name}")
     model_full_path = self.model_full_path(network_path)
-    self.model_train_full.save_weights(model_full_path, save_format="tf")
+    self.models_train.full.save_weights(model_full_path, save_format="tf")
 
-    # # Save the commentary decoder and tokenizer if they exist.
-    # if self.models[device_index].commentary_decoder and self.commentary_tokenizer:
-    #   log(f"Saving model ({device_index}/{self.network_type}/commentary): {log_name}")
+    # Save the commentary decoder and tokenizer if they exist.
+    if self.models_train.commentary_decoder and self.models_train.commentary_tokenizer:
+      log(f"Saving model ({log_device_context}/{self.network_type}/commentary): {log_name}")
 
-    #   # Save the commentary decoder.
-    #   model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
-    #   self.models[device_index].commentary_decoder.save_weights(model_commentary_decoder_path, save_format="tf")
+      # Save the commentary decoder.
+      model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
+      self.models_train.commentary_decoder.save_weights(model_commentary_decoder_path, save_format="tf")
 
-    #   # Save the tokenizer.
-    #   commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
-    #   with open(commentary_tokenizer_path, 'w') as f:
-    #     f.write(self.commentary_tokenizer.to_json())
+      # Save the tokenizer.
+      commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
+      tokenizer_json = self.models_train.commentary_tokenizer.to_json()
+      tf.io.gfile.GFile(commentary_tokenizer_path, "w").write(tokenizer_json)
 
   def get_log_name(self, network_path):
     return os.path.basename(os.path.normpath(network_path))
@@ -370,10 +371,8 @@ def predict_batch_student(images):
     return np.array(memoryview(value)), np.array(memoryview(policy))
 
 def predict_commentary_batch(images):
-  device_index = choose_device_index()
-  with device(device_index):
-    # Always use the teacher network for commentary.
-    return networks.teacher.predict_commentary_batch(device_index, images)
+  # Always use the teacher network for commentary.
+  return networks.teacher.predict_commentary_batch(images)
 
 def train_teacher(game_types, training_windows, step, checkpoint):
   trainer.train(networks.teacher, None, game_types, training_windows, step, checkpoint)
@@ -381,9 +380,9 @@ def train_teacher(game_types, training_windows, step, checkpoint):
 def train_student(game_types, training_windows, step, checkpoint):
   trainer.train(networks.student, networks.teacher, game_types, training_windows, step, checkpoint)
 
-def train_commentary_batch(step, images, comments):
-  pass # TODO
-  #training.train_commentary_batch(step, images, comments)
+def train_commentary(step, checkpoint):
+  # Always use the teacher network for commentary.
+  trainer.train_commentary(networks.teacher, step, checkpoint)
 
 def log_scalars_teacher(step, names, values):
   trainer.log_scalars(networks.teacher, step, names, values)
@@ -392,6 +391,7 @@ def log_scalars_student(step, names, values):
   trainer.log_scalars(networks.student, step, names, values)
 
 def load_network(network_name):
+  log("Network:", network_name)
   networks.name = network_name
   return networks.teacher.info # Assume there's a saved teacher, if anything, and return its info.
 

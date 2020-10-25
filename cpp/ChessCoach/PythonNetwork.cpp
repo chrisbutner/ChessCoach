@@ -50,7 +50,7 @@ PythonNetwork::PythonNetwork()
     _predictCommentaryBatchFunction = LoadFunction(module, "predict_commentary_batch");
     _trainFunction[NetworkType_Teacher] = LoadFunction(module, "train_teacher");
     _trainFunction[NetworkType_Student] = LoadFunction(module, "train_student");
-    _trainCommentaryBatchFunction = LoadFunction(module, "train_commentary_batch");
+    _trainCommentaryFunction = LoadFunction(module, "train_commentary");
     _logScalarsFunction[NetworkType_Teacher] = LoadFunction(module, "log_scalars_teacher");
     _logScalarsFunction[NetworkType_Student] = LoadFunction(module, "log_scalars_student");
     _loadNetworkFunction = LoadFunction(module, "load_network");
@@ -72,7 +72,7 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_loadNetworkFunction);
     Py_XDECREF(_logScalarsFunction[NetworkType_Student]);
     Py_XDECREF(_logScalarsFunction[NetworkType_Teacher]);
-    Py_XDECREF(_trainCommentaryBatchFunction);
+    Py_XDECREF(_trainCommentaryFunction);
     Py_XDECREF(_trainFunction[NetworkType_Student]);
     Py_XDECREF(_trainFunction[NetworkType_Teacher]);
     Py_XDECREF(_predictCommentaryBatchFunction);
@@ -185,48 +185,22 @@ void PythonNetwork::Train(NetworkType networkType, std::vector<GameType>& gameTy
     Py_DECREF(pythonGameTypes);
 }
 
-void PythonNetwork::TrainCommentaryBatch(int step, int batchSize, InputPlanes* images, std::string* comments)
+void PythonNetwork::TrainCommentary(int step, int checkpoint)
 {
     PythonContext context;
 
     PyObject* pythonStep = PyLong_FromLong(step);
     PyAssert(pythonStep);
 
-    npy_intp imageDims[2]{ batchSize, InputPlaneCount };
-    PyObject* pythonImages = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
-    PyAssert(pythonImages);
+    PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
+    PyAssert(pythonCheckpoint);
 
-    // Pack the strings contiguously.
-    int longestString = 0;
-    for (int i = 0; i < batchSize; i++)
-    {
-        longestString = std::max(longestString, static_cast<int>(comments[i].size()));
-    }
-    void* memory = PyDataMem_NEW(longestString * batchSize);
-    assert(memory);
-    char* packedStrings = reinterpret_cast<char*>(memory);
-    for (int i = 0; i < batchSize; i++)
-    {
-        char* packedString = (packedStrings + (i * longestString));
-        std::copy(&comments[i][0], &comments[i][0] + comments[i].size(), packedString);
-        std::fill(packedString + comments[i].size(), packedString + longestString, '\0');
-    }
-
-    npy_intp commentDims[1]{ batchSize };
-    PyObject* pythonComments = PyArray_New(&PyArray_Type, Py_ARRAY_LENGTH(commentDims), commentDims,
-        NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
-    PyAssert(pythonComments);
-
-    PyObject* result = PyObject_CallFunctionObjArgs(_trainCommentaryBatchFunction, pythonStep, pythonImages,
-        pythonComments, nullptr);
+    PyObject* result = PyObject_CallFunctionObjArgs(_trainCommentaryFunction, pythonStep, pythonCheckpoint, nullptr);
     PyAssert(result);
 
     Py_DECREF(result);
-    Py_DECREF(pythonComments);
-    Py_DECREF(pythonImages);
+    Py_DECREF(pythonCheckpoint);
     Py_DECREF(pythonStep);
-
 }
 
 void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values)
