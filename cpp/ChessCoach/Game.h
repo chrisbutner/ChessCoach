@@ -131,9 +131,11 @@ public:
 
     Color ToPlay() const;
     void ApplyMove(Move move);
+    void ApplyMoveMaybeNull(Move move);
     int Ply() const;
     Key GenerateImageKey() const;
     void GenerateImage(INetwork::InputPlanes& imageOut) const;
+    void GenerateImage(INetwork::PackedPlane* imageOut) const;
     void GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::PackedPlane* auxiliaryOut) const;
     float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
     float& PolicyValue(INetwork::PlanesPointerFlat policyInOut, Move move) const;

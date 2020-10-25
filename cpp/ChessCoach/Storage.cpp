@@ -2,6 +2,7 @@
 
 #include <string>
 #include <sstream>
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <chrono>
@@ -22,9 +23,10 @@
 
 Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig, int trainingChunkCount)
     : _trainingChunkCount(trainingChunkCount)
+    , _trainingGameCount(0)
     , _gamesPerChunk(miscConfig.Storage_GamesPerChunk)
     , _pgnInterval(networkConfig.Training.PgnInterval)
-    , _vocabularyFilename(networkConfig.Training.VocabularyFilename)
+    , _sessionNonce("UNINITIALIZED")
     , _sessionGameCount(0)
     , _sessionChunkCount(0)
 {
@@ -32,13 +34,12 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
 
     _relativeTrainingGamePath = networkConfig.Training.GamesPathTraining;
     _localTrainingGamePath = MakeLocalPath(rootPath, _relativeTrainingGamePath);
-    //static_assert(GameType_Count == 3);
-    //_commentaryPaths[GameType_Supervised] = MakePath(rootPath, networkConfig.Training.CommentaryPathSupervised);
-    //_commentaryPaths[GameType_Training] = MakePath(rootPath, networkConfig.Training.CommentaryPathTraining);
-    //_commentaryPaths[GameType_Validation] = MakePath(rootPath, networkConfig.Training.CommentaryPathValidation);
     _localLogsPath = MakeLocalPath(rootPath, miscConfig.Paths_Logs);
     _relativePgnsPath = miscConfig.Paths_Pgns;
+}
 
+void Storage::InitializeLocalGamesChunks(INetwork* network)
+{
     // Use a 32-bit session nonce to help differentiate this run from others. Still secondary to timestamp in ordering.
     const std::string alphabet = "0123456789ABCDEF";
     std::uniform_int_distribution<> distribution(0, static_cast<int>(alphabet.size()) - 1);
@@ -57,15 +58,12 @@ Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfi
             _trainingGameCount++;
         }
     }
-}
 
-void Storage::Housekeep(INetwork* network)
-{
     // Try to chunk now in case we already have enough games (so zero would be played)
     // but they failed to chunk previously.
     if (_trainingGameCount >= _gamesPerChunk)
     {
-        TryChunk(network);
+        TryChunkMultiple(network);
     }
 }
 
@@ -78,7 +76,7 @@ int Storage::AddTrainingGame(INetwork* network, SavedGame&& game)
 
     // Save locally for chunking later.
     const std::filesystem::path localGamePath = _localTrainingGamePath / (filenameStem + ".game");
-    SaveChunk(_startingPosition, localGamePath, { game });
+    SaveChunk(localGamePath, { game });
 
     // Occasionally save PGNs to central storage.
     if ((gameNumber % _pgnInterval) == 0)
@@ -98,7 +96,7 @@ int Storage::AddTrainingGame(INetwork* network, SavedGame&& game)
     const int newTrainingGameCount = ++_trainingGameCount;
     if ((newTrainingGameCount % _gamesPerChunk) == 0)
     {
-        TryChunk(network);
+        TryChunkMultiple(network);
     }
 
     return gameNumber;
@@ -107,7 +105,7 @@ int Storage::AddTrainingGame(INetwork* network, SavedGame&& game)
 // Just in case anything went wrong with file I/O, etc. previously, attempt to
 // create as many chunks as we can here. This is still safe with the outer atomic_int
 // check as long as we finish before the next _gamesPerChunk cycle.
-void Storage::TryChunk(INetwork* network)
+void Storage::TryChunkMultiple(INetwork* network)
 {
     std::vector<std::filesystem::path> gamePaths;
     for (const auto& entry : std::filesystem::directory_iterator(_localTrainingGamePath))
@@ -187,7 +185,7 @@ int Storage::TrainingGamesToPlay(int targetCount) const
     return std::max(0, targetCount - existingCount);
 }
 
-std::string Storage::GenerateSimpleChunkFilename(int chunkNumber)
+std::string Storage::GenerateSimpleChunkFilename(int chunkNumber) const
 {
     std::stringstream suffix;
     suffix << std::setfill('0') << std::setw(9) << chunkNumber << ".chunk";
@@ -212,7 +210,7 @@ std::string Storage::GenerateFilename(int number)
     return filename.str();
 }
 
-void Storage::SaveChunk(const Game& startingPosition, const std::filesystem::path& path, const std::vector<SavedGame>& games)
+void Storage::SaveChunk(const std::filesystem::path& path, const std::vector<SavedGame>& games) const
 {
     // Compress the TFRecord file using zlib.
     CFile file(path, true /* write */);
@@ -226,7 +224,7 @@ void Storage::SaveChunk(const Game& startingPosition, const std::filesystem::pat
     std::string buffer;
     for (const SavedGame& game : games)
     {
-        PopulateGame(startingPosition, game, storeGame);
+        PopulateGame(_startingPosition, game, storeGame);
         WriteTfRecord(zip, buffer, storeGame);
     }
 }
@@ -380,106 +378,88 @@ std::filesystem::path Storage::MakeLocalPath(const std::filesystem::path& root, 
     return rooted;
 }
 
-//void Storage::LoadCommentary()
-//{
-//    const Preprocessor preprocessor;
-//    const GameType gameType = GameType_Supervised; // TODO: Always supervised for now
-//
-//    _commentary.games.clear();
-//    _commentary.comments.clear();
-//
-//    // Load and pre-process commentary, culling empty/unreferenced comments and games.
-//    for (auto&& entry : std::filesystem::recursive_directory_iterator(_commentaryPaths[gameType]))
-//    {
-//        if (entry.path().extension().string() == ".pgn")
-//        {
-//            std::ifstream pgnFile = std::ifstream(entry.path(), std::ios::in);
-//            Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, Commentary&& commentary)
-//                {
-//                    int gameIndex = -1;
-//                    for (auto comment : commentary.comments)
-//                    {
-//                        preprocessor.PreprocessComment(comment.comment);
-//                        if (!comment.comment.empty())
-//                        {
-//                            if (gameIndex == -1)
-//                            {
-//                                _commentary.games.emplace_back(std::move(game));
-//                                gameIndex = (static_cast<int>(_commentary.games.size()) - 1);
-//                            }
-//                            _commentary.comments.emplace_back(gameIndex, comment.moveIndex, std::move(comment.variationMoves), std::move(comment.comment));
-//                        }
-//                    }
-//                });
-//        }
-//    }
-//
-//    // Generate a vocabulary document with unique comments.
-//    std::set<std::string> vocabulary;
-//    for (const SavedComment& comment : _commentary.comments)
-//    {
-//        vocabulary.insert(comment.comment);
-//    }
-//    const std::filesystem::path vocabularyPath = (_commentaryPaths[gameType] / _vocabularyFilename);
-//    std::ofstream vocabularyFile = std::ofstream(vocabularyPath, std::ios::out);
-//    for (const std::string& comment : vocabulary)
-//    {
-//        vocabularyFile << comment << std::endl;
-//    }
-//
-//    std::cout << "Loaded " << _commentary.comments.size() << " move comments" << std::endl;
-//}
+void Storage::SaveCommentary(const std::filesystem::path& path, const std::vector<SavedGame>& games,
+    std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary) const
+{
+    // Compress the TFRecord file using zlib.
+    CFile file(path, true /* write */);
+    google::protobuf::io::FileOutputStream wrapped(file.FileDescriptor());
+    google::protobuf::io::GzipOutputStream::Options zipOptions{};
+    zipOptions.format = google::protobuf::io::GzipOutputStream::ZLIB;
+    google::protobuf::io::GzipOutputStream zip(&wrapped, zipOptions);
 
-//CommentaryTrainingBatch* Storage::SampleCommentaryBatch()
-//{
-//    // Load comments if needed.
-//    if (_commentary.comments.empty())
-//    {
-//        LoadCommentary();
-//    }
-//
-//    // Make sure that there are enough comments to sample from. Just require the batch size for now.
-//    if (_commentary.comments.size() < _trainingCommentaryBatchSize)
-//    {
-//        return nullptr;
-//    }
-//
-//    _commentaryBatch.images.resize(_trainingCommentaryBatchSize);
-//    _commentaryBatch.comments.resize(_trainingCommentaryBatchSize);
-//
-//    std::uniform_int_distribution<> commentDistribution(0, static_cast<int>(_commentary.comments.size()) - 1);
-//
-//    for (int i = 0; i < _commentaryBatch.images.size(); i++)
-//    {
-//        const int commentIndex =
-//#if SAMPLE_BATCH_FIXED
-//            i;
-//#else
-//            commentDistribution(Random::Engine);
-//#endif
-//
-//        const SavedComment& comment = _commentary.comments[i];
-//        const SavedGame& game = _commentary.games[comment.gameIndex];
-//
-//        // Find the position for the chosen comment and populate the image and comment text.
-//        //
-//        // For now interpret the comment as refering to the position after playing the move,
-//        // so play moves up to *and including* the stored moveIndex.
-//        Game scratchGame = _startingPosition;
-//        for (int m = 0; m <= comment.moveIndex; m++)
-//        {
-//            scratchGame.ApplyMove(Move(game.moves[m]));
-//        }
-//
-//        // Also play out the variation.
-//        for (uint16_t move : comment.variationMoves)
-//        {
-//            scratchGame.ApplyMove(Move(move));
-//        }
-//
-//        scratchGame.GenerateImage(_commentaryBatch.images[i]);
-//        _commentaryBatch.comments[i] = comment.comment;
-//    }
-//
-//    return &_commentaryBatch;
-//}
+    // Write a single "tf.train.Example" protobuf for all images/comments as a TFRecord.
+    message::Example store;
+    std::string buffer;
+    auto& features = *store.mutable_features()->mutable_feature();
+    auto& images = *features["images"].mutable_int64_list()->mutable_value();
+    auto& comments = *features["comments"].mutable_bytes_list()->mutable_value();
+    const int imageStride = INetwork::InputPlaneCount;
+
+    const Preprocessor preprocessor;
+
+    for (int i = 0; i < games.size(); i++)
+    {
+        const SavedGame& game = games[i];
+        SavedCommentary commentary = gameCommentary[i];
+
+        // Require that commentary for this game refers to positions in order
+        // and play out a single base scratch game, then branch off variations.
+        //
+        // Variations "override" the last real move and so will regress the move index,
+        // so sort comments by move index here.
+        Game scratchGame = _startingPosition;
+        struct {
+            bool operator()(const SavedComment& a, const SavedComment& b) const
+            {
+                return (a.moveIndex < b.moveIndex);
+            }
+        } compareMoveIndex;
+        std::sort(commentary.comments.begin(), commentary.comments.end(), compareMoveIndex);
+
+        for (SavedComment& comment : commentary.comments)
+        {
+            preprocessor.PreprocessComment(comment.comment);
+            if (!comment.comment.empty())
+            {
+                // Update vocabulary.
+                vocabulary.commentCount++;
+                vocabulary.vocabulary.insert(comment.comment);
+
+                // Write the comment directly (don't touch "comment.comment" after this).
+                comments.Add(std::move(comment.comment));
+
+                // Prepare the image for writing.
+                const int imageSizeOld = images.size();
+                const int imageSizeNew = (imageSizeOld + imageStride);
+                images.Reserve(imageSizeNew);
+                images.AddNAlreadyReserved(imageStride);
+                INetwork::PackedPlane* imageOut = (reinterpret_cast<INetwork::PackedPlane*>(images.mutable_data()) + imageSizeOld);
+
+                // Find the position for the chosen comment and populate the image.
+                //
+                // For now interpret the comment as refering to the position after playing the move,
+                // so play moves up to *and including* the stored moveIndex.
+                for (int m = scratchGame.Ply(); m <= comment.moveIndex; m++)
+                {
+                    // Some commentary games include null moves in the actual game, not just variations
+                    // (e.g. at the very end to add a summary comment) so allow them here too.
+                    scratchGame.ApplyMoveMaybeNull(Move(game.moves[m]));
+                }
+
+                // Also play out the variation.
+                Game variation = scratchGame;
+                for (uint16_t move : comment.variationMoves)
+                {
+                    variation.ApplyMoveMaybeNull(Move(move));
+                }
+
+                // Write the full image: no compression for commentary because of branching variation structure.
+                variation.GenerateImage(imageOut);
+            }
+        }
+    }
+
+    // Write the "tf.train.Example" protobuf.
+    WriteTfRecord(zip, buffer, store);
+}

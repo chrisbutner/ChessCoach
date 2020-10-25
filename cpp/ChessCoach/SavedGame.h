@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 
 #include <Stockfish/types.h>
 
@@ -10,8 +11,6 @@
 
 struct SavedGame
 {
-public:
-
     SavedGame();
     SavedGame(float setResult, const std::vector<Move>& setMoves, const std::vector<float>& setMctsValues, const std::vector<std::map<Move, float>>& setChildVisits);
     SavedGame(float setResult, std::vector<uint16_t>&& setMoves, std::vector<float>&& setMctsValues, std::vector<std::map<Move, float>>&& setChildVisits);
@@ -23,30 +22,8 @@ public:
     std::vector<std::map<Move, float>> childVisits;
 };
 
-struct Comment
-{
-public:
-
-    int moveIndex;
-    std::vector<uint16_t> variationMoves;
-    std::string comment;
-};
-
-struct Commentary
-{
-public:
-
-    std::vector<Comment> comments;
-};
-
 struct SavedComment
 {
-public:
-
-    SavedComment();
-    SavedComment(int setGameIndex, int setMoveIndex, std::vector<uint16_t>&& setVariationMoves, std::string&& setComment);
-
-    int gameIndex;
     int moveIndex;
     std::vector<uint16_t> variationMoves;
     std::string comment;
@@ -54,10 +31,13 @@ public:
 
 struct SavedCommentary
 {
-public:
-
-    std::vector<SavedGame> games;
     std::vector<SavedComment> comments;
+};
+
+struct Vocabulary
+{
+    int commentCount;
+    std::set<std::string> vocabulary;
 };
 
 #endif // _SAVEDGAME_H_

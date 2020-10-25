@@ -48,8 +48,8 @@ void ChessCoachTrain::TrainChessCoach()
     std::unique_ptr<INetwork> network(CreateNetworkWithInfo(config, networkStepCount, trainingChunkCount));
     Storage storage(config, Config::Misc, trainingChunkCount);
 
-    // Take care of any game/chunk housekeeping from previous runs.
-    storage.Housekeep(network.get());
+    // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
+    storage.InitializeLocalGamesChunks(network.get());
 
     // Start self-play worker threads.
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
@@ -124,9 +124,6 @@ void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage
     // Log the stage info in a consistent format.
     std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << trainingWindow.TrainingGameMin << " - "
         << trainingWindow.TrainingGameMax << "]" << std::endl;
-
-    // Always save games to the GameType_Training store.
-    const GameType gameType = GameType_Training;
 
     // Need to play enough games to reach the training window maximum (skip if already enough).
     const int gamesToPlay = storage.TrainingGamesToPlay(trainingWindow.TrainingGameMax);

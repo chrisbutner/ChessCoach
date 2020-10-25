@@ -14,7 +14,7 @@
 // E.g. assume that pawn capture squares are fully specified.
 //
 // Note that this means SAN input like "ex" will cause overflows. Don't feed in untrusted input.
-void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, Commentary&&)> gameHandler)
+void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler)
 {
     while (true)
     {
@@ -34,7 +34,7 @@ void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, Commen
         Position position;
         position.set(Config::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
         std::vector<uint16_t> moves;
-        Commentary commentary;
+        SavedCommentary commentary;
         if (!ParseMoves(content, positionStates, position, moves, commentary, result, false /* inVariation */))
         {
             break;
@@ -160,7 +160,7 @@ void Pgn::ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOu
     }
 }
 
-bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, Commentary& commentary, float& resultInOut, bool inVariation)
+bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, SavedCommentary& commentary, float& resultInOut, bool inVariation)
 {
     char c;
     std::string str;
@@ -368,7 +368,7 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
     return true;
 }
 
-void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves, Commentary& commentary)
+void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves, SavedCommentary& commentary)
 {
     // Grab the full comment string between curly braces, including spaces.
     std::string comment = ParseUntil(content, '}');
@@ -377,7 +377,7 @@ void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves
     Preprocessor::Trim(comment);
     if (!comment.empty())
     {
-        commentary.comments.emplace_back(Comment{ (static_cast<int>(moves.size()) - 1), {}, comment });
+        commentary.comments.emplace_back(SavedComment{ (static_cast<int>(moves.size()) - 1), {}, comment });
     }
 }
 
@@ -417,7 +417,7 @@ void Pgn::ParseMoveGlyph(std::istream& content, std::string& target)
     content >> std::skipws;
 }
 
-bool Pgn::ParseVariation(std::istream& content, const Position& parent, const std::vector<uint16_t>& parentMoves, Commentary& commentary, float& resultInOut)
+bool Pgn::ParseVariation(std::istream& content, const Position& parent, const std::vector<uint16_t>& parentMoves, SavedCommentary& commentary, float& resultInOut)
 {
     // Copy/branch the position and move list. We can start a new empty StateInfo list
     // that refers into the old one just like the "Game" class.
@@ -454,7 +454,7 @@ bool Pgn::ParseVariation(std::istream& content, const Position& parent, const st
         // For now, throw away the initial pre-move comment. When the comment was generated the final parent move
         // had already been culled from "moves", so we can test for (comment.moveIndex < preVariationMoveCount)
         // (i.e. breaking the first asserted invariant below).
-        Comment& comment = commentary.comments[newCommentary];
+        SavedComment& comment = commentary.comments[newCommentary];
         if (comment.moveIndex < preVariationMoveCount)
         {
             commentary.comments.erase(commentary.comments.begin() + newCommentary);

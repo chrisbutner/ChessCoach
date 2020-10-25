@@ -167,6 +167,22 @@ void Game::ApplyMove(Move move)
     _position.do_move(move, *_currentState);
 }
 
+void Game::ApplyMoveMaybeNull(Move move)
+{
+    _previousPositions[_previousPositionsOldest] = _position;
+    _previousPositionsOldest = (_previousPositionsOldest + 1) % INetwork::InputPreviousPositionCount;
+
+    _currentState = AllocateState();
+    if (move != MOVE_NULL)
+    {
+        _position.do_move(move, *_currentState);
+    }
+    else
+    {
+        _position.do_null_move(*_currentState);
+    }
+}
+
 int Game::Ply() const
 {
     return _position.game_ply();
@@ -199,6 +215,11 @@ Key Game::GenerateImageKey() const
 
 void Game::GenerateImage(INetwork::InputPlanes& imageOut) const
 {
+    GenerateImage(imageOut.data());
+}
+
+void Game::GenerateImage(INetwork::PackedPlane* imageOut) const
+{
     int nextPlane = 0;
 
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
@@ -210,7 +231,7 @@ void Game::GenerateImage(INetwork::InputPlanes& imageOut) const
     for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
     {
         const Position& position = _previousPositions[previousPositionIndex];
-        GeneratePiecePlanes(imageOut.data(), nextPlane, position);
+        GeneratePiecePlanes(imageOut, nextPlane, position);
 
         nextPlane += INetwork::InputPiecePlanesPerPosition;
         previousPositionIndex = (previousPositionIndex + 1) % INetwork::InputPreviousPositionCount;
@@ -218,7 +239,7 @@ void Game::GenerateImage(INetwork::InputPlanes& imageOut) const
 
     // Add current position's pieces, planes 84-95.
     assert(nextPlane == 84);
-    GeneratePiecePlanes(imageOut.data(), nextPlane, _position);
+    GeneratePiecePlanes(imageOut, nextPlane, _position);
     nextPlane += INetwork::InputPiecePlanesPerPosition;
 
     // Castling planes 96-99

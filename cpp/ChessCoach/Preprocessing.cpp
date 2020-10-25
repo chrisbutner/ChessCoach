@@ -52,7 +52,7 @@ void Preprocessor::PreprocessComment(std::string& comment) const
 
     // Convert newlines to spaces and re-trim.
     std::replace(comment.begin(), comment.end(), '\n', ' ');
-    comment.erase(std::remove(comment.begin(), comment.end(), '\r'));
+    comment.erase(std::remove(comment.begin(), comment.end(), '\r'), comment.end());
     Trim(comment);
 }
 

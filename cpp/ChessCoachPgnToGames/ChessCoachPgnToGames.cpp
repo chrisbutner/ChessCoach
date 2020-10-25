@@ -5,6 +5,7 @@
 #include <queue>
 #include <filesystem>
 #include <atomic>
+#include <deque>
 
 #include <Stockfish/position.h>
 #include <tclap/CmdLine.h>
@@ -21,7 +22,8 @@ class ChessCoachPgnToGames : public ChessCoach
 {
 public:
 
-    ChessCoachPgnToGames(const std::filesystem::path& inputDirectory, const std::filesystem::path& outputDirectory, int threadCount);
+    ChessCoachPgnToGames(const std::filesystem::path& inputDirectory, const std::filesystem::path& outputDirectory,
+        int threadCount, bool commentary);
 
     void InitializeLight();
     void FinalizeLight();
@@ -30,13 +32,15 @@ public:
 private:
 
     void ConvertPgns();
-    void SaveChunk(const Game& startingPosition, std::vector<SavedGame>& games);
+    void SaveChunk(const Storage& storage, std::vector<SavedGame>& games,
+        std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary);
 
 private:
 
     std::filesystem::path _inputDirectory;
     std::filesystem::path _outputDirectory;
     int _threadCount;
+    bool _commentary;
 
     std::mutex _pgnQueueMutex;
     std::queue<std::filesystem::path> _pgnQueue;
@@ -46,6 +50,8 @@ private:
 
     std::atomic_int _totalFileCount;
     std::atomic_int _totalGameCount;
+
+    std::deque<Vocabulary> _vocabularies;
 };
 
 int main(int argc, char* argv[])
@@ -53,6 +59,7 @@ int main(int argc, char* argv[])
     std::string inputDirectory;
     std::string outputDirectory;
     int threadCount;
+    bool commentary;
 
     try
     {
@@ -61,8 +68,10 @@ int main(int argc, char* argv[])
         TCLAP::ValueArg<std::string> inputDirectoryArg("i", "input", "Input directory where PGN files are located", true /* req */, "", "string");
         TCLAP::ValueArg<std::string> outputDirectoryArg("o", "output", "Output directory where game files should be placed", true /* req */, "", "string");
         TCLAP::ValueArg<int> threadCountArg("t", "threads", "Number of threads to use (0 = autodetect)", false /* req */, 0, "number");
+        TCLAP::SwitchArg commentaryArg("c", "commentary", "Parse commentary/variations and output comments", false, nullptr);
 
         // Usage/help seems to reverse this order.
+        cmd.add(commentaryArg);
         cmd.add(threadCountArg);
         cmd.add(outputDirectoryArg);
         cmd.add(inputDirectoryArg);
@@ -72,6 +81,8 @@ int main(int argc, char* argv[])
         inputDirectory = inputDirectoryArg.getValue();
         outputDirectory = outputDirectoryArg.getValue();
         threadCount = threadCountArg.getValue();
+        commentary = commentaryArg.getValue();
+        
     }
     catch (TCLAP::ArgException& e)
     {
@@ -79,7 +90,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    ChessCoachPgnToGames pgnToGames(inputDirectory, outputDirectory, threadCount);
+    ChessCoachPgnToGames pgnToGames(inputDirectory, outputDirectory, threadCount, commentary);
 
     pgnToGames.PrintExceptions();
     pgnToGames.InitializeLight();
@@ -92,10 +103,11 @@ int main(int argc, char* argv[])
 }
 
 ChessCoachPgnToGames::ChessCoachPgnToGames(const std::filesystem::path& inputDirectory,
-    const std::filesystem::path& outputDirectory, int threadCount)
+    const std::filesystem::path& outputDirectory, int threadCount, bool commentary)
     : _inputDirectory(inputDirectory)
     , _outputDirectory(outputDirectory)
     , _threadCount(threadCount)
+    , _commentary(commentary)
     , _latestGamesNumber(0)
     , _totalFileCount(0)
     , _totalGameCount(0)
@@ -129,7 +141,7 @@ void ChessCoachPgnToGames::ConvertAll()
     }
 
     // Distribute PGN paths.
-    for (const auto& entry : std::filesystem::directory_iterator(_inputDirectory))
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(_inputDirectory))
     {
         if (entry.path().extension().string() == ".pgn")
         {
@@ -156,6 +168,28 @@ void ChessCoachPgnToGames::ConvertAll()
         thread.join();
     }
 
+    if (_commentary)
+    {
+        // Combine vocabulary from threads.
+        Vocabulary vocabulary{};
+        for (Vocabulary& workerVocabulary : _vocabularies)
+        {
+            vocabulary.commentCount += workerVocabulary.commentCount;
+            vocabulary.vocabulary.merge(std::move(workerVocabulary.vocabulary));
+        }
+
+        // Write out the vocabulary document.
+        const std::filesystem::path vocabularyPath = (_outputDirectory / Config::TrainingNetwork.Training.VocabularyFilename);
+        std::ofstream vocabularyFile = std::ofstream(vocabularyPath, std::ios::out);
+        for (const std::string& comment : vocabulary.vocabulary)
+        {
+            vocabularyFile << comment << std::endl;
+        }
+
+        std::cout << "Wrote " << vocabulary.commentCount << " move comments, "
+            << vocabulary.vocabulary.size() << " unique" << std::endl;
+    }
+
     const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();
     const float filesPerSecond = (_totalFileCount / secondsTaken);
     const float gamesPerSecond = (_totalGameCount / secondsTaken);
@@ -165,8 +199,16 @@ void ChessCoachPgnToGames::ConvertAll()
 
 void ChessCoachPgnToGames::ConvertPgns()
 {
-    const Game startingPosition;
+    const Storage storage(Config::TrainingNetwork, Config::Misc, 0);
     std::vector<SavedGame> games;
+    std::vector<SavedCommentary> gameCommentary;
+
+    Vocabulary& vocabulary = [&]() -> decltype(auto)
+    {
+        std::lock_guard lock(_coutMutex);
+
+        return _vocabularies.emplace_back();
+    }();
 
     while (true)
     {
@@ -193,14 +235,15 @@ void ChessCoachPgnToGames::ConvertPgns()
         }
 
         std::ifstream pgnFile = std::ifstream(pgnPath, std::ios::in);
-        Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, Commentary&& commentary)
+        Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, SavedCommentary&& commentary)
             {
                 games.emplace_back(std::move(game));
+                gameCommentary.emplace_back(std::move(commentary));
                 pgnGamesConverted++;
 
                 if (games.size() >= Config::Misc.Storage_GamesPerChunk)
                 {
-                    SaveChunk(startingPosition, games);
+                    SaveChunk(storage, games, gameCommentary, vocabulary);
                 }
             });
 
@@ -214,13 +257,22 @@ void ChessCoachPgnToGames::ConvertPgns()
 
     if (!games.empty())
     {
-        SaveChunk(startingPosition, games);
+        SaveChunk(storage, games, gameCommentary, vocabulary);
     }
 }
 
-void ChessCoachPgnToGames::SaveChunk(const Game& startingPosition, std::vector<SavedGame>& games)
+void ChessCoachPgnToGames::SaveChunk(const Storage& storage, std::vector<SavedGame>& games,
+    std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary)
 {
-    const std::filesystem::path gamePath = (_outputDirectory / Storage::GenerateSimpleChunkFilename(++_latestGamesNumber));
-    Storage::SaveChunk(startingPosition, gamePath, games);
+    const std::filesystem::path gamePath = (_outputDirectory / storage.GenerateSimpleChunkFilename(++_latestGamesNumber));
+    if (_commentary)
+    {
+        storage.SaveCommentary(gamePath, games, gameCommentary, vocabulary);
+    }
+    else
+    {
+        storage.SaveChunk(gamePath, games);
+    }
     games.clear();
+    gameCommentary.clear();
 }

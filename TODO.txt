@@ -1,6 +1,7 @@
 Commentary
 - update tools to convert commentary to protobufs
 - make sure commentary still working (training, prediction)
+	- test with 100x LR on fresh network, get to 0.25 accuracy
 
 Full training
 - train "chesscoach6" locally and on TPU
@@ -13,6 +14,7 @@ Tests
 - get passing
 - rewrite storage tests (maybe compare compressed to old uncompresed code (dead though))
 - add unit test for unique queen/knight indexing into planes
+- add test for null move flipping the generated image (important for commentary data)
 
 Self-play
 - *** CPU/mcts times going up over time, again, important to check for node/stateinfo leaks ***
