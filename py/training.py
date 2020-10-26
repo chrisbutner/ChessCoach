@@ -18,8 +18,9 @@ def flat_categorical_accuracy(y_true, y_pred):
 
 # Weighted sum of knowledge_distillation_temperature**2 * teacher loss + ground truth loss
 def student_policy_loss(y_true, y_pred):
-  teacher_logits = K.batch_flatten(y_true[0])
-  true_labels = K.batch_flatten(y_true[1])
+  # See "Trainer.stack_teacher_targets" for stacking details.
+  teacher_logits = K.batch_flatten(y_true[:, 0])
+  true_labels = K.batch_flatten(y_true[:, 1])
   y_pred = K.batch_flatten(y_pred)
 
   teacher_loss = knowledge_distillation_temperature**2 * tf.keras.losses.categorical_crossentropy(
@@ -29,7 +30,8 @@ def student_policy_loss(y_true, y_pred):
 
 # Accuracy against ground truth (argmax).
 def student_policy_accuracy(y_true, y_pred):
-  return flat_categorical_accuracy(y_true[1], y_pred)
+  # See "Trainer.stack_teacher_targets" for stacking details.
+  return flat_categorical_accuracy(y_true[:, 1], y_pred)
 
 class Trainer:
 
@@ -140,8 +142,11 @@ class Trainer:
     self.data_commentary_training = None
 
   def train(self, network, teacher_network, game_types, training_windows, starting_step, checkpoint):
+    # Create models on the distribution strategy scope, including the teacher for knowledge distillation inference.
     with self.strategy.scope():
       model = network.ensure_training()
+      if teacher_network:
+        teacher_network.ensure_training()
 
     # Set up data pipelines, or re-use existing if not cleared by self-play.
     # Numpy hijacks == and bool testing and enforces any() or all(), so convert to lists first.
@@ -187,11 +192,7 @@ class Trainer:
 
     # If a teacher was provided, predict soft targets and combine with the provided hard targets.
     if teacher_network:
-      _, _, teacher_policies, teacher_reply_policies = teacher_network.predict_for_training_batch(images)
-      values, mcts_values, policies, reply_policies = targets
-      policies = tf.stack([teacher_policies, policies])
-      reply_policies = tf.stack([teacher_reply_policies, reply_policies])
-      targets = (values, mcts_values, policies, reply_policies)
+      targets = self.stack_teacher_targets(teacher_network, images, targets)
 
     # Train the model.
     losses = model.train_on_batch(images, targets, reset_metrics=False)
@@ -206,17 +207,36 @@ class Trainer:
 
     # If a teacher was provided, predict soft targets and combine with the provided hard targets.
     if teacher_network:
-      _, _, teacher_policies, teacher_reply_policies = teacher_network.predict_for_training_batch(images)
-      values, mcts_values, policies, reply_policies = targets
-      policies = tf.stack([teacher_policies, policies])
-      reply_policies = tf.stack([teacher_reply_policies, reply_policies])
-      targets = (values, mcts_values, policies, reply_policies)
+      targets = self.stack_teacher_targets(teacher_network, images, targets)
 
     # Train the model.
     losses = model.test_on_batch(images, targets, reset_metrics=False)
 
     # Do Tensorboard logging.
     self.log_training("validation", network.tensorboard_writer_validation, step, losses, model)
+
+  def stack_teacher_targets(self, teacher_network, images, targets):
+    # Predict teacher logits.
+    distributed_images = self.distribute_batch(images)
+    _, _, teacher_policies, teacher_reply_policies = self.strategy.run(
+      teacher_network.tf_predict_for_training, args=(distributed_images,))
+    if self.device_count > 1:
+      teacher_policies = self.collect_batch(teacher_policies)
+      teacher_reply_policies = self.collect_batch(teacher_reply_policies)
+
+    # Stack with provided labels in axis=1 so that axis=0 can remain the batch axis
+    # and be auto-distributed to replicas by train_on_batch/test_on_batch.
+    values, mcts_values, policies, reply_policies = targets
+    policies = tf.stack([teacher_policies, policies], axis=1)
+    reply_policies = tf.stack([teacher_reply_policies, reply_policies], axis=1)
+    targets = (values, mcts_values, policies, reply_policies)
+    return targets
+
+  def distribute_batch(self, x):
+    return next(iter(self.strategy.experimental_distribute_dataset(tf.data.Dataset.from_tensors(x))))
+
+  def collect_batch(self, x):
+    return tf.concat(x.values, axis=0)
 
   def train_commentary(self, network, starting_step, checkpoint):
     with self.strategy.scope():

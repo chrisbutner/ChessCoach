@@ -110,10 +110,6 @@ class Network:
     self.ensure_prediction(device_index)
     return self.tf_predict(device_index, images)
 
-  def predict_for_training_batch(self, images):
-    self.ensure_training()
-    return self.tf_predict_for_training(images)
-
   def predict_commentary_batch(self, images):
     networks.teacher.ensure_commentary()
 
