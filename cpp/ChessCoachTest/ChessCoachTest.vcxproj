@@ -74,7 +74,6 @@
     <ClCompile Include="PoolAllocatorTest.cpp" />
     <ClCompile Include="PredictionCacheTest.cpp" />
     <ClCompile Include="StockfishTest.cpp" />
-    <ClCompile Include="StorageTest.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ChessCoach\ChessCoach.vcxproj">
@@ -105,7 +104,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-	  <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobufd.lib;$(SolutionDir)zlib\lib\zlibstaticd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobufd.lib;$(SolutionDir)zlib\lib\zlibstaticd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -124,7 +123,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-	  <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobufd.lib;$(SolutionDir)zlib\lib\zlibstaticd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobufd.lib;$(SolutionDir)zlib\lib\zlibstaticd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -144,7 +143,7 @@
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-	  <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoOpt|Win32'">
@@ -164,7 +163,7 @@
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-	  <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -184,7 +183,7 @@
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-	  <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoOpt|x64'">
@@ -205,7 +204,7 @@
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-	  <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)protobuf-3.13.0\lib\libprotobuf.lib;$(SolutionDir)zlib\lib\zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

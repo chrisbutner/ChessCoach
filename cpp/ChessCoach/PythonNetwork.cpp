@@ -114,10 +114,10 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
     PyAssert(PyArray_Check(pythonPolicies));
 
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
-    float* pythonPoliciesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonPoliciesArray));
+    PlanesPointerFlat pythonPoliciesPtr = reinterpret_cast<PlanesPointerFlat>(PyArray_DATA(pythonPoliciesArray));
 
     const int policyCount = (batchSize * OutputPlanesFloatCount);
-    std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<float*>(policies));
+    std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<PlanesPointerFlat>(policies));
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonImages);

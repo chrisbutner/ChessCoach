@@ -44,15 +44,16 @@ TEST(Network, Policy)
     game.StoreSearchStatistics();
     game.ApplyMoveWithRootAndHistory(firstMove, game.Root()->firstChild);
     game.Complete();
-    INetwork::OutputPlanes labels = game.GeneratePolicy(game.Save().childVisits[0]);
+    std::unique_ptr<INetwork::OutputPlanes> labels(std::make_unique<INetwork::OutputPlanes>());
+    game.GeneratePolicy(game.Save().childVisits[0], *labels);
     
     for (Move move : legalMoves)
     {
-        EXPECT_GT(game.PolicyValue(labels, move), 0.f);
+        EXPECT_GT(game.PolicyValue(*labels, move), 0.f);
     }
 
     int zeroCount = 0;
-    float* value = reinterpret_cast<float*>(labels.data());
+    INetwork::PlanesPointerFlat value = reinterpret_cast<INetwork::PlanesPointerFlat>(labels.get());
     for (int i = 0; i < INetwork::OutputPlanesFloatCount; i++)
     {
         if (*(value++) == 0.f) zeroCount++;
@@ -65,7 +66,7 @@ TEST(Network, Policy)
     float sum = 0;
     for (int i = 0; i < legalMoveCount; i++)
     {
-        sum += (game.PolicyValue(labels, *(legalMoves.begin() + i)) * -::logf(prediction));
+        sum += (game.PolicyValue(*labels, *(legalMoves.begin() + i)) * -::logf(prediction));
     }
 }
 
@@ -80,7 +81,8 @@ TEST(Network, ImagePieceHistoryPlanes)
     const int currentPositionPlanes = INetwork::InputPreviousPositionCount * INetwork::InputPiecePlanesPerPosition;
 
     // Ensure that the final history plane is all zeros.
-    std::unique_ptr<INetwork::InputPlanes> image1(std::make_unique<INetwork::InputPlanes>(game.GenerateImage()));
+    std::unique_ptr<INetwork::InputPlanes> image1(std::make_unique<INetwork::InputPlanes>());
+    game.GenerateImage(*image1);
     const INetwork::PackedPlane startingPositionOurPawns = (*image1)[currentPositionPlanes + 0];
     for (int i = 0; i < INetwork::InputPiecePlanesPerPosition; i++)
     {
@@ -89,6 +91,7 @@ TEST(Network, ImagePieceHistoryPlanes)
 
     // Make a move. Ensure that the final history our-pawns plane equals the starting position's.
     game.ApplyMove(make_move(SQ_E2, SQ_E4));
-    std::unique_ptr<INetwork::InputPlanes> image2(std::make_unique<INetwork::InputPlanes>(game.GenerateImage()));
+    std::unique_ptr<INetwork::InputPlanes> image2(std::make_unique<INetwork::InputPlanes>());
+    game.GenerateImage(*image2);
     EXPECT_EQ((*image2)[finalHistoryPlanes + 0], startingPositionOurPawns);
 }

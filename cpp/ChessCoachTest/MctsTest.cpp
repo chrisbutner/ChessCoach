@@ -30,7 +30,7 @@ SelfPlayGame& PlayGame(SelfPlayWorker& selfPlayWorker, std::function<void (SelfP
         // "GPU" work. Pretend to predict for a batch.
         std::fill(values, values + selfPlayWorker.Config().SelfPlay.PredictionBatchSize, CHESSCOACH_VALUE_DRAW);
 
-        float* policiesPtr = reinterpret_cast<float*>(policies);
+        INetwork::PlanesPointerFlat policiesPtr = reinterpret_cast<INetwork::PlanesPointerFlat>(policies);
         const int policyCount = (selfPlayWorker.Config().SelfPlay.PredictionBatchSize * INetwork::OutputPlanesFloatCount);
         std::fill(policiesPtr, policiesPtr + policyCount, 0.f);
 

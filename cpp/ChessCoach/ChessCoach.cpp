@@ -82,7 +82,10 @@ void ChessCoach::InitializePython()
     Py_Initialize();
 
     // Initialize numpy.
-    _import_array();
+    if (PY_ARRAY_UNIQUE_SYMBOL == nullptr)
+    {
+        _import_array();
+    }
 
     // Release the implicit main-thread GIL.
     PythonContext context;

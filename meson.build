@@ -215,27 +215,26 @@ chesscoachtrain = executable(
 # ChessCoachTest
 ###############################################################################
 
-# chesscoachtest_sources = [
-#   'cpp/ChessCoachTest/ConfigTest.cpp',
-#   'cpp/ChessCoachTest/GameTest.cpp',
-#   'cpp/ChessCoachTest/MctsTest.cpp',
-#   'cpp/ChessCoachTest/NetworkTest.cpp',
-#   'cpp/ChessCoachTest/PgnTest.cpp',
-#   'cpp/ChessCoachTest/PoolAllocatorTest.cpp',
-#   'cpp/ChessCoachTest/PredictionCacheTest.cpp',
-#   'cpp/ChessCoachTest/StockfishTest.cpp',
-#   'cpp/ChessCoachTest/StorageTest.cpp',
-#   ]
+chesscoachtest_sources = [
+  'cpp/ChessCoachTest/ConfigTest.cpp',
+  'cpp/ChessCoachTest/GameTest.cpp',
+  'cpp/ChessCoachTest/MctsTest.cpp',
+  'cpp/ChessCoachTest/NetworkTest.cpp',
+  'cpp/ChessCoachTest/PgnTest.cpp',
+  'cpp/ChessCoachTest/PoolAllocatorTest.cpp',
+  'cpp/ChessCoachTest/PredictionCacheTest.cpp',
+  'cpp/ChessCoachTest/StockfishTest.cpp',
+  ]
 
-# chesscoachtest = executable(
-#   'ChessCoachTest',
-#   chesscoachtest_sources,
-#   include_directories: common_includes,
-#   dependencies: [gtest_dependency],
-#   link_with: [chesscoach, chesscoachprotobuf, stockfish, hunspell, crc32c],
-# )
+chesscoachtest = executable(
+  'ChessCoachTest',
+  chesscoachtest_sources,
+  include_directories: cpp_includes,
+  dependencies: [gtest_dependency],
+  link_with: [chesscoach, chesscoachprotobuf, stockfish, hunspell, crc32c],
+)
 
-# test('AllTests', chesscoachtest, timeout: 300)
+test('AllTests', chesscoachtest, timeout: 300)
 
 ###############################################################################
 # Install

@@ -100,7 +100,7 @@ void PredictionCache::Allocate(int sizeGb)
 
     for (int i = 0; i < tableCount; i++)
     {
-        // Memory is already zero-filled, so no need to clear chunks.
+        // Allocate table with large page support.
         void* memory = LargePageAllocator::Allocate(TableBytes);
         assert(memory);
         if (!memory)
@@ -110,6 +110,14 @@ void PredictionCache::Allocate(int sizeGb)
 
         _tables.push_back(reinterpret_cast<PredictionCacheChunk*>(memory));
     }
+
+#ifdef CHESSCOACH_WINDOWS
+    // Memory is already zero-filled by VirtualAlloc on Windows, so no need to clear chunks.
+#else
+    // Memory comes from std::aligned_alloc in Linux with madvise hint, so no zero-filling guarantees
+    // and may not even be large pages. We can either Clear() or memset, haven't timed them.
+    Clear();
+#endif
 
     _entryCapacity = (static_cast<uint64_t>(tableCount) * ChunksPerTable * PredictionCacheChunk::EntryCount);
 }
