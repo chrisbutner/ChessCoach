@@ -86,7 +86,7 @@ class Trainer:
 
   # Would use PiecewiseConstantDecay but it hangs.
   def get_learning_rate_common(self, schedule, step):
-    scale_learning_rate_with_batch_size = self.device_count
+    scale_learning_rate_with_batch_size = (self.device_count ** .67)
     warmup = np.interp(step, [0, self.config.training["warmup_steps"]], [0.0, 1.0]).item()
     multiplier = scale_learning_rate_with_batch_size * warmup
 

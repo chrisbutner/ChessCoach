@@ -1,8 +1,3 @@
-Commentary
-- update tools to convert commentary to protobufs
-- make sure commentary still working (training, prediction)
-	- test with 100x LR on fresh network, get to 0.25 accuracy
-
 Full training
 - train "chesscoach6" locally and on TPU
 
@@ -22,6 +17,9 @@ Self-play
 - move uniform to pre-PythonNetwork C++
 - switch to multiple MCTS threads per python thread (2:1 should be fine if prediction cache on)
 
+Commentary
+- not converging after restoration, sync back and check
+
 Check in
 - make sure main.py all working on GPU + TPU
 - make sure tests all passing
@@ -33,6 +31,7 @@ AFTER CHECK-IN, FIND A HOME LATER
 - don't need to copy vectors into SavedGame, see if the struct is still useful at all, maybe just richer callbacks
 - try also batching across examples in dataset.py
 - need to solve pipeline threading issues again, make sure Cuda >= 90% locally
+	- also "experimental_steps_per_execution" for TPU
 - throw away positions before expensive decompression in dataset.py, keep all/more games, keep fewer positions
 - relinquish prediction cache memory while training? increase cycle/shuffle?
 - anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
@@ -61,6 +60,7 @@ Value experiments
 - work out static eval vs. search on stockfish side for inflection/control points, see what's viable
 
 Commentary cleanup
+- use model garden transformer now?
 - try wrap main engine loop with @tf.function too?
 - wrap <start>/<end> in graph mode - Transformer article
 - cull attention weight plumbing
@@ -70,7 +70,7 @@ Commentary cleanup
 
 Text quality
 - basic - does the encoder need an extra dense+relu layer after the tower/reshape?
-- tokenizing - lots of options for chess specifically, around puntuation, top-k, etc.
+- tokenizing - lots of options for chess specifically, around punctuation, top-k, etc.
 - larger model size
 - different model architectures
 	- read about "Performer" architecture
