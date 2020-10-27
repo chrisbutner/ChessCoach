@@ -29,6 +29,8 @@ thread_dependency = dependency('threads')
 protobuf_dependency = dependency('protobuf', version: '3.13.0', static: true)
 zlib_dependency = dependency('zlib', version: '>=1.2.8')
 
+protoc = find_program('protoc')
+
 ###############################################################################
 # Stockfish
 ###############################################################################
@@ -131,9 +133,13 @@ chesscoach = static_library(
 # chesscoachprotobuf (generated code in "protobuf" dir)
 ###############################################################################
 
-chesscoachprotobuf_sources = [
-  'cpp/protobuf/ChessCoach.pb.cc',
-  ]
+gen = generator(protoc,
+  output: ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'],
+  arguments: ['--proto_path=@CURRENT_SOURCE_DIR@/cpp/protobuf', '--cpp_out=@BUILD_DIR@', '@INPUT@'])
+
+generated = gen.process('cpp/protobuf/ChessCoach.proto')
+
+chesscoachprotobuf_sources = generated
 
 chesscoachprotobuf = static_library(
   'chesscoachprotobuf',

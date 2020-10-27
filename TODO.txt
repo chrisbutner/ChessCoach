@@ -1,9 +1,3 @@
-Full training
-- train "chesscoach6" locally and on TPU
-
-Builds
-- protoc gen (generator example on meson github)
-
 Tests
 - fix compilation in win + linux (reload proj, uncomment meson)
 - get passing
@@ -25,6 +19,12 @@ Check in
 - make sure tests all passing
 - make sure all exe tools working, debug/release
 
+Apply for cloud resources
+- look up the FAQ again
+
+Validate
+- make sure that a fresh run can match chesscoach6 performance by 15k steps
+
 AFTER CHECK-IN, FIND A HOME LATER
 - print config summary when starting a run
 - move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
@@ -37,9 +37,6 @@ AFTER CHECK-IN, FIND A HOME LATER
 - anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
 - save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
 - overall run may hang or have 2k too few games if any .game files deleted now, think about live adjustment/different approach
-
-Apply for cloud resources
-- look up the FAQ again
 
 Distributed self-play/training
 - set up some basic infrastructure, preemptibles, startup, roles, etc.
