@@ -1,7 +1,3 @@
-Tests
-- add unit test for unique queen/knight indexing into planes
-- add test for null move flipping the generated image (important for commentary data)
-
 Self-play
 - *** CPU/mcts times going up over time, again, important to check for node/stateinfo leaks ***
 	- need to be able to let TPU machines run

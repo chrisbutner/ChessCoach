@@ -246,3 +246,107 @@ TEST(Network, CompressDecompress)
     EXPECT_NE(images[7][0], 0);
     EXPECT_EQ(policies[1], replyPolicies[0]);
 }
+
+TEST(Network, QueenKnightPlanes)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    float policySums[COLOR_NB] = {};
+    for (int i = 0; i < COLOR_NB; i++)
+    {
+        Color toPlay = Color(i);
+        Game game;
+        INetwork::OutputPlanes policy{}; // Zero the policy planes.
+
+        if (toPlay == BLACK)
+        {
+            game.ApplyMoveMaybeNull(MOVE_NULL);
+        }
+        EXPECT_EQ(game.ToPlay(), toPlay);
+
+        // Increment the policy value for all queen and knight moves.
+        Position position{}; // Zero the position, since no set() call.
+        for (Square from = SQ_A1; from <= SQ_H8; ++from)
+        {
+            Bitboard queenMoves = position.attacks_from(QUEEN, from);
+            Bitboard knightMoves = position.attacks_from(KNIGHT, from);
+
+            while (queenMoves)
+            {
+                const Square to = pop_lsb(&queenMoves);
+                game.PolicyValue(policy, make_move(from, to)) += 1.f;
+            }
+            while (knightMoves)
+            {
+                const Square to = pop_lsb(&knightMoves);
+                game.PolicyValue(policy, make_move(from, to)) += 1.f;
+            }
+        }
+
+        // Increment the policy value for all underpromotions, excluding the 2x3 illegal pseudo-possibilities, axz and hxi.
+        for (Square from = SQ_A7; from <= SQ_H7; ++from)
+        {
+            if (file_of(from) > FILE_A)
+            {
+                for (PieceType pieceType = KNIGHT; pieceType <= ROOK; ++pieceType)
+                {
+                    game.PolicyValue(policy, Game::FlipMove(toPlay, make<PROMOTION>(from, from + NORTH_WEST, pieceType))) += 1.f;
+                }
+            }
+            {
+                for (PieceType pieceType = KNIGHT; pieceType <= ROOK; ++pieceType)
+                {
+                    game.PolicyValue(policy, Game::FlipMove(toPlay, make<PROMOTION>(from, from + NORTH, pieceType))) += 1.f;
+                }
+            }
+            if (file_of(from) < FILE_H)
+            {
+                for (PieceType pieceType = KNIGHT; pieceType <= ROOK; ++pieceType)
+                {
+                    game.PolicyValue(policy, Game::FlipMove(toPlay, make<PROMOTION>(from, from + NORTH_EAST, pieceType))) += 1.f;
+                }
+            }
+        }
+
+        // Check for colliding policy values.
+        INetwork::PlanesPointerFlat policyFlat = reinterpret_cast<INetwork::PlanesPointerFlat>(policy.data());
+        float sum = 0.f;
+        for (int i = 0; i < INetwork::OutputPlanesFloatCount; i++)
+        {
+            const float policyValue = policyFlat[i];
+            policySums[toPlay] += policyValue;
+            EXPECT_GE(policyValue, 0.f);
+            EXPECT_LE(policyValue, 1.f);
+        }
+    }
+
+    EXPECT_EQ(policySums[WHITE], policySums[BLACK]);
+}
+
+TEST(Network, NullMoveFlip)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    // Set up a position and generate image planes.
+    Game game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {});
+    INetwork::InputPlanes image1;
+    game.GenerateImage(image1);
+
+    // Apply a null move (e.g. like in a commentary training variation) and generate image planes.
+    game.ApplyMoveMaybeNull(MOVE_NULL);
+    INetwork::InputPlanes image2;
+    game.GenerateImage(image2);
+
+    // Expect that the piece planes for the "current" position are identical but flipped.
+    for (int i = 0; i < INetwork::INetwork::InputPiecePlanesPerPosition; i++)
+    {
+        const int historyPlanes = (INetwork::InputPreviousPositionCount * INetwork::InputPiecePlanesPerPosition);
+        const int ourPieces = (i + historyPlanes);
+        const int theirPieces = (((i + INetwork::INetwork::InputPiecePlanesPerPosition / 2) % INetwork::INetwork::InputPiecePlanesPerPosition) + historyPlanes);
+        const INetwork::PackedPlane original = image1[ourPieces];
+        const INetwork::PackedPlane nullFlipTheirs = Game::FlipBoard(image2[theirPieces]);
+        EXPECT_EQ(original, nullFlipTheirs);
+    }
+}

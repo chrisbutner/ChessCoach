@@ -48,7 +48,7 @@ TEST(Stockfish, CentipawnConversion)
 
 TEST(Stockfish, EmptyPosition)
 {
-    Position position{};
+    Position position{}; // Zero the position, since no set() call.
     EXPECT_EQ(position.state_info(), nullptr);
 
     for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
