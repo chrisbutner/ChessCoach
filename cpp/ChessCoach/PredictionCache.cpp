@@ -9,7 +9,6 @@ PredictionCache PredictionCache::Instance;
 
 void PredictionCacheChunk::Clear()
 {
-    // Don't lock here, assume it's a quiet single-threaded section.
     for (int i = 0; i < EntryCount; i++)
     {
         _entries[i].key = 0;
@@ -19,9 +18,6 @@ void PredictionCacheChunk::Clear()
 
 bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float* priorsOut)
 {
-    // Only ages are mutated and the operations are atomic on basically all hardware, so use a shared_lock.
-    std::shared_lock lock(_mutex);
-
     for (int& age : _ages)
     {
         age++;
@@ -31,12 +27,52 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
     {
         if (_entries[i].key == key)
         {
-            _ages[i] = std::numeric_limits<int>::min();
-            *valueOut = _entries[i].value;
+            // Various types of collisions and race conditions across threads are possible:
+            //
+            // - Key collisions (type-1 errors):
+            //      - Can mitigate by increasing key size, table size, or e.g. for Stockfish,
+            //        validating the stored information, a Move, against the probing position.
+            //        Note that validating using key/input information rather than stored/output
+            //        is equivalent to increasing key size. We can mitigate by summing policy for
+            //        the probing legal move count and ensuring that it's nearly 1.0.
+            // - Index collisions (type-2 errors):
+            //      - Results from the bit shrinkage from the full key size down to the addressable
+            //        space of the table. Can be mitigated by storing the the full key, or more of
+            //        the key than the addressable space, and validating when probing. We store the
+            //        full key.
+            // - Spliced values from parallel thread writes:
+            //      - Multiple threads may race to write to a single chunk and/or entry, splicing
+            //        values - either intra-field (e.g. writing to different parts of the policy)
+            //        or inter-field (e.g. one thread writing key/value and the other writing policy).
+            //        We have to accept seeing an incorrect value, but intra and inter-policy splicing
+            //        can potentially be detected by again summing policy for the probing legal move count
+            //        and ensuring that it's nearly 1.0.
+            //
+            // Use the provided "priorsOut" as writable scratch space even if we return false.
+            //
+            // Allow for 3 quanta error, ~1%.
+
+            int priorSum = 0;
             for (int m = 0; m < moveCount; m++)
             {
-                priorsOut[m] = INetwork::DequantizeProbability(_entries[i].policyPriors[m]);
+                const uint8_t quantizedPrior = _entries[i].policyPriors[m];
+                priorSum += quantizedPrior;
+
+                const float prior = INetwork::DequantizeProbability(quantizedPrior);
+                priorsOut[m] = prior;
             }
+
+            // Check for type-1 errors and splices and return false. It's important not to
+            // fresh the age in these cases so that splices can be overwritten with good data.
+            static_assert(INetwork::DequantizeProbability(255) == 1.f);
+            if ((priorSum < 252) || (priorSum > 258))
+            {
+                return false;
+            }
+
+            // The entry is valid, as far as we can tell, so freshen its age and return it.
+            _ages[i] = std::numeric_limits<int>::min();
+            *valueOut = _entries[i].value;
             return true;
         }
     }
@@ -46,8 +82,6 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
 
 void PredictionCacheChunk::Put(Key key, float value, int moveCount, float* priors)
 {
-    std::unique_lock lock(_mutex);
-
     int oldestIndex = 0;
     for (int i = 1; i < EntryCount; i++)
     {

@@ -2,7 +2,6 @@
 #define _PREDICTIONCACHE_H_
 
 #include <vector>
-#include <shared_mutex>
 
 #include <Stockfish/types.h>
 
@@ -28,25 +27,14 @@ struct alignas(512) PredictionCacheChunk
 
 private:
 
-    static const int EntryCount =
-#ifdef CHESSCOACH_WINDOWS
-        7;
-#else
-        6;
-#endif
+    static const int EntryCount = 7;
 
-    std::array<PredictionCacheEntry, EntryCount> _entries;  // 448/384 bytes
-    std::array<int, EntryCount> _ages;                      // 28=32/24 bytes
-    std::shared_mutex _mutex;                               // 8/56 bytes
+    std::array<PredictionCacheEntry, EntryCount> _entries;  // 448 bytes
+    std::array<int, EntryCount> _ages;                      // 28=32 bytes
+                                                            // 32 bytes padding
 
     friend class PredictionCache;
 };
-
-#ifdef CHESSCOACH_WINDOWS
-static_assert(sizeof(std::shared_mutex) == 8);
-#else
-static_assert(sizeof(std::shared_mutex) == 56);
-#endif
 
 static_assert(sizeof(PredictionCacheChunk) == 512);
 
