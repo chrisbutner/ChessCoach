@@ -1,7 +1,4 @@
 Tests
-- fix compilation in win + linux (reload proj, uncomment meson)
-- get passing
-- rewrite storage tests (maybe compare compressed to old uncompresed code (dead though))
 - add unit test for unique queen/knight indexing into planes
 - add test for null move flipping the generated image (important for commentary data)
 
@@ -16,7 +13,6 @@ Commentary
 
 Check in
 - make sure main.py all working on GPU + TPU
-- make sure tests all passing
 - make sure all exe tools working, debug/release
 
 Apply for cloud resources

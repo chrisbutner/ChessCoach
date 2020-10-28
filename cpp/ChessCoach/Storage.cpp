@@ -229,6 +229,13 @@ void Storage::SaveChunk(const std::filesystem::path& path, const std::vector<Sav
     }
 }
 
+message::Example Storage::DebugPopulateGame(const SavedGame& game) const
+{
+    message::Example gameOut;
+    PopulateGame(_startingPosition, game, gameOut);
+    return gameOut;
+}
+
 void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut)
 {
     auto& features = *gameOut.mutable_features()->mutable_feature();
@@ -282,7 +289,7 @@ void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Exa
         const int cumulativePolicyIndexCountNew = (cumulativePolicyIndexCountOld + movePolicyIndexCount);
         policyIndices.Reserve(cumulativePolicyIndexCountNew);
         policyIndices.AddNAlreadyReserved(movePolicyIndexCount);
-        policyValues.Reserve(cumulativePolicyIndexCountNew);
+        policyValues.Reserve(cumulativePolicyIndexCountNew); // Policy values get zeroed here, as required by "GeneratePolicyCompressed".
         policyValues.AddNAlreadyReserved(movePolicyIndexCount);
         scratchGame.GeneratePolicyCompressed(game.childVisits[m],
             policyIndices.mutable_data() + cumulativePolicyIndexCountOld,

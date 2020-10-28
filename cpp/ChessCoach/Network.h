@@ -90,6 +90,9 @@ struct INetwork
     virtual void LoadNetwork(const std::string& networkName, int& stepCountOut, int& trainingChunkCountOut) = 0;
     virtual void SaveNetwork(NetworkType networkType, int checkpoint) = 0;
     virtual void SaveFile(const std::string& relativePath, const std::string& data) = 0;
+    virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
+        float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
+        float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut) = 0;
 };
 
 static_assert(INetwork::QuantizeProbability(1.f) == 255);

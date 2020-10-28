@@ -400,6 +400,11 @@ def save_network_student(checkpoint):
 def save_file(relative_path, data):
   config.save_file(relative_path, data)
 
+def debug_decompress(result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
+  images, values, policies, reply_policies = datasets.decompress(result, image_pieces_auxiliary,
+    mcts_values, policy_row_lengths, policy_indices, policy_values)
+  return np.array(memoryview(images)), np.array(memoryview(values)), np.array(memoryview(policies)), np.array(memoryview(reply_policies))
+
 # --- Initialize ---
 
 # Build the device mapping safely.

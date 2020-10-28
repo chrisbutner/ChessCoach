@@ -1,8 +1,54 @@
 #include <gtest/gtest.h>
 
+#include <protobuf/ChessCoach.pb.h>
+
 #include <ChessCoach/SelfPlay.h>
 #include <ChessCoach/ChessCoach.h>
 
+void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
+{
+    const MoveList legalMoves = MoveList<LEGAL>(game.DebugPosition());
+    const int legalMoveCount = static_cast<int>(legalMoves.size());
+
+    int moveIndex = 0;
+    Node* lastSibling = nullptr;
+    Node* moveNode = nullptr;
+    for (Move legalMove : legalMoves)
+    {
+        Node* child = new Node(legalMove, 0.f);
+        if (move == legalMove)
+        {
+            moveNode = child;
+        }
+
+        const int visitCount = (((moveIndex++ + patternIndex) % legalMoveCount) + 1);
+        child->visitCount += visitCount;
+        game.Root()->visitCount += visitCount;
+
+        ASSERT_LT(patternIndex, 32);
+        const float value = (patternIndex / 32.f);
+        child->valueSum += (visitCount * value);
+        game.Root()->valueSum += (visitCount * Game::FlipValue(value));
+        ASSERT_GE(game.Root()->Value(), 0.f);
+        ASSERT_LE(game.Root()->Value(), 1.f);
+
+        if (lastSibling)
+        {
+            lastSibling->nextSibling = child;
+        }
+        else
+        {
+            game.Root()->firstChild = child;
+        }
+        lastSibling = child;
+    }
+    ASSERT_NE(moveNode, nullptr);
+
+    Node* previousRoot = game.Root();
+    game.StoreSearchStatistics();
+    game.ApplyMoveWithRootAndHistory(move, moveNode);
+    game.PruneExcept(previousRoot, moveNode);
+}
 TEST(Network, Policy)
 {
     ChessCoach chessCoach;
@@ -38,11 +84,15 @@ TEST(Network, Policy)
         lastSibling = child;
     }
     Move firstMove = *legalMoves.begin();
-    game.Root()->firstChild->visitCount += (networkConfig.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
+    Node* selected = game.Root()->firstChild;
+    selected->visitCount += (networkConfig.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
+    game.Root()->visitCount = networkConfig.SelfPlay.NumSimulations;
 
     // Generate policy labels. Make sure that legal moves are non-zero and the rest are zero.
+    Node* previousRoot = game.Root();
     game.StoreSearchStatistics();
-    game.ApplyMoveWithRootAndHistory(firstMove, game.Root()->firstChild);
+    game.ApplyMoveWithRootAndHistory(firstMove, selected);
+    game.PruneExcept(previousRoot, selected);
     game.Complete();
     std::unique_ptr<INetwork::OutputPlanes> labels(std::make_unique<INetwork::OutputPlanes>());
     game.GeneratePolicy(game.Save().childVisits[0], *labels);
@@ -60,7 +110,7 @@ TEST(Network, Policy)
     }
     EXPECT_EQ(zeroCount, INetwork::OutputPlanesFloatCount - legalMoveCount);
 
-    // This isn't a test, just checking some ballpark loss (~3.93).
+    // This isn't really a test, just checking some ballpark loss (~3.93).
     // Check categorical cross-entropy loss. Fake a uniform policy, post-softmax.
     float prediction = (1.f / legalMoveCount);
     float sum = 0;
@@ -68,6 +118,7 @@ TEST(Network, Policy)
     {
         sum += (game.PolicyValue(*labels, *(legalMoves.begin() + i)) * -::logf(prediction));
     }
+    EXPECT_LT(sum, 5.f);
 }
 
 TEST(Network, ImagePieceHistoryPlanes)
@@ -94,4 +145,104 @@ TEST(Network, ImagePieceHistoryPlanes)
     std::unique_ptr<INetwork::InputPlanes> image2(std::make_unique<INetwork::InputPlanes>());
     game.GenerateImage(*image2);
     EXPECT_EQ((*image2)[finalHistoryPlanes + 0], startingPositionOurPawns);
+}
+
+TEST(Network, CompressDecompress)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayGame game(nullptr, nullptr, nullptr);
+
+    // Play some moves, generating mostly different policy distributions for each move.
+    const std::vector<Move> moves =
+    {
+        make_move(SQ_E2, SQ_E4), make_move(SQ_E7, SQ_E5), make_move(SQ_G1, SQ_F3), make_move(SQ_D7, SQ_D6),
+        make_move(SQ_D2, SQ_D4), make_move(SQ_C8, SQ_G4), make_move(SQ_D4, SQ_E5), make_move(SQ_G4, SQ_F3),
+        make_move(SQ_D1, SQ_F3), make_move(SQ_D6, SQ_E5), make_move(SQ_F1, SQ_C4), make_move(SQ_G8, SQ_F6),
+    };
+    for (int i = 0; i < moves.size(); i++)
+    {
+        ApplyMoveExpandWithPattern(game, moves[i], i);
+    }
+    game.Root()->terminalValue = TerminalValue::MateIn<1>(); // Fudge a non-draw so that flips are interesting.
+    game.Complete();
+    const SavedGame savedGame = game.Save();
+
+    // Generate compressed training tensors.
+    const Storage storage(Config::TrainingNetwork, Config::Misc, 0);
+    message::Example compressed = storage.DebugPopulateGame(savedGame);
+
+    // Decompress in Python.
+    auto& features = *compressed.mutable_features()->mutable_feature();
+    auto& result = *features["result"].mutable_float_list()->mutable_value();
+    auto& mctsValues = *features["mcts_values"].mutable_float_list()->mutable_value();
+    auto& imagePiecesAuxiliary = *features["image_pieces_auxiliary"].mutable_int64_list()->mutable_value();
+    auto& policyRowLengths = *features["policy_row_lengths"].mutable_int64_list()->mutable_value();
+    auto& policyIndices = *features["policy_indices"].mutable_int64_list()->mutable_value();
+    auto& policyValues = *features["policy_values"].mutable_float_list()->mutable_value();
+
+    std::vector<INetwork::InputPlanes> images(savedGame.moveCount);
+    std::vector<float> values(savedGame.moveCount);
+    std::vector<INetwork::OutputPlanes> policies(savedGame.moveCount);
+    std::vector<INetwork::OutputPlanes> replyPolicies(savedGame.moveCount);
+
+    std::unique_ptr<INetwork> network(chessCoach.CreateNetwork(Config::TrainingNetwork));
+    network->DebugDecompress(savedGame.moveCount, policyIndices.size(), result.mutable_data(), imagePiecesAuxiliary.mutable_data(),
+        mctsValues.mutable_data(), policyRowLengths.mutable_data(), policyIndices.mutable_data(), policyValues.mutable_data(), images.data(),
+        values.data(), policies.data(), replyPolicies.data());
+
+    // Generate full training tensors to compare.
+    Game scratchGame;
+    for (int i = 0; i < moves.size(); i++)
+    {
+        INetwork::InputPlanes image;
+        float value;
+        INetwork::OutputPlanes policy{}; // "GeneratePolicy" requires zeroed planes.
+        INetwork::OutputPlanes replyPolicy{}; // "GeneratePolicy" requires zeroed planes.
+
+        scratchGame.GenerateImage(image);
+
+        value = Game::FlipValue(scratchGame.ToPlay(), savedGame.result);
+
+        scratchGame.GeneratePolicy(savedGame.childVisits[i], policy);
+
+        const int replyIndex = (i + 1);
+        if (replyIndex < moves.size())
+        {
+            Game reply = scratchGame;
+            reply.ApplyMove(moves[i]);
+            reply.GeneratePolicy(savedGame.childVisits[replyIndex], replyPolicy);
+        }
+        else
+        {
+            float* data = reinterpret_cast<float*>(replyPolicy.data());
+            std::fill(data, data + INetwork::OutputPlanesFloatCount, 0.f);
+        }
+
+        // Compare compressed to uncompressed.
+        EXPECT_EQ(image, images[i]);
+        EXPECT_EQ(value, values[i]);
+        EXPECT_EQ(policy, policies[i]);
+        EXPECT_EQ(replyPolicy, replyPolicies[i]);
+
+        // Sanity-check.
+        image[5] += 7;
+        value += 0.0000005f;
+        policy[5][3][2] += 0.00000025f;
+        replyPolicy[7][5][3] += 0.00000075f;
+        EXPECT_NE(image, images[i]);
+        EXPECT_NE(value, values[i]);
+        EXPECT_NE(policy, policies[i]);
+        EXPECT_NE(replyPolicy, replyPolicies[i]);
+
+        scratchGame.ApplyMove(moves[i]);
+    }
+
+    // More sanity-checks.
+    EXPECT_NE(mctsValues[0], mctsValues[1]);
+    static_assert(INetwork::InputPreviousPositionCount == 7);
+    EXPECT_EQ(images[6][0], 0);
+    EXPECT_NE(images[7][0], 0);
+    EXPECT_EQ(policies[1], replyPolicies[0]);
 }

@@ -80,17 +80,14 @@ class DatasetBuilder:
     reply_policies = tf.pad(reply_policies, [[0, 1], [0, 0], [0, 0], [0, 0]])
     return reply_policies
 
-  def parse_game(self, serialized, options):
-    # Parse raw features from the tf.train.Example representing the game.
-    example = tf.io.parse_single_example(serialized, self.feature_map)
-    result = example["result"]
-    mcts_values = example["mcts_values"]
-    image_pieces_auxiliary = example["image_pieces_auxiliary"]
+  def decompress(self, result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
+    # Slice out piece and auxiliary planes.
     image_pieces = image_pieces_auxiliary[:, :self.input_piece_planes_per_position]
     image_auxiliary = image_pieces_auxiliary[:, self.input_piece_planes_per_position:]
-    policy_row_lengths = tf.cast(example["policy_row_lengths"], tf.int32)
-    policy_indices = tf.cast(example["policy_indices"], tf.int32)
-    policy_values = example["policy_values"]
+
+    # Cast down from protobuf 64-bit.
+    policy_row_lengths = tf.cast(policy_row_lengths, tf.int32)
+    policy_indices = tf.cast(policy_indices, tf.int32)
 
     # Policy indices and values are ragged (different move possibilities per position), reconstruct.
     policy_indices = tf.RaggedTensor.from_row_lengths(policy_indices, policy_row_lengths)
@@ -103,6 +100,21 @@ class DatasetBuilder:
     policies = self.decompress_policies(policy_indices, policy_values)
     reply_policies = self.decompress_reply_policies(policies)
 
+    return (images, values, policies, reply_policies)
+
+  def parse_game(self, serialized, options):
+    # Parse raw features from the tf.train.Example representing the game.
+    example = tf.io.parse_single_example(serialized, self.feature_map)
+    result = example["result"]
+    mcts_values = example["mcts_values"]
+    image_pieces_auxiliary = example["image_pieces_auxiliary"]
+    policy_row_lengths = example["policy_row_lengths"]
+    policy_indices = example["policy_indices"]
+    policy_values = example["policy_values"]
+
+    # Break apart and stitch together tensors, and decompress using position history.
+    images, values, policies, reply_policies = self.decompress(
+      result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values)
     dataset = tf.data.Dataset.from_tensor_slices((images, (values, mcts_values, policies, reply_policies)))
 
     # Throw away a proportion of *positions* to avoid overly correlated/periodic data. This is a time/space trade-off.

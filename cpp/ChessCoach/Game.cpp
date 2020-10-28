@@ -322,6 +322,7 @@ float& Game::PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const
     return policyInOut[plane][rank_of(from)][file_of(from)];
 }
 
+// Callers must zero "policyOut" before calling: only some values are set.
 void Game::GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::OutputPlanes& policyOut) const
 {
     for (auto pair : childVisits)
@@ -330,6 +331,7 @@ void Game::GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::Ou
     }
 }
 
+// Callers must zero "policyValuesOut" before calling: only some values are set.
 void Game::GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const
 {
     int i = 0;

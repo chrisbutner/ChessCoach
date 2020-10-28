@@ -57,6 +57,7 @@ PythonNetwork::PythonNetwork()
     _saveNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_network_teacher");
     _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
     _saveFileFunction = LoadFunction(module, "save_file");
+    _debugDecompressFunction = LoadFunction(module, "debug_decompress");
 
     Py_DECREF(module);
     Py_DECREF(pythonPath);
@@ -66,6 +67,7 @@ PythonNetwork::PythonNetwork()
 
 PythonNetwork::~PythonNetwork()
 {
+    Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_saveFileFunction);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Teacher]);
@@ -302,6 +304,102 @@ void PythonNetwork::SaveFile(const std::string& relativePath, const std::string&
     Py_DECREF(result);
     Py_DECREF(pythonData);
     Py_DECREF(pythonRelativePath);
+}
+
+void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
+    float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
+    float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut)
+{
+    PythonContext context;
+
+    // Compressed probabilities are already in Python/TensorFlow [-1, 1] range (see Storage::PopulateGame).
+
+    // Wrap compressed data in numpy.
+    PyObject* pythonResult = PyArray_SimpleNewFromData(0, 0, NPY_FLOAT32, result);
+    PyAssert(pythonResult);
+
+    npy_intp imagePiecesAuxiliaryDims[2]{ positionCount, InputPiecePlanesPerPosition + InputAuxiliaryPlaneCount };
+    PyObject* pythonImagePiecesAuxiliary = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(imagePiecesAuxiliaryDims), imagePiecesAuxiliaryDims, NPY_INT64, imagePiecesAuxiliary);
+    PyAssert(pythonImagePiecesAuxiliary);
+
+    npy_intp perPositionDims[1]{ positionCount };
+    PyObject* pythonMctsValues = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(perPositionDims), perPositionDims, NPY_FLOAT32, mctsValues);
+    PyAssert(pythonMctsValues);
+
+    PyObject* pythonPolicyRowLengths = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(perPositionDims), perPositionDims, NPY_INT64, policyRowLengths);
+    PyAssert(pythonPolicyRowLengths);
+
+    npy_intp policyDims[1]{ policySize };
+    PyObject* pythonPolicyIndices = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(policyDims), policyDims, NPY_INT64, policyIndices);
+    PyAssert(pythonPolicyIndices);
+
+    PyObject* pythonPolicyValues = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policyValues);
+    PyAssert(pythonPolicyValues);
+
+    // Make the call.
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_debugDecompressFunction, pythonResult, pythonImagePiecesAuxiliary,
+        pythonMctsValues, pythonPolicyRowLengths, pythonPolicyIndices, pythonPolicyValues, nullptr);
+    PyAssert(tupleResult);
+    PyAssert(PyTuple_Check(tupleResult));
+
+    // Extract the images.
+    PyObject* pythonImages = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonImages);
+    PyAssert(PyArray_Check(pythonImages));
+
+    PyArrayObject* pythonImagesArray = reinterpret_cast<PyArrayObject*>(pythonImages);
+    PackedPlane* pythonImagesPtr = reinterpret_cast<PackedPlane*>(PyArray_DATA(pythonImagesArray));
+
+    const int imageCount = (positionCount * InputPlaneCount);
+    std::copy(pythonImagesPtr, pythonImagesPtr + imageCount, reinterpret_cast<PackedPlane*>(imagesOut));
+
+    // Extract the values.
+    PyObject* pythonValues = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonValues);
+    PyAssert(PyArray_Check(pythonValues));
+
+    PyArrayObject* pythonValuesArray = reinterpret_cast<PyArrayObject*>(pythonValues);
+    float* pythonValuesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonValuesArray));
+
+    const int valueCount = positionCount;
+    std::copy(pythonValuesPtr, pythonValuesPtr + valueCount, valuesOut);
+
+    // Network deals with tanh outputs/targets in (-1, 1)/[-1, 1]. MCTS deals with probabilities in [0, 1].
+    MapProbabilities11To01(valueCount, valuesOut);
+
+    // Extract the policies.
+    PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 2); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonPolicies);
+    PyAssert(PyArray_Check(pythonPolicies));
+
+    PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
+    PlanesPointerFlat pythonPoliciesPtr = reinterpret_cast<PlanesPointerFlat>(PyArray_DATA(pythonPoliciesArray));
+
+    const int policyCount = (positionCount * OutputPlanesFloatCount);
+    std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<PlanesPointerFlat>(policiesOut));
+
+    // Extract the reply policies.
+    PyObject* pythonReplyPolicies = PyTuple_GetItem(tupleResult, 3); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonReplyPolicies);
+    PyAssert(PyArray_Check(pythonReplyPolicies));
+
+    PyArrayObject* pythonReplyPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonReplyPolicies);
+    PlanesPointerFlat pythonReplyPoliciesPtr = reinterpret_cast<PlanesPointerFlat>(PyArray_DATA(pythonReplyPoliciesArray));
+
+    std::copy(pythonReplyPoliciesPtr, pythonReplyPoliciesPtr + policyCount, reinterpret_cast<PlanesPointerFlat>(replyPoliciesOut));
+
+    Py_DECREF(tupleResult);
+    Py_DECREF(pythonPolicyValues);
+    Py_DECREF(pythonPolicyIndices);
+    Py_DECREF(pythonPolicyRowLengths);
+    Py_DECREF(pythonMctsValues);
+    Py_DECREF(pythonImagePiecesAuxiliary);
+    Py_DECREF(pythonResult);
 }
 
 PyObject* PythonNetwork::LoadFunction(PyObject* module, const char* name)

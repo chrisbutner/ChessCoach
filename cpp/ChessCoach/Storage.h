@@ -36,6 +36,8 @@ public:
     void SaveCommentary(const std::filesystem::path& path, const std::vector<SavedGame>& games,
         std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary) const;
     std::string GenerateSimpleChunkFilename(int chunkNumber) const;
+
+    message::Example DebugPopulateGame(const SavedGame& game) const;
         
 private:
 

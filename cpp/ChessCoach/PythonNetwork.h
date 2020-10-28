@@ -51,6 +51,9 @@ public:
     virtual void LoadNetwork(const std::string& networkName, int& stepCountOut, int& trainingChunkCountOut);
     virtual void SaveNetwork(NetworkType networkType, int checkpoint);
     virtual void SaveFile(const std::string& relativePath, const std::string& data);
+    virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
+        float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
+        float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut);
 
 private:
 
@@ -66,6 +69,7 @@ private:
     PyObject* _loadNetworkFunction;
     PyObject* _saveNetworkFunction[NetworkType_Count];
     PyObject* _saveFileFunction;
+    PyObject* _debugDecompressFunction;
 };
 
 #endif // _PYTHONNETWORK_H_
