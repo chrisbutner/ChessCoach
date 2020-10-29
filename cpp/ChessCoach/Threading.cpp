@@ -70,3 +70,8 @@ bool WorkCoordinator::CheckWorkersReady()
     // and haven't started yet.
     return !CheckWorkItemsExist() && (_workerReadyCount >= _workerCount);
 }
+
+bool& WorkCoordinator::GenerateUniformPredictions()
+{
+    return _generateUniformPredictions;
+}

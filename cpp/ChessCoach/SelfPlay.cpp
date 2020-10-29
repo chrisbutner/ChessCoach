@@ -741,6 +741,13 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
         // Wait until games are required.
         workCoordinator.WaitForWorkItems();
 
+        // Generate uniform predictions for the first network (rather than use random weights).
+        const bool uniform = workCoordinator.GenerateUniformPredictions();
+        if (uniform)
+        {
+            std::cout << "Generating uniform network predictions until trained" << std::endl;
+        }
+
         // Warm up the GIL and predictions, and reclaim training memory.
         WarmUpPredictions(network, networkType, 1);
 
@@ -768,7 +775,14 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
             }
 
             // GPU work
-            network->PredictBatch(networkType, _networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+            if (uniform)
+            {
+                PredictBatchUniform(_networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+            }
+            else
+            {
+                network->PredictBatch(networkType, _networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+            }
         }
 
         // Clean up nodes.
@@ -1086,6 +1100,15 @@ void SelfPlayWorker::SaveToStorageAndLog(INetwork* network, int index)
     const float mctsTime = (gameTime / ply);
     std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
     //PredictionCache::Instance.PrintDebugInfo();
+}
+
+void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies)
+{
+    std::fill(values, values + batchSize, CHESSCOACH_VALUE_DRAW);
+
+    const int policyCount = (batchSize * INetwork::OutputPlanesFloatCount);
+    INetwork::PlanesPointerFlat policiesFlat = reinterpret_cast<INetwork::PlanesPointerFlat>(policies);
+    std::fill(policiesFlat, policiesFlat + policyCount, 0.f);
 }
 
 Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,

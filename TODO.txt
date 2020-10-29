@@ -1,7 +1,4 @@
 Self-play
-- *** CPU/mcts times going up over time, again, important to check for node/stateinfo leaks ***
-	- need to be able to let TPU machines run
-- move uniform to pre-PythonNetwork C++
 - switch to multiple MCTS threads per python thread (2:1 should be fine if prediction cache on)
 
 Commentary
@@ -33,6 +30,7 @@ AFTER CHECK-IN, FIND A HOME LATER
 Distributed self-play/training
 - set up some basic infrastructure, preemptibles, startup, roles, etc.
 	- don't lose 1999 games when preemptible goes down
+	- make sure we still clear prediction cache on self-play-only workers
 
 Training improvements
 - playout cap randomization (Wu)
@@ -182,6 +180,7 @@ Bugs
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
 - Possible problems resuming if e.g. student missing or strength tests didn't run, etc. - no per-stage completion checks
+- Tiny configs with self-play don't work now with minimum 2000 chunking
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)

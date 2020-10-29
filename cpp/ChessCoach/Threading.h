@@ -71,6 +71,8 @@ public:
     bool CheckWorkItemsExist();
     bool CheckWorkersReady();
 
+    bool& GenerateUniformPredictions();
+
 private:
 
     std::mutex _mutex;
@@ -82,6 +84,9 @@ private:
 
     int _workerCount;
     int _workerReadyCount;
+
+    // Rely on fencing via _mutex.
+    bool _generateUniformPredictions;
 };
 
 #endif // _THREADING_H_

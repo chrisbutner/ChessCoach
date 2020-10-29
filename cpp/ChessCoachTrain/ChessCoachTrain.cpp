@@ -16,7 +16,7 @@ public:
 
 private:
 
-    void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator);
+    void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator, int networkNumber);
     void StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, const NetworkConfig& config, Storage& storage,
         SelfPlayWorker& selfPlayWorker, INetwork* network, int networkCount, int n, int step, int checkpoint);
     void StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint);
@@ -90,7 +90,7 @@ void ChessCoachTrain::TrainChessCoach()
                 // Calculate the replay buffer window for position sampling (network training)
                 // and play enough games to satisfy it.
                 const Window trainingWindow = CalculateWindow(config, stage, networkCount, n);
-                StagePlay(stage, storage, trainingWindow, workCoordinator);
+                StagePlay(stage, storage, trainingWindow, workCoordinator, n);
                 break;
             }
             case StageType_Train:
@@ -119,7 +119,8 @@ void ChessCoachTrain::TrainChessCoach()
     }
 }
 
-void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator)
+void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow,
+    WorkCoordinator& workCoordinator, int networkNumber)
 {
     // Log the stage info in a consistent format.
     std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << trainingWindow.TrainingGameMin << " - "
@@ -133,6 +134,9 @@ void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage
     {
         return;
     }
+
+    // Generate uniform predictions for the first network (rather than use random weights).
+    workCoordinator.GenerateUniformPredictions() = (networkNumber == 1);
 
     // Play the games.
     workCoordinator.ResetWorkItemsRemaining(gamesToPlay);

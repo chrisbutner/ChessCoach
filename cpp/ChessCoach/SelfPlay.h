@@ -315,6 +315,7 @@ public:
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(INetwork* network, int index);
+    void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
     Node* RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
         std::vector<Node*>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
