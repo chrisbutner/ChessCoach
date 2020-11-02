@@ -108,6 +108,14 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, float* prior
     {
         _entries[oldestIndex].policyPriors[m] = INetwork::QuantizeProbability(priors[m]);
     }
+
+    // Place a "guard" probability of 1.0 immediately after the N legal moves' probabilities
+    // so that "TryGet" can more often detect incorrect probability sums (rather than potentially
+    // seeing only trailing zeros and still summing to 1.0).
+    if (moveCount < _entries[oldestIndex].policyPriors.size())
+    {
+        _entries[oldestIndex].policyPriors[moveCount] = INetwork::QuantizeProbability(1.f);
+    }
 }
 
 PredictionCache::PredictionCache()
