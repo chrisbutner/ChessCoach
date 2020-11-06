@@ -160,7 +160,7 @@ class ModelBuilder:
     return tf.keras.Model(input, [value, mcts_value, policy, reply_policy, commentary_encoder])
 
   def build_student(self, config):
-    return self.build(config, residual_count=8, filter_count=64, dense_count=128)
+    return self.build(config, residual_count=8, filter_count=128, dense_count=128)
 
   def subset_train(self, model):
     return tf.keras.Model(model.input, model.outputs[:4])

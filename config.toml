@@ -4,12 +4,12 @@
 
 [network]
 
-training_network_name = "chesscoach6"
-uci_network_name = "chesscoach6"
+training_network_name = "chesscoach1"
+uci_network_name = "chesscoach1"
 
 [[networks]]
 
-    name = "chesscoach6"
+    name = "chesscoach1"
     
     [networks.training]
 
@@ -209,6 +209,21 @@ uci_network_name = "chesscoach6"
     steps = [0, 40_000, 80_000, 120_000]
     rates = [2e-2, 2e-3, 2e-4, 2e-5]
 
+[[networks]]
+
+    name = "benchmark1"
+
+    [networks.training]
+
+    stages = [
+        # Self-play
+        { stage = "play", window_size_start = 1_000_000, window_size_finish = 1_000_000, num_games = 1_000_000 },
+    ]
+
+    games_path_training = "Games/Benchmark"
+
+    # NOTE: Still need to (a) turn off prediction cache if network untrained, (b) turn off uniform predictions if steps <= 0
+
 ###############################################################################
 #     Default training and self-play configuration. Networks can override.    #
 ###############################################################################
@@ -251,7 +266,7 @@ rates = [2e-4, 2e-5, 2e-6, 2e-7]
 [self_play]
 
 num_workers = 4
-prediction_batch_size = 256
+prediction_batch_size = 512
 
 num_sampling_moves = 30
 max_moves = 512

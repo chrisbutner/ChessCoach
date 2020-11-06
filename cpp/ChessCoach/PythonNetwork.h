@@ -2,7 +2,6 @@
 #define _PYTHONNETWORK_H_
 
 #include <vector>
-#include <deque>
 
 #include "Network.h"
 #include "Threading.h"
