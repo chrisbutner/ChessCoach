@@ -63,7 +63,7 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
             }
 
             // Check for type-1 errors and splices and return false. It's important not to
-            // fresh the age in these cases so that splices can be overwritten with good data.
+            // freshen the age in these cases so that splices can be overwritten with good data.
             static_assert(INetwork::DequantizeProbability(255) == 1.f);
             if ((priorSum < 252) || (priorSum > 258))
             {

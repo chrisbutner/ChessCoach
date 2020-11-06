@@ -4,8 +4,8 @@ project('ChessCoach', 'cpp', version: '0.9.0', license: 'GPL3',
   ])
 
 if get_option('buildtype') == 'release'
-    compiler = meson.get_compiler('cpp')
-    add_project_arguments(compiler.get_supported_arguments(['-march=native', '-O2', '-DNDEBUG', '-flto']), language: 'cpp')
+  compiler = meson.get_compiler('cpp')
+  add_project_arguments(compiler.get_supported_arguments(['-march=native', '-O2', '-DNDEBUG', '-flto']), language: 'cpp')
 endif
 
 add_project_arguments('-lstdc++fs', '-msse4.2', language: 'cpp')
@@ -28,8 +28,6 @@ gtest_dependency = dependency('gtest', main: true)
 thread_dependency = dependency('threads')
 protobuf_dependency = dependency('protobuf', version: '3.13.0', static: true)
 zlib_dependency = dependency('zlib', version: '>=1.2.8')
-
-protoc = find_program('protoc')
 
 ###############################################################################
 # Stockfish
@@ -130,16 +128,12 @@ chesscoach = static_library(
   )
 
 ###############################################################################
-# chesscoachprotobuf (generated code in "protobuf" dir)
+# chesscoachprotobuf (generated code in "protobuf" dir, using protoc.cmd/protoc.sh)
 ###############################################################################
 
-gen = generator(protoc,
-  output: ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'],
-  arguments: ['--proto_path=@CURRENT_SOURCE_DIR@/cpp/protobuf', '--cpp_out=@BUILD_DIR@', '@INPUT@'])
-
-generated = gen.process('cpp/protobuf/ChessCoach.proto')
-
-chesscoachprotobuf_sources = generated
+chesscoachprotobuf_sources = [
+  'cpp/protobuf/ChessCoach.pb.cc',
+]
 
 chesscoachprotobuf = static_library(
   'chesscoachprotobuf',
