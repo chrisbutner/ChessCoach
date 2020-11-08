@@ -56,14 +56,14 @@ std::vector<StageConfig> ParseStages(const TomlValue& config)
 struct DefaultPolicy
 {
     template <typename T>
-    T Find(const TomlValue& config, const toml::key& key, const T& defaultValue) const
+    T Find(const TomlValue& config, const toml::key& key, const T& /*defaultValue*/) const
     {
         return toml::find<T>(config, key);
     }
 };
 
 template <>
-std::vector<StageConfig> DefaultPolicy::Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& defaultValue) const
+std::vector<StageConfig> DefaultPolicy::Find(const TomlValue& config, const toml::key& key, const std::vector<StageConfig>& /*defaultValue*/) const
 {
     return ParseStages(config.at(key));
 }

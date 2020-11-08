@@ -84,7 +84,7 @@ private:
     std::unique_ptr<std::thread> _selfPlayThread;
 };
 
-int main(int argc, char* argv[])
+int main()
 {
     ChessCoachUci chessCoachUci;
 
@@ -177,7 +177,7 @@ bool ChessCoachUci::HandleCommand(std::stringstream& commands, std::string comma
     return false;
 }
 
-void ChessCoachUci::HandleUci(std::stringstream& commands)
+void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
 {
     Reply("id name ChessCoach",
         "id author C. Butner",
@@ -204,22 +204,22 @@ void ChessCoachUci::HandleDebug(std::stringstream& commands)
     _selfPlayWorker->SignalDebug(_debug);
 }
 
-void ChessCoachUci::HandleIsReady(std::stringstream& commands)
+void ChessCoachUci::HandleIsReady(std::stringstream& /*commands*/)
 {
     InitializeSelfPlayWorker();
     _selfPlayWorker->WaitUntilReady();
     Reply("readyok");
 }
 
-void ChessCoachUci::HandleSetOption(std::stringstream& commands)
+void ChessCoachUci::HandleSetOption(std::stringstream& /*commands*/)
 {
 }
 
-void ChessCoachUci::HandleRegister(std::stringstream& commands)
+void ChessCoachUci::HandleRegister(std::stringstream& /*commands*/)
 {
 }
 
-void ChessCoachUci::HandleUciNewGame(std::stringstream& commands)
+void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
 {
     InitializeSelfPlayWorker();
 }
@@ -316,18 +316,18 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
     _selfPlayWorker->SignalSearchGo(timeControl);
 }
 
-void ChessCoachUci::HandleStop(std::stringstream& commands)
+void ChessCoachUci::HandleStop(std::stringstream& /*commands*/)
 {
     InitializeSelfPlayWorker();
     _selfPlayWorker->SignalSearchStop();
 }
 
-void ChessCoachUci::HandlePonderHit(std::stringstream& commands)
+void ChessCoachUci::HandlePonderHit(std::stringstream& /*commands*/)
 {
     // TODO: Do the necessary housekeeping here
 }
 
-void ChessCoachUci::HandleQuit(std::stringstream& commands)
+void ChessCoachUci::HandleQuit(std::stringstream& /*commands*/)
 {
     if (_selfPlayWorker)
     {
@@ -337,7 +337,7 @@ void ChessCoachUci::HandleQuit(std::stringstream& commands)
     _quit = true;
 }
 
-void ChessCoachUci::HandleComment(std::stringstream& commands)
+void ChessCoachUci::HandleComment(std::stringstream& /*commands*/)
 {
     InitializeSelfPlayWorker();
     _selfPlayWorker->SignalComment();

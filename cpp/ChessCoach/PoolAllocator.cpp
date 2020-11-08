@@ -52,15 +52,30 @@ void LargePageAllocator::Initialize()
 
     BOOL opened = ::OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
     assert(opened);
+    if (!opened)
+    {
+        throw std::bad_alloc();
+    }
 
-    BOOL gotLuid = ::LookupPrivilegeValue(nullptr, L"SeLockMemoryPrivilege", &tokenPrivileges.Privileges[0].Luid);
+    BOOL gotLuid = ::LookupPrivilegeValueW(nullptr, L"SeLockMemoryPrivilege", &tokenPrivileges.Privileges[0].Luid);
     assert(gotLuid);
+    if (!gotLuid)
+    {
+        throw std::bad_alloc();
+    }
 
     tokenPrivileges.PrivilegeCount = 1;
     tokenPrivileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
 
     BOOL adjusted = ::AdjustTokenPrivileges(hToken, FALSE, &tokenPrivileges, 0, nullptr, 0);
     assert(adjusted);
+    if (!adjusted)
+    {
+        throw std::bad_alloc();
+    }
+
+    // Close using RAII if reusing as library code.
+    ::CloseHandle(hToken);
 
     LargePageMinimum = ::GetLargePageMinimum();
 #else

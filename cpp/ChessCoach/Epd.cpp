@@ -122,7 +122,7 @@ std::vector<std::string> Epd::ReadMoves(std::istream& tokenizer, std::string& to
     return moves;
 }
 
-void Epd::Expect(std::istream& tokenizer, const unsigned char expected)
+void Epd::Expect(std::istream& tokenizer, [[maybe_unused]] const unsigned char expected)
 {
     unsigned char c;
     tokenizer >> c;
@@ -142,13 +142,13 @@ bool Epd::Find(std::istream& tokenizer, std::string& token, const std::string& e
     return false;
 }
 
-std::string Epd::StripLeft(const std::string& string, char expected)
+std::string Epd::StripLeft(const std::string& string, [[maybe_unused]] char expected)
 {
     assert(!string.empty() && (string[0] == expected));
     return string.substr(1, string.size() - 1);
 }
 
-std::string Epd::StripRight(const std::string& string, char expected)
+std::string Epd::StripRight(const std::string& string, [[maybe_unused]] char expected)
 {
     assert(!string.empty() && (string.back() == expected));
     return string.substr(0, string.size() - 1);

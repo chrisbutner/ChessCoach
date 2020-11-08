@@ -11,6 +11,9 @@ endif
 add_project_arguments('-lstdc++fs', '-msse4.2', language: 'cpp')
 add_project_link_arguments('-lstdc++fs', language: 'cpp')
 
+# Rely on MSVC's less pedantic signed/unsigned checking, e.g. around loop indices.
+add_project_arguments('-Werror', '-Wall', '-Wextra', '-Wpedantic', '-Wno-unknown-pragmas', '-Wno-sign-compare', language: 'cpp')
+
 bindir = get_option('bindir')
 datadir = get_option('datadir')
 

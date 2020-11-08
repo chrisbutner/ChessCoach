@@ -55,8 +55,8 @@ private:
     static Bitboard Attacks(const Position& position, PieceType pieceType, Square targetSquare);
     static Bitboard Legal(const Position& position, Bitboard fromPieces, Square targetSquare);
 
-    static inline char FileSymbol(File file) { return 'a' + file; }
-    static inline char RankSymbol(Rank rank) { return '1' + rank; }
+    static inline char FileSymbol(File file) { return static_cast<char>('a' + file); }
+    static inline char RankSymbol(Rank rank) { return static_cast<char>('1' + rank); }
 };
 
 #endif // _PGN_H_

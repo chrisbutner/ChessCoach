@@ -223,7 +223,7 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
                         return false;
                     }
                     ApplyMove(positionStates, position, move);
-                    moves.push_back(move);
+                    moves.push_back(static_cast<uint16_t>(move));
                 }
             }
             else if (moveNumber == 1)
@@ -298,7 +298,7 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
                 return false;
             }
             ApplyMove(positionStates, position, move);
-            moves.push_back(move);
+            moves.push_back(static_cast<uint16_t>(move));
         }
         else if (c == '$')
         {
@@ -807,6 +807,7 @@ void Pgn::UndoMoveInVariation(Position& position, Move move)
     }
 }
 
+#pragma warning(disable:4706) // Intentionally assigning, not comparing
 Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceType fromPieceType)
 {
     const size_t capture = san.find('x', 1);
@@ -903,7 +904,9 @@ Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceT
 
     return make_move(lsb(fromPieces), targetSquare);
 }
+#pragma warning(default:4706) // Intentionally assigning, not comparing
 
+#pragma warning(disable:4706) // Intentionally assigning, not comparing
 Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
 {
     const Color toPlay = position.side_to_move();
@@ -957,6 +960,7 @@ Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
 
     return make_move(fromSquare, targetSquare);
 }
+#pragma warning(default:4706) // Intentionally assigning, not comparing
 
 Square Pgn::ParseSquare(const std::string& text, int offset)
 {

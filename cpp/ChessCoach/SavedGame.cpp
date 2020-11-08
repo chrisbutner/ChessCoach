@@ -15,7 +15,7 @@ SavedGame::SavedGame(float setResult, const std::vector<Move>& setMoves, const s
 
     for (int i = 0; i < setMoves.size(); i++)
     {
-        moves[i] = setMoves[i];
+        moves[i] = static_cast<uint16_t>(setMoves[i]);
     }
 
     // No point shrinking keys from 32 to 16 bits because they alternate with floats. Don't bother zipping/unzipping.

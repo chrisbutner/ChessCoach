@@ -17,16 +17,16 @@ public:
 private:
 
     void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator, int networkNumber);
-    void StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, const NetworkConfig& config, Storage& storage,
-        SelfPlayWorker& selfPlayWorker, INetwork* network, int networkCount, int n, int step, int checkpoint);
+    void StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, SelfPlayWorker& selfPlayWorker, INetwork* network,
+        int networkCount, int n, int step, int checkpoint);
     void StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint);
     void StageSave(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
     void StageStrengthTest(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
 
-    Window CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int networkCount, int network);
+    Window CalculateWindow(const StageConfig& stageConfig, int networkCount, int network);
 };
 
-int main(int argc, char* argv[])
+int main()
 {
     ChessCoachTrain chessCoachTrain;
 
@@ -89,13 +89,13 @@ void ChessCoachTrain::TrainChessCoach()
             {
                 // Calculate the replay buffer window for position sampling (network training)
                 // and play enough games to satisfy it.
-                const Window trainingWindow = CalculateWindow(config, stage, networkCount, n);
+                const Window trainingWindow = CalculateWindow(stage, networkCount, n);
                 StagePlay(stage, storage, trainingWindow, workCoordinator, n);
                 break;
             }
             case StageType_Train:
             {
-                StageTrain(config.Training.Stages, i, config, storage, *selfPlayWorkers.front(), network.get(),
+                StageTrain(config.Training.Stages, i, *selfPlayWorkers.front(), network.get(),
                     networkCount, n, step, checkpoint);
                 break;
             }
@@ -112,6 +112,11 @@ void ChessCoachTrain::TrainChessCoach()
             case StageType_StrengthTest:
             {
                 StageStrengthTest(stage, *selfPlayWorkers.front(), network.get(), checkpoint);
+                break;
+            }
+            case StageType_Count:
+            {
+                // Catch unreferenced enums in GCC.
                 break;
             }
             }
@@ -147,7 +152,7 @@ void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage
     PredictionCache::Instance.Clear();
 }
 
-void ChessCoachTrain::StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, const NetworkConfig& config, Storage& storage,
+void ChessCoachTrain::StageTrain(const std::vector<StageConfig>& stages, int& stageIndex,
     SelfPlayWorker& selfPlayWorker, INetwork* network, int networkCount, int n, int step, int checkpoint)
 {
     const int first = stageIndex;
@@ -164,7 +169,7 @@ void ChessCoachTrain::StageTrain(const std::vector<StageConfig>& stages, int& st
         gameTypes.push_back(stage.Type);
 
         // Calculate the replay buffer window for position sampling (network training).
-        const Window& trainingWindow = trainingWindows.emplace_back(CalculateWindow(config, stage, networkCount, n));
+        const Window& trainingWindow = trainingWindows.emplace_back(CalculateWindow(stage, networkCount, n));
 
         // Log the stage info in a consistent format (just use one line per game type).
         std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "]["
@@ -216,7 +221,7 @@ void ChessCoachTrain::StageStrengthTest(const StageConfig& stage, SelfPlayWorker
     selfPlayWorker.StrengthTestNetwork(network, stage.Target, checkpoint);
 }
 
-Window ChessCoachTrain::CalculateWindow(const NetworkConfig& config, const StageConfig& stageConfig, int networkCount, int network)
+Window ChessCoachTrain::CalculateWindow(const StageConfig& stageConfig, int networkCount, int network)
 {
     // The starting window (subscript 0) mins at zero.
     // The finishing window (subscript 1) maxes at totalGamesCount.

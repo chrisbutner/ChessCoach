@@ -11,7 +11,9 @@
 
 #include <google/protobuf/io/gzip_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
+#pragma warning(disable:4100) // Ignore unused args in generated code
 #include <protobuf/ChessCoach.pb.h>
+#pragma warning(default:4100) // Ignore unused args in generated code
 
 #include <crc32c/include/crc32c/crc32c.h>
 

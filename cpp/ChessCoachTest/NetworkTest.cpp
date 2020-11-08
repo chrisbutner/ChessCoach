@@ -1,6 +1,10 @@
 #include <gtest/gtest.h>
 
+#pragma warning(disable:4100) // Ignore unused args in generated code
+#pragma warning(disable:4127) // Ignore const-per-architecture warning
 #include <protobuf/ChessCoach.pb.h>
+#pragma warning(default:4127) // Ignore const-per-architecture warning
+#pragma warning(default:4100) // Ignore unused args in generated code
 
 #include <ChessCoach/SelfPlay.h>
 #include <ChessCoach/ChessCoach.h>
@@ -311,10 +315,9 @@ TEST(Network, QueenKnightPlanes)
 
         // Check for colliding policy values.
         INetwork::PlanesPointerFlat policyFlat = reinterpret_cast<INetwork::PlanesPointerFlat>(policy.data());
-        float sum = 0.f;
-        for (int i = 0; i < INetwork::OutputPlanesFloatCount; i++)
+        for (int j = 0; j < INetwork::OutputPlanesFloatCount; j++)
         {
-            const float policyValue = policyFlat[i];
+            const float policyValue = policyFlat[j];
             policySums[toPlay] += policyValue;
             EXPECT_GE(policyValue, 0.f);
             EXPECT_LE(policyValue, 1.f);

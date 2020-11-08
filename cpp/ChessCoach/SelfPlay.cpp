@@ -147,7 +147,7 @@ Node::Node(Move setMove, float setPrior)
     assert(!std::isnan(setPrior));
 }
 
-void* Node::operator new(size_t count)
+void* Node::operator new(size_t /*count*/)
 {
     return Allocator.Allocate();
 }
@@ -203,11 +203,11 @@ float Node::Value() const
     return (valueSum / visitCount);
 }
 
-Node* Node::Child(Move move)
+Node* Node::Child(Move match)
 {
     for (Node& child : *this)
     {
-        if (child.move == move)
+        if (child.move == match)
         {
             return &child;
         }
@@ -492,7 +492,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         // see enough unique positions/paths to fill the cache no matter what, and it saves on time
         // to evict less. However, in search (TryHard) it's better to keep everything recent.
         cacheStore = nullptr;
-        float cachedValue;
+        float cachedValue = std::numeric_limits<float>::quiet_NaN();
         _imageKey = GenerateImageKey();
         bool hitCached = false;
         if ((workingMoveCount <= PredictionCacheEntry::MaxMoveCount) &&
@@ -848,7 +848,7 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
         }
         else
         {
-            Node* newRoot = ((i == (moves.size() - 1)) ? new Node(MOVE_NONE, 0.f) : nullptr);
+            newRoot = ((i == (moves.size() - 1)) ? new Node(MOVE_NONE, 0.f) : nullptr);
             game.PruneAll();
             game.ApplyMoveWithRoot(move, newRoot);
         }
@@ -1102,7 +1102,7 @@ void SelfPlayWorker::SaveToStorageAndLog(INetwork* network, int index)
     //PredictionCache::Instance.PrintDebugInfo();
 }
 
-void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies)
+void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* /*images*/, float* values, INetwork::OutputPlanes* policies)
 {
     std::fill(values, values + batchSize, CHESSCOACH_VALUE_DRAW);
 
