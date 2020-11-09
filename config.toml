@@ -15,17 +15,17 @@ uci_network_name = "chesscoach1"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 6_250, window_size_finish = 500_000, num_games = 1_000_000 },
+        { stage = "play", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
 
-        # Train supervised, self-play and commentary, teacher
-        { stage = "train", target = "teacher", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000, num_games = 2_000_000 },
-        { stage = "train", target = "teacher", type = "training", window_size_start = 6_250, window_size_finish = 500_000, num_games = 1_000_000 },
+        # Train commentary, supervised and self-play, teacher
         { stage = "train_commentary", target = "teacher", type = "supervised" },
+        { stage = "train", target = "teacher", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000, num_games = 2_000_000 },
+        { stage = "train", target = "teacher", type = "training", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
         { stage = "save", target = "teacher" },
 
         # Distill supervised and self-play to student
         { stage = "train", target = "student", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000, num_games = 2_000_000 },
-        { stage = "train", target = "student", type = "training", window_size_start = 6_250, window_size_finish = 500_000, num_games = 1_000_000 },
+        { stage = "train", target = "student", type = "training", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -59,12 +59,12 @@ uci_network_name = "chesscoach1"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 6_250, window_size_finish = 500_000, num_games = 1_000_000 },
+        { stage = "play", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
 
         # Train self-play, teacher then distill
-        { stage = "train", target = "teacher", type = "training", window_size_start = 6_250, window_size_finish = 500_000, num_games = 1_000_000 },
+        { stage = "train", target = "teacher", type = "training", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
         { stage = "save", target = "teacher" },
-        { stage = "train", target = "student", type = "training", window_size_start = 6_250, window_size_finish = 500_000, num_games = 1_000_000 },
+        { stage = "train", target = "student", type = "training", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -86,7 +86,7 @@ uci_network_name = "chesscoach1"
 
     [networks.training.commentary_learning_rate_schedule]
 
-    steps = [0, 40_000, 80_000, 120_000]
+    steps = [0, 60_000, 120_000, 180_000]
     rates = [2e-2, 2e-3, 2e-4, 2e-5]
 
 [[networks]]
@@ -106,10 +106,10 @@ uci_network_name = "chesscoach1"
         # Self-play
         { stage = "play", window_size_start = 50, window_size_finish = 100, num_games = 100 },
 
-        # Train supervised, self-play and commentary, teacher
+        # Train commentary, supervised and self-play, teacher
+        { stage = "train_commentary", target = "teacher", type = "supervised" },
         { stage = "train", target = "teacher", type = "supervised", window_size_start = 100, window_size_finish = 100, num_games = 100 },
         { stage = "train", target = "teacher", type = "training", window_size_start = 50, window_size_finish = 100, num_games = 100 },
-        { stage = "train_commentary", target = "teacher", type = "supervised" },
         { stage = "save", target = "teacher" },
 
         # Distill supervised and self-play to student
@@ -206,7 +206,7 @@ uci_network_name = "chesscoach1"
 
     [networks.training.commentary_learning_rate_schedule]
 
-    steps = [0, 40_000, 80_000, 120_000]
+    steps = [0, 60_000, 120_000, 180_000]
     rates = [2e-2, 2e-3, 2e-4, 2e-5]
 
 [[networks]]
@@ -217,7 +217,7 @@ uci_network_name = "chesscoach1"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 1_000_000, window_size_finish = 1_000_000, num_games = 1_000_000 },
+        { stage = "play", window_size_start = 720_000, window_size_finish = 720_000, num_games = 720_000 },
     ]
 
     games_path_training = "Games/Benchmark"
@@ -233,12 +233,12 @@ uci_network_name = "chesscoach1"
 architecture = "conv2d"
 batch_size = 512
 commentary_batch_size = 256
-steps = 160_000
+steps = 240_000
 warmup_steps = 1000
 pgn_interval = 100
-validation_interval = 100
-checkpoint_interval = 1000
-strength_test_interval = 5000
+validation_interval = 200
+checkpoint_interval = 2000
+strength_test_interval = 10000
 value_loss_weight = 1.0
 mcts_value_loss_weight = 0.15
 policy_loss_weight = 1.0
@@ -255,12 +255,12 @@ stages = []
 
 [training.learning_rate_schedule]
 
-steps = [0, 40_000, 80_000, 120_000]
+steps = [0, 60_000, 120_000, 180_000]
 rates = [2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5]
 
 [training.commentary_learning_rate_schedule]
 
-steps = [0, 40_000, 80_000, 120_000]
+steps = [0, 60_000, 120_000, 180_000]
 rates = [2e-4, 2e-5, 2e-6, 2e-7]
 
 [self_play]

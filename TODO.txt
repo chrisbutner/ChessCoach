@@ -1,36 +1,22 @@
-Self-play
-- switch to multiple MCTS threads per python thread (2:1 should be fine if prediction cache on)
-
-Commentary
-- not converging after restoration, sync back and check
-
-Check in
-- make sure main.py all working on GPU + TPU
-- make sure all exe tools working, debug/release
-
-Apply for cloud resources
-- look up the FAQ again
-
-Validate
-- make sure that a fresh run can match chesscoach6 performance by 15k steps
-
-AFTER CHECK-IN, FIND A HOME LATER
-- print config summary when starting a run
-- move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
-- don't need to copy vectors into SavedGame, see if the struct is still useful at all, maybe just richer callbacks
-- try also batching across examples in dataset.py
-- need to solve pipeline threading issues again, make sure Cuda >= 90% locally
-	- also "experimental_steps_per_execution" for TPU
-- throw away positions before expensive decompression in dataset.py, keep all/more games, keep fewer positions
-- relinquish prediction cache memory while training? increase cycle/shuffle?
-- anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
-- save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
-- overall run may hang or have 2k too few games if any .game files deleted now, think about live adjustment/different approach
+Speed up self-play
+- thread-local device IDs
+- try quantize UCB calc?
 
 Distributed self-play/training
+- need to dynamically wait for self-play games to reach target/ask for more, not just initial static request
+- overall run may hang or have 2k too few games if any .game files deleted now, think about live adjustment/different approach
 - set up some basic infrastructure, preemptibles, startup, roles, etc.
 	- don't lose 1999 games when preemptible goes down
 	- make sure we still clear prediction cache on self-play-only workers
+
+Fresh training run
+- run distributed training with a fresh self-play corpus as a baseline for further experiments
+
+Speed up training, play with tf.function
+	- don't log step 1 to tensorboard (switch to just before, not just-after? in conjunction with multi-step-in-tf-function)
+	- TPU training perf:
+	- https://github.com/tensorflow/tensorflow/issues/20068
+	- https://github.com/tensorflow/tpu/tree/master/models/official/resnet
 
 Training improvements
 - playout cap randomization (Wu)
@@ -41,30 +27,33 @@ Training improvements
 	- lc0/Wu seem to use similar conv filters for policy and value heads?
 	- lc0 was thinking fully connected layer may be needed for policy head when network isn't deep enough to cross board well (may not apply for distillation)
 - try a run with masked policy loss (valid moves only) once there's enough data to compare
-
-Value experiments
+- find some positions where engine misses shallow tactics, play with FPU and criticality
+	- try to quantify and train criticality, feed into FPU (or deeper FPU, multi-move decay)
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
-- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
+	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
+
+Quality
+- print config summary when starting a run
+- switch to even number of history positions for repetitions (what if we only did every 2nd going back)
+	- wait for a solid baseline and measure
 
 Commentary cleanup
 - use model garden transformer now?
 - try wrap main engine loop with @tf.function too?
-- wrap <start>/<end> in graph mode - Transformer article
 - cull attention weight plumbing
-- can pre-sequence-and-index commentary
-- write unit tests for comment preprocessing
 - try time and special-case speed-up prediction for batchsize=1
 
 Text quality
+- try bigger model, get some convergence somehow (get 25% with fixed batch at least, work up from there)
 - basic - does the encoder need an extra dense+relu layer after the tower/reshape?
-- tokenizing - lots of options for chess specifically, around punctuation, top-k, etc.
 - larger model size
 - different model architectures
 	- read about "Performer" architecture
 	- read about PET: https://arxiv.org/pdf/2001.07676.pdf
 	- definitely try universal transformer
 - different tokenizers
-	- definitely try SubwordTextEncoder
+	- need TF.Text for Windows in TF2.4 release so we can sub-word tokenize in graph mode (SubwordTextEncoder doesn't work in graph, deprecated)
+	- lots of options for chess specifically, around punctuation, top-k, etc.
 - build deterministic train/validate split?
 - try encode before + after positions - comment on the move, not the position
 	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
@@ -93,12 +82,13 @@ Training - later
 - like Wu/lc0, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
 - stochastic weight averaging
 
-TPUs - later
-- try make the student a bit deeper - already hugely smaller with 64 vs. 256 filters (benchmark self-play and UCI, GPU and TPU, not much headroom on GTX 1080 though)
-- try C++ API if we still need more games, could do it linux-only
-	(maybe https://github.com/FloopCZ/tensorflow_cc)
-	(Q4? https://github.com/tensorflow/tensorflow/issues/42614)
-	(include file tip https://stackoverflow.com/questions/42898577/list-of-headers-to-use-tensorflow-c-api-using-libtensorflow-cc-so)
+TensorFlow training speed (mostly dataset issues, local/GPU speed regression)
+- move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
+- try also batching across examples in dataset.py
+- need to solve pipeline threading issues again, make sure Cuda >= 90% locally
+	- also "experimental_steps_per_execution" for TPU
+- throw away positions before expensive decompression in dataset.py, keep all/more games, keep fewer positions
+- run full local training to validate
 
 UCI (#2)
 - tune on GPU and TPU (methods below)
@@ -113,17 +103,15 @@ UCI (#2)
 	- if dangerous time left, take mate-in-N rather than trying to find faster
 
 CPU+GPU integration performance:
-- maybe deparallelize SelfPlayWorker arrays
 - try shrink Node memory
 - try vectorize/GPU softmax/UCT calcs
-- break down MCTS timing details just in case anything's off (just use sampling)
+- break down MCTS timing details just in case anything's off (instrumented, already did some sampling measurements/optimization)
 - image key for prediction cache can be incrementally updated if it helps enough
 - do some timeline charting for CPU vs. GPU use
 	- it may make sense to keep shared images/values/policies but have separate CPU worker threads
 	  drop in/pick up there, using a GPU worker like very beginning, and maybe oversubscribe
 	  like double-buffer games? might just be equivalent to doubling threads though. seem to be
 	  limited by Node memory use now. anyway, think about it.
-- buffer fstreams for windows
 - for Nodes can point last sibling at root and unrecurse deletion (sacrificing breadth-at-once)
 
 Code quality
@@ -167,9 +155,6 @@ Publishing
 - write-ups
 - website - game-in-10, one at a time, people can watch, comments shown for each move
 
-Low priority
-- structured binding, check all pairs
-
 Revisit
 - try batch renorm + ghost batch norm
 	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
@@ -181,6 +166,12 @@ Bugs
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
 - Possible problems resuming if e.g. student missing or strength tests didn't run, etc. - no per-stage completion checks
 - Tiny configs with self-play don't work now with minimum 2000 chunking
+
+Low priority
+- relinquish prediction cache memory while training? increase cycle/shuffle?
+- anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
+- save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
+- structured binding, check all pairs
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
