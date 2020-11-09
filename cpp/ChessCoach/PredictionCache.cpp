@@ -50,7 +50,11 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
             //
             // Use the provided "priorsOut" as writable scratch space even if we return false.
             //
-            // Allow for 3 quanta error, ~1%.
+            // Most real probabilities will have canceling bias from quanitzation errors,
+            // but uniform policy will give cases like 1/19 * 19, 1.0 vs. ~0.9686, 255 vs. 247,
+            // and we may get unlucky on certain batches (don't actually need to cache pure uniform).
+            //
+            // Allow for 9 quanta error, ~3.5%.
 
             int priorSum = 0;
             for (int m = 0; m < moveCount; m++)
@@ -64,8 +68,10 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
 
             // Check for type-1 errors and splices and return false. It's important not to
             // freshen the age in these cases so that splices can be overwritten with good data.
-            static_assert(INetwork::DequantizeProbability(255) == 1.f);
-            if ((priorSum < 252) || (priorSum > 258))
+            constexpr int expected = INetwork::QuantizeProbability(1.f);
+            static_assert(INetwork::DequantizeProbability(expected) == 1.f);
+            const int allowance = 9;
+            if ((priorSum < (expected - allowance)) || (priorSum > (expected + allowance)))
             {
                 return false;
             }
@@ -80,7 +86,7 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
     return false;
 }
 
-void PredictionCacheChunk::Put(Key key, float value, int moveCount, float* priors)
+void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float* priors)
 {
     int oldestIndex = 0;
     for (int i = 1; i < EntryCount; i++)

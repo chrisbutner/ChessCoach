@@ -10,12 +10,12 @@ bool TryGetPrediction(Key key)
 {
     PredictionCacheChunk* chunk;
     float value;
-    std::array<float, MAX_MOVES> priors;
+    std::array<float, 4> priors = { 0.1f, 0.2f, 0.3f, 0.4f };
 
-    bool hit = PredictionCache::Instance.TryGetPrediction(key, 0, &chunk, &value, priors.data());
+    bool hit = PredictionCache::Instance.TryGetPrediction(key, static_cast<int>(priors.size()), &chunk, &value, priors.data());
     if (!hit)
     {
-        chunk->Put(key, 0.f, 0, priors.data());
+        chunk->Put(key, 0.33f, static_cast<int>(priors.size()), priors.data());
     }
     return hit;
 }
@@ -132,9 +132,7 @@ TEST(PredictionCache, Quantization)
     std::vector<float> priors1(moveCount);
     for (int i = 0; i < moveCount; i++)
     {
-        priors1[i] = (static_cast<float>(i) / moveCount);
-        EXPECT_LE(0.f, priors1[i]);
-        EXPECT_LE(priors1[i], 1.f);
+        priors1[i] = (1.f / moveCount);
     }
 
     // Put into the cache.

@@ -162,12 +162,15 @@ Revisit
 	- while not full hit rate should be higher? add some new metrics
 
 Bugs
+- Read-AV in game stateinfo cleanup when quitting UCI
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
 - Possible problems resuming if e.g. student missing or strength tests didn't run, etc. - no per-stage completion checks
 - Tiny configs with self-play don't work now with minimum 2000 chunking
+- network.js doesn't listen to CHESSCOACH_SILENT when set in NetworkTest.cpp
 
 Low priority
+- shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
 - relinquish prediction cache memory while training? increase cycle/shuffle?
 - anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
 - save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save

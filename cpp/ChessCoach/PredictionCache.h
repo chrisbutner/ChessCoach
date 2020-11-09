@@ -23,7 +23,7 @@ struct alignas(512) PredictionCacheChunk
 {
     void Clear();
     bool TryGet(Key key, int moveCount, float* valueOut, float* priorsOut);
-    void Put(Key key, float value, int moveCount, float* priors);
+    void Put(Key key, float value, int moveCount, const float* priors);
 
 private:
 
