@@ -339,12 +339,19 @@ class Networks:
 
 # --- Helpers ---
 
+thread_local = threading.local()
+
 def choose_device_index():
+  try:
+    return thread_local.device_index
+  except:
+    pass
   thread_ident = threading.get_ident()
   with device_lock:
     next_index = len(thread_ident_to_index)
     thread_index = thread_ident_to_index.setdefault(thread_ident, next_index)
   device_index = thread_index % len(devices)
+  thread_local.device_index = device_index
   return device_index
 
 def device(device_index):
