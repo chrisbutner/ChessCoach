@@ -22,12 +22,12 @@ public:
 
 };
 
-class CFile
+class PosixFile
 {
 public:
 
-    CFile(const std::filesystem::path& path, bool write);
-    ~CFile();
+    PosixFile(const std::filesystem::path& path, bool write);
+    ~PosixFile();
     int FileDescriptor() const;
 
 private:

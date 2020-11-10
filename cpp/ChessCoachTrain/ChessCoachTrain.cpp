@@ -16,7 +16,7 @@ public:
 
 private:
 
-    void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator, int networkNumber);
+    void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator, INetwork* network, int networkNumber);
     void StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, SelfPlayWorker& selfPlayWorker, INetwork* network,
         int networkCount, int n, int step, int checkpoint);
     void StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint);
@@ -43,10 +43,13 @@ int main()
 void ChessCoachTrain::TrainChessCoach()
 {
     const NetworkConfig& config = Config::TrainingNetwork;
+    std::unique_ptr<INetwork> network(CreateNetwork(config));
+    Storage storage(config, Config::Misc);
+
+    // We need to reach into Python for network info in case it's coming from cloud storage.
     int networkStepCount;
-    int trainingChunkCount;
-    std::unique_ptr<INetwork> network(CreateNetworkWithInfo(config, networkStepCount, trainingChunkCount));
-    Storage storage(config, Config::Misc, trainingChunkCount);
+    int ignore;
+    network->GetNetworkInfo(networkStepCount, ignore);
 
     // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
     storage.InitializeLocalGamesChunks(network.get());
@@ -90,7 +93,7 @@ void ChessCoachTrain::TrainChessCoach()
                 // Calculate the replay buffer window for position sampling (network training)
                 // and play enough games to satisfy it.
                 const Window trainingWindow = CalculateWindow(stage, networkCount, n);
-                StagePlay(stage, storage, trainingWindow, workCoordinator, n);
+                StagePlay(stage, storage, trainingWindow, workCoordinator, network.get(), n);
                 break;
             }
             case StageType_Train:
@@ -125,27 +128,50 @@ void ChessCoachTrain::TrainChessCoach()
 }
 
 void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow,
-    WorkCoordinator& workCoordinator, int networkNumber)
+    WorkCoordinator& workCoordinator, INetwork* network, int networkNumber)
 {
     // Log the stage info in a consistent format.
     std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << trainingWindow.TrainingGameMin << " - "
         << trainingWindow.TrainingGameMax << "]" << std::endl;
 
     // Need to play enough games to reach the training window maximum (skip if already enough).
-    const int gamesToPlay = storage.TrainingGamesToPlay(trainingWindow.TrainingGameMax);
-
-    std::cout << "Playing " << gamesToPlay << " games..." << std::endl;
-    if (gamesToPlay <= 0)
+    // Loop and check in case of distributed scenarios where other machines are generating games/chunks,
+    // or to avoid generating too few games/chunks after unexpected failures or outside intervention.
+    while (true)
     {
-        return;
+        // Check every 5 minutes to see whether other machines have generated enough games/chunks.
+        const bool workersReady = workCoordinator.WaitForWorkers(5 * 60 * 1000 /* timeoutMilliseconds */);
+
+        // We need to reach into Python for network info in case it's coming from cloud storage.
+        int ignore;
+        int trainingChunkCount;
+        network->GetNetworkInfo(ignore, trainingChunkCount);
+        const int gamesToPlay = storage.TrainingGamesToPlay(trainingChunkCount, trainingWindow.TrainingGameMax);
+
+        if (gamesToPlay <= 0)
+        {
+            // Stop workers in case we finished because of other machines, in a distributed scenario.
+            std::cout << "Finished playing games" << std::endl;
+            workCoordinator.ResetWorkItemsRemaining(0);
+            return;
+        }
+
+        if (workersReady)
+        {
+            // Coordinate workers and print when initially starting, or restarting after a false finish.
+            std::cout << "Playing " << gamesToPlay << " games..." << std::endl;
+
+            // Generate uniform predictions for the first network (rather than use random weights).
+            workCoordinator.GenerateUniformPredictions() = (networkNumber == 1);
+
+            // Play the games.
+            workCoordinator.ResetWorkItemsRemaining(gamesToPlay);
+        }
+        else
+        {
+            // Loop back and keep waiting for workers.
+        }
     }
-
-    // Generate uniform predictions for the first network (rather than use random weights).
-    workCoordinator.GenerateUniformPredictions() = (networkNumber == 1);
-
-    // Play the games.
-    workCoordinator.ResetWorkItemsRemaining(gamesToPlay);
-    workCoordinator.WaitForWorkers();
 
     // Clear the prediction cache to prepare for the new network.
     PredictionCache::Instance.PrintDebugInfo();

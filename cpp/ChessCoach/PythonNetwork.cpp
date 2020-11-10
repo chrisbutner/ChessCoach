@@ -56,6 +56,7 @@ PythonNetwork::PythonNetwork()
     _loadNetworkFunction = LoadFunction(module, "load_network");
     _saveNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_network_teacher");
     _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
+    _getNetworkInfoFunction = LoadFunction(module, "get_network_info");
     _saveFileFunction = LoadFunction(module, "save_file");
     _debugDecompressFunction = LoadFunction(module, "debug_decompress");
 
@@ -69,6 +70,7 @@ PythonNetwork::~PythonNetwork()
 {
     Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_saveFileFunction);
+    Py_XDECREF(_getNetworkInfoFunction);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Teacher]);
     Py_XDECREF(_loadNetworkFunction);
@@ -247,14 +249,39 @@ void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCoun
     Py_DECREF(pythonStep);
 }
 
-void PythonNetwork::LoadNetwork(const std::string& networkName, int& stepCountOut, int& trainingChunkCountOut)
+void PythonNetwork::LoadNetwork(const std::string& networkName)
 {
     PythonContext context;
 
     PyObject* pythonNetworkName = PyUnicode_FromStringAndSize(networkName.c_str(), networkName.size());
     PyAssert(pythonNetworkName);
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_loadNetworkFunction, pythonNetworkName, nullptr);
+    PyObject* result = PyObject_CallFunctionObjArgs(_loadNetworkFunction, pythonNetworkName, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonNetworkName);
+}
+
+void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
+{
+    PythonContext context;
+
+    PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
+    PyAssert(pythonCheckpoint);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_saveNetworkFunction[networkType], pythonCheckpoint, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonCheckpoint);
+}
+
+void PythonNetwork::GetNetworkInfo(int& stepCountOut, int& trainingChunkCountOut)
+{
+    PythonContext context;
+
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_getNetworkInfoFunction, nullptr);
     PyAssert(tupleResult);
     PyAssert(PyTuple_Check(tupleResult));
 
@@ -271,21 +298,6 @@ void PythonNetwork::LoadNetwork(const std::string& networkName, int& stepCountOu
     trainingChunkCountOut = PyLong_AsLong(pythonTrainingChunkCount);
 
     Py_DECREF(tupleResult);
-    Py_DECREF(pythonNetworkName);
-}
-
-void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
-{
-    PythonContext context;
-
-    PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
-    PyAssert(pythonCheckpoint);
-
-    PyObject* result = PyObject_CallFunctionObjArgs(_saveNetworkFunction[networkType], pythonCheckpoint, nullptr);
-    PyAssert(result);
-
-    Py_DECREF(result);
-    Py_DECREF(pythonCheckpoint);
 }
 
 void PythonNetwork::SaveFile(const std::string& relativePath, const std::string& data)

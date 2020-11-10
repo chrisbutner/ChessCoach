@@ -174,7 +174,7 @@ TEST(Network, CompressDecompress)
     const SavedGame savedGame = game.Save();
 
     // Generate compressed training tensors.
-    const Storage storage(Config::TrainingNetwork, Config::Misc, 0);
+    const Storage storage(Config::TrainingNetwork, Config::Misc);
     message::Example compressed = storage.DebugPopulateGame(savedGame);
 
     // Decompress in Python.

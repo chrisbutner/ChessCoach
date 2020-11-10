@@ -60,7 +60,7 @@ void Platform::SetEnvironmentVariable(const char* name, const char* value)
 #endif
 }
 
-CFile::CFile(const std::filesystem::path& path, bool write)
+PosixFile::PosixFile(const std::filesystem::path& path, bool write)
 {
 #pragma warning(disable:4996) // It's all fine.
     _fileDescriptor = ::open(path.string().c_str(), (write ? (O_CREAT | O_WRONLY) : O_RDONLY) | O_BINARY, 0644);
@@ -68,14 +68,14 @@ CFile::CFile(const std::filesystem::path& path, bool write)
 #pragma warning(default:4996) // It's all fine.
 }
 
-CFile::~CFile()
+PosixFile::~PosixFile()
 {
 #pragma warning(disable:4996) // Don't worry about conformant name.
     ::close(_fileDescriptor);
-#pragma warning(disable:4996) // Don't worry about conformant name.
+#pragma warning(default:4996) // Don't worry about conformant name.
 }
 
-int CFile::FileDescriptor() const
+int PosixFile::FileDescriptor() const
 {
     return _fileDescriptor;
 }

@@ -1,5 +1,8 @@
 #include "Threading.h"
 
+#include <chrono>
+#include <functional>
+
 WorkCoordinator::WorkCoordinator(int workerCount)
     : _workItemsRemaining(0)
     , _workerCount(workerCount)
@@ -57,6 +60,14 @@ void WorkCoordinator::WaitForWorkers()
     {
         _workersReady.wait(lock);
     }
+}
+
+bool WorkCoordinator::WaitForWorkers(int timeoutMilliseconds)
+{
+    std::unique_lock lock(_mutex);
+
+    return _workersReady.wait_for(lock, std::chrono::milliseconds(timeoutMilliseconds),
+        std::bind(&WorkCoordinator::CheckWorkersReady, this));
 }
 
 bool WorkCoordinator::CheckWorkItemsExist()

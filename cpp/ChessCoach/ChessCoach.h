@@ -12,7 +12,6 @@ public:
     void Finalize();
 
     INetwork* CreateNetwork(const NetworkConfig& networkConfig) const;
-    INetwork* CreateNetworkWithInfo(const NetworkConfig& networkConfig, int& stepCountOut, int& trainingChunkCountOut) const;
 
 protected:
 

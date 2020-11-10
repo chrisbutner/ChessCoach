@@ -133,14 +133,7 @@ void ChessCoach::FinalizeStockfish()
 
 INetwork* ChessCoach::CreateNetwork(const NetworkConfig& networkConfig) const
 {
-    int ignoreStepCount;
-    int ignoreTrainingChunkCount;
-    return CreateNetworkWithInfo(networkConfig, ignoreStepCount, ignoreTrainingChunkCount);
-}
-
-INetwork* ChessCoach::CreateNetworkWithInfo(const NetworkConfig& networkConfig, int& stepCountOut, int& trainingChunkCountOut) const
-{
     INetwork* network = new PythonNetwork();
-    network->LoadNetwork(networkConfig.Name, stepCountOut, trainingChunkCountOut);
+    network->LoadNetwork(networkConfig.Name.c_str());
     return network;
 }

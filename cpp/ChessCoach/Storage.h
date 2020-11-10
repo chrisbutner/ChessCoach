@@ -26,10 +26,10 @@ class Storage
 {
 public:
 
-    Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig, int trainingChunkCount);
+    Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
     void InitializeLocalGamesChunks(INetwork* network);
     int AddTrainingGame(INetwork* network, SavedGame&& game);
-    int TrainingGamesToPlay(int targetCount) const;
+    int TrainingGamesToPlay(int trainingChunkCount, int targetGameCount) const;
     std::filesystem::path LocalLogPath() const;
 
     void SaveChunk(const std::filesystem::path& path, const std::vector<SavedGame>& games) const;
@@ -53,7 +53,6 @@ private:
 
     const Game _startingPosition;
 
-    std::atomic_int _trainingChunkCount;
     std::atomic_int _trainingGameCount;
     int _gamesPerChunk;
 

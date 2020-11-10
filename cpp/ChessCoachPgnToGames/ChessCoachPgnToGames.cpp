@@ -199,7 +199,7 @@ void ChessCoachPgnToGames::ConvertAll()
 
 void ChessCoachPgnToGames::ConvertPgns()
 {
-    const Storage storage(Config::TrainingNetwork, Config::Misc, 0);
+    const Storage storage(Config::TrainingNetwork, Config::Misc);
     std::vector<SavedGame> games;
     std::vector<SavedCommentary> gameCommentary;
 

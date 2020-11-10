@@ -23,9 +23,8 @@
 #include "Preprocessing.h"
 #include "Random.h"
 
-Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig, int trainingChunkCount)
-    : _trainingChunkCount(trainingChunkCount)
-    , _trainingGameCount(0)
+Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig)
+    : _trainingGameCount(0)
     , _gamesPerChunk(miscConfig.Storage_GamesPerChunk)
     , _pgnInterval(networkConfig.Training.PgnInterval)
     , _sessionNonce("UNINITIALIZED")
@@ -139,7 +138,7 @@ void Storage::ChunkGames(INetwork* network, std::vector<std::filesystem::path>& 
         // Just decompress each individual game chunk with zlib and append to the chunk.
         for (auto& path : gamePaths)
         {
-            CFile gameFile(path, false /* write */);
+            PosixFile gameFile(path, false /* write */);
             google::protobuf::io::FileInputStream gameWrapped(gameFile.FileDescriptor());
             google::protobuf::io::GzipInputStream gameZip(&gameWrapped, google::protobuf::io::GzipInputStream::ZLIB);
 
@@ -152,7 +151,7 @@ void Storage::ChunkGames(INetwork* network, std::vector<std::filesystem::path>& 
             // then long-lived "chunkZip" (can we write it) so that "BackUp" is never missed.
             while (gameZip.Next(&gameBuffer, &gameSize) && chunkZip.Next(&chunkBuffer, &chunkSize))
             {
-                const int copySize = std::min(chunkSize, gameSize);
+                const int copySize = std::min(gameSize, chunkSize);
                 std::memcpy(chunkBuffer, gameBuffer, copySize);
 
                 chunkZip.BackUp(chunkSize - copySize);
@@ -175,16 +174,15 @@ void Storage::ChunkGames(INetwork* network, std::vector<std::filesystem::path>& 
     }
 
     // Update stats.
-    _trainingChunkCount++;
     _trainingGameCount -= _gamesPerChunk;
 }
 
 // Training is only done on chunks, not individual games, so round the target up to the nearest chunk.
-int Storage::TrainingGamesToPlay(int targetCount) const
+int Storage::TrainingGamesToPlay(int trainingChunkCount, int targetGameCount) const
 {
-    const int existingCount = ((_trainingChunkCount * _gamesPerChunk) + _trainingGameCount);
-    targetCount = (((targetCount + _gamesPerChunk - 1) / _gamesPerChunk) * _gamesPerChunk);
-    return std::max(0, targetCount - existingCount);
+    const int existingCount = ((trainingChunkCount * _gamesPerChunk) + _trainingGameCount);
+    const int roundedTarget = (((targetGameCount + _gamesPerChunk - 1) / _gamesPerChunk) * _gamesPerChunk);
+    return std::max(0, roundedTarget - existingCount);
 }
 
 std::string Storage::GenerateSimpleChunkFilename(int chunkNumber) const
@@ -215,7 +213,7 @@ std::string Storage::GenerateFilename(int number)
 void Storage::SaveChunk(const std::filesystem::path& path, const std::vector<SavedGame>& games) const
 {
     // Compress the TFRecord file using zlib.
-    CFile file(path, true /* write */);
+    PosixFile file(path, true /* write */);
     google::protobuf::io::FileOutputStream wrapped(file.FileDescriptor());
     google::protobuf::io::GzipOutputStream::Options zipOptions{};
     zipOptions.format = google::protobuf::io::GzipOutputStream::ZLIB;
@@ -391,7 +389,7 @@ void Storage::SaveCommentary(const std::filesystem::path& path, const std::vecto
     std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary) const
 {
     // Compress the TFRecord file using zlib.
-    CFile file(path, true /* write */);
+    PosixFile file(path, true /* write */);
     google::protobuf::io::FileOutputStream wrapped(file.FileDescriptor());
     google::protobuf::io::GzipOutputStream::Options zipOptions{};
     zipOptions.format = google::protobuf::io::GzipOutputStream::ZLIB;

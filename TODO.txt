@@ -1,10 +1,4 @@
-Speed up self-play
-- thread-local device IDs
-- try quantize UCB calc?
-
 Distributed self-play/training
-- need to dynamically wait for self-play games to reach target/ask for more, not just initial static request
-- overall run may hang or have 2k too few games if any .game files deleted now, think about live adjustment/different approach
 - set up some basic infrastructure, preemptibles, startup, roles, etc.
 	- don't lose 1999 games when preemptible goes down
 	- make sure we still clear prediction cache on self-play-only workers

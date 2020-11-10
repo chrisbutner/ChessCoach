@@ -67,6 +67,7 @@ public:
 
     void WaitForWorkItems();
     void WaitForWorkers();
+    bool WaitForWorkers(int timeoutMilliseconds);
 
     bool CheckWorkItemsExist();
     bool CheckWorkersReady();

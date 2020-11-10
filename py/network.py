@@ -396,6 +396,8 @@ def log_scalars_student(step, names, values):
 def load_network(network_name):
   log("Network:", network_name)
   networks.name = network_name
+
+def get_network_info():
   return networks.teacher.info # Assume there's a saved teacher, if anything, and return its info.
 
 def save_network_teacher(checkpoint):
