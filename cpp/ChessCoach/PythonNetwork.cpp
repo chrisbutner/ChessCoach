@@ -56,7 +56,8 @@ PythonNetwork::PythonNetwork()
     _loadNetworkFunction = LoadFunction(module, "load_network");
     _saveNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_network_teacher");
     _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
-    _getNetworkInfoFunction = LoadFunction(module, "get_network_info");
+    _getNetworkInfoFunction[NetworkType_Teacher] = LoadFunction(module, "get_network_info_teacher");
+    _getNetworkInfoFunction[NetworkType_Student] = LoadFunction(module, "get_network_info_student");
     _saveFileFunction = LoadFunction(module, "save_file");
     _debugDecompressFunction = LoadFunction(module, "debug_decompress");
 
@@ -70,7 +71,8 @@ PythonNetwork::~PythonNetwork()
 {
     Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_saveFileFunction);
-    Py_XDECREF(_getNetworkInfoFunction);
+    Py_XDECREF(_getNetworkInfoFunction[NetworkType_Student]);
+    Py_XDECREF(_getNetworkInfoFunction[NetworkType_Teacher]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Teacher]);
     Py_XDECREF(_loadNetworkFunction);
@@ -277,11 +279,11 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
     Py_DECREF(pythonCheckpoint);
 }
 
-void PythonNetwork::GetNetworkInfo(int& stepCountOut, int& trainingChunkCountOut)
+void PythonNetwork::GetNetworkInfo(NetworkType networkType, int& stepCountOut, int& trainingChunkCountOut)
 {
     PythonContext context;
 
-    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_getNetworkInfoFunction, nullptr);
+    PyObject* tupleResult = PyObject_CallFunctionObjArgs(_getNetworkInfoFunction[networkType], nullptr);
     PyAssert(tupleResult);
     PyAssert(PyTuple_Check(tupleResult));
 

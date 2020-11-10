@@ -40,6 +40,12 @@ enum GameType
 constexpr const char* GameTypeNames[GameType_Count] = { "Supervised", "Training", "Validation" };
 static_assert(GameType_Count == 3);
 
+enum RoleType {
+    RoleType_None = 0,
+    RoleType_Train = (1 << 0),
+    RoleType_Play = (1 << 1),
+};
+
 struct Window
 {
     // E.g. for 5000 games per network, with current window size of 10000, on network #4,
@@ -68,6 +74,7 @@ struct TrainingConfig
     int ValidationInterval;
     int CheckpointInterval;
     int StrengthTestInterval;
+    int WaitMilliseconds;
     std::vector<StageConfig> Stages;
     std::string VocabularyFilename;
     std::string GamesPathSupervised;
@@ -99,6 +106,7 @@ struct SelfPlayConfig
 struct NetworkConfig
 {
     std::string Name;
+    RoleType Role;
     TrainingConfig Training;
     SelfPlayConfig SelfPlay;
 };

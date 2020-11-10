@@ -397,8 +397,11 @@ def load_network(network_name):
   log("Network:", network_name)
   networks.name = network_name
 
-def get_network_info():
-  return networks.teacher.info # Assume there's a saved teacher, if anything, and return its info.
+def get_network_info_teacher():
+  return networks.teacher.info
+
+def get_network_info_student():
+  return networks.student.info
 
 def save_network_teacher(checkpoint):
   networks.teacher.save(checkpoint)

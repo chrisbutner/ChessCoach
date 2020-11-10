@@ -6,6 +6,7 @@
 
 training_network_name = "chesscoach1"
 uci_network_name = "chesscoach1"
+role = "train|play"
 
 [[networks]]
 
@@ -251,6 +252,7 @@ games_path_validation = "Games/Validation"
 commentary_path_supervised = "Commentary/Supervised"
 commentary_path_training = ""
 commentary_path_validation = ""
+wait_milliseconds = 300_000 # Check on Google Storage every 5 minutes when waiting for other machines.
 stages = []
 
 [training.learning_rate_schedule]

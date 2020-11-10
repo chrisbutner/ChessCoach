@@ -29,7 +29,7 @@ public:
     Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
     void InitializeLocalGamesChunks(INetwork* network);
     int AddTrainingGame(INetwork* network, SavedGame&& game);
-    int TrainingGamesToPlay(int trainingChunkCount, int targetGameCount) const;
+    int TrainingGamesToPlay(int trainingChunkCount, int targetGameCount, bool ignoreLocalGames) const;
     std::filesystem::path LocalLogPath() const;
 
     void SaveChunk(const std::filesystem::path& path, const std::vector<SavedGame>& games) const;

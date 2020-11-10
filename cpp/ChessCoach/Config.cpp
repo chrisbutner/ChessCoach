@@ -17,12 +17,14 @@ const std::map<std::string, StageType> StageTypeLookup = {
     { "save", StageType_Save },
     { "strength_test", StageType_StrengthTest },
 };
+static_assert(StageType_Count == 5);
 
 const std::map<std::string, NetworkType> NetworkTypeLookup = {
     { "teacher", NetworkType_Teacher },
     { "student", NetworkType_Student },
     { "", NetworkType_Count },
 };
+static_assert(NetworkType_Count == 2);
 
 const std::map<std::string, GameType> GameTypeLookup = {
     { "supervised", GameType_Supervised },
@@ -31,6 +33,11 @@ const std::map<std::string, GameType> GameTypeLookup = {
     { "", GameType_Count },
 };
 static_assert(GameType_Count == 3);
+
+const std::map<std::string, RoleType> RoleTypeLookup = {
+    { "train", RoleType_Train },
+    { "play", RoleType_Play },
+};
 
 std::vector<StageConfig> ParseStages(const TomlValue& config)
 {
@@ -94,6 +101,18 @@ std::vector<StageConfig> OverridePolicy::Find(const TomlValue& config, const tom
     return ParseStages(config.at(key));
 }
 
+RoleType ParseRole(const std::string& raw)
+{
+    int role = RoleType_None;
+    std::stringstream tokenizer(raw);
+    std::string token;
+    while (std::getline(tokenizer, token, '|'))
+    {
+        role |= RoleTypeLookup.at(token);
+    }
+    return static_cast<RoleType>(role);
+}
+
 template <typename Policy>
 TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, const TrainingConfig& defaults)
 {
@@ -108,6 +127,7 @@ TrainingConfig ParseTraining(const TomlValue& config, const Policy& policy, cons
     training.CheckpointInterval = policy.template Find<int>(config, "checkpoint_interval", defaults.CheckpointInterval);
     training.StrengthTestInterval = policy.template Find<int>(config, "strength_test_interval", defaults.StrengthTestInterval);
 
+    training.WaitMilliseconds = policy.template Find<int>(config, "wait_milliseconds", defaults.WaitMilliseconds);
     training.Stages = policy.template Find<std::vector<StageConfig>>(config, "stages", defaults.Stages);
 
     training.VocabularyFilename = policy.template Find<std::string>(config, "vocabulary_filename", defaults.VocabularyFilename);
@@ -183,6 +203,7 @@ void Config::Initialize()
     const SelfPlayConfig defaultSelfPlay = ParseSelfPlay(toml::find(config, "self_play"), DefaultPolicy(), SelfPlayConfig());
 
     // Parse network configs.
+    const RoleType role = ParseRole(toml::find<std::string>(config, "network", "role"));
     TrainingNetwork.Name = toml::find<std::string>(config, "network", "training_network_name");
     UciNetwork.Name = toml::find<std::string>(config, "network", "uci_network_name");
     auto networks = { &TrainingNetwork, &UciNetwork };
@@ -194,6 +215,7 @@ void Config::Initialize()
         {
             if (name == network->Name)
             {
+                network->Role = role;
                 network->Training = ParseTraining(toml::find_or(configNetwork, "training", TomlValue::table_type()), OverridePolicy(), defaultTraining);
                 network->SelfPlay = ParseSelfPlay(toml::find_or(configNetwork, "self_play", TomlValue::table_type()), OverridePolicy(), defaultSelfPlay);
             }

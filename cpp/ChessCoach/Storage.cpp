@@ -178,9 +178,10 @@ void Storage::ChunkGames(INetwork* network, std::vector<std::filesystem::path>& 
 }
 
 // Training is only done on chunks, not individual games, so round the target up to the nearest chunk.
-int Storage::TrainingGamesToPlay(int trainingChunkCount, int targetGameCount) const
+int Storage::TrainingGamesToPlay(int trainingChunkCount, int targetGameCount, bool ignoreLocalGames) const
 {
-    const int existingCount = ((trainingChunkCount * _gamesPerChunk) + _trainingGameCount);
+    const int localGameCount = (ignoreLocalGames ? 0 : static_cast<int>(_trainingGameCount));
+    const int existingCount = ((trainingChunkCount * _gamesPerChunk) + localGameCount);
     const int roundedTarget = (((targetGameCount + _gamesPerChunk - 1) / _gamesPerChunk) * _gamesPerChunk);
     return std::max(0, roundedTarget - existingCount);
 }

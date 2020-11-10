@@ -16,12 +16,15 @@ public:
 
 private:
 
-    void StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow, WorkCoordinator& workCoordinator, INetwork* network, int networkNumber);
-    void StageTrain(const std::vector<StageConfig>& stages, int& stageIndex, SelfPlayWorker& selfPlayWorker, INetwork* network,
+    void StagePlay(const NetworkConfig& config, const StageConfig& stage, const Storage& storage, WorkCoordinator& workCoordinator, INetwork* network,
+        int networkCount, int n, int checkpoint);
+    void StagePlayWait(const NetworkConfig& config, const Storage& storage, INetwork* network, const Window& trainingWindow);
+    void StageTrain(const NetworkConfig& config, const std::vector<StageConfig>& stages, int& stageIndex, SelfPlayWorker& selfPlayWorker, INetwork* network,
         int networkCount, int n, int step, int checkpoint);
-    void StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint);
-    void StageSave(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
-    void StageStrengthTest(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
+    void StageTrainCommentary(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint);
+    void StageSave(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
+    void StageSaveWait(const NetworkConfig& config, const StageConfig& stage, INetwork* network, int checkpoint);
+    void StageStrengthTest(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
 
     Window CalculateWindow(const StageConfig& stageConfig, int networkCount, int network);
 };
@@ -49,7 +52,7 @@ void ChessCoachTrain::TrainChessCoach()
     // We need to reach into Python for network info in case it's coming from cloud storage.
     int networkStepCount;
     int ignore;
-    network->GetNetworkInfo(networkStepCount, ignore);
+    network->GetNetworkInfo(NetworkType_Teacher, networkStepCount, ignore);
 
     // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
     storage.InitializeLocalGamesChunks(network.get());
@@ -90,31 +93,28 @@ void ChessCoachTrain::TrainChessCoach()
             {
             case StageType_Play:
             {
-                // Calculate the replay buffer window for position sampling (network training)
-                // and play enough games to satisfy it.
-                const Window trainingWindow = CalculateWindow(stage, networkCount, n);
-                StagePlay(stage, storage, trainingWindow, workCoordinator, network.get(), n);
+                StagePlay(config, stage, storage, workCoordinator, network.get(), networkCount, n, checkpoint);
                 break;
             }
             case StageType_Train:
             {
-                StageTrain(config.Training.Stages, i, *selfPlayWorkers.front(), network.get(),
+                StageTrain(config, config.Training.Stages, i, *selfPlayWorkers.front(), network.get(),
                     networkCount, n, step, checkpoint);
                 break;
             }
             case StageType_TrainCommentary:
             {
-                StageTrainCommentary(stage, *selfPlayWorkers.front(), network.get(), step, checkpoint);
+                StageTrainCommentary(config, stage, *selfPlayWorkers.front(), network.get(), step, checkpoint);
                 break;
             }
             case StageType_Save:
             {
-                StageSave(stage, *selfPlayWorkers.front(), network.get(), checkpoint);
+                StageSave(config, stage, *selfPlayWorkers.front(), network.get(), checkpoint);
                 break;
             }
             case StageType_StrengthTest:
             {
-                StageStrengthTest(stage, *selfPlayWorkers.front(), network.get(), checkpoint);
+                StageStrengthTest(config, stage, *selfPlayWorkers.front(), network.get(), checkpoint);
                 break;
             }
             case StageType_Count:
@@ -127,26 +127,39 @@ void ChessCoachTrain::TrainChessCoach()
     }
 }
 
-void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage, Window trainingWindow,
-    WorkCoordinator& workCoordinator, INetwork* network, int networkNumber)
+void ChessCoachTrain::StagePlay(const NetworkConfig& config, const StageConfig& stage, const Storage& storage,
+    WorkCoordinator& workCoordinator, INetwork* network, int networkCount, int n, int checkpoint)
 {
+    // Calculate the replay buffer window for position sampling (network training)
+    // and play enough games to satisfy it.
+    const Window trainingWindow = CalculateWindow(stage, networkCount, n);
+
+    // If this machine isn't a player, wait until we see someone else generate the required games.
+    if (!(config.Role & RoleType_Play))
+    {
+        std::cout << "Waiting: [" << StageTypeNames[stage.Stage] << "][" << checkpoint << "]["
+            << trainingWindow.TrainingGameMin << " - " << trainingWindow.TrainingGameMax << "]" << std::endl;
+        StagePlayWait(config, storage, network, trainingWindow);
+        return;
+    }
+
     // Log the stage info in a consistent format.
-    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << trainingWindow.TrainingGameMin << " - "
-        << trainingWindow.TrainingGameMax << "]" << std::endl;
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << checkpoint << "]["
+        << trainingWindow.TrainingGameMin << " - " << trainingWindow.TrainingGameMax << "]" << std::endl;
 
     // Need to play enough games to reach the training window maximum (skip if already enough).
     // Loop and check in case of distributed scenarios where other machines are generating games/chunks,
     // or to avoid generating too few games/chunks after unexpected failures or outside intervention.
     while (true)
     {
-        // Check every 5 minutes to see whether other machines have generated enough games/chunks.
-        const bool workersReady = workCoordinator.WaitForWorkers(5 * 60 * 1000 /* timeoutMilliseconds */);
+        // Check every "wait_milliseconds" to see whether other machines have generated enough games/chunks.
+        const bool workersReady = workCoordinator.WaitForWorkers(config.Training.WaitMilliseconds);
 
         // We need to reach into Python for network info in case it's coming from cloud storage.
         int ignore;
         int trainingChunkCount;
-        network->GetNetworkInfo(ignore, trainingChunkCount);
-        const int gamesToPlay = storage.TrainingGamesToPlay(trainingChunkCount, trainingWindow.TrainingGameMax);
+        network->GetNetworkInfo(NetworkType_Teacher, ignore, trainingChunkCount);
+        const int gamesToPlay = storage.TrainingGamesToPlay(trainingChunkCount, trainingWindow.TrainingGameMax, false /* ignoreLocalGames */);
 
         if (gamesToPlay <= 0)
         {
@@ -162,7 +175,7 @@ void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage
             std::cout << "Playing " << gamesToPlay << " games..." << std::endl;
 
             // Generate uniform predictions for the first network (rather than use random weights).
-            workCoordinator.GenerateUniformPredictions() = (networkNumber == 1);
+            workCoordinator.GenerateUniformPredictions() = (n == 1);
 
             // Play the games.
             workCoordinator.ResetWorkItemsRemaining(gamesToPlay);
@@ -178,12 +191,36 @@ void ChessCoachTrain::StagePlay(const StageConfig& stage, const Storage& storage
     PredictionCache::Instance.Clear();
 }
 
-void ChessCoachTrain::StageTrain(const std::vector<StageConfig>& stages, int& stageIndex,
+void ChessCoachTrain::StagePlayWait(const NetworkConfig& config, const Storage& storage, INetwork* network, const Window& trainingWindow)
+{
+    while (true)
+    {
+        int ignore;
+        int trainingChunkCount;
+        network->GetNetworkInfo(NetworkType_Teacher, ignore, trainingChunkCount);
+        const int distributedGamesToPlay = storage.TrainingGamesToPlay(
+            trainingChunkCount, trainingWindow.TrainingGameMax, true /* ignoreLocalGames */);
+        if (distributedGamesToPlay <= 0)
+        {
+            return;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(config.Training.WaitMilliseconds));
+    }
+}
+
+void ChessCoachTrain::StageTrain(const NetworkConfig& config, const std::vector<StageConfig>& stages, int& stageIndex,
     SelfPlayWorker& selfPlayWorker, INetwork* network, int networkCount, int n, int step, int checkpoint)
 {
     const int first = stageIndex;
     std::vector<GameType> gameTypes;
     std::vector<Window> trainingWindows;
+
+    // If this machine isn't a trainer, skip training (no need to coalesce).
+    if (!(config.Role & RoleType_Train))
+    {
+        return;
+    }
 
     // Coalesce multiple adjacent "training" stages for the same target (e.g. "teacher" or "student")
     // but potentially different types (e.g. "supervised" or "training") into a single rotation.
@@ -199,6 +236,7 @@ void ChessCoachTrain::StageTrain(const std::vector<StageConfig>& stages, int& st
 
         // Log the stage info in a consistent format (just use one line per game type).
         std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "]["
+            << checkpoint << "]["
             << trainingWindow.TrainingGameMin << " - " << trainingWindow.TrainingGameMax << "]" << std::endl;
 
         // Skip past this stage in the outer training loop (mutable reference).
@@ -212,10 +250,17 @@ void ChessCoachTrain::StageTrain(const std::vector<StageConfig>& stages, int& st
     selfPlayWorker.TrainNetwork(network, stages[first].Target, gameTypes, trainingWindows, step, checkpoint);
 }
 
-void ChessCoachTrain::StageTrainCommentary(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint)
+void ChessCoachTrain::StageTrainCommentary(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint)
 {
+    // If this machine isn't a trainer, skip training commentary.
+    if (!(config.Role & RoleType_Train))
+    {
+        return;
+    }
+
     // Log the stage info in a consistent format.
-    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "]" << std::endl;
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << GameTypeNames[stage.Type] << "][" 
+        << checkpoint << "]" << std::endl;
 
     // Only the teacher network supports commentary training.
     assert(stage.Target == NetworkType_Teacher);
@@ -229,19 +274,50 @@ void ChessCoachTrain::StageTrainCommentary(const StageConfig& stage, SelfPlayWor
     selfPlayWorker.TrainNetworkWithCommentary(network, step, checkpoint);
 }
 
-void ChessCoachTrain::StageSave(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
+void ChessCoachTrain::StageSave(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
 {
+    // If this machine isn't a trainer, wait until we see someone else save this network type + checkpoint.
+    if (!(config.Role & RoleType_Train))
+    {
+        std::cout << "Waiting: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << checkpoint << "]" << std::endl;
+        StageSaveWait(config, stage, network, checkpoint);
+        return;
+    }
+
     // Log the stage info in a consistent format.
-    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "]" << std::endl;
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << checkpoint << "]" << std::endl;
 
     // Save the network. It logs enough internally.
     selfPlayWorker.SaveNetwork(network, stage.Target, checkpoint);
 }
 
-void ChessCoachTrain::StageStrengthTest(const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
+void ChessCoachTrain::StageSaveWait(const NetworkConfig& config, const StageConfig& stage, INetwork* network, int checkpoint)
 {
+    while (true)
+    {
+        int networkStepCount;
+        int ignore;
+        network->GetNetworkInfo(stage.Target, networkStepCount, ignore);
+
+        if (networkStepCount >= checkpoint)
+        {
+            return;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(config.Training.WaitMilliseconds));
+    }
+}
+
+void ChessCoachTrain::StageStrengthTest(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
+{
+    // If this machine isn't a trainer, skip Strength testing.
+    if (!(config.Role & RoleType_Train))
+    {
+        return;
+    }
+
     // Log the stage info in a consistent format.
-    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "]" << std::endl;
+    std::cout << "Stage: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << checkpoint << "]" << std::endl;
 
     // Potentially strength test the network, if the checkpoint is a multiple of the strength test interval.
     selfPlayWorker.StrengthTestNetwork(network, stage.Target, checkpoint);
