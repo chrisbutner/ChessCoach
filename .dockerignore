@@ -1,0 +1,14 @@
+.*
+*.cmd
+*.txt
+Dockerfile
+build
+data
+protobuf*
+**/.vscode
+**/__pycache__
+**/.vs
+**/*.user
+**/*.filters
+**/x64
+**/x86

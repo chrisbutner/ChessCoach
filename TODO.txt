@@ -1,7 +1,14 @@
 Distributed self-play/training
-- set up some basic infrastructure, preemptibles, startup, roles, etc.
-	- don't lose 1999 games when preemptible goes down
-	- make sure we still clear prediction cache on self-play-only workers
+- split out base and train/play images (where train also plays)
+- clean up TPU discovery
+- how will config files work (e.g. network name)
+- script building/running images manually (local + cluster), tagging and pushing to gcr.io
+- script to spin up/down a single 24-hour preemptible
+- script to spin up/down kubernetes cluster
+
+Further distributed work
+- don't prune/reset games if not training, but still clear prediction cache on weights update
+- partial network resume (disk milestones - teacher save, student save, strength test markers)
 
 Fresh training run
 - run distributed training with a fresh self-play corpus as a baseline for further experiments
@@ -13,6 +20,7 @@ Speed up training, play with tf.function
 	- https://github.com/tensorflow/tpu/tree/master/models/official/resnet
 
 Training improvements
+- comparison run on pure self-play, rather than mixed batches
 - playout cap randomization (Wu)
 - forced playouts/pruning (Wu)
 - SE (lc0) or SE-ish-as-bias (Wu)
@@ -42,6 +50,7 @@ Text quality
 - basic - does the encoder need an extra dense+relu layer after the tower/reshape?
 - larger model size
 - different model architectures
+	- think about 1D vs. 2D again: https://arxiv.org/pdf/1502.03044.pdf
 	- read about "Performer" architecture
 	- read about PET: https://arxiv.org/pdf/2001.07676.pdf
 	- definitely try universal transformer
