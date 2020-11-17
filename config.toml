@@ -4,13 +4,13 @@
 
 [network]
 
-training_network_name = "chesscoach1"
-uci_network_name = "chesscoach1"
+training_network_name = "chesscoach1m"
+uci_network_name = "chesscoach1m"
 role = "train|play"
 
 [[networks]]
 
-    name = "chesscoach1"
+    name = "chesscoach1m"
     
     [networks.training]
 

@@ -1,6 +1,8 @@
 .*
 *.cmd
 *.txt
+*.sh
+!build.sh
 Dockerfile
 build
 data

@@ -13,11 +13,9 @@ RUN curl -L https://github.com/protocolbuffers/protobuf/releases/download/v3.13.
   cd .. && \
   rm -r protobuf-3.13.0
 
-COPY . /chesscoach
-RUN /chesscoach/build.sh release install
-
 RUN pip3 install --upgrade pip && \
   pip3 install setuptools && \
   pip3 install toml tensorflow-cpu==2.3.1 cloud-tpu-client
 
-CMD ["ChessCoachTrain"]
+COPY . /chesscoach
+RUN /chesscoach/build.sh release install

@@ -1,9 +1,5 @@
 Distributed self-play/training
-- split out base and train/play images (where train also plays)
 - clean up TPU discovery
-- how will config files work (e.g. network name)
-- script building/running images manually (local + cluster), tagging and pushing to gcr.io
-- script to spin up/down a single 24-hour preemptible
 - script to spin up/down kubernetes cluster
 
 Further distributed work
@@ -118,6 +114,7 @@ CPU+GPU integration performance:
 - for Nodes can point last sibling at root and unrecurse deletion (sacrificing breadth-at-once)
 
 Code quality
+- try multistage docker build, debian only for building chesscoach, copy over to tensorflow base
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - switch to vcpkg for windows dependencies
 - fix _ in network names - split on final _
