@@ -1,7 +1,3 @@
-Distributed self-play/training
-- clean up TPU discovery
-- script to spin up/down kubernetes cluster
-
 Further distributed work
 - don't prune/reset games if not training, but still clear prediction cache on weights update
 - partial network resume (disk milestones - teacher save, student save, strength test markers)
@@ -115,6 +111,7 @@ CPU+GPU integration performance:
 
 Code quality
 - try multistage docker build, debian only for building chesscoach, copy over to tensorflow base
+- inject config.toml into cluster volume, take out of image tags, make sure it takes priority over installed
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - switch to vcpkg for windows dependencies
 - fix _ in network names - split on final _

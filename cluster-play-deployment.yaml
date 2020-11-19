@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chesscoach-play-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: chesscoach-play
+  template:
+    metadata:
+      annotations:
+        tf-version.cloud-tpus.google.com: "2.3.1"
+      labels:
+        app: chesscoach-play
+    spec:
+      restartPolicy: Always
+      volumes:
+      - name: service-credentials
+        secret:
+          secretName: chesscoach-credentials
+      containers:
+      - name: chesscoach-play-container
+        image: gcr.io/chesscoach/chesscoach-play:chesscoach1m_v1
+        volumeMounts:
+        - name: service-credentials
+          mountPath: /var/secrets/google
+          readOnly: true
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/secrets/google/key.json
+        resources:
+          limits:
+            # v2-8
+            cloud-tpus.google.com/v2: 8
+      

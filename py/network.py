@@ -17,7 +17,11 @@ import tensorflow as tf
 
 tpu_strategy = None
 try:
+  # Passing zone-qualified cluster-injected TPU_NAME to the resolver fails, need to leave it blank.
   tpu_name = os.environ.get("TPU_NAME") or socket.gethostname()
+  if "/" in tpu_name:
+    tpu_name = None
+  log("TPU name for cluster resolution:", tpu_name, "" if tpu_name else "(auto)")
   resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_name)
   tf.config.experimental_connect_to_cluster(resolver)
   tf.tpu.experimental.initialize_tpu_system(resolver)

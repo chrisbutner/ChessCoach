@@ -4,6 +4,9 @@
 *.sh
 !build.sh
 Dockerfile
+*.dockerfile
+*.yaml
+*.json
 build
 data
 protobuf*
