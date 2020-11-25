@@ -81,7 +81,7 @@ struct INetwork
 
     virtual ~INetwork() {};
 
-    virtual void PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
+    virtual PredictionStatus PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images) = 0;
     virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
         std::vector<Window>& trainingWindows, int step, int checkpoint) = 0;

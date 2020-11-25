@@ -86,7 +86,7 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_predictBatchFunction[NetworkType_Teacher]);
 }
 
-void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
+PredictionStatus PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies)
 {
     PythonContext context;
 
@@ -100,8 +100,14 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
     PyAssert(tupleResult);
     PyAssert(PyTuple_Check(tupleResult));
 
+    // Get the prediction status.
+    PyObject* pythonPredictionStatus = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonPredictionStatus);
+    PyAssert(PyLong_Check(pythonPredictionStatus));
+    const PredictionStatus status = static_cast<PredictionStatus>(PyLong_AsLong(pythonPredictionStatus));
+
     // Extract the values.
-    PyObject* pythonValues = PyTuple_GetItem(tupleResult, 0); // PyTuple_GetItem does not INCREF
+    PyObject* pythonValues = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
     PyAssert(pythonValues);
     PyAssert(PyArray_Check(pythonValues));
 
@@ -115,7 +121,7 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
     MapProbabilities11To01(valueCount, values);
 
     // Extract the policies.
-    PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
+    PyObject* pythonPolicies = PyTuple_GetItem(tupleResult, 2); // PyTuple_GetItem does not INCREF
     PyAssert(pythonPolicies);
     PyAssert(PyArray_Check(pythonPolicies));
 
@@ -127,6 +133,8 @@ void PythonNetwork::PredictBatch(NetworkType networkType, int batchSize, InputPl
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonImages);
+
+    return status;
 }
 
 std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, InputPlanes* images)

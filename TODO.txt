@@ -1,8 +1,9 @@
 Further distributed work
-- don't prune/reset games if not training, but still clear prediction cache on weights update
+- don't stop self-play on "play"-only roles
 - partial network resume (disk milestones - teacher save, student save, strength test markers)
 
-Fresh training run
+Fresh training runs
+- comparison run on pure self-play, rather than mixed batches
 - run distributed training with a fresh self-play corpus as a baseline for further experiments
 
 Speed up training, play with tf.function
@@ -12,7 +13,6 @@ Speed up training, play with tf.function
 	- https://github.com/tensorflow/tpu/tree/master/models/official/resnet
 
 Training improvements
-- comparison run on pure self-play, rather than mixed batches
 - playout cap randomization (Wu)
 - forced playouts/pruning (Wu)
 - SE (lc0) or SE-ish-as-bias (Wu)
@@ -21,6 +21,7 @@ Training improvements
 	- lc0/Wu seem to use similar conv filters for policy and value heads?
 	- lc0 was thinking fully connected layer may be needed for policy head when network isn't deep enough to cross board well (may not apply for distillation)
 - try a run with masked policy loss (valid moves only) once there's enough data to compare
+	- could also conceivably blend, like 1.0 for legal moves and 0.15 zero-pressure for others
 - find some positions where engine misses shallow tactics, play with FPU and criticality
 	- try to quantify and train criticality, feed into FPU (or deeper FPU, multi-move decay)
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides

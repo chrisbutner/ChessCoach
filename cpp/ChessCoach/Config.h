@@ -46,6 +46,11 @@ enum RoleType {
     RoleType_Play = (1 << 1),
 };
 
+enum PredictionStatus {
+    PredictionStatus_None = 0,
+    PredictionStatus_UpdatedNetwork = (1 << 0),
+};
+
 struct Window
 {
     // E.g. for 5000 games per network, with current window size of 10000, on network #4,

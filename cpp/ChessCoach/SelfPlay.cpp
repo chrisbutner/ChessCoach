@@ -14,6 +14,8 @@
 #include "Pgn.h"
 #include "Random.h"
 
+
+
 TerminalValue TerminalValue::NonTerminal()
 {
     return {};
@@ -698,6 +700,10 @@ Move SelfPlayGame::ParseSan(const std::string& san)
     return Pgn::ParseSan(_position, san);
 }
 
+// Don't clear the prediction cache more than once every 30 seconds
+// (aimed at preventing N self-play worker threads from each clearing).
+Throttle SelfPlayWorker::PredictionCacheResetThrottle(30 * 1000 /* durationMilliseconds */);
+
 SelfPlayWorker::SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage)
     : _networkConfig(&networkConfig)
     , _storage(storage)
@@ -723,14 +729,6 @@ const NetworkConfig& SelfPlayWorker::Config() const
     return *_networkConfig;
 }
 
-void SelfPlayWorker::ResetGames()
-{
-    for (int i = 0; i < _networkConfig->SelfPlay.PredictionBatchSize; i++)
-    {
-        SetUpGame(i);
-    }
-}
-
 void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* network)
 {
     // Use the faster student network for self-play.
@@ -748,11 +746,23 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
             std::cout << "Generating uniform network predictions until trained" << std::endl;
         }
 
-        // Warm up the GIL and predictions, and reclaim training memory.
-        WarmUpPredictions(network, networkType, 1);
+        // Warm up the GIL and predictions.
+        const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, 1);
+        if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
+        {
+            // This thread has permission to clear the prediction cache after seeing an updated network.
+            PredictionCache::Instance.Clear();
+        }
 
-        // Clear away old games in progress to ensure that new ones use the new network.
-        ResetGames();
+        // Set up any uninitialized games. It's important to do this here so that "_gameStarts" is accurate for MCTS timing.
+        // Otherwise, continue games in progress, clearing the prediction cache when the network is updated.
+        for (int i = 0; i < _games.size(); i++)
+        {
+            if (!_games[i].Root())
+            {
+                SetUpGame(i);
+            }
+        }
 
         // Play games until required.
         while (!workCoordinator.AllWorkItemsCompleted())
@@ -781,15 +791,17 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
             }
             else
             {
-                network->PredictBatch(networkType, _networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+                const PredictionStatus status = network->PredictBatch(networkType, _networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+                if ((status & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
+                {
+                    // This thread has permission to clear the prediction cache after seeing an updated network.
+                    PredictionCache::Instance.Clear();
+                }
             }
         }
 
-        // Clean up nodes.
-        for (int i = 0; i < _games.size(); i++)
-        {
-            _games[i].PruneAll();
-        }
+        // Don't free nodes here. Let the games and MCTS trees be continued using the next network
+        // after clearing the prediction cache (via PredictionStatus flag).
     }
 }
 
@@ -960,7 +972,7 @@ std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, Net
     // Make sure that the prediction cache is clear, for consistent results.
     PredictionCache::Instance.Clear();
 
-    // Warm up the GIL and predictions, and reclaim training memory.
+    // Warm up the GIL and predictions.
     WarmUpPredictions(network, networkType, 1);
 
     const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
@@ -1018,7 +1030,7 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkT
     const Node* bestMove = SelectMove(_games[0]);
     const int points = JudgeStrengthTestPosition(spec, bestMove->move);
 
-    // Free nodes after strength testing (especially for the final position, for which there's no PruneAll/SetUpGame).
+    // Free nodes after strength testing (especially for the final position, for which there's no following PruneAll/SetUpGame).
     _games[0].PruneAll();
 
     return points;
@@ -1508,7 +1520,7 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     // Use the faster student network for UCI predictions.
     const NetworkType networkType = NetworkType_Student;
 
-    // Warm up the GIL and predictions, and reclaim training memory.
+    // Warm up the GIL and predictions.
     WarmUpPredictions(network.get(), networkType, 1);
 
     // Start with the position "updated" to the starting position in case of a naked "go" command.
@@ -1589,10 +1601,9 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
 // - initializing Python thread state
 // - creating models and loading weights on this thread's assigned TPU/GPU device
 // - tracing tf.functions on this thread's assigned TPU/GPU device
-// - clearing any cached training data to free up memory for self-play or strength testing (may be extremely slow at the moment)
-void SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize)
+PredictionStatus SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize)
 {
-    network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());
+    return network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());
 }
 
 void SelfPlayWorker::UpdatePosition()

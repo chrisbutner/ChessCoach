@@ -154,12 +154,12 @@ class DatasetBuilder:
     dataset = tf.data.Dataset.from_tensor_slices(filenames)
     dataset = dataset.shuffle(len(filenames), reshuffle_each_iteration=True)
 
+    # Repeat chunk loading for each source.
+    dataset = dataset.repeat()
+
     # Parse chunks in parallel, cycling through as large a number as possible while staying under memory budget.
     dataset = dataset.interleave(lambda x: self.parse_chunk(x, options), cycle_length=options.cycle_length,
       num_parallel_calls=tf.data.experimental.AUTOTUNE, deterministic=False)
-
-    # Repeat each source.
-    dataset = dataset.repeat()
     return dataset
 
   def build_dataset(self, sources, options):

@@ -291,6 +291,10 @@ private:
 
 class SelfPlayWorker
 {
+private:
+
+    static Throttle PredictionCacheResetThrottle;
+
 public:
 
     SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage);
@@ -301,7 +305,6 @@ public:
     SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
 
     const NetworkConfig& Config() const;
-    void ResetGames();
     void PlayGames(WorkCoordinator& workCoordinator, INetwork* network);
     void ClearGame(int index);
     void SetUpGame(int index);
@@ -333,7 +336,7 @@ public:
     void DebugResetGame(int index);
 
     void Search(std::function<INetwork* ()> networkFactory);
-    void WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
+    PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
     void SignalDebug(bool debug);
     void SignalPosition(std::string&& fen, std::vector<Move>&& moves);
     void SignalSearchGo(const TimeControl& timeControl);

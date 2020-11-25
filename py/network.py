@@ -45,7 +45,7 @@ import time
 import threading
 import numpy as np
 
-from config import Config
+from config import Config, PredictionStatus
 from model import ModelBuilder
 import transformer
 from training import Trainer
@@ -111,8 +111,8 @@ class Network:
       return self.models_train.train(images, training=False)
 
   def predict_batch(self, device_index, images):
-    self.ensure_prediction(device_index)
-    return self.tf_predict(device_index, images)
+    status = self.ensure_prediction(device_index)
+    return (status, *self.tf_predict(device_index, images))
 
   def predict_commentary_batch(self, images):
     networks.teacher.ensure_commentary()
@@ -171,7 +171,8 @@ class Network:
     now = time.time()
     if (now - models.full_weights_last_check) > interval_seconds:
       models.full_weights_last_check = now
-      self.check_update_full(device_index)
+      return self.check_update_full(device_index)
+    return PredictionStatus.Nothing
 
   def check_update_full(self, device_index):
     models = self.models_predict[device_index]
@@ -188,18 +189,20 @@ class Network:
         log(f"Updating model ({device_index}/{self.network_type}/full): {log_name}")
         self.load_weights(models.full, model_full_path)
         models.full_weights_path = model_full_path
+        return PredictionStatus.UpdatedNetwork
+    return PredictionStatus.Nothing
 
   def ensure_prediction(self, device_index):
     with ensure_locks[device_index]:
       # The prediction model may already exist.
       if self.models_predict[device_index].predict:
         # Occasionally check for more recent weights to load.
-        self.maybe_check_update_full(device_index)
-        return
+        return self.maybe_check_update_full(device_index)
 
       # Take the prediction subset from the full model.
       self.ensure_full(device_index)
       self.models_predict[device_index].predict = ModelBuilder().subset_predict(self.models_predict[device_index].full)
+      return PredictionStatus.Nothing
   
   def ensure_training(self):
     # The training subset may already exist.
@@ -364,18 +367,16 @@ def device(device_index):
 # --- C++ API ---
 
 def predict_batch_teacher(images):
-  trainer.clear_data() # Free up training memory for use in self-play or strength testing.
   device_index = choose_device_index()
   with device(device_index):
-    value, policy = networks.teacher.predict_batch(device_index, images)
-    return np.array(memoryview(value)), np.array(memoryview(policy))
+    status, value, policy = networks.teacher.predict_batch(device_index, images)
+    return status, np.array(memoryview(value)), np.array(memoryview(policy))
 
 def predict_batch_student(images):
-  trainer.clear_data() # Free up training memory for use in self-play or strength testing.
   device_index = choose_device_index()
   with device(device_index):
-    value, policy = networks.student.predict_batch(device_index, images)
-    return np.array(memoryview(value)), np.array(memoryview(policy))
+    status, value, policy = networks.student.predict_batch(device_index, images)
+    return status, np.array(memoryview(value)), np.array(memoryview(policy))
 
 def predict_commentary_batch(images):
   # Always use the teacher network for commentary.

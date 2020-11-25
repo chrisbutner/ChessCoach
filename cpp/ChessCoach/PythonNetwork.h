@@ -41,7 +41,7 @@ public:
     PythonNetwork();
     virtual ~PythonNetwork();
 
-    virtual void PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
+    virtual PredictionStatus PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images);
     virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
         std::vector<Window>& trainingWindows, int step, int checkpoint);

@@ -2,7 +2,13 @@ import toml
 import platform
 import os
 import posixpath
+import enum
 import tensorflow as tf
+
+# Duplicated from "Config.h"
+class PredictionStatus(enum.IntFlag):
+  Nothing = 0
+  UpdatedNetwork = (1 << 0)
 
 class Config:
 

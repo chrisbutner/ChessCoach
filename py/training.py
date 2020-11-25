@@ -129,18 +129,6 @@ class Trainer:
     metrics = [[], [], [student_policy_accuracy], [student_policy_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
-  # NOTE: This can be extremely slow right now (e.g. ~500 seconds after 1000 steps on 2**17 shuffle buffer)
-  # but is necessary when training and self-playing on a single machine to ensure enough memory for
-  # either (a) a 32-cycle_length of chunk loads plus a 2**17-shuffle buffer (~ 30 GB with overhead)
-  # or (b) num_workers * prediction_batch_size games in parallel worth of Stockfish StateInfos and MCTS Nodes.
-  def clear_data(self):
-    if self.data_training_key or self.data_commentary_training:
-      self.log("Clearing datasets")
-    self.data_training = None
-    self.data_validation = None
-    self.data_training_key = None
-    self.data_commentary_training = None
-
   def train(self, network, teacher_network, game_types, training_windows, starting_step, checkpoint):
     # Create models on the distribution strategy scope, including the teacher for knowledge distillation inference.
     with self.strategy.scope():

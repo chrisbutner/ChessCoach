@@ -57,7 +57,9 @@ void ChessCoachTrain::TrainChessCoach()
     // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
     storage.InitializeLocalGamesChunks(network.get());
 
-    // Start self-play worker threads.
+    // Start self-play worker threads. Also create a self-play worker for this main thread so that
+    // MCTS nodes are always allocated and freed from the correct thread's pool allocator.
+    std::unique_ptr<SelfPlayWorker> mainWorker = std::make_unique<SelfPlayWorker>(config, &storage);
     std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
     std::vector<std::thread> selfPlayThreads;
 
@@ -98,23 +100,23 @@ void ChessCoachTrain::TrainChessCoach()
             }
             case StageType_Train:
             {
-                StageTrain(config, config.Training.Stages, i, *selfPlayWorkers.front(), network.get(),
+                StageTrain(config, config.Training.Stages, i, *mainWorker, network.get(),
                     networkCount, n, step, checkpoint);
                 break;
             }
             case StageType_TrainCommentary:
             {
-                StageTrainCommentary(config, stage, *selfPlayWorkers.front(), network.get(), step, checkpoint);
+                StageTrainCommentary(config, stage, *mainWorker, network.get(), step, checkpoint);
                 break;
             }
             case StageType_Save:
             {
-                StageSave(config, stage, *selfPlayWorkers.front(), network.get(), checkpoint);
+                StageSave(config, stage, *mainWorker, network.get(), checkpoint);
                 break;
             }
             case StageType_StrengthTest:
             {
-                StageStrengthTest(config, stage, *selfPlayWorkers.front(), network.get(), checkpoint);
+                StageStrengthTest(config, stage, *mainWorker, network.get(), checkpoint);
                 break;
             }
             case StageType_Count:
@@ -166,7 +168,7 @@ void ChessCoachTrain::StagePlay(const NetworkConfig& config, const StageConfig& 
             // Stop workers in case we finished because of other machines, in a distributed scenario.
             std::cout << "Finished playing games" << std::endl;
             workCoordinator.ResetWorkItemsRemaining(0);
-            return;
+            break;
         }
 
         if (workersReady)
@@ -186,9 +188,8 @@ void ChessCoachTrain::StagePlay(const NetworkConfig& config, const StageConfig& 
         }
     }
 
-    // Clear the prediction cache to prepare for the new network.
+    // Print prediction cache stats after finishing self-play.
     PredictionCache::Instance.PrintDebugInfo();
-    PredictionCache::Instance.Clear();
 }
 
 void ChessCoachTrain::StagePlayWait(const NetworkConfig& config, const Storage& storage, INetwork* network, const Window& trainingWindow)

@@ -219,6 +219,7 @@ bool PredictionCache::TryGetPrediction(Key key, int moveCount, PredictionCacheCh
 
 void PredictionCache::Clear()
 {
+    std::cout << "Clearing the prediction cache" << std::endl;
     for (PredictionCacheChunk* table : _tables)
     {
         for (int i = 0; i < ChunksPerTable; i++)

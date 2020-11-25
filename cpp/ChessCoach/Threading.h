@@ -6,6 +6,20 @@
 #include <condition_variable>
 #include <atomic>
 
+class Throttle
+{
+public:
+
+    Throttle(int durationMilliseconds);
+
+    bool TryFire();
+
+private:
+
+    int _durationMilliseconds;
+    std::atomic_uint64_t _last;
+};
+
 template <typename T>
 class SyncQueue
 {

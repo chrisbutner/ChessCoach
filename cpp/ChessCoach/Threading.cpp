@@ -3,6 +3,27 @@
 #include <chrono>
 #include <functional>
 
+Throttle::Throttle(int durationMilliseconds)
+    : _durationMilliseconds(durationMilliseconds)
+    , _last(0)
+{
+}
+
+bool Throttle::TryFire()
+{
+    const uint64_t now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    uint64_t last = _last;
+
+    while ((now - last) >= _durationMilliseconds)
+    {
+        if (_last.compare_exchange_weak(last, now))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 WorkCoordinator::WorkCoordinator(int workerCount)
     : _workItemsRemaining(0)
     , _workerCount(workerCount)
