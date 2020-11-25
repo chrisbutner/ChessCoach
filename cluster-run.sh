@@ -2,5 +2,5 @@
 set -eux
 pushd "$(dirname "$0")"
 
-kubectl create -f cluster-train-deployment.yaml
-kubectl create -f cluster-play-deployment.yaml
+kubectl apply -f cluster-train-deployment.yaml
+kubectl apply -f cluster-play-deployment.yaml
