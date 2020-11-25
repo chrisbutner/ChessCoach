@@ -160,6 +160,7 @@ SelfPlayConfig ParseSelfPlay(const TomlValue& config, const Policy& policy, cons
     selfPlay.ExplorationRateInit = policy.template Find<float>(config, "exploration_rate_init", defaults.ExplorationRateInit);
 
     selfPlay.NetworkUpdateCheckIntervalSeconds = policy.template Find<float>(config, "network_update_check_interval_seconds", defaults.NetworkUpdateCheckIntervalSeconds);
+    selfPlay.WaitForUpdatedNetwork = policy.template Find<bool>(config, "wait_for_updated_network", defaults.WaitForUpdatedNetwork);
         
     return selfPlay;
 }

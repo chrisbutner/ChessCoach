@@ -106,6 +106,7 @@ struct SelfPlayConfig
     float ExplorationRateInit;
 
     float NetworkUpdateCheckIntervalSeconds;
+    bool WaitForUpdatedNetwork;
 };
 
 struct NetworkConfig

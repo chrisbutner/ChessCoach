@@ -1,6 +1,6 @@
 Further distributed work
-- don't stop self-play on "play"-only roles
 - partial network resume (disk milestones - teacher save, student save, strength test markers)
+- script to update active deployments with updated container image
 
 Fresh training runs
 - comparison run on pure self-play, rather than mixed batches

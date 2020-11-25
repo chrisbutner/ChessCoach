@@ -281,6 +281,7 @@ exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
 network_update_check_interval_seconds = 300.0
+wait_for_updated_network = false
 
 ###############################################################################
 #                       Miscellaneous configuration                           #

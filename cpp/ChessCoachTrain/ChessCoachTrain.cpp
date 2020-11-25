@@ -277,12 +277,22 @@ void ChessCoachTrain::StageTrainCommentary(const NetworkConfig& config, const St
 
 void ChessCoachTrain::StageSave(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
 {
-    // If this machine isn't a trainer, wait until we see someone else save this network type + checkpoint.
+    // If this machine isn't a trainer, and "wait_for_updated_network" is *true*, wait until we see someone else save this network type + checkpoint.
+    // If this machine isn't a trainer, and "wait_for_updated_network" is *false*, return immediately and start playing the next set of games.
+    // In either case, the network will be updated and used when available, even mid-game (detected and updated in network.py, observed and handled in SelfPlay.cpp).
     if (!(config.Role & RoleType_Train))
     {
-        std::cout << "Waiting: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << checkpoint << "]" << std::endl;
-        StageSaveWait(config, stage, network, checkpoint);
-        return;
+        if (config.SelfPlay.WaitForUpdatedNetwork)
+        {
+            std::cout << "Waiting: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << checkpoint << "]" << std::endl;
+            StageSaveWait(config, stage, network, checkpoint);
+            return;
+        }
+        else
+        {
+            std::cout << "Not waiting: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << checkpoint << "]" << std::endl;
+            return;
+        }
     }
 
     // Log the stage info in a consistent format.
