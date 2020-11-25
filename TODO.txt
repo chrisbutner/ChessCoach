@@ -27,6 +27,14 @@ Training improvements
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
 	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
 
+Bigger ideas
+- what if we just shove the supervised games at the beginning of a larger "virtual" window, so that training starts with 100% supervised and finishes with 0%
+	- window would need to start large, e.g. 1m or 2m, then shrink fast enough to reach milestones like 50% selfplay by X steps, 0% by Y steps
+	  (without requiring many millions of self-play games)
+- seems like networks may be getting too "set in their ways" with early unfortunate/shortcut data and heavy sample ratio
+	- could use a generation-style system to periodically start new networks fresher with less supervised/early and lower sample ratio,
+	  now that they have more data available to them, then take over on self-play once they emperically reach parity
+
 Quality
 - print config summary when starting a run
 - switch to even number of history positions for repetitions (what if we only did every 2nd going back)

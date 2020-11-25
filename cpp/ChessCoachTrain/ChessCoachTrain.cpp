@@ -22,7 +22,7 @@ private:
     void StageTrain(const NetworkConfig& config, const std::vector<StageConfig>& stages, int& stageIndex, SelfPlayWorker& selfPlayWorker, INetwork* network,
         int networkCount, int n, int step, int checkpoint);
     void StageTrainCommentary(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int step, int checkpoint);
-    void StageSave(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
+    void StageSave(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int n, int checkpoint);
     void StageSaveWait(const NetworkConfig& config, const StageConfig& stage, INetwork* network, int checkpoint);
     void StageStrengthTest(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint);
 
@@ -111,7 +111,7 @@ void ChessCoachTrain::TrainChessCoach()
             }
             case StageType_Save:
             {
-                StageSave(config, stage, *mainWorker, network.get(), checkpoint);
+                StageSave(config, stage, *mainWorker, network.get(), n, checkpoint);
                 break;
             }
             case StageType_StrengthTest:
@@ -275,14 +275,15 @@ void ChessCoachTrain::StageTrainCommentary(const NetworkConfig& config, const St
     selfPlayWorker.TrainNetworkWithCommentary(network, step, checkpoint);
 }
 
-void ChessCoachTrain::StageSave(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int checkpoint)
+void ChessCoachTrain::StageSave(const NetworkConfig& config, const StageConfig& stage, SelfPlayWorker& selfPlayWorker, INetwork* network, int n, int checkpoint)
 {
     // If this machine isn't a trainer, and "wait_for_updated_network" is *true*, wait until we see someone else save this network type + checkpoint.
-    // If this machine isn't a trainer, and "wait_for_updated_network" is *false*, return immediately and start playing the next set of games.
+    // If this machine isn't a trainer, and "wait_for_updated_network" is *false*, return immediately and start playing the next set of games,
+    // *except* when this is the first network and we're generating uniform predictions.
     // In either case, the network will be updated and used when available, even mid-game (detected and updated in network.py, observed and handled in SelfPlay.cpp).
     if (!(config.Role & RoleType_Train))
     {
-        if (config.SelfPlay.WaitForUpdatedNetwork)
+        if (config.SelfPlay.WaitForUpdatedNetwork || (n == 1))
         {
             std::cout << "Waiting: [" << StageTypeNames[stage.Stage] << "][" << NetworkTypeNames[stage.Target] << "][" << checkpoint << "]" << std::endl;
             StageSaveWait(config, stage, network, checkpoint);
