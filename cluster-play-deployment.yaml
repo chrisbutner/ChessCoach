@@ -36,7 +36,9 @@ spec:
             cpu: 3
             memory: 30Gi
             cloud-tpus.google.com/v2: 8 # v2-8
+            ephemeral-storage: 4Gi
           limits:
             cpu: 3.75
             memory: 30Gi
             cloud-tpus.google.com/v2: 8 # v2-8
+            ephemeral-storage: 4Gi
