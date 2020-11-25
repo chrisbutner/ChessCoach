@@ -11,8 +11,9 @@ Throttle::Throttle(int durationMilliseconds)
 
 bool Throttle::TryFire()
 {
-    const uint64_t now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    uint64_t last = _last;
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    int64_t last = _last;
 
     while ((now - last) >= _durationMilliseconds)
     {

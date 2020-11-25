@@ -17,7 +17,7 @@ public:
 private:
 
     int _durationMilliseconds;
-    std::atomic_uint64_t _last;
+    std::atomic_int64_t _last;
 };
 
 template <typename T>
