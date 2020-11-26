@@ -23,7 +23,7 @@ spec:
           secretName: chesscoach-credentials
       containers:
       - name: chesscoach-train-container
-        image: gcr.io/chesscoach/chesscoach-train:chesscoach1m_v3
+        image: gcr.io/chesscoach/chesscoach-train:chesscoach2_v3
         volumeMounts:
         - name: service-credentials
           mountPath: /var/secrets/google

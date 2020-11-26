@@ -100,7 +100,7 @@ class Network:
     path = self.latest_network_path()
     step_count = int(re.match(".*?([0-9]+)$", path).group(1)) if path else 0
     training_chunk_count = config.count_training_chunks()
-    relative_path = config.unmake_path(path).encode("ascii")
+    relative_path = config.unmake_path(path).encode("ascii") if path else b""
     return (step_count, training_chunk_count, relative_path)
 
   @tf.function

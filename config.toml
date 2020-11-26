@@ -4,13 +4,13 @@
 
 [network]
 
-training_network_name = "chesscoach1m"
-uci_network_name = "chesscoach1m"
+training_network_name = "chesscoach2"
+uci_network_name = "chesscoach2"
 role = "train|play"
 
 [[networks]]
 
-    name = "chesscoach1m"
+    name = "chesscoach2"
     
     [networks.training]
 
@@ -33,6 +33,8 @@ role = "train|play"
         { stage = "strength_test", target = "teacher" },
         { stage = "strength_test", target = "student" },
     ]
+
+    games_path_training = "Games/Training2"
 
 [[networks]]
 
@@ -267,7 +269,7 @@ rates = [2e-4, 2e-5, 2e-6, 2e-7]
 
 [self_play]
 
-num_workers = 4
+num_workers = 8
 prediction_batch_size = 512
 
 num_sampling_moves = 30

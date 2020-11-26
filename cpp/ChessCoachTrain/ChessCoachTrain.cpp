@@ -328,7 +328,11 @@ void ChessCoachTrain::StageStrengthTest(const TrainingState& state, SelfPlayWork
     const bool strengthTested = selfPlayWorker.StrengthTestNetwork(state.network, state.Stage().Target, state.Checkpoint());
     if (strengthTested)
     {
-        state.network->SaveFile(state.StrengthTestMarkerRelativePath(), "");
+        const std::string markerRelativePath = state.StrengthTestMarkerRelativePath();
+        if (!markerRelativePath.empty())
+        {
+            state.network->SaveFile(markerRelativePath, "");
+        }
     }
 }
 
@@ -404,7 +408,8 @@ bool ChessCoachTrain::IsStageComplete(const TrainingState& state)
     case StageType_StrengthTest:
     {
         // Look for the teacher or student strength test marker file in storage.
-        return state.network->FileExists(state.StrengthTestMarkerRelativePath());
+        const std::string markerRelativePath = state.StrengthTestMarkerRelativePath();
+        return markerRelativePath.empty() ? false : state.network->FileExists(markerRelativePath);
     }
     case StageType_Count:
     {
@@ -464,6 +469,11 @@ std::string TrainingState::StrengthTestMarkerRelativePath() const
 {
     std::string relativePath;
     network->GetNetworkInfo(Stage().Target, nullptr, nullptr, &relativePath);
+    if (relativePath.empty())
+    {
+        // No path, not saved in storage yet.
+        return relativePath;
+    }
 
     // Always use a forward slash for potential compatibility with gs://
     relativePath += '/';

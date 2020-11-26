@@ -700,9 +700,9 @@ Move SelfPlayGame::ParseSan(const std::string& san)
     return Pgn::ParseSan(_position, san);
 }
 
-// Don't clear the prediction cache more than once every 30 seconds
+// Don't clear the prediction cache more than once every 5 minutes
 // (aimed at preventing N self-play worker threads from each clearing).
-Throttle SelfPlayWorker::PredictionCacheResetThrottle(30 * 1000 /* durationMilliseconds */);
+Throttle SelfPlayWorker::PredictionCacheResetThrottle(300 * 1000 /* durationMilliseconds */);
 
 SelfPlayWorker::SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage)
     : _networkConfig(&networkConfig)
