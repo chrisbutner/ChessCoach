@@ -18,4 +18,5 @@ RUN pip3 install --upgrade pip && \
   pip3 install toml tensorflow-cpu==2.3.1 cloud-tpu-client
 
 COPY . /chesscoach
-RUN /chesscoach/build.sh release install
+RUN /chesscoach/build.sh release install && \
+  rm -r /chesscoach/build
