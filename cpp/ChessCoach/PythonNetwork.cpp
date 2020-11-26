@@ -59,6 +59,7 @@ PythonNetwork::PythonNetwork()
     _getNetworkInfoFunction[NetworkType_Teacher] = LoadFunction(module, "get_network_info_teacher");
     _getNetworkInfoFunction[NetworkType_Student] = LoadFunction(module, "get_network_info_student");
     _saveFileFunction = LoadFunction(module, "save_file");
+    _fileExistsFunction = LoadFunction(module, "file_exists");
     _debugDecompressFunction = LoadFunction(module, "debug_decompress");
 
     Py_DECREF(module);
@@ -70,6 +71,7 @@ PythonNetwork::PythonNetwork()
 PythonNetwork::~PythonNetwork()
 {
     Py_XDECREF(_debugDecompressFunction);
+    Py_XDECREF(_fileExistsFunction);
     Py_XDECREF(_saveFileFunction);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Student]);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Teacher]);
@@ -287,7 +289,7 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
     Py_DECREF(pythonCheckpoint);
 }
 
-void PythonNetwork::GetNetworkInfo(NetworkType networkType, int& stepCountOut, int& trainingChunkCountOut)
+void PythonNetwork::GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut)
 {
     PythonContext context;
 
@@ -304,8 +306,22 @@ void PythonNetwork::GetNetworkInfo(NetworkType networkType, int& stepCountOut, i
     PyAssert(pythonTrainingChunkCount);
     PyAssert(PyLong_Check(pythonTrainingChunkCount));
 
-    stepCountOut = PyLong_AsLong(pythonStepCount);
-    trainingChunkCountOut = PyLong_AsLong(pythonTrainingChunkCount);
+    PyObject* pythonRelativePath = PyTuple_GetItem(tupleResult, 2); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonRelativePath);
+    PyAssert(PyBytes_Check(pythonRelativePath));
+
+    if (stepCountOut)
+    {
+        *stepCountOut = PyLong_AsLong(pythonStepCount);
+    }
+    if (trainingChunkCountOut)
+    {
+        *trainingChunkCountOut = PyLong_AsLong(pythonTrainingChunkCount);
+    }
+    if (relativePathOut)
+    {
+        *relativePathOut = PyBytes_AsString(pythonRelativePath);
+    }
 
     Py_DECREF(tupleResult);
 }
@@ -326,6 +342,24 @@ void PythonNetwork::SaveFile(const std::string& relativePath, const std::string&
     Py_DECREF(result);
     Py_DECREF(pythonData);
     Py_DECREF(pythonRelativePath);
+}
+
+bool PythonNetwork::FileExists(const std::string& relativePath)
+{
+    PythonContext context;
+
+    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.c_str(), relativePath.size());
+    PyAssert(pythonRelativePath);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_fileExistsFunction, pythonRelativePath, nullptr);
+    PyAssert(result);
+    PyAssert(PyBool_Check(result));
+    const bool exists = PyObject_IsTrue(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonRelativePath);
+
+    return exists;
 }
 
 void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,

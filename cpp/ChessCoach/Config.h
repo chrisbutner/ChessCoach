@@ -140,6 +140,7 @@ struct MiscConfig
     std::string Paths_TensorBoard;
     std::string Paths_Logs;
     std::string Paths_Pgns;
+    std::string Paths_StrengthTestMarkerPrefix;
 };
 
 class Config

@@ -14,7 +14,8 @@ class Config:
 
   def __init__(self, is_tpu):
     self.is_tpu = is_tpu
-    self.join = posixpath.join if is_tpu else os.path.join
+    self.path = posixpath if is_tpu else os.path
+    self.join = self.path.join
     
     try:
       config = toml.load("config.toml")
@@ -101,6 +102,9 @@ class Config:
 
     return path
 
+  def unmake_path(self, path):
+    return self.path.relpath(path, self.data_root)
+
   def latest_network_path_for_type(self, network_name, network_type):
     glob = self.join(self.misc["paths"]["networks"], network_name + "_*", network_type)
     results = tf.io.gfile.glob(glob)
@@ -113,3 +117,7 @@ class Config:
   def save_file(self, relative_path, data):
     path = self.make_path(relative_path)
     tf.io.gfile.GFile(path, "wb").write(data)
+
+  def file_exists(self, relative_path):
+    path = self.make_path(relative_path)
+    return tf.io.gfile.exists(path)

@@ -49,8 +49,9 @@ public:
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values);
     virtual void LoadNetwork(const std::string& networkName);
     virtual void SaveNetwork(NetworkType networkType, int checkpoint);
-    virtual void GetNetworkInfo(NetworkType networkType, int& stepCountOut, int& trainingChunkCountOut);
+    virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut);
     virtual void SaveFile(const std::string& relativePath, const std::string& data);
+    virtual bool FileExists(const std::string& relativePath);
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
         float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut);
@@ -70,6 +71,7 @@ private:
     PyObject* _saveNetworkFunction[NetworkType_Count];
     PyObject* _getNetworkInfoFunction[NetworkType_Count];
     PyObject* _saveFileFunction;
+    PyObject* _fileExistsFunction;
     PyObject* _debugDecompressFunction;
 };
 

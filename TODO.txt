@@ -1,7 +1,3 @@
-Further distributed work
-- partial network resume (disk milestones - teacher save, student save, strength test markers)
-- script to update active deployments with updated container image
-
 Fresh training runs
 - comparison run on pure self-play, rather than mixed batches
 - run distributed training with a fresh self-play corpus as a baseline for further experiments

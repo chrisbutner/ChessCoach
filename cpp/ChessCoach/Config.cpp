@@ -185,6 +185,7 @@ MiscConfig ParseMisc(const TomlValue& config)
     misc.Paths_TensorBoard = toml::find<std::string>(config, "paths", "tensorboard");
     misc.Paths_Logs = toml::find<std::string>(config, "paths", "logs");
     misc.Paths_Pgns = toml::find<std::string>(config, "paths", "pgns");
+    misc.Paths_StrengthTestMarkerPrefix = toml::find<std::string>(config, "paths", "strength_test_marker_prefix");
 
     return misc;
 }

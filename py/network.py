@@ -100,7 +100,8 @@ class Network:
     path = self.latest_network_path()
     step_count = int(re.match(".*?([0-9]+)$", path).group(1)) if path else 0
     training_chunk_count = config.count_training_chunks()
-    return (step_count, training_chunk_count)
+    relative_path = config.unmake_path(path).encode("ascii")
+    return (step_count, training_chunk_count, relative_path)
 
   @tf.function
   def tf_predict(self, device_index, images):
@@ -416,6 +417,9 @@ def save_network_student(checkpoint):
 
 def save_file(relative_path, data):
   config.save_file(relative_path, data)
+
+def file_exists(relative_path):
+  return config.file_exists(relative_path)
 
 def debug_decompress(result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
   images, values, policies, reply_policies = datasets.decompress(result, image_pieces_auxiliary,

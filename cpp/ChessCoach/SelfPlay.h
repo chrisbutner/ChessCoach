@@ -314,7 +314,7 @@ public:
         std::vector<Window>& trainingWindows, int step, int checkpoint);
     void TrainNetworkWithCommentary(INetwork* network, int step, int checkpoint);
     void SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint);
-    void StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint);
+    bool StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint);
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(INetwork* network, int index);

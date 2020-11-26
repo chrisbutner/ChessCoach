@@ -902,7 +902,7 @@ void SelfPlayWorker::SaveNetwork(INetwork* network, NetworkType networkType, int
     network->SaveNetwork(networkType, checkpoint);
 }
 
-void SelfPlayWorker::StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint)
+bool SelfPlayWorker::StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint)
 {
     // Strength-test the engine every "StrengthTestInterval" steps.
     assert(_networkConfig->Training.StrengthTestInterval >= _networkConfig->Training.CheckpointInterval);
@@ -910,7 +910,9 @@ void SelfPlayWorker::StrengthTestNetwork(INetwork* network, NetworkType networkT
     if ((checkpoint % _networkConfig->Training.StrengthTestInterval) == 0)
     {
         StrengthTest(network, networkType, checkpoint);
+        return true;
     }
+    return false;
 }
 
 void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, int step)

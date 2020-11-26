@@ -316,4 +316,6 @@ tensorboard = "TensorBoard"
 logs = "Logs"
 pgns = "Pgns"
 
+strength_test_marker_prefix = "StrengthTestComplete"
+
 ###############################################################################

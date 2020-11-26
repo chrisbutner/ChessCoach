@@ -89,8 +89,9 @@ struct INetwork
     virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values) = 0;
     virtual void LoadNetwork(const std::string& networkName) = 0;
     virtual void SaveNetwork(NetworkType networkType, int checkpoint) = 0;
-    virtual void GetNetworkInfo(NetworkType networkType, int& stepCountOut, int& trainingChunkCountOut) = 0;
+    virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut) = 0;
     virtual void SaveFile(const std::string& relativePath, const std::string& data) = 0;
+    virtual bool FileExists(const std::string& relativePath) = 0;
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
         float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut) = 0;
