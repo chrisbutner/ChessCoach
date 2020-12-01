@@ -368,12 +368,14 @@ def device(device_index):
 # --- C++ API ---
 
 def predict_batch_teacher(images):
+  trainer.clear_data() # Free up training memory for use in self-play or strength testing.
   device_index = choose_device_index()
   with device(device_index):
     status, value, policy = networks.teacher.predict_batch(device_index, images)
     return status, np.array(memoryview(value)), np.array(memoryview(policy))
 
 def predict_batch_student(images):
+  trainer.clear_data() # Free up training memory for use in self-play or strength testing.
   device_index = choose_device_index()
   with device(device_index):
     status, value, policy = networks.student.predict_batch(device_index, images)

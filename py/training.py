@@ -129,6 +129,16 @@ class Trainer:
     metrics = [[], [], [student_policy_accuracy], [student_policy_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
+  # Explicitly reclaim dataset memory before active self-play or strength testing.
+  # Relying on working set eviction doesn't seem to be enough to avoid OOM kills, Kubernetes evictions, etc.
+  def clear_data(self):
+    if self.data_training_key or self.data_commentary_training:
+      self.log("Clearing datasets")
+    self.data_training = None
+    self.data_validation = None
+    self.data_training_key = None
+    self.data_commentary_training = None
+
   def train(self, network, teacher_network, game_types, training_windows, starting_step, checkpoint):
     # Create models on the distribution strategy scope, including the teacher for knowledge distillation inference.
     with self.strategy.scope():
