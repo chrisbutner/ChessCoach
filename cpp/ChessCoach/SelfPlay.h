@@ -25,24 +25,24 @@ public:
 
     static TerminalValue NonTerminal();
 
-    static int Draw();
+    static int8_t Draw();
 
     // Mate in N fullmoves, not halfmoves/ply.
-    static int MateIn(int n);
+    static int8_t MateIn(int8_t n);
 
     // Opponent mate in N fullmoves, not halfmoves/ply.
-    static int OpponentMateIn(int n);
+    static int8_t OpponentMateIn(int8_t n);
 
     // Mate in N fullmoves, not halfmoves/ply.
-    template <int N>
-    static constexpr int MateIn()
+    template <int8_t N>
+    static constexpr int8_t MateIn()
     {
         return N;
     }
 
     // Opponent mate in N fullmoves, not halfmoves/ply.
-    template <int N>
-    static constexpr int OpponentMateIn()
+    template <int8_t N>
+    static constexpr int8_t OpponentMateIn()
     {
         return -N;
     }
@@ -50,10 +50,10 @@ public:
 public:
 
     TerminalValue();
-    TerminalValue(const int value);
+    TerminalValue(const int8_t value);
     
-    TerminalValue& operator=(const int value);
-    bool operator==(const int other) const;
+    TerminalValue& operator=(const int8_t value);
+    bool operator==(const int8_t other) const;
 
     bool IsNonTerminal() const;
 
@@ -63,15 +63,15 @@ public:
     bool IsMateInN() const;
     bool IsOpponentMateInN() const;
 
-    int MateN() const;
-    int OpponentMateN() const;
-    int EitherMateN() const;
+    int8_t MateN() const;
+    int8_t OpponentMateN() const;
+    int8_t EitherMateN() const;
 
     float MateScore(float explorationRate) const;
 
 private:
 
-    std::optional<int> _value;
+    std::optional<int8_t> _value;
     float _mateTerm;
 };
 
@@ -143,6 +143,7 @@ public:
 
 public:
 
+    Node(uint16_t setMove, float setPrior);
     Node(Move setMove, float setPrior);
 
     void* operator new(size_t byteCount);
@@ -163,17 +164,19 @@ public:
 
 public:
 
-    Move move;
-    float prior;
-    int visitCount;
-    int visitingCount;
-    float valueSum;
-    TerminalValue terminalValue;
-    bool expanding;
     Node* bestChild;
     Node* firstChild;
     Node* nextSibling;
+    uint16_t move;
+    bool expanding;
+    uint8_t visitingCount;
+    float prior;
+    int visitCount;
+    float valueSum;
+    TerminalValue terminalValue;
 };
+static_assert(sizeof(TerminalValue) == 8);
+static_assert(sizeof(Node) == 48);
 
 enum class SelfPlayState
 {

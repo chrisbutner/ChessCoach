@@ -21,19 +21,19 @@ TerminalValue TerminalValue::NonTerminal()
     return {};
 }
 
-int TerminalValue::Draw()
+int8_t TerminalValue::Draw()
 {
     return 0;
 }
 
 // Mate in N fullmoves, not halfmoves/ply.
-int TerminalValue::MateIn(int n)
+int8_t TerminalValue::MateIn(int8_t n)
 {
     return n;
 }
 
 // Opponent mate in N fullmoves, not halfmoves/ply.
-int TerminalValue::OpponentMateIn(int n)
+int8_t TerminalValue::OpponentMateIn(int8_t n)
 {
     return -n;
 }
@@ -44,18 +44,18 @@ TerminalValue::TerminalValue()
 {
 }
 
-TerminalValue::TerminalValue(const int value)
+TerminalValue::TerminalValue(const int8_t value)
 {
     operator=(value);
 }
 
-TerminalValue& TerminalValue::operator=(const int value)
+TerminalValue& TerminalValue::operator=(const int8_t value)
 {
     _value = value;
 
     if (value > 0)
     {
-        const int mateNSaturated = std::min(static_cast<int>(Game::UcbMateTerm.size() - 1), value);
+        const int mateNSaturated = std::min(static_cast<int8_t>(Game::UcbMateTerm.size() - 1), value);
         _mateTerm = Game::UcbMateTerm[mateNSaturated];
     }
     else
@@ -76,7 +76,7 @@ TerminalValue& TerminalValue::operator=(const int value)
     return *this;
 }
 
-bool TerminalValue::operator==(const int other) const
+bool TerminalValue::operator==(const int8_t other) const
 {
     return (_value == other);
 }
@@ -112,17 +112,17 @@ bool TerminalValue::IsOpponentMateInN() const
     return (_value && (*_value < 0));
 }
 
-int TerminalValue::MateN() const
+int8_t TerminalValue::MateN() const
 {
-    return (_value ? std::max(0, *_value) : 0);
+    return static_cast<int8_t>(_value ? std::max(0, static_cast<int>(*_value)) : 0);
 }
 
-int TerminalValue::OpponentMateN() const
+int8_t TerminalValue::OpponentMateN() const
 {
-    return (_value ? std::max(0, -*_value) : 0);
+    return static_cast<int8_t>(_value ? std::max(0, -*_value) : 0);
 }
 
-int TerminalValue::EitherMateN() const
+int8_t TerminalValue::EitherMateN() const
 {
     return (_value ? *_value : 0);
 }
@@ -134,7 +134,7 @@ float TerminalValue::MateScore(float explorationRate) const
 
 thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
 
-Node::Node(Move setMove, float setPrior)
+Node::Node(uint16_t setMove, float setPrior)
     : move(setMove)
     , prior(setPrior)
     , visitCount(0)
@@ -147,6 +147,11 @@ Node::Node(Move setMove, float setPrior)
     , nextSibling(nullptr)
 {
     assert(!std::isnan(setPrior));
+}
+
+Node::Node(Move setMove, float setPrior)
+    : Node(static_cast<uint16_t>(setMove), setPrior)
+{
 }
 
 void* Node::operator new(size_t /*count*/)
@@ -613,7 +618,7 @@ void SelfPlayGame::StoreSearchStatistics()
     const int sumChildVisits = _root->visitCount;
     for (const Node& child : *_root)
     {
-        visits[child.move] = static_cast<float>(child.visitCount) / sumChildVisits;
+        visits[Move(child.move)] = static_cast<float>(child.visitCount) / sumChildVisits;
     }
     // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
     _mctsValues.push_back(FlipValue(_root->Value()));
@@ -1030,7 +1035,7 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkT
 
     // Pick a best move and judge points.
     const Node* bestMove = SelectMove(_games[0]);
-    const int points = JudgeStrengthTestPosition(spec, bestMove->move);
+    const int points = JudgeStrengthTestPosition(spec, Move(bestMove->move));
 
     // Free nodes after strength testing (especially for the final position, for which there's no following PruneAll/SetUpGame).
     _games[0].PruneAll();
@@ -1086,7 +1091,7 @@ void SelfPlayWorker::Play(int index)
 
         assert(selected != nullptr);
         game.StoreSearchStatistics();
-        game.ApplyMoveWithRootAndHistory(selected->move, selected);
+        game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
         game.PruneExcept(root, selected /* == game.Root() */);
         _searchState.principleVariationChanged = true; // First move in PV is now gone.
     }
@@ -1172,7 +1177,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                     return nullptr;
                 }
 
-                scratchGame.ApplyMoveWithRoot(selected->move, selected);
+                scratchGame.ApplyMoveWithRoot(Move(selected->move), selected);
                 searchPath.push_back(selected /* == scratchGame.Root() */);
                 selected->visitingCount++;
             }
@@ -1357,7 +1362,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<Node*>& searchPath)
             // The child in the searchPath just became a mate, or a faster mate.
             // Does this make the parent an opponent mate or faster opponent mate?
             const Node* child = searchPath[i + 1];
-            const int newMateN = child->terminalValue.MateN();
+            const int8_t newMateN = child->terminalValue.MateN();
             assert(newMateN > 0);
             if (!parent->terminalValue.IsOpponentMateInN() ||
                 (newMateN < parent->terminalValue.OpponentMateN()))
@@ -1386,10 +1391,10 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<Node*>& searchPath)
             // The child in the searchPath just became an opponent mate or faster opponent mate.
             // Always check all children. This could do nothing, make the parent a new mate, or
             // make the parent a faster mate, depending on which child just got updated.
-            int longestChildOpponentMateN = std::numeric_limits<int>::min();
+            int8_t longestChildOpponentMateN = std::numeric_limits<int8_t>::min();
             for (const Node& child : *parent)
             {
-                const int childOpponentMateN = child.terminalValue.OpponentMateN();
+                const int8_t childOpponentMateN = child.terminalValue.OpponentMateN();
                 if (childOpponentMateN <= 0)
                 {
                     return;
@@ -1696,7 +1701,7 @@ void SelfPlayWorker::OnSearchFinished()
     // Print the final PV info and bestmove.
     const Node* bestMove = SelectMove(_games[0]);
     PrintPrincipleVariation();
-    std::cout << "bestmove " << UCI::move(bestMove->move, false /* chess960 */) << std::endl;
+    std::cout << "bestmove " << UCI::move(Move(bestMove->move), false /* chess960 */) << std::endl;
 
     // Lock around (a) checking "searchUpdated" and (b) clearing "search". We want to clear
     // "search" in order to go back to sleep but only if it's still the existing search.
@@ -1782,7 +1787,7 @@ void SelfPlayWorker::PrintPrincipleVariation()
 
     while (node->bestChild)
     {
-        principleVariation.push_back(node->bestChild->move);
+        principleVariation.push_back(Move(node->bestChild->move));
         node = node->bestChild;
     }
 
