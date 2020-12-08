@@ -927,26 +927,29 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
 
     std::cout << "Running strength tests..." << std::endl;
 
-    // STS gets special treatment.
+    // Only run STS in the interest of time.
     const std::string stsName = "STS";
+    const int moveTimeMs = 200;
 
-    // Find strength test .epd files.
+    // Find strength test .epd files and match STS.
     const std::filesystem::path testPath = (Platform::InstallationDataPath() / "StrengthTests");
     for (const auto& entry : std::filesystem::directory_iterator(testPath))
     {
-        if (entry.path().extension().string() == ".epd")
+        if (entry.path().extension().string() != ".epd")
         {
-            // Hard-coding move times in an ugly way here. They should really be 10-15 seconds for ERET and Arasan20,
-            // not 1 second, but this can show some level of progress during training without taking forever.
-            // However, only STS results will be comparable to other tested engines.
-            const std::string testName = entry.path().stem().string();
-            const int moveTimeMs = ((testName == stsName) ? 200 : 1000);
-
-            std::cout << "Testing " << entry.path().filename() << "..." << std::endl;
-            const auto [score, total, positions] = StrengthTestEpd(network, networkType, entry.path(), moveTimeMs);
-            testResults[testName] = score;
-            testPositions[testName] = positions;
+            continue;
         }
+
+        const std::string testName = entry.path().stem().string();
+        if (testName != stsName)
+        {
+            continue;
+        }
+
+        std::cout << "Testing " << entry.path().filename() << "..." << std::endl;
+        const auto [score, total, positions] = StrengthTestEpd(network, networkType, entry.path(), moveTimeMs);
+        testResults[testName] = score;
+        testPositions[testName] = positions;
     }
 
     // Estimate an Elo rating using logic here: https://github.com/fsmosca/STS-Rating/blob/master/sts_rating.py
