@@ -246,6 +246,7 @@ python_sources = [
   'py/attention.py',
   'py/config.py',
   'py/dataset.py',
+  'py/gui.py',
   'py/layers.py',
   'py/model.py',
   'py/network.py',
