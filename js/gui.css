@@ -1,5 +1,13 @@
 ﻿#board {
+    display: inline-block;
+    vertical-align: top;
     width: 800px;
+}
+
+#info {
+    display: inline-block;
+    vertical-align: top;
+    width: 600px;
 }
 
 button {
@@ -19,4 +27,20 @@ button {
 
 #sparePieces {
     display: none;
+}
+
+#moves {
+    margin-top: 20px;
+}
+
+.move {
+    padding: 5px;
+    border: 1px solid gray;
+    margin-top: -1px;
+    font-size: 24px;
+}
+
+.move .san {
+    display: inline-block;
+    width: 50px;
 }
