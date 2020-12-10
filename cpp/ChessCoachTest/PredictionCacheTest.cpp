@@ -38,7 +38,7 @@ TEST(PredictionCache, Basic)
     Key game1_key = game1.GenerateImageKey();
     Key game2_key = game2.GenerateImageKey();
 
-    EXPECT_EQ(game1.DebugPosition().key(), game2.DebugPosition().key());
+    EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_EQ(game1_key, game2_key);
     EXPECT_FALSE(TryGetPrediction(game1_key));
     EXPECT_TRUE(TryGetPrediction(game2_key));
@@ -61,7 +61,7 @@ TEST(PredictionCache, PathDependence)
     Key game1_key1 = game1.GenerateImageKey();
     Key game2_key1 = game2.GenerateImageKey();
     
-    EXPECT_EQ(game1.DebugPosition().key(), game2.DebugPosition().key());
+    EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_EQ(game1_key1, game2_key1);
     EXPECT_FALSE(TryGetPrediction(game1_key1));
     EXPECT_TRUE(TryGetPrediction(game2_key1));
@@ -74,7 +74,7 @@ TEST(PredictionCache, PathDependence)
     Key game1_key2 = game1.GenerateImageKey();
     Key game2_key2 = game2.GenerateImageKey();
 
-    EXPECT_NE(game1.DebugPosition().key(), game2.DebugPosition().key());
+    EXPECT_NE(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_NE(game1_key2, game2_key2);
     EXPECT_FALSE(TryGetPrediction(game1_key2));
     EXPECT_FALSE(TryGetPrediction(game2_key2));
@@ -91,7 +91,7 @@ TEST(PredictionCache, PathDependence)
     Key game1_key3 = game1.GenerateImageKey();
     Key game2_key3 = game2.GenerateImageKey();
 
-    EXPECT_EQ(game1.DebugPosition().key(), game2.DebugPosition().key());
+    EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_NE(game1_key3, game2_key3);
     EXPECT_FALSE(TryGetPrediction(game1_key3));
     EXPECT_FALSE(TryGetPrediction(game2_key3));
@@ -115,12 +115,12 @@ TEST(PredictionCache, Quantization)
     Key game1_key = game1.GenerateImageKey();
     Key game2_key = game2.GenerateImageKey();
 
-    EXPECT_EQ(game1.DebugPosition().key(), game2.DebugPosition().key());
+    EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_EQ(game1_key, game2_key);
 
     // Make sure that the two games' moves are the same.
-    MoveList<LEGAL> moves1(game1.DebugPosition());
-    MoveList<LEGAL> moves2(game2.DebugPosition());
+    MoveList<LEGAL> moves1(game1.GetPosition());
+    MoveList<LEGAL> moves2(game2.GetPosition());
     EXPECT_EQ(moves1.size(), moves2.size());
     for (int i = 0; i < moves1.size(); i++)
     {

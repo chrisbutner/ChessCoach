@@ -11,7 +11,7 @@
 
 void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
 {
-    const MoveList legalMoves = MoveList<LEGAL>(game.DebugPosition());
+    const MoveList legalMoves = MoveList<LEGAL>(game.GetPosition());
     const int legalMoveCount = static_cast<int>(legalMoves.size());
 
     int moveIndex = 0;
@@ -67,7 +67,7 @@ TEST(Network, Policy)
 
     SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {}, false /* tryHard */, &images[0], &values[0], &policies[0]);
     
-    MoveList legalMoves = MoveList<LEGAL>(game.DebugPosition());
+    MoveList legalMoves = MoveList<LEGAL>(game.GetPosition());
     const int legalMoveCount = static_cast<int>(legalMoves.size());
 
     // Give 5 visits evenly across legal moves, then the rest to the first move.

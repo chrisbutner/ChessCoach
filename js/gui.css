@@ -37,10 +37,13 @@ button {
     padding: 5px;
     border: 1px solid gray;
     margin-top: -1px;
-    font-size: 24px;
 }
 
 .move .san {
     display: inline-block;
     width: 50px;
+}
+
+input {
+    width: 80px;
 }

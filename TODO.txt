@@ -1,17 +1,20 @@
-Fresh training runs
-- comparison run on pure self-play, rather than mixed batches
-- run distributed training with a fresh self-play corpus as a baseline for further experiments
+GUI - TODO
+- fix pgn generation, need to properly guess a final move
+- add the rest of the info to the info panel
 
-Speed up training, play with tf.function
-	- don't log step 1 to tensorboard (switch to just before, not just-after? in conjunction with multi-step-in-tf-function)
-	- TPU training perf:
-	- https://github.com/tensorflow/tensorflow/issues/20068
-	- https://github.com/tensorflow/tpu/tree/master/models/official/resnet
+GUI - IMPROVEMENTS
+- deal with info panel height/scrolling, move list
+- change the square background rather than adding overlay, need more consistency between black/white squares
+- implement search tool with slider over node count
+- websocket reconnect?
 
 Training improvements
-- playout cap randomization (Wu)
+- SE (lc0)
+	- try batchnorm/relu before SE since we have v2 residuals
+- SE-ish-as-bias (Wu)
+	- (TODO)
 - forced playouts/pruning (Wu)
-- SE (lc0) or SE-ish-as-bias (Wu)
+- playout cap randomization (Wu)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
 - try 1 vs. 8 vs. 32 value head filters again
 	- lc0/Wu seem to use similar conv filters for policy and value heads?
@@ -22,6 +25,13 @@ Training improvements
 	- try to quantify and train criticality, feed into FPU (or deeper FPU, multi-move decay)
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
 	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
+- investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
+	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
+	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
+
+Cluster
+- got an answer about DNS, either scale up kube-dns vs. preemption or use a critical node pool
+- still waiting on core dump issue
 
 Bigger ideas
 - what if we just shove the supervised games at the beginning of a larger "virtual" window, so that training starts with 100% supervised and finishes with 0%
@@ -30,6 +40,12 @@ Bigger ideas
 - seems like networks may be getting too "set in their ways" with early unfortunate/shortcut data and heavy sample ratio
 	- could use a generation-style system to periodically start new networks fresher with less supervised/early and lower sample ratio,
 	  now that they have more data available to them, then take over on self-play once they emperically reach parity
+
+Speed up training, play with tf.function
+	- don't log step 1 to tensorboard (switch to just before, not just-after? in conjunction with multi-step-in-tf-function)
+	- TPU training perf:
+	- https://github.com/tensorflow/tensorflow/issues/20068
+	- https://github.com/tensorflow/tpu/tree/master/models/official/resnet
 
 Quality
 - print config summary when starting a run
@@ -79,7 +95,8 @@ Once value loss is converging below 0.4 on big network:
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 
 Training - later
-- like Wu/lc0, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
+- once we're getting to 2600-3200, test raw student-as-teacher training to make sure distillation is worth it
+- like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
 - stochastic weight averaging
 
 TensorFlow training speed (mostly dataset issues, local/GPU speed regression)
@@ -103,7 +120,6 @@ UCI (#2)
 	- if dangerous time left, take mate-in-N rather than trying to find faster
 
 CPU+GPU integration performance:
-- try shrink Node memory
 - try vectorize/GPU softmax/UCT calcs
 - break down MCTS timing details just in case anything's off (instrumented, already did some sampling measurements/optimization)
 - image key for prediction cache can be incrementally updated if it helps enough
@@ -166,15 +182,16 @@ Revisit
 Bugs
 - Read-AV in game stateinfo cleanup when quitting UCI
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
+- SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
-- Possible problems resuming if e.g. student missing or strength tests didn't run, etc. - no per-stage completion checks
+	- Looks like it's actually the training code - need to investigate in Python
 - Tiny configs with self-play don't work now with minimum 2000 chunking
 - network.js doesn't listen to CHESSCOACH_SILENT when set in NetworkTest.cpp
 
 Low priority
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
-- relinquish prediction cache memory while training? increase cycle/shuffle?
-- anything that uses a worker.front() will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
+- anything that uses the mainWorker will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
+	- unavoidable if we keep all games around to resume, need higher ceiling
 - save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
 - structured binding, check all pairs
 

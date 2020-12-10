@@ -16,6 +16,7 @@
 #pragma warning(default:4100) // Ignore unused args in generated code
 
 #include <crc32c/include/crc32c/crc32c.h>
+#include <Stockfish/movegen.h>
 
 #include "Config.h"
 #include "Pgn.h"
@@ -230,6 +231,124 @@ void Storage::SaveChunk(const std::filesystem::path& path, const std::vector<Sav
     }
 }
 
+void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex, SavedGame* gameOut)
+{
+    google::protobuf::io::ArrayInputStream wrapped(chunkContents.data(), static_cast<int>(chunkContents.size()));
+    google::protobuf::io::GzipInputStream zip(&wrapped, google::protobuf::io::GzipInputStream::ZLIB);
+
+    // The chunk is stored as a bunch of concatenated TFRecords, using zlib.
+    for (int i = 0; i < gameIndex - 1; i++)
+    {
+        if (!SkipTfRecord(zip))
+        {
+            throw std::runtime_error("Failed to parse chunk");
+        }
+    }
+
+    // We're reading from memory so just expect enough slop bytes, don't mess around.
+    const void* buffer;
+    int size = 0;
+    uint64_t payloadLength;
+    uint32_t crc32c;
+    const int preambleSize = (sizeof(payloadLength) + sizeof(crc32c));
+    if (!zip.Next(&buffer, &size) || (size < preambleSize))
+    {
+        throw std::runtime_error("Failed to parse chunk");
+    }
+    payloadLength = *reinterpret_cast<const uint64_t*>(buffer);
+    zip.BackUp(size - preambleSize);
+
+    // The game is stored as a TFRecord using zlib.
+    message::Example compressedGame;
+    if (!compressedGame.MergePartialFromBoundedZeroCopyStream(&zip, static_cast<int>(payloadLength)))
+    {
+        throw std::runtime_error("Failed to parse game");
+    }
+
+    // The first 12 planes of "image_pieces_auxiliary" contain the pieces for each position in the game.
+    auto& features = compressedGame.features().feature();
+    auto& result = features.at("result").float_list().value();
+    auto& mctsValues = features.at("mcts_values").float_list().value();
+    auto& imagePiecesAuxiliary = features.at("image_pieces_auxiliary").int64_list().value();
+    const int imagePiecesAuxiliaryStride = (INetwork::InputPiecePlanesPerPosition + INetwork::InputAuxiliaryPlaneCount);
+    auto& policyRowLengths = features.at("policy_row_lengths").int64_list().value();
+    auto& policyIndices = features.at("policy_indices").int64_list().value();
+    auto& policyValues = features.at("policy_values").float_list().value();
+
+    // Set up result and MCTS values directly.
+    // MCTS deals with probabilities in [0, 1]. Network deals with tanh outputs/targets in (-1, 1)/[-1, 1].
+    *gameOut = SavedGame();
+    gameOut->result = INetwork::MapProbability11To01(result[0]);
+    gameOut->moveCount = mctsValues.size();
+    gameOut->mctsValues.insert(gameOut->mctsValues.begin(), mctsValues.begin(), mctsValues.end());
+    INetwork::MapProbabilities11To01(gameOut->mctsValues.size(), gameOut->mctsValues.data());
+
+    // Play out the game and match the resulting pieces after each legal move.
+    Game game;
+    int policyStart = 0;
+    for (int m = 0; m < gameOut->moveCount; m++)
+    {
+        // Reconstruct the policy by walking over legal moves.
+        const int policyLength = static_cast<int>(policyRowLengths[m]);
+        const int64_t* positionPolicyIndices = (policyIndices.data() + policyStart);
+        const float* positionPolicyValues = (policyValues.data() + policyStart);
+        policyStart += policyLength;
+
+        std::unique_ptr<INetwork::OutputPlanes> policy = std::make_unique<INetwork::OutputPlanes>(); // Zero for "GeneratePolicyDecompress"
+        game.GeneratePolicyDecompress(policyLength, positionPolicyIndices, positionPolicyValues, *policy);
+
+        std::map<Move, float>& childVisits = gameOut->childVisits.emplace_back();
+        const MoveList legalMoves = MoveList<LEGAL>(game.GetPosition());
+        for (const Move move : legalMoves)
+        {
+            childVisits[move] = game.PolicyValue(*policy, move);
+        }
+
+        // We can't find the final move by matching pieces since the terminal position is left off.
+        const int resultingPosition = (m + 1);
+        if (resultingPosition < gameOut->moveCount)
+        {
+            const Move move = game.ApplyMove(reinterpret_cast<const INetwork::PackedPlane*>(
+                imagePiecesAuxiliary.data()) + (resultingPosition * imagePiecesAuxiliaryStride));
+            gameOut->moves.push_back(static_cast<uint16_t>(move));
+        }
+        else
+        {
+            gameOut->moves.push_back(MOVE_NONE);
+        }
+    }
+}
+
+#pragma warning(disable:4706) // Intentionally assigning, not comparing
+bool Storage::SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) const
+{
+    bool ok;
+    const void* buffer;
+    int size = 0;
+    uint64_t payloadLength = 0;
+    while ((ok = stream.Next(&buffer, &size)))
+    {
+        if (size < sizeof(payloadLength))
+        {
+            // This isn't technically sound if the stream only offers say a byte-at-once,
+            // but I don't want to live in a world like that.
+            stream.BackUp(size);
+            continue;
+        }
+
+        payloadLength = *reinterpret_cast<const uint64_t*>(buffer);
+        stream.BackUp(size - sizeof(payloadLength));
+        break;
+    }
+    if (ok)
+    {
+        // Skip the two CRC32Cs plus the payload.
+        ok = stream.Skip(static_cast<int>(payloadLength) + (2 * sizeof(uint32_t)));
+    }
+    return ok;
+}
+#pragma warning(default:4706) // Intentionally assigning, not comparing
+
 message::Example Storage::DebugPopulateGame(const SavedGame& game) const
 {
     message::Example gameOut;
@@ -237,7 +356,7 @@ message::Example Storage::DebugPopulateGame(const SavedGame& game) const
     return gameOut;
 }
 
-void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut)
+void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut) const
 {
     auto& features = *gameOut.mutable_features()->mutable_feature();
 
@@ -253,7 +372,7 @@ void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Exa
     mctsValues.AddNAlreadyReserved(game.moveCount);
     std::copy(game.mctsValues.begin(), game.mctsValues.end(), mctsValues.mutable_data());
 
-    // Fix up result and MCTS value.
+    // Fix up result and MCTS values.
     // MCTS deals with probabilities in [0, 1]. Network deals with tanh outputs/targets in (-1, 1)/[-1, 1].
     INetwork::MapProbabilities01To11(result.size(), result.mutable_data());
     INetwork::MapProbabilities01To11(mctsValues.size(), mctsValues.mutable_data());
@@ -321,7 +440,7 @@ void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Exa
 //
 // masked_crc = ((crc >> 15) | (crc << 17)) + 0xa282ead8ul
 //
-void Storage::WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, std::string& buffer, const google::protobuf::Message& message)
+void Storage::WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, std::string& buffer, const google::protobuf::Message& message) const
 {
     // Prepare a stream wrapper that can do efficient size-ensuring for writes.
     uint8_t* target;

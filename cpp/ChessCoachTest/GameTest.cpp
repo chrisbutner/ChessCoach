@@ -47,7 +47,7 @@ TEST(Game, FlipBoard)
 
     // Flip the board and flip back.
     Game startingPosition;
-    Position position = startingPosition.DebugPosition();
+    Position& position = startingPosition.DebugPosition();
     Bitboard whitePawns = position.pieces(WHITE, PAWN);
     Bitboard flipWhitePawns1 = Game::FlipBoard(whitePawns);
     Bitboard flipWhitePawns2 = Game::FlipBoard(flipWhitePawns1);

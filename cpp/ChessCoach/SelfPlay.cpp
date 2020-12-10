@@ -135,16 +135,16 @@ float TerminalValue::MateScore(float explorationRate) const
 thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
 
 Node::Node(uint16_t setMove, float setPrior)
-    : move(setMove)
-    , prior(setPrior)
-    , visitCount(0)
-    , visitingCount(0)
-    , valueSum(0.f)
-    , terminalValue{}
-    , expanding(false)
-    , bestChild(nullptr)
+    : bestChild(nullptr)
     , firstChild(nullptr)
     , nextSibling(nullptr)
+    , move(setMove)
+    , expanding(false)
+    , visitingCount(0)
+    , prior(setPrior)
+    , visitCount(0)
+    , valueSum(0.f)
+    , terminalValue{}
 {
     assert(!std::isnan(setPrior));
 }
@@ -751,7 +751,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
             std::cout << "Generating uniform network predictions until trained" << std::endl;
         }
 
-        // Warm up the GIL and predictions.
+        // Warm up the GIL and predictions, and reclaim training memory.
         const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, 1);
         if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
         {
@@ -969,7 +969,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
     names.emplace_back("strength/" + stsName + "_rating");
     values.push_back(stsRating);
     std::cout << names.back() << ": " << values.back() << std::endl;
-    network->LogScalars(networkType, step, static_cast<int>(names.size()), names.data(), values.data());
+    network->LogScalars(networkType, step, names, values.data());
 }
 
 // Returns (score, total, positions).
@@ -982,7 +982,7 @@ std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, Net
     // Make sure that the prediction cache is clear, for consistent results.
     PredictionCache::Instance.Clear();
 
-    // Warm up the GIL and predictions.
+    // Warm up the GIL and predictions, and reclaim training memory.
     WarmUpPredictions(network, networkType, 1);
 
     const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
@@ -1530,7 +1530,7 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
     // Use the faster student network for UCI predictions.
     const NetworkType networkType = NetworkType_Student;
 
-    // Warm up the GIL and predictions.
+    // Warm up the GIL and predictions, and reclaim training memory.
     WarmUpPredictions(network.get(), networkType, 1);
 
     // Start with the position "updated" to the starting position in case of a naked "go" command.
@@ -1611,6 +1611,7 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
 // - initializing Python thread state
 // - creating models and loading weights on this thread's assigned TPU/GPU device
 // - tracing tf.functions on this thread's assigned TPU/GPU device
+// - clearing any cached training data to free up memory for self-play or strength testing (may be extremely slow at the moment)
 PredictionStatus SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize)
 {
     return network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());

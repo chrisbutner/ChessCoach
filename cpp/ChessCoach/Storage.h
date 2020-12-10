@@ -13,6 +13,7 @@ namespace google {
     namespace protobuf {
         class Message;
         namespace io {
+            class ZeroCopyInputStream;
             class ZeroCopyOutputStream;
         }
     }
@@ -37,6 +38,8 @@ public:
         std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary) const;
     std::string GenerateSimpleChunkFilename(int chunkNumber) const;
 
+    void LoadGameFromChunk(const std::string& chunkContents, int gameIndex, SavedGame* gameOut);
+
     message::Example DebugPopulateGame(const SavedGame& game) const;
         
 private:
@@ -44,9 +47,10 @@ private:
     std::string GenerateFilename(int number);
     void TryChunkMultiple(INetwork* network);
     void ChunkGames(INetwork* network, std::vector<std::filesystem::path>& gamePaths);
-    static void PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut);
-    static void WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, std::string& buffer, const google::protobuf::Message& message);
+    void PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut) const;
+    void WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, std::string& buffer, const google::protobuf::Message& message) const;
     static uint32_t MaskCrc32cForTfRecord(uint32_t crc32c);
+    bool SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) const;
     std::filesystem::path MakeLocalPath(const std::filesystem::path& root, const std::filesystem::path& path);
 
 private:

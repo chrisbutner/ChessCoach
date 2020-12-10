@@ -115,6 +115,7 @@ chesscoach_sources = [
   'cpp/ChessCoach/PoolAllocator.cpp',
   'cpp/ChessCoach/PredictionCache.cpp',
   'cpp/ChessCoach/Preprocessing.cpp',
+  'cpp/ChessCoach/PythonModule.cpp',
   'cpp/ChessCoach/PythonNetwork.cpp',
   'cpp/ChessCoach/Random.cpp',
   'cpp/ChessCoach/SavedGame.cpp',
@@ -187,6 +188,22 @@ chesscoachstrengthtest_sources = [
 chesscoachstrengthtest = executable(
   'ChessCoachStrengthTest',
   chesscoachstrengthtest_sources,
+  include_directories: [cpp_includes, tclap_includes],
+  link_with: [chesscoach, chesscoachprotobuf, stockfish, hunspell, crc32c],
+  install: true,
+  )
+
+###############################################################################
+# ChessCoachGui
+###############################################################################
+
+chesscoachgui_sources = [
+  'cpp/ChessCoachGui/ChessCoachGui.cpp',
+  ]
+
+chesscoachgui = executable(
+  'ChessCoachGui',
+  chesscoachgui_sources,
   include_directories: [cpp_includes, tclap_includes],
   link_with: [chesscoach, chesscoachprotobuf, stockfish, hunspell, crc32c],
   install: true,

@@ -420,8 +420,15 @@ def save_network_student(checkpoint):
 def save_file(relative_path, data):
   config.save_file(relative_path, data)
 
+def load_file(relative_path):
+  return config.load_file(relative_path)
+
 def file_exists(relative_path):
   return config.file_exists(relative_path)
+
+def launch_gui():
+  import gui
+  gui.launch()
 
 def debug_decompress(result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
   images, values, policies, reply_policies = datasets.decompress(result, image_pieces_auxiliary,

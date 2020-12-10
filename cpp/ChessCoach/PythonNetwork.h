@@ -30,11 +30,24 @@ public:
     ~PythonContext();
 };
 
+class NonPythonContext
+{
+public:
+
+    NonPythonContext();
+    ~NonPythonContext();
+
+private:
+
+    PyThreadState* _threadState;
+};
+
 class PythonNetwork : public INetwork
 {
 public:
 
     static void PyAssert(bool result);
+    static PyObject* PackNumpyStringArray(const std::vector<std::string>& values);
 
 public:
 
@@ -46,12 +59,14 @@ public:
     virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
         std::vector<Window>& trainingWindows, int step, int checkpoint);
     virtual void TrainCommentary(int step, int checkpoint);
-    virtual void LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values);
+    virtual void LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values);
     virtual void LoadNetwork(const std::string& networkName);
     virtual void SaveNetwork(NetworkType networkType, int checkpoint);
     virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut);
     virtual void SaveFile(const std::string& relativePath, const std::string& data);
+    virtual std::string LoadFile(const std::string& relativePath);
     virtual bool FileExists(const std::string& relativePath);
+    virtual void LaunchGui();
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
         float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut);
@@ -71,7 +86,9 @@ private:
     PyObject* _saveNetworkFunction[NetworkType_Count];
     PyObject* _getNetworkInfoFunction[NetworkType_Count];
     PyObject* _saveFileFunction;
+    PyObject* _loadFileFunction;
     PyObject* _fileExistsFunction;
+    PyObject* _launchGuiFunction;
     PyObject* _debugDecompressFunction;
 };
 

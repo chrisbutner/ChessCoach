@@ -118,6 +118,10 @@ class Config:
     path = self.make_path(relative_path)
     tf.io.gfile.GFile(path, "wb").write(data)
 
+  def load_file(self, relative_path):
+    path = self.make_path(relative_path)
+    return tf.io.gfile.GFile(path, "rb").read()
+
   def file_exists(self, relative_path):
     path = self.make_path(relative_path)
     return tf.io.gfile.exists(path)

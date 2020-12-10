@@ -10,6 +10,7 @@
 #include <Stockfish/uci.h>
 
 #include "PythonNetwork.h"
+#include "PythonModule.h"
 #undef NO_IMPORT_ARRAY
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
@@ -77,6 +78,11 @@ void ChessCoach::InitializePython()
         {
             Platform::SetEnvironmentVariable("PYTHONHOME", condaPrefix.c_str());
         }
+    }
+
+    if (PyImport_AppendInittab(PythonModule::ChessCoachModule.m_name, PythonModule::PyInit_ChessCoachModule) == -1)
+    {
+        throw std::runtime_error("Failed to register 'chesscoach' module");
     }
 
     Py_Initialize();

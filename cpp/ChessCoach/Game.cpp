@@ -183,6 +183,39 @@ void Game::ApplyMoveMaybeNull(Move move)
     }
 }
 
+Move Game::ApplyMove(const INetwork::PackedPlane* resultingPieces)
+{
+    StateInfo state;
+    const MoveList legalMoves = MoveList<LEGAL>(_position);
+    INetwork::PackedPlane checkPieces[INetwork::InputPiecePlanesPerPosition];
+
+    for (const Move move : legalMoves)
+    {
+        _position.do_move(move, state);
+        GeneratePiecePlanes(checkPieces, 0, _position);
+        if (PiecesMatch(checkPieces, resultingPieces))
+        {
+            _position.undo_move(move);
+            ApplyMove(move);
+            return move;
+        }
+        _position.undo_move(move);
+    }
+    throw std::runtime_error("Impossible to reach provided position via legal move");
+}
+
+bool Game::PiecesMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const
+{
+    for (int i = 0; i < INetwork::InputPiecePlanesPerPosition; i++)
+    {
+        if (a[i] != b[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 int Game::Ply() const
 {
     return _position.game_ply();
@@ -325,7 +358,7 @@ float& Game::PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const
 // Callers must zero "policyOut" before calling: only some values are set.
 void Game::GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::OutputPlanes& policyOut) const
 {
-    for (auto pair : childVisits)
+    for (const auto pair : childVisits)
     {
         PolicyValue(policyOut, pair.first) = pair.second;
     }
@@ -335,7 +368,7 @@ void Game::GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::Ou
 void Game::GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const
 {
     int i = 0;
-    for (auto& [move, value] : childVisits)
+    for (const auto& [move, value] : childVisits)
     {
         // Let "PolicyValue" generate a flat index via [plane][rank][file] and just never dereference.
         const INetwork::PlanesPointerFlat zero = 0;
@@ -343,6 +376,16 @@ void Game::GeneratePolicyCompressed(const std::map<Move, float>& childVisits, in
         policyIndicesOut[i] = static_cast<int>(distance);
         policyValuesOut[i] = value;
         i++;
+    }
+}
+
+// Requires that the caller has zero-initialized "policyOut".
+void Game::GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIndices, const float* policyValues, INetwork::OutputPlanes& policyOut)
+{
+    INetwork::PlanesPointerFlat policyFlat = reinterpret_cast<INetwork::PlanesPointerFlat>(policyOut.data());
+    for (int i = 0; i < childVisitsSize; i++)
+    {
+        policyFlat[policyIndices[i]] = policyValues[i];
     }
 }
 
@@ -356,6 +399,11 @@ float Game::StockfishEvaluation() const
     const Value centipawns = Eval::evaluate(_position);
     const float probability = CentipawnsToProbability(static_cast<float>(centipawns));
     return probability;
+}
+
+const Position& Game::GetPosition() const
+{
+    return _position;
 }
 
 void Game::Free()

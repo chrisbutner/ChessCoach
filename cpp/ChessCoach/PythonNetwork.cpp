@@ -29,6 +29,18 @@ PythonContext::~PythonContext()
     ThreadState = PyEval_SaveThread();
 }
 
+NonPythonContext::NonPythonContext()
+{
+    // Release the GIL.
+    _threadState = PyEval_SaveThread();
+}
+
+NonPythonContext::~NonPythonContext()
+{
+    // Re-acquire the GIL.
+    PyEval_RestoreThread(_threadState);
+}
+
 PythonNetwork::PythonNetwork()
 {
     PythonContext context;
@@ -59,7 +71,9 @@ PythonNetwork::PythonNetwork()
     _getNetworkInfoFunction[NetworkType_Teacher] = LoadFunction(module, "get_network_info_teacher");
     _getNetworkInfoFunction[NetworkType_Student] = LoadFunction(module, "get_network_info_student");
     _saveFileFunction = LoadFunction(module, "save_file");
+    _loadFileFunction = LoadFunction(module, "load_file");
     _fileExistsFunction = LoadFunction(module, "file_exists");
+    _launchGuiFunction = LoadFunction(module, "launch_gui");
     _debugDecompressFunction = LoadFunction(module, "debug_decompress");
 
     Py_DECREF(module);
@@ -72,6 +86,8 @@ PythonNetwork::~PythonNetwork()
 {
     Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_fileExistsFunction);
+    Py_XDECREF(_launchGuiFunction);
+    Py_XDECREF(_loadFileFunction);
     Py_XDECREF(_saveFileFunction);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Student]);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Teacher]);
@@ -219,35 +235,16 @@ void PythonNetwork::TrainCommentary(int step, int checkpoint)
     Py_DECREF(pythonStep);
 }
 
-void PythonNetwork::LogScalars(NetworkType networkType, int step, int scalarCount, std::string* names, float* values)
+void PythonNetwork::LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values)
 {
     PythonContext context;
 
     PyObject* pythonStep = PyLong_FromLong(step);
     PyAssert(pythonStep);
 
-    // Pack the strings contiguously.
-    int longestString = 0;
-    for (int i = 0; i < scalarCount; i++)
-    {
-        longestString = std::max(longestString, static_cast<int>(names[i].size()));
-    }
-    void* memory = PyDataMem_NEW(longestString * scalarCount);
-    assert(memory);
-    char* packedStrings = reinterpret_cast<char*>(memory);
-    for (int i = 0; i < scalarCount; i++)
-    {
-        char* packedString = (packedStrings + (i * longestString));
-        std::copy(&names[i][0], &names[i][0] + names[i].size(), packedString);
-        std::fill(packedString + names[i].size(), packedString + longestString, '\0');
-    }
+    PyObject* pythonNames = PackNumpyStringArray(names);
 
-    npy_intp nameDims[1]{ scalarCount };
-    PyObject* pythonNames = PyArray_New(&PyArray_Type, Py_ARRAY_LENGTH(nameDims), nameDims,
-        NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
-    PyAssert(pythonNames);
-
-    npy_intp valueDims[1]{ scalarCount };
+    npy_intp valueDims[1]{ static_cast<int>(names.size()) };
     PyObject* pythonValues = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(valueDims), valueDims, NPY_FLOAT32, values);
     PyAssert(pythonValues);
@@ -344,6 +341,28 @@ void PythonNetwork::SaveFile(const std::string& relativePath, const std::string&
     Py_DECREF(pythonRelativePath);
 }
 
+std::string PythonNetwork::LoadFile(const std::string& relativePath)
+{
+    PythonContext context;
+
+    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.c_str(), relativePath.size());
+    PyAssert(pythonRelativePath);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_loadFileFunction, pythonRelativePath, nullptr);
+    PyAssert(result);
+    PyAssert(PyBytes_Check(result));
+
+    char* bytes;
+    Py_ssize_t size;
+    PyBytes_AsStringAndSize(result, &bytes, &size);
+    std::string fileData(bytes, size);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonRelativePath);
+
+    return fileData;
+}
+
 bool PythonNetwork::FileExists(const std::string& relativePath)
 {
     PythonContext context;
@@ -360,6 +379,16 @@ bool PythonNetwork::FileExists(const std::string& relativePath)
     Py_DECREF(pythonRelativePath);
 
     return exists;
+}
+
+void PythonNetwork::LaunchGui()
+{
+    PythonContext context;
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_launchGuiFunction, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
 }
 
 void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
@@ -473,4 +502,30 @@ void PythonNetwork::PyAssert(bool result)
         PyErr_Print();
     }
     assert(result);
+}
+
+PyObject* PythonNetwork::PackNumpyStringArray(const std::vector<std::string>& values)
+{
+    // Pack the strings contiguously.
+    const int valueCount = static_cast<int>(values.size());
+    int longestString = 0;
+    for (const std::string& value : values)
+    {
+        longestString = std::max(longestString, static_cast<int>(value.length()));
+    }
+    void* memory = PyDataMem_NEW(longestString * valueCount);
+    PyAssert(memory);
+    char* packedStrings = reinterpret_cast<char*>(memory);
+    for (int i = 0; i < valueCount; i++)
+    {
+        char* packedString = (packedStrings + (i * longestString));
+        std::copy(&values[i][0], &values[i][0] + values[i].length(), packedString);
+        std::fill(packedString + values[i].length(), packedString + longestString, '\0');
+    }
+
+    npy_intp dims[1]{ valueCount };
+    PyObject* pythonValues = PyArray_New(&PyArray_Type, Py_ARRAY_LENGTH(dims), dims,
+        NPY_STRING, nullptr, memory, longestString, NPY_ARRAY_OWNDATA, nullptr);
+    PyAssert(pythonValues);
+    return pythonValues;
 }

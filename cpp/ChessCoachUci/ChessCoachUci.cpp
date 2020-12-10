@@ -356,7 +356,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
             Node* root = game->Root();
             for (const Node& child : *root)
             {
-                std::cout << Pgn::San(game->DebugPosition(), Move(child.move), true /* showCheckmate */)
+                std::cout << Pgn::San(game->GetPosition(), Move(child.move), true /* showCheckmate */)
                     << " prior=" << child.prior
                     << " value=" << child.Value()
                     << " ucb=" << _selfPlayWorker->CalculateUcbScore(root, &child)

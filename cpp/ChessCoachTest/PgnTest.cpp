@@ -50,7 +50,7 @@ void TestSan(const std::string& fen, Move move, const std::string expectSan)
 {
     Game game(fen, {});
 
-    const std::string san = Pgn::San(game.DebugPosition(), move, true /* showCheckmate */);
+    const std::string san = Pgn::San(game.GetPosition(), move, true /* showCheckmate */);
     EXPECT_EQ(san, expectSan);
 }
 
@@ -58,7 +58,7 @@ void TestParseSan(const std::string& fen, const std::string& san, Move expectMov
 {
     Game game(fen, {});
 
-    const Move move = Pgn::ParseSan(game.DebugPosition(), san);
+    const Move move = Pgn::ParseSan(game.GetPosition(), san);
     EXPECT_EQ(type_of(move), type_of(expectMove));
     EXPECT_EQ(promotion_type(move), promotion_type(expectMove));
     EXPECT_EQ(from_sq(move), from_sq(expectMove));
