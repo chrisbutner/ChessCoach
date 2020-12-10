@@ -1,7 +1,3 @@
-GUI - TODO
-- fix pgn generation, need to properly guess a final move
-- add the rest of the info to the info panel
-
 GUI - IMPROVEMENTS
 - deal with info panel height/scrolling, move list
 - change the square background rather than adding overlay, need more consistency between black/white squares
@@ -23,6 +19,7 @@ Training improvements
 	- could also conceivably blend, like 1.0 for legal moves and 0.15 zero-pressure for others
 - find some positions where engine misses shallow tactics, play with FPU and criticality
 	- try to quantify and train criticality, feed into FPU (or deeper FPU, multi-move decay)
+		- actually only need immediate FPU since each node in the tree gets its own criticality prediction from the network
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
 	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
 - investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:

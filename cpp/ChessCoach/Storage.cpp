@@ -304,17 +304,19 @@ void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex,
             childVisits[move] = game.PolicyValue(*policy, move);
         }
 
-        // We can't find the final move by matching pieces since the terminal position is left off.
+        // We can't find the final move by matching pieces since the terminal position is left off,
+        // so guess instead using the game result and the policy for the final position.
         const int resultingPosition = (m + 1);
         if (resultingPosition < gameOut->moveCount)
         {
-            const Move move = game.ApplyMove(reinterpret_cast<const INetwork::PackedPlane*>(
+            const Move move = game.ApplyMoveInfer(reinterpret_cast<const INetwork::PackedPlane*>(
                 imagePiecesAuxiliary.data()) + (resultingPosition * imagePiecesAuxiliaryStride));
             gameOut->moves.push_back(static_cast<uint16_t>(move));
         }
         else
         {
-            gameOut->moves.push_back(MOVE_NONE);
+            const Move move = game.ApplyMoveGuess(gameOut->result, childVisits);
+            gameOut->moves.push_back(static_cast<uint16_t>(move));
         }
     }
 }
@@ -536,13 +538,9 @@ void Storage::SaveCommentary(const std::filesystem::path& path, const std::vecto
         // Variations "override" the last real move and so will regress the move index,
         // so sort comments by move index here.
         Game scratchGame = _startingPosition;
-        struct {
-            bool operator()(const SavedComment& a, const SavedComment& b) const
-            {
-                return (a.moveIndex < b.moveIndex);
-            }
-        } compareMoveIndex;
-        std::sort(commentary.comments.begin(), commentary.comments.end(), compareMoveIndex);
+        std::sort(commentary.comments.begin(), commentary.comments.end(), [](const auto& a, const auto& b) {
+            return (a.moveIndex < b.moveIndex);
+        });
 
         for (SavedComment& comment : commentary.comments)
         {

@@ -571,19 +571,6 @@ void SelfPlayGame::Expand(int moveCount)
 
 // Avoid Position::is_draw because it regenerates legal moves.
 // If we've already just checked for checkmate and stalemate then this works fine.
-bool SelfPlayGame::IsDrawByNoProgressOrThreefoldRepetition()
-{
-    const StateInfo* stateInfo = _position.state_info();
-
-    return
-        // Omit "and not checkmate" from Position::is_draw.
-        (stateInfo->rule50 > 99) ||
-        // Stockfish encodes 3-repetition as negative.
-        (stateInfo->repetition < 0);
-}
-
-// Avoid Position::is_draw because it regenerates legal moves.
-// If we've already just checked for checkmate and stalemate then this works fine.
 bool SelfPlayGame::IsDrawByTwofoldRepetition(int plyToSearchRoot)
 {
     const StateInfo* stateInfo = _position.state_info();

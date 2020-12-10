@@ -132,7 +132,9 @@ public:
     Color ToPlay() const;
     void ApplyMove(Move move);
     void ApplyMoveMaybeNull(Move move);
-    Move ApplyMove(const INetwork::PackedPlane* resultingPieces);
+    Move ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces);
+    Move ApplyMoveGuess(float result, const std::map<Move, float>& policy);
+    bool IsDrawByNoProgressOrThreefoldRepetition() const;
     bool PiecesMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;
     int Ply() const;
     Key GenerateImageKey() const;
@@ -184,5 +186,10 @@ static_assert(INetwork::MapProbability01To11(CHESSCOACH_VALUE_LOSS) == NETWORK_V
 static_assert(INetwork::MapProbability11To01(NETWORK_VALUE_WIN) == CHESSCOACH_VALUE_WIN);
 static_assert(INetwork::MapProbability11To01(NETWORK_VALUE_DRAW) == CHESSCOACH_VALUE_DRAW);
 static_assert(INetwork::MapProbability11To01(NETWORK_VALUE_LOSS) == CHESSCOACH_VALUE_LOSS);
+
+static_assert(Game::FlipValue(CHESSCOACH_VALUE_UNINITIALIZED) != CHESSCOACH_VALUE_UNINITIALIZED);
+static_assert(Game::FlipValue(CHESSCOACH_VALUE_UNINITIALIZED) != CHESSCOACH_VALUE_WIN);
+static_assert(Game::FlipValue(CHESSCOACH_VALUE_UNINITIALIZED) != NETWORK_VALUE_DRAW);
+static_assert(Game::FlipValue(CHESSCOACH_VALUE_UNINITIALIZED) != NETWORK_VALUE_LOSS);
 
 #endif // _GAME_H_

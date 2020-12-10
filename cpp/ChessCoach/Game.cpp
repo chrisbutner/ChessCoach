@@ -183,7 +183,7 @@ void Game::ApplyMoveMaybeNull(Move move)
     }
 }
 
-Move Game::ApplyMove(const INetwork::PackedPlane* resultingPieces)
+Move Game::ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces)
 {
     StateInfo state;
     const MoveList legalMoves = MoveList<LEGAL>(_position);
@@ -202,6 +202,53 @@ Move Game::ApplyMove(const INetwork::PackedPlane* resultingPieces)
         _position.undo_move(move);
     }
     throw std::runtime_error("Impossible to reach provided position via legal move");
+}
+
+Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
+{
+    // Walk through legal moves from highest value to lowest and pick the first one that matches the game result.
+    // We don't have enough information here to fully replicate "SelfPlayWorker::WorseThan" logic, e.g. "TerminalValue"
+    // and mate-proving, but hopefully at MCTS time that guided the "bestNode" to the highest value in time.
+    //
+    // This guess can definitely be wrong though and shouldn't be trusted too much. It's irrelevant for training and
+    // is mainly to allow sane PGN generation for the debug GUI.
+    std::vector<std::pair<Move, float>> bestMoves(policy.begin(), policy.end());
+    std::sort(bestMoves.begin(), bestMoves.end(), [](const auto& a, const auto& b) { return  (a.second > b.second); });
+    StateInfo state;
+    for (const auto& [move, value] : bestMoves)
+    {
+        _position.do_move(move, state);
+        const MoveList legalMoves = MoveList<LEGAL>(_position);
+        const float moveResult = FlipValue(ToPlay(),
+            (legalMoves.size() == 0) ?
+                (_position.checkers() ? CHESSCOACH_VALUE_LOSS : CHESSCOACH_VALUE_DRAW) :
+                IsDrawByNoProgressOrThreefoldRepetition() ?
+                    CHESSCOACH_VALUE_DRAW :
+                    (Ply() >= Config::TrainingNetwork.SelfPlay.MaxMoves) ?
+                        CHESSCOACH_VALUE_DRAW :
+                        CHESSCOACH_VALUE_UNINITIALIZED);
+        if (moveResult == result)
+        {
+            _position.undo_move(move);
+            ApplyMove(move);
+            return move;
+        }
+        _position.undo_move(move);
+    }
+    throw std::runtime_error("Failed to guess move matching result and policy");
+}
+
+// Avoid Position::is_draw because it regenerates legal moves.
+// If we've already just checked for checkmate and stalemate then this works fine.
+bool Game::IsDrawByNoProgressOrThreefoldRepetition() const
+{
+    const StateInfo* stateInfo = _position.state_info();
+
+    return
+        // Omit "and not checkmate" from Position::is_draw.
+        (stateInfo->rule50 > 99) ||
+        // Stockfish encodes 3-repetition as negative.
+        (stateInfo->repetition < 0);
 }
 
 bool Game::PiecesMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const

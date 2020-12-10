@@ -75,6 +75,14 @@
         }
     }
 
+    function probabilityToPawns(value) {
+        value = (2 * value - 1)
+        value = Math.tan(value * 1.5620688421) * 111.714640912;
+        value = value / 100;
+        value = Math.round(value * 1000000) / 1000000;
+        return value;
+    }
+
     function handleData(newData) {
         data = newData
 
@@ -87,9 +95,11 @@
         displayPosition = (position + 1).toString()
         document.getElementById("gameInput").value = displayGame;
         document.getElementById("positionInput").value = displayPosition;
-        document.getElementById("fenInfo").textContent = data.fen;
+        document.getElementById("fen").textContent = data.fen;
+        document.getElementById("pgn").textContent = data.pgn;
         document.getElementById("gameInfo").textContent = `Game ${displayGame} of ${game_count}`
         document.getElementById("positionInfo").textContent = `Position ${displayPosition} of ${position_count}`
+        document.getElementById("mctsValue").textContent = `${data.mcts_value} (${probabilityToPawns(data.mcts_value)} pawns)`
 
         data.policy.sort((a, b) => { return b.value - a.value; });
 

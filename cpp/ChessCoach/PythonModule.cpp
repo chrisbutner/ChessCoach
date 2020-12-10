@@ -84,8 +84,7 @@ PyObject* PythonModule::LoadGame(PyObject* self, PyObject* args)
 
         Instance()._storage.LoadGameFromChunk(Instance()._chunkContents, gameInChunk, &Instance()._game);
 
-        pgn << "TODO";
-        //Pgn::GeneratePgn(pgn, Instance()._game);
+        Pgn::GeneratePgn(pgn, Instance()._game);
     }
 
     PyObject* pythonPositionCount = PyLong_FromLong(Instance()._game.moveCount);

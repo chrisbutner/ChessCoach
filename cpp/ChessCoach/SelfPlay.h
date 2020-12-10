@@ -251,7 +251,6 @@ public:
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore);
     void Expand(int moveCount);
-    bool IsDrawByNoProgressOrThreefoldRepetition();
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
     void StoreSearchStatistics();
