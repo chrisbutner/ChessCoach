@@ -1,4 +1,5 @@
-﻿(function () {
+﻿// Code is really low-effort, apologies.
+(function () {
 
     function highlight(element, proportion) {
         if (proportion > 0) {
@@ -8,7 +9,7 @@
     }
 
     function overlaysHighlightAll() {
-        const proportions = {}
+        const proportions = {};
         for (const square in overlays) {
             proportions[square] = 0;
         }
@@ -68,7 +69,7 @@
     }
 
     function handleInitialize(message) {
-        game_count = message.game_count
+        game_count = message.game_count;
 
         if (game_count > 0) {
             requestPosition();
@@ -76,30 +77,77 @@
     }
 
     function probabilityToPawns(value) {
-        value = (2 * value - 1)
+        value = (2 * value - 1);
         value = Math.tan(value * 1.5620688421) * 111.714640912;
         value = value / 100;
         value = Math.round(value * 1000000) / 1000000;
         return value;
     }
 
-    function handleData(newData) {
-        data = newData
+    function handleTrainingData(trainingData) {
+        data = trainingData;
+
+        document.getElementById("trainingControls").style.display = "block";
 
         game = data.game;
         position_count = data.position_count;
         position = data.position;
         board.position(data.fen);
 
-        displayGame = (game + 1).toString()
-        displayPosition = (position + 1).toString()
+        displayGame = (game + 1).toString();
+        displayPosition = (position + 1).toString();
         document.getElementById("gameInput").value = displayGame;
         document.getElementById("positionInput").value = displayPosition;
         document.getElementById("fen").textContent = data.fen;
         document.getElementById("pgn").textContent = data.pgn;
-        document.getElementById("gameInfo").textContent = `Game ${displayGame} of ${game_count}`
-        document.getElementById("positionInfo").textContent = `Position ${displayPosition} of ${position_count}`
-        document.getElementById("mctsValue").textContent = `${data.mcts_value} (${probabilityToPawns(data.mcts_value)} pawns)`
+        document.getElementById("gameInfo").textContent = `Game ${displayGame} of ${game_count}`;
+        document.getElementById("positionInfo").textContent = `Position ${displayPosition} of ${position_count}`;
+        document.getElementById("evaluation").textContent = data.evaluation;
+
+        data.policy.sort((a, b) => { return b.value - a.value; });
+
+        clearMoves();
+        for (const move of data.policy) {
+            addMove(move);
+        }
+
+        overlaysHighlightAll();
+    }
+
+    function handleUciData(uciData) {
+        // Add the new UCI data to history, clearing history first if it's a new search.
+        if (dataHistory.length > 0) {
+            const last = dataHistory[dataHistory.length - 1];
+            if ((uciData.fen !== last.fen) || (uciData.node_count <= last.node_count)) {
+                dataHistory = [];
+                data = null;
+            }
+        }
+        dataHistory.push(uciData);
+
+        // If we were showing the latest data, show the new data.
+        if (!data || (data === dataHistory[dataHistory.length - 2])) {
+            data = uciData;
+            renderUciData();
+        }
+
+        // Update the global UI.
+        document.getElementById("uciControls").style.display = "block";
+        range = document.getElementById("nodeCountRange");
+        range.min = 0
+        range.max = (dataHistory.length - 1);
+        if (data === uciData) {
+            range.valueAsNumber = (dataHistory.length - 1);
+        }
+    }
+
+    function renderUciData() {
+        board.position(data.fen);
+
+        document.getElementById("fen").textContent = data.fen;
+        document.getElementById("nodeCount").textContent = `${data.node_count} nodes`;
+        document.getElementById("evaluation").textContent = data.evaluation;
+        document.getElementById("principleVariation").textContent = "Principle variation: " + data.principle_variation;
 
         data.policy.sort((a, b) => { return b.value - a.value; });
 
@@ -126,6 +174,8 @@
     let game = 0;
     let position_count = 0;
     let position = 0;
+    let data = null;
+    let dataHistory = [];
 
     const sparePieces = document.getElementById("sparePieces");
     const sparePiecesTop = document.querySelector(".spare-pieces-top-4028b");
@@ -167,7 +217,8 @@
     messageHandlers = {
         "ping": () => { },
         "initialize": handleInitialize,
-        "data": handleData,
+        "training_data": handleTrainingData,
+        "uci_data": handleUciData,
     };
 
     const socket = new WebSocket("ws://localhost:8001/");
@@ -264,6 +315,14 @@
             } else {
                 positionInput.value = (position + 1).toString();
             }
+        }
+    });
+
+    document.getElementById("nodeCountRange").addEventListener("input", (e) => {
+        newData = dataHistory[e.target.value];
+        if (newData !== data) {
+            data = newData;
+            renderUciData();
         }
     });
 })();

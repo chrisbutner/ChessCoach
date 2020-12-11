@@ -9,25 +9,32 @@
 <body>
     <div id="board"></div>
     <div id="info">
-        <div>
-            <span id="gameInfo"></span>
-            <button id="gamePrevBig">&laquo;</button>
-            <button id="gamePrev">&lsaquo;</button>
-            <input id="gameInput" />
-            <button id="gameNext">&rsaquo;</button>
-            <button id="gameNextBig">&raquo;</button>
-        </div>
-        <div>
-            <span id="positionInfo"></span>
-            <button id="positionPrevBig">&laquo;</button>
-            <button id="positionPrev">&lsaquo;</button>
-            <input id="positionInput" />
-            <button id="positionNext">&rsaquo;</button>
-            <button id="positionNextBig">&raquo;</button>
+        <div id="trainingControls">
+            <div>
+                <span id="gameInfo"></span>
+                <button id="gamePrevBig">&laquo;</button>
+                <button id="gamePrev">&lsaquo;</button>
+                <input id="gameInput" />
+                <button id="gameNext">&rsaquo;</button>
+                <button id="gameNextBig">&raquo;</button>
+            </div>
+            <div>
+                <span id="positionInfo"></span>
+                <button id="positionPrevBig">&laquo;</button>
+                <button id="positionPrev">&lsaquo;</button>
+                <input id="positionInput" />
+                <button id="positionNext">&rsaquo;</button>
+                <button id="positionNextBig">&raquo;</button>
+            </div>
         </div>
         <div>FEN: <span id="fen"></span></div>
+        <div id="uciControls">
+            <input id="nodeCountRange" type="range" />
+        </div>
+        <div><span id="nodeCount"></span></div>
         <div><span id="pgn"></span></div>
-        <div>Evaluation: <span id="mctsValue"></span></div>
+        <div>Evaluation: <span id="evaluation"></span></div>
+        <div><span id="principleVariation"></span></div>
         <div id="moves"></div>
     </div>
     <div id="sparePieces"></div>

@@ -176,6 +176,7 @@ MiscConfig ParseMisc(const TomlValue& config)
     misc.TimeControl_FractionOfRemaining = toml::find<int>(config, "time_control", "fraction_remaining");
 
     misc.Search_MctsParallelism = toml::find<int>(config, "search", "mcts_parallelism");
+    misc.Search_GuiUpdateIntervalNodes = toml::find<int>(config, "search", "gui_update_interval_nodes");
 
     misc.Storage_GamesPerChunk = toml::find<int>(config, "storage", "games_per_chunk");
 

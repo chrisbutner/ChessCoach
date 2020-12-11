@@ -93,7 +93,9 @@ struct INetwork
     virtual void SaveFile(const std::string& relativePath, const std::string& data) = 0;
     virtual std::string LoadFile(const std::string& relativePath) = 0;
     virtual bool FileExists(const std::string& relativePath) = 0;
-    virtual void LaunchGui() = 0;
+    virtual void LaunchGui(const std::string& mode) = 0;
+    virtual void UpdateGui(const std::string& fen, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
+        const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& policyValues) = 0;
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
         float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut) = 0;

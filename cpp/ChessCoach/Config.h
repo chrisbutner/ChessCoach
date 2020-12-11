@@ -129,6 +129,7 @@ struct MiscConfig
 
     // Search
     int Search_MctsParallelism;
+    int Search_GuiUpdateIntervalNodes;
 
     // Storage
     int Storage_GamesPerChunk;

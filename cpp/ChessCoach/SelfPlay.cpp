@@ -6,6 +6,8 @@
 #include <chrono>
 #include <iostream>
 #include <numeric>
+#include <sstream>
+#include <iomanip>
 
 #include <Stockfish/thread.h>
 #include <Stockfish/uci.h>
@@ -13,8 +15,6 @@
 #include "Config.h"
 #include "Pgn.h"
 #include "Random.h"
-
-
 
 TerminalValue TerminalValue::NonTerminal()
 {
@@ -599,17 +599,21 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
     }
 }
 
+float SelfPlayGame::CalculateMctsValue() const
+{
+    // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
+    return FlipValue(_root->Value());
+}
+
 void SelfPlayGame::StoreSearchStatistics()
 {
-    std::map<Move, float> visits;
+    std::map<Move, float>& visits = _childVisits.emplace_back();
     const int sumChildVisits = _root->visitCount;
     for (const Node& child : *_root)
     {
         visits[Move(child.move)] = static_cast<float>(child.visitCount) / sumChildVisits;
     }
-    // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
-    _mctsValues.push_back(FlipValue(_root->Value()));
-    _childVisits.emplace_back(std::move(visits));
+    _mctsValues.push_back(CalculateMctsValue());
 }
 
 void SelfPlayGame::Complete()
@@ -1001,10 +1005,12 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkT
     timeControl.moveTimeMs = moveTimeMs;
 
     _searchState.searching = true;
+    _searchState.gui = false;
     _searchState.searchStart = std::chrono::high_resolution_clock::now();
     _searchState.lastPrincipleVariationPrint = _searchState.searchStart;
     _searchState.timeControl = timeControl;
     _searchState.nodeCount = 0;
+    _searchState.previousNodeCount = 0;
     _searchState.failedNodeCount = 0;
     _searchState.principleVariationChanged = false;
 
@@ -1547,10 +1553,17 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
                 _searchConfig.signalReady.notify_all();
             }
 
-            // Wait until told to search or comment.
+            // Wait until told to search, comment or quit.
             while (!_searchConfig.quit && !_searchConfig.search && !_searchConfig.comment)
             {
                 _searchConfig.signalUci.wait(lock);
+            }
+
+            // Launch the GUI once searching if we were told to (and not quitting).
+            if (_searchConfig.gui && !_searchState.gui && _searchConfig.search && !_searchConfig.quit)
+            {
+                _searchState.gui = true;
+                network->LaunchGui("push");
             }
         }
 
@@ -1579,10 +1592,14 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
 
                 CheckPrintInfo();
 
+                CheckUpdateGui(network.get());
+
                 // TODO: Only check every N times
                 CheckTimeControl();
 
                 UpdateSearch();
+
+                _searchState.previousNodeCount = _searchState.nodeCount;
             }
             // Don't free nodes here: leave them available for reuse/freeing with the next UpdatePosition(),
             // and instead clean up below, when quitting.
@@ -1670,6 +1687,7 @@ void SelfPlayWorker::UpdateSearch()
             _searchState.lastPrincipleVariationPrint = _searchState.searchStart;
             _searchState.timeControl = _searchConfig.searchTimeControl;
             _searchState.nodeCount = 0;
+            _searchState.previousNodeCount = 0;
             _searchState.failedNodeCount = 0;
             _searchState.principleVariationChanged = true; // Print out initial PV.
         }
@@ -1714,6 +1732,75 @@ void SelfPlayWorker::CheckPrintInfo()
     {
         PrintPrincipleVariation();
         _searchState.principleVariationChanged = false;
+    }
+}
+
+void SelfPlayWorker::CheckUpdateGui(INetwork* network)
+{
+    const int interval = Config::Misc.Search_GuiUpdateIntervalNodes;
+    if (_searchState.gui && ((_searchState.nodeCount / interval) > (_searchState.previousNodeCount / interval)))
+    {
+        const SelfPlayGame& game = _games[0];
+        const Node* root = game.Root();
+        if (!root->bestChild)
+        {
+            return;
+        }
+        
+        const std::string fen = game.GetPosition().fen();
+
+        // Value is from the parent's perspective, so that's already correct for the root perspective
+        std::stringstream evaluation;
+        const Node* pvFirst = root->bestChild;
+        const int eitherMateN = pvFirst->terminalValue.EitherMateN();
+        const float pvValue = pvFirst->Value();
+        if (eitherMateN != 0)
+        {
+            evaluation << std::fixed << std::setprecision(6) << pvValue
+                << " (" << ((eitherMateN > 0) ? "mate in " : "opponent mate in ") << std::abs(eitherMateN) << ")";
+        }
+        else
+        {
+            evaluation << std::fixed << std::setprecision(6) << pvValue
+                << " (" << (Game::ProbabilityToCentipawns(pvValue) / 100.f) << " pawns)";
+        }
+
+        // Compose a SAN principle variation: more expensive but only used for GUI and only every "Search_GuiUpdateIntervalNodes".
+        std::stringstream principleVariation;
+        const Node* node = root;
+        SelfPlayGame pvGame = game;
+        while (node->bestChild)
+        {
+            const Move move = Move(node->bestChild->move);
+            const std::string san = Pgn::San(pvGame.GetPosition(), move,
+                (node->bestChild->terminalValue == TerminalValue::MateIn<1>()) /* showCheckmate */);
+            principleVariation << san << " ";
+            node = node->bestChild;
+            pvGame.ApplyMove(move);
+        }
+
+        std::vector<std::string> sans;
+        std::vector<std::string> froms;
+        std::vector<std::string> tos;
+        std::vector<float> policyValues;
+        float sumChildVisits = 0.f;
+
+        for (const Node& child : *game.Root())
+        {
+            const Move move = Move(child.move);
+            sans.emplace_back(Pgn::San(game.GetPosition(), move, true /* showCheckmate */));
+            froms.emplace_back(Game::SquareName[from_sq(move)]);
+            tos.emplace_back(Game::SquareName[to_sq(move)]);
+            const float floatVisitCount = static_cast<float>(child.visitCount);
+            policyValues.push_back(floatVisitCount);
+            sumChildVisits += floatVisitCount;
+        }
+        for (float& value : policyValues)
+        {
+            value /= sumChildVisits;
+        }
+
+        network->UpdateGui(fen, _searchState.nodeCount, evaluation.str(), principleVariation.str(), sans, froms, tos, policyValues);
     }
 }
 
@@ -1875,6 +1962,13 @@ void SelfPlayWorker::SignalComment()
     _searchConfig.comment = true;
 
     _searchConfig.signalUci.notify_all();
+}
+
+void SelfPlayWorker::SignalGui()
+{
+    std::lock_guard lock(_searchConfig.mutexUci);
+
+    _searchConfig.gui = true;
 }
 
 void SelfPlayWorker::WaitUntilReady()

@@ -4,13 +4,13 @@
 
 [network]
 
-training_network_name = "chesscoach2"
-uci_network_name = "chesscoach2"
+training_network_name = "chesscoach1m"
+uci_network_name = "chesscoach1m"
 role = "train|play"
 
 [[networks]]
 
-    name = "chesscoach2"
+    name = "chesscoach1m"
     
     [networks.training]
 
@@ -33,8 +33,6 @@ role = "train|play"
         { stage = "strength_test", target = "teacher" },
         { stage = "strength_test", target = "student" },
     ]
-
-    games_path_training = "Games/Training2"
 
 [[networks]]
 
@@ -302,6 +300,7 @@ fraction_remaining = 20
 [search]
 
 mcts_parallelism = 16
+gui_update_interval_nodes = 50000
 
 [storage]
 

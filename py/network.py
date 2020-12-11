@@ -426,9 +426,13 @@ def load_file(relative_path):
 def file_exists(relative_path):
   return config.file_exists(relative_path)
 
-def launch_gui():
+def launch_gui(*args):
   import gui
-  gui.launch()
+  gui.launch(*args)
+
+def update_gui(*args):
+  import gui
+  gui.update(*args)
 
 def debug_decompress(result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
   images, values, policies, reply_policies = datasets.decompress(result, image_pieces_auxiliary,

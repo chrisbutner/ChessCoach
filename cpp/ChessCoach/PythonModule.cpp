@@ -4,6 +4,7 @@
 #include <numpy/arrayobject.h>
 
 #include <sstream>
+#include <iomanip>
 
 #include "Pgn.h"
 
@@ -122,7 +123,7 @@ PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
     position = std::clamp(position, 0, savedGame.moveCount - 1);
 
     std::string fen;
-    float mctsValue;
+    std::stringstream evaluation;
     std::vector<std::string> sans;
     std::vector<std::string> froms;
     std::vector<std::string> tos;
@@ -138,7 +139,8 @@ PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
         }
 
         fen = game.GetPosition().fen();
-        mctsValue = savedGame.mctsValues[position];
+        evaluation << std::fixed << std::setprecision(6) << savedGame.mctsValues[position]
+            << " (" << (Game::ProbabilityToCentipawns(savedGame.mctsValues[position]) / 100.f) << " pawns)";
         for (const auto& [move, value] : savedGame.childVisits[position])
         {
             sans.emplace_back(Pgn::San(game.GetPosition(), move, true /* showCheckmate */));
@@ -150,7 +152,7 @@ PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
 
     PyObject* pythonClampedPosition = PyLong_FromLong(position);
     PyObject* pythonFen = PyUnicode_FromStringAndSize(fen.data(), fen.size());
-    PyObject* pythonMctsValue = PyFloat_FromDouble(mctsValue);
+    PyObject* pythonEvaluation = PyUnicode_FromString(evaluation.str().c_str());
     PyObject* pythonSans = PythonNetwork::PackNumpyStringArray(sans);
     PyObject* pythonFroms = PythonNetwork::PackNumpyStringArray(froms);
     PyObject* pythonTos = PythonNetwork::PackNumpyStringArray(tos);
@@ -163,11 +165,11 @@ PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
     std::copy(policyValues.begin(), policyValues.end(), pythonPolicyValuesData);
 
     // Pack and return a 7-tuple.
-    PyObject* pythonTuple = PyTuple_Pack(7, pythonClampedPosition, pythonFen, pythonMctsValue, pythonSans, pythonFroms, pythonTos, pythonPolicyValues);
+    PyObject* pythonTuple = PyTuple_Pack(7, pythonClampedPosition, pythonFen, pythonEvaluation, pythonSans, pythonFroms, pythonTos, pythonPolicyValues);
     PythonNetwork::PyAssert(pythonTuple);
     Py_DECREF(pythonClampedPosition);
     Py_DECREF(pythonFen);
-    Py_DECREF(pythonMctsValue);
+    Py_DECREF(pythonEvaluation);
     Py_DECREF(pythonSans);
     Py_DECREF(pythonFroms);
     Py_DECREF(pythonTos);

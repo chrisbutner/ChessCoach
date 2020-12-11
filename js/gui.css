@@ -44,6 +44,14 @@ button {
     width: 50px;
 }
 
-input {
+input[type=text] {
     width: 80px;
+}
+
+input[type=range] {
+    width: 500px;
+}
+
+#trainingControls, #uciControls {
+    display: none;
 }

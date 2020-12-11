@@ -74,6 +74,7 @@ PythonNetwork::PythonNetwork()
     _loadFileFunction = LoadFunction(module, "load_file");
     _fileExistsFunction = LoadFunction(module, "file_exists");
     _launchGuiFunction = LoadFunction(module, "launch_gui");
+    _updateGuiFunction = LoadFunction(module, "update_gui");
     _debugDecompressFunction = LoadFunction(module, "debug_decompress");
 
     Py_DECREF(module);
@@ -86,6 +87,7 @@ PythonNetwork::~PythonNetwork()
 {
     Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_fileExistsFunction);
+    Py_XDECREF(_updateGuiFunction);
     Py_XDECREF(_launchGuiFunction);
     Py_XDECREF(_loadFileFunction);
     Py_XDECREF(_saveFileFunction);
@@ -327,10 +329,10 @@ void PythonNetwork::SaveFile(const std::string& relativePath, const std::string&
 {
     PythonContext context;
 
-    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.c_str(), relativePath.size());
+    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.data(), relativePath.size());
     PyAssert(pythonRelativePath);
 
-    PyObject* pythonData = PyBytes_FromStringAndSize(data.c_str(), data.size());
+    PyObject* pythonData = PyBytes_FromStringAndSize(data.data(), data.size());
     PyAssert(pythonData);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_saveFileFunction, pythonRelativePath, pythonData, nullptr);
@@ -345,7 +347,7 @@ std::string PythonNetwork::LoadFile(const std::string& relativePath)
 {
     PythonContext context;
 
-    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.c_str(), relativePath.size());
+    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.data(), relativePath.size());
     PyAssert(pythonRelativePath);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_loadFileFunction, pythonRelativePath, nullptr);
@@ -367,7 +369,7 @@ bool PythonNetwork::FileExists(const std::string& relativePath)
 {
     PythonContext context;
 
-    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.c_str(), relativePath.size());
+    PyObject* pythonRelativePath = PyUnicode_FromStringAndSize(relativePath.data(), relativePath.size());
     PyAssert(pythonRelativePath);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_fileExistsFunction, pythonRelativePath, nullptr);
@@ -381,14 +383,59 @@ bool PythonNetwork::FileExists(const std::string& relativePath)
     return exists;
 }
 
-void PythonNetwork::LaunchGui()
+void PythonNetwork::LaunchGui(const std::string& mode)
 {
     PythonContext context;
 
-    PyObject* result = PyObject_CallFunctionObjArgs(_launchGuiFunction, nullptr);
+    PyObject* pythonMode = PyUnicode_FromStringAndSize(mode.data(), mode.size());
+    PyAssert(pythonMode);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_launchGuiFunction, pythonMode, nullptr);
     PyAssert(result);
 
     Py_DECREF(result);
+    Py_DECREF(pythonMode);
+}
+
+void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
+    const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& policyValues)
+{
+    PythonContext context;
+
+    PyObject* pythonFen = PyUnicode_FromStringAndSize(fen.data(), fen.size());
+    PyAssert(pythonFen);
+
+    PyObject* pythonNodeCount = PyLong_FromLong(nodeCount);
+    PyAssert(pythonNodeCount);
+
+    PyObject* pythonEvaluation = PyUnicode_FromStringAndSize(evaluation.data(), evaluation.size());
+    PyAssert(pythonEvaluation);
+
+    PyObject* pythonPrincipleVariation = PyUnicode_FromStringAndSize(principleVariation.data(), principleVariation.size());
+    PyAssert(pythonPrincipleVariation);
+
+    PyObject* pythonSans = PackNumpyStringArray(sans);
+    PyObject* pythonFroms = PackNumpyStringArray(froms);
+    PyObject* pythonTos = PackNumpyStringArray(tos);
+
+    npy_intp policyValueDims[1]{ static_cast<int>(policyValues.size()) };
+    PyObject* pythonPolicyValues = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(policyValueDims), policyValueDims, NPY_FLOAT32, policyValues.data());
+    PythonNetwork::PyAssert(pythonPolicyValues);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_updateGuiFunction, pythonFen, pythonNodeCount, pythonEvaluation, pythonPrincipleVariation,
+        pythonSans, pythonFroms, pythonTos, pythonPolicyValues, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonPolicyValues);
+    Py_DECREF(pythonTos);
+    Py_DECREF(pythonFroms);
+    Py_DECREF(pythonSans);
+    Py_DECREF(pythonPrincipleVariation);
+    Py_DECREF(pythonEvaluation);
+    Py_DECREF(pythonNodeCount);
+    Py_DECREF(pythonFen);
 }
 
 void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,

@@ -48,7 +48,7 @@ void ChessCoachGui::Run()
 {
     // Call in to Python.
     std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
-    network->LaunchGui();
+    network->LaunchGui("pull");
 
     // Sleep and let Python run its own separate message pump. We may want to handle command-line input here to drive UI in future.
     while (true)

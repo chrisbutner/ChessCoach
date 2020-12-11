@@ -66,7 +66,9 @@ public:
     virtual void SaveFile(const std::string& relativePath, const std::string& data);
     virtual std::string LoadFile(const std::string& relativePath);
     virtual bool FileExists(const std::string& relativePath);
-    virtual void LaunchGui();
+    virtual void LaunchGui(const std::string& mode);
+    virtual void UpdateGui(const std::string& fen, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
+        const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& policyValues);
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
         float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut);
@@ -89,6 +91,7 @@ private:
     PyObject* _loadFileFunction;
     PyObject* _fileExistsFunction;
     PyObject* _launchGuiFunction;
+    PyObject* _updateGuiFunction;
     PyObject* _debugDecompressFunction;
 };
 

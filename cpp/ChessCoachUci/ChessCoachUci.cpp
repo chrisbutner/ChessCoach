@@ -46,6 +46,7 @@ private:
 
     // Custom commands
     void HandleComment(std::stringstream& commands);
+    void HandleGui(std::stringstream& commands);
 
     // Console
     void HandleConsole(std::stringstream& commands);
@@ -125,6 +126,7 @@ void ChessCoachUci::Initialize()
 
     // Custom commands
     _commandHandlers.emplace_back("comment", std::bind(&ChessCoachUci::HandleComment, this, std::placeholders::_1));
+    _commandHandlers.emplace_back("gui", std::bind(&ChessCoachUci::HandleGui, this, std::placeholders::_1));
 
     // Console (for unsafely-threaded debug info)
     _commandHandlers.emplace_back("`", std::bind(&ChessCoachUci::HandleConsole, this, std::placeholders::_1));
@@ -341,6 +343,12 @@ void ChessCoachUci::HandleComment(std::stringstream& /*commands*/)
 {
     InitializeSelfPlayWorker();
     _selfPlayWorker->SignalComment();
+}
+
+void ChessCoachUci::HandleGui(std::stringstream& /*commands*/)
+{
+    InitializeSelfPlayWorker();
+    _selfPlayWorker->SignalGui();
 }
 
 void ChessCoachUci::HandleConsole(std::stringstream& commands)

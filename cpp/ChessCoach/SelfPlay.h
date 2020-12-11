@@ -204,6 +204,7 @@ struct SearchConfig
     std::atomic_bool debug;
     bool ready;
     std::atomic_bool comment;
+    bool gui;
 
     std::atomic_bool searchUpdated;
     std::atomic_bool search;
@@ -219,10 +220,12 @@ struct SearchState
     std::string positionFen;
     std::vector<Move> positionMoves;
     bool searching;
+    bool gui;
     std::chrono::time_point<std::chrono::high_resolution_clock> searchStart;
     std::chrono::time_point<std::chrono::high_resolution_clock>lastPrincipleVariationPrint;
     TimeControl timeControl;
     int nodeCount;
+    int previousNodeCount;
     int failedNodeCount;
     bool principleVariationChanged;
 };
@@ -253,6 +256,7 @@ public:
     void Expand(int moveCount);
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
+    float CalculateMctsValue() const;
     void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
@@ -345,6 +349,7 @@ public:
     void SignalSearchStop();
     void SignalQuit();
     void SignalComment();
+    void SignalGui();
     void WaitUntilReady();
 
     void StrengthTest(INetwork* network, NetworkType networkType, int step);
@@ -356,6 +361,7 @@ private:
     void UpdateSearch();
     void OnSearchFinished();
     void CheckPrintInfo();
+    void CheckUpdateGui(INetwork* network);
     void CheckTimeControl();
     void PrintPrincipleVariation();
     void SearchInitialize(int mctsParallelism);
