@@ -279,8 +279,6 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
     // TODO: searchmoves
     // TODO: ponder
     // TODO: movestogo
-    // TODO: depth
-    // TODO: nodes
     // TODO: mate
 
     TimeControl timeControl = {};
@@ -291,6 +289,10 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         if ((token == "infinite") || (token == "inf"))
         {
             timeControl.infinite = true;
+        }
+        if ((token == "nodes"))
+        {
+            commands >> timeControl.nodes;
         }
         else if (token == "movetime")
         {
@@ -354,17 +356,62 @@ void ChessCoachUci::HandleGui(std::stringstream& /*commands*/)
 void ChessCoachUci::HandleConsole(std::stringstream& commands)
 {
     std::string token;
-    while (commands >> token)
+    if (!(commands >> token))
     {
-        if (token == "ucb")
-        {
-            SelfPlayGame* game;
-            _selfPlayWorker->DebugGame(0, &game, nullptr, nullptr, nullptr);
+        return;
+    }
 
-            Node* root = game->Root();
-            for (const Node& child : *root)
+    if (token == "ucb")
+    {
+        bool csv = false;
+        while (commands >> token)
+        {
+            if (token == "csv")
             {
-                std::cout << Pgn::San(game->GetPosition(), Move(child.move), true /* showCheckmate */)
+                csv = true;
+            }
+            else if (token == "moves")
+            {
+                break;
+            }
+        }
+
+        SelfPlayGame* game;
+        _selfPlayWorker->DebugGame(0, &game, nullptr, nullptr, nullptr);
+        SelfPlayGame ucbGame = *game;
+
+        // If "moves" wasn't seen then we already consumed the rest of the line.
+        while (commands >> token)
+        {
+            Move move = UCI::to_move(ucbGame.GetPosition(), token);
+            if (move == MOVE_NONE)
+            {
+                break;
+            }
+
+            ucbGame.ApplyMoveWithRoot(move, ucbGame.Root()->Child(move));
+        }
+
+        if (csv)
+        {
+            std::cout << "move,prior,value,ucb,visits" << std::endl;
+        }
+
+        Node* root = ucbGame.Root();
+        for (const Node& child : *root)
+        {
+            if (csv)
+            {
+                std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
+                    << "," << child.prior
+                    << "," << child.Value()
+                    << "," << _selfPlayWorker->CalculateUcbScore(root, &child)
+                    << "," << (child.visitCount + child.visitingCount)
+                    << std::endl;
+            }
+            else
+            {
+                std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << " prior=" << child.prior
                     << " value=" << child.Value()
                     << " ucb=" << _selfPlayWorker->CalculateUcbScore(root, &child)

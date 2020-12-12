@@ -188,6 +188,7 @@ enum class SelfPlayState
 struct TimeControl
 {
     bool infinite;
+    int nodes;
     int64_t moveTimeMs;
 
     int64_t timeRemainingMs[COLOR_NB];
@@ -361,7 +362,7 @@ private:
     void UpdateSearch();
     void OnSearchFinished();
     void CheckPrintInfo();
-    void CheckUpdateGui(INetwork* network);
+    void CheckUpdateGui(INetwork* network, bool forceUpdate);
     void CheckTimeControl();
     void PrintPrincipleVariation();
     void SearchInitialize(int mctsParallelism);

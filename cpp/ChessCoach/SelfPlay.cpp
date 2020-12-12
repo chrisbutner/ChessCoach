@@ -557,15 +557,13 @@ void SelfPlayGame::Expand(int moveCount)
     assert(root->firstChild == nullptr);
     assert(moveCount > 0);
 
-    assert(_position.legal(_expandAndEvaluate_moves[0].move));
-    Node* lastSibling = new Node(_expandAndEvaluate_moves[0].move, _cachedPriors[0]);
-    root->firstChild = lastSibling;
-    for (int i = 1; i < moveCount; i++)
+    Node** next = &root->firstChild;
+    for (int i = 0; i < moveCount; i++)
     {
         const Move move = _expandAndEvaluate_moves[i].move;
         assert(_position.legal(move));
-        lastSibling->nextSibling = new Node(move, _cachedPriors[i]);
-        lastSibling = lastSibling->nextSibling;
+        *next = new Node(move, _cachedPriors[i]);
+        next = &(*next)->nextSibling;
     }
 }
 
@@ -1592,7 +1590,7 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
 
                 CheckPrintInfo();
 
-                CheckUpdateGui(network.get());
+                CheckUpdateGui(network.get(), false /* forceUpdate */);
 
                 // TODO: Only check every N times
                 CheckTimeControl();
@@ -1601,9 +1599,13 @@ void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
 
                 _searchState.previousNodeCount = _searchState.nodeCount;
             }
+
+            CheckUpdateGui(network.get(), true /* forceUpdate */);
+
+            OnSearchFinished();
+
             // Don't free nodes here: leave them available for reuse/freeing with the next UpdatePosition(),
             // and instead clean up below, when quitting.
-            OnSearchFinished();
         }
     }
 
@@ -1735,10 +1737,11 @@ void SelfPlayWorker::CheckPrintInfo()
     }
 }
 
-void SelfPlayWorker::CheckUpdateGui(INetwork* network)
+void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 {
     const int interval = Config::Misc.Search_GuiUpdateIntervalNodes;
-    if (_searchState.gui && ((_searchState.nodeCount / interval) > (_searchState.previousNodeCount / interval)))
+    if (_searchState.gui && (forceUpdate || 
+        ((_searchState.nodeCount / interval) > (_searchState.previousNodeCount / interval))))
     {
         const SelfPlayGame& game = _games[0];
         const Node* root = game.Root();
@@ -1746,7 +1749,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network)
         {
             return;
         }
-        
+
         const std::string fen = game.GetPosition().fen();
 
         // Value is from the parent's perspective, so that's already correct for the root perspective
@@ -1812,44 +1815,49 @@ void SelfPlayWorker::CheckTimeControl()
         return;
     }
 
-    // Infinite think takes first priority.
+    // Infinite think takes priority: nothing else can stop the search.
     if (_searchState.timeControl.infinite)
     {
+        return;
+    }
+
+    // Nodes can stop the search.
+    if ((_searchState.timeControl.nodes > 0) && (_searchState.nodeCount >= _searchState.timeControl.nodes))
+    {
+        _searchState.searching = false;
         return;
     }
 
     const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState.searchStart);
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
 
-    // Specified think time takes second priority.
-    if (_searchState.timeControl.moveTimeMs > 0)
+    // Specified think time can stop the search.
+    if ((_searchState.timeControl.moveTimeMs > 0) && (searchTimeMs >= _searchState.timeControl.moveTimeMs))
     {
-        if (searchTimeMs >= _searchState.timeControl.moveTimeMs)
-        {
-            _searchState.searching = false;
-        }
+        _searchState.searching = false;
         return;
     }
 
-    // Game clock takes third priority. Use a simple strategy like AlphaZero for now.
+    // Game clock can stop the search. Use a simple strategy like AlphaZero for now.
     const Color toPlay = _games[0].ToPlay();
     const int64_t timeAllowed =
         (_searchState.timeControl.timeRemainingMs[toPlay] / Config::Misc.TimeControl_FractionOfRemaining)
         + _searchState.timeControl.incrementMs[toPlay]
         - Config::Misc.TimeControl_SafetyBufferMilliseconds;
-    if (timeAllowed > 0)
+    if ((timeAllowed > 0) && (searchTimeMs >= timeAllowed))
     {
-        if (searchTimeMs >= timeAllowed)
-        {
-            _searchState.searching = false;
-        }
+        _searchState.searching = false;
         return;
     }
 
-    // No time allowed at all: defy the system and just make a quick training-style move.
-    if (_mctsSimulations[0] >= Config().SelfPlay.NumSimulations)
+    // No limits set/remaining: make at least the training number of simulations.
+    if ((_searchState.timeControl.nodes <= 0) &&
+        (_searchState.timeControl.moveTimeMs <= 0) &&
+        (timeAllowed <= 0) &&
+        (_mctsSimulations[0] >= Config().SelfPlay.NumSimulations))
     {
         _searchState.searching = false;
+        return;
     }
 }
 

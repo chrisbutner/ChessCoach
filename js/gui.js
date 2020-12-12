@@ -118,7 +118,7 @@
         // Add the new UCI data to history, clearing history first if it's a new search.
         if (dataHistory.length > 0) {
             const last = dataHistory[dataHistory.length - 1];
-            if ((uciData.fen !== last.fen) || (uciData.node_count <= last.node_count)) {
+            if ((uciData.fen !== last.fen) || (uciData.node_count < last.node_count)) {
                 dataHistory = [];
                 data = null;
             }
