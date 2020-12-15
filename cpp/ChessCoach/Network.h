@@ -37,14 +37,17 @@ struct INetwork
     using PlanesPointer = float(*)[BoardSide][BoardSide];
     using PlanesPointerFlat = float*;
 
-    constexpr static uint8_t QuantizeProbability(float probability01)
+    // To allow zero we would use (probability01 * 65535.f + 0.5f).
+    constexpr static uint16_t QuantizeProbabilityNoZero(float probability01)
     {
-        return static_cast<uint8_t>(probability01 * 255.f + 0.5f);
+        probability01 = std::max((1.f / 65536.f), probability01);
+        return (static_cast<uint16_t>(probability01 * 65536.f + 0.5f) - 1);
     }
 
-    constexpr static float DequantizeProbability(uint8_t quantizedProbability)
+    // To allow zero we would use (quantizedProbability / 65535.f).
+    constexpr static float DequantizeProbabilityNoZero(uint16_t quantizedProbability)
     {
-        return (quantizedProbability / 255.f);
+        return ((quantizedProbability + 1) / 65536.f);
     }
 
     constexpr static float MapProbability01To11(float probability01)
@@ -101,9 +104,16 @@ struct INetwork
         float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut) = 0;
 };
 
-static_assert(INetwork::QuantizeProbability(1.f) == 255);
-static_assert(INetwork::QuantizeProbability(0.f) == 0);
-static_assert(INetwork::DequantizeProbability(255) == 1.f);
-static_assert(INetwork::DequantizeProbability(0) == 0.f);
+static_assert(INetwork::QuantizeProbabilityNoZero(1.f) == 65535);
+static_assert(INetwork::QuantizeProbabilityNoZero(0.f) == 0);
+static_assert(INetwork::DequantizeProbabilityNoZero(65535) == 1.f);
+static_assert(INetwork::DequantizeProbabilityNoZero(0) > 0.f);
+
+static_assert(INetwork::DequantizeProbabilityNoZero(INetwork::QuantizeProbabilityNoZero(1.f)) == 1.f);
+static_assert(INetwork::QuantizeProbabilityNoZero(INetwork::DequantizeProbabilityNoZero(65535)) == 65535);
+
+static_assert(INetwork::DequantizeProbabilityNoZero(INetwork::QuantizeProbabilityNoZero(0.0000152587890625f)) == 0.0000152587890625f);
+static_assert(INetwork::DequantizeProbabilityNoZero(INetwork::QuantizeProbabilityNoZero(0.f)) == 0.0000152587890625f); // Probabilities always clipped above zero.
+static_assert(INetwork::QuantizeProbabilityNoZero(INetwork::DequantizeProbabilityNoZero(0)) == 0);
 
 #endif // _NETWORK_H_

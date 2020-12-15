@@ -8,18 +8,19 @@
 #include "Network.h"
 #include "Platform.h"
 
-struct alignas(64) PredictionCacheEntry
+struct alignas(128) PredictionCacheEntry
 {
     // Positions with more moves don't fit in the cache and so shouldn't be probed/stored.
-    static const int MaxMoveCount = 52;
+    static const int MaxMoveCount = 56;
 
     Key key;                                            // 8 bytes
     float value;                                        // 4 bytes
-    std::array<uint8_t, MaxMoveCount> policyPriors;     // 52 bytes
+    int age;                                            // 4 bytes
+    std::array<uint16_t, MaxMoveCount> policyPriors;    // 112 bytes
 };
-static_assert(sizeof(PredictionCacheEntry) == 64);
+static_assert(sizeof(PredictionCacheEntry) == 128);
 
-struct alignas(512) PredictionCacheChunk
+struct alignas(1024) PredictionCacheChunk
 {
     void Clear();
     bool TryGet(Key key, int moveCount, float* valueOut, float* priorsOut);
@@ -27,16 +28,14 @@ struct alignas(512) PredictionCacheChunk
 
 private:
 
-    static const int EntryCount = 7;
+    static const int EntryCount = 8;
 
-    std::array<PredictionCacheEntry, EntryCount> _entries;  // 448 bytes
-    std::array<int, EntryCount> _ages;                      // 28=32 bytes
-                                                            // 32 bytes padding
+    std::array<PredictionCacheEntry, EntryCount> _entries;  // 1024 bytes
 
     friend class PredictionCache;
 };
 
-static_assert(sizeof(PredictionCacheChunk) == 512);
+static_assert(sizeof(PredictionCacheChunk) == 1024);
 
 class PredictionCache
 {

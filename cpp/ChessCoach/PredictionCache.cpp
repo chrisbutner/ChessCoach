@@ -12,20 +12,20 @@ void PredictionCacheChunk::Clear()
     for (int i = 0; i < EntryCount; i++)
     {
         _entries[i].key = 0;
-        _ages[i] = 0;
+        _entries[i].age = 0;
     }
 }
 
 bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float* priorsOut)
 {
-    for (int& age : _ages)
+    for (PredictionCacheEntry& entry : _entries)
     {
-        age++;
+        entry.age++;
     }
 
-    for (int i = 0; i < EntryCount; i++)
+    for (PredictionCacheEntry& entry : _entries)
     {
-        if (_entries[i].key == key)
+        if (entry.key == key)
         {
             // Various types of collisions and race conditions across threads are possible:
             //
@@ -51,34 +51,35 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
             // Use the provided "priorsOut" as writable scratch space even if we return false.
             //
             // Most real probabilities will have canceling bias from quanitzation errors,
-            // but uniform policy will give cases like 1/19 * 19, 1.0 vs. ~0.9686, 255 vs. 247,
+            // but uniform policy will give cases like 1/245 * 245, 1.0 vs. ~0.9982, 65535 vs. 65415,
             // and we may get unlucky on certain batches (don't actually need to cache pure uniform).
             //
-            // Allow for 9 quanta error, ~3.5%.
+            // Allow for 120 quanta error, ~0.18% (used to be much higher with 8-bit quantization, ~3.5% for 9).
+            // This allows for the largest uniform error for legal moves in [1, 256].
 
             int priorSum = 0;
             for (int m = 0; m < moveCount; m++)
             {
-                const uint8_t quantizedPrior = _entries[i].policyPriors[m];
+                const uint16_t quantizedPrior = entry.policyPriors[m];
                 priorSum += quantizedPrior;
 
-                const float prior = INetwork::DequantizeProbability(quantizedPrior);
+                const float prior = INetwork::DequantizeProbabilityNoZero(quantizedPrior);
                 priorsOut[m] = prior;
             }
 
             // Check for type-1 errors and splices and return false. It's important not to
             // freshen the age in these cases so that splices can be overwritten with good data.
-            constexpr int expected = INetwork::QuantizeProbability(1.f);
-            static_assert(INetwork::DequantizeProbability(expected) == 1.f);
-            const int allowance = 9;
+            constexpr int expected = INetwork::QuantizeProbabilityNoZero(1.f);
+            static_assert(INetwork::DequantizeProbabilityNoZero(expected) == 1.f);
+            const int allowance = 120;
             if ((priorSum < (expected - allowance)) || (priorSum > (expected + allowance)))
             {
                 return false;
             }
 
             // The entry is valid, as far as we can tell, so freshen its age and return it.
-            _ages[i] = std::numeric_limits<int>::min();
-            *valueOut = _entries[i].value;
+            entry.age = std::numeric_limits<int>::min();
+            *valueOut = entry.value;
             return true;
         }
     }
@@ -91,7 +92,7 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float*
     int oldestIndex = 0;
     for (int i = 1; i < EntryCount; i++)
     {
-        if (_ages[i] > _ages[oldestIndex])
+        if (_entries[i].age > _entries[oldestIndex].age)
         {
             oldestIndex = i;
         }
@@ -107,12 +108,12 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float*
         PredictionCache::Instance._entryCount++;
     }
 
-    _ages[oldestIndex] = std::numeric_limits<int>::min();
     _entries[oldestIndex].key = key;
     _entries[oldestIndex].value = value;
+    _entries[oldestIndex].age = std::numeric_limits<int>::min();
     for (int m = 0; m < moveCount; m++)
     {
-        _entries[oldestIndex].policyPriors[m] = INetwork::QuantizeProbability(priors[m]);
+        _entries[oldestIndex].policyPriors[m] = INetwork::QuantizeProbabilityNoZero(priors[m]);
     }
 
     // Place a "guard" probability of 1.0 immediately after the N legal moves' probabilities
@@ -120,7 +121,7 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float*
     // seeing only trailing zeros and still summing to 1.0).
     if (moveCount < _entries[oldestIndex].policyPriors.size())
     {
-        _entries[oldestIndex].policyPriors[moveCount] = INetwork::QuantizeProbability(1.f);
+        _entries[oldestIndex].policyPriors[moveCount] = INetwork::QuantizeProbabilityNoZero(1.f);
     }
 }
 
@@ -140,6 +141,16 @@ PredictionCache::~PredictionCache()
 
 void PredictionCache::Allocate(int sizeGb)
 {
+    // Require <= 256 GiB and a power of two, or zero.
+    if (sizeGb > 256)
+    {
+        throw std::invalid_argument("Maximum prediction cache size 256 GiB");
+    }
+    if ((sizeGb & (sizeGb - 1)) != 0)
+    {
+        throw std::invalid_argument("Prediction cache size must be a power-of-two GiB or zero");
+    }
+
     Free();
 
     const int tableCount = sizeGb;
@@ -199,14 +210,24 @@ bool PredictionCache::TryGetPrediction(Key key, int moveCount, PredictionCacheCh
 
     _probeCount++;
 
-    // Use the high 16 bits to choose the table.
+    // We're not using very many bits of the key for our tables: currently 26 bits of entries, 23 bits of 64 used to index, 3 bits decided via age/linear scan.
+    // Since hashes are Zobrist we can assume distribution is pretty even across different bit positions. However, since our modulos should be powers of two
+    // we don't need to worry about bias and can cheaply xor to combine entropy (between 1x and 2x per combination, depending), with no discards necessary.
+
+    // Use up to 16 high bits to choose the table (e.g. lowest 3 of the 16 for 8-GiB cache with 1-GiB tables).
     const uint16_t tableKey = (key >> 48);
-    PredictionCacheChunk* table = _tables[tableKey % _tables.size()];
+    // Xor down to 8 bits (covers up to 256 tables of prediction cache, checked in "Allocate").
+    const uint16_t tableKeyXor = ((tableKey & 0xFF) ^ (tableKey >> 8));
+    PredictionCacheChunk* table = _tables[tableKeyXor % _tables.size()];
 
-    // Use the low 48 bits to choose the chunk.
+    // Use up to 48 low bits to choose the chunk (e.g. lowest 20 of the 48 for 1-GiB table with 1-MiB chunks).
     const uint64_t chunkKey = (key & 0xFFFFFFFFFFFF);
-    PredictionCacheChunk& chunk = table[chunkKey % ChunksPerTable];
+    // Xor lowest 40 bits down to 20 bits (covers ChunksPerTable exactly); don't worry about bits dangling above.
+    static_assert(ChunksPerTable == (1 << 20));
+    const uint64_t chunkKeyXor = ((chunkKey & 0xFFFFF) ^ (chunkKey >> 20));
+    PredictionCacheChunk& chunk = table[chunkKeyXor % ChunksPerTable];
 
+    // Age-based differentiation among entries in the chunk covers another 3 bits' worth.
     if (chunk.TryGet(key, moveCount, valueOut, priorsOut))
     {
         _hitCount++;
