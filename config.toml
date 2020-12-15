@@ -300,7 +300,7 @@ fraction_remaining = 20
 [search]
 
 mcts_parallelism = 16
-gui_update_interval_nodes = 50000
+gui_update_interval_nodes = 1000
 
 [storage]
 

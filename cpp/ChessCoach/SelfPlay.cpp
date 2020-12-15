@@ -606,7 +606,7 @@ float SelfPlayGame::CalculateMctsValue() const
 void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float>& visits = _childVisits.emplace_back();
-    const int sumChildVisits = _root->visitCount;
+    const float sumChildVisits = static_cast<float>(_root->visitCount);
     for (const Node& child : *_root)
     {
         visits[Move(child.move)] = static_cast<float>(child.visitCount) / sumChildVisits;
@@ -1084,6 +1084,7 @@ void SelfPlayWorker::Play(int index)
         }
 
         assert(selected != nullptr);
+        PrunePolicyTarget(root);
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
         game.PruneExcept(root, selected /* == game.Root() */);
@@ -1157,9 +1158,14 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
 
             while (scratchGame.Root()->IsExpanded())
             {
+                // Force playouts during training only, at the root only.
+                const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
+                Node* selected =  forcePlayouts ?
+                    SelectChild<true>(scratchGame.Root()) :
+                    SelectChild<false>(scratchGame.Root());
+
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration, just fix up visitingCounts.
-                Node* selected = SelectChild(scratchGame.Root());
                 if (!selected)
                 {
                     assert(game.TryHard());
@@ -1287,6 +1293,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game) const
 
 // It's possible because of nodes marked off-limits via "expanding"
 // that this method cannot select a child, instead returning NONE/nullptr.
+template <bool ForcePlayouts>
 Node* SelfPlayWorker::SelectChild(Node* parent) const
 {
     float maxUcbScore = -std::numeric_limits<float>::infinity();
@@ -1295,7 +1302,7 @@ Node* SelfPlayWorker::SelectChild(Node* parent) const
     {
         if (!child.expanding)
         {
-            const float ucbScore = CalculateUcbScore(parent, &child);
+            const float ucbScore = CalculateUcbScore<ForcePlayouts>(parent, &child);
             if (ucbScore > maxUcbScore)
             {
                 maxUcbScore = ucbScore;
@@ -1305,18 +1312,32 @@ Node* SelfPlayWorker::SelectChild(Node* parent) const
     }
     return max;
 }
+template Node* SelfPlayWorker::SelectChild<true>(Node* parent) const;
+template Node* SelfPlayWorker::SelectChild<false>(Node* parent) const;
 
 // TODO: Profile, see if significant, whether vectorizing is viable/worth it
+template <bool ForcePlayouts>
 float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) const
 {
+    const int parentVirtualExploration = (parent->visitCount + parent->visitingCount);
+    const int childVirtualExploration = (child->visitCount + child->visitingCount);
+
+    // We force playouts only during training, so we don't care about virtual loss or exploration issues
+    // that would otherwise occur when returning a constant infinity.
+    if (ForcePlayouts &&
+        (childVirtualExploration < static_cast<int>(::sqrtf(2.f * child->prior * parentVirtualExploration))))
+    {
+        return std::numeric_limits<float>::infinity();
+    }
+
     // Calculate the exploration rate, which is multiplied by (a) the prior to incentivize exploration,
     // and (b) a mate-in-N lookup to incentivize sufficient exploitation of forced mates, dependent on depth.
     // Include "visitingCount" to help parallel searches diverge.
-    const float parentVirtualExploration = static_cast<float>(parent->visitCount + parent->visitingCount);
-    const float childVirtualExploration = static_cast<float>(child->visitCount + child->visitingCount);
+    const float parentVirtualExplorationFloat = static_cast<float>(parentVirtualExploration);
+    const float childVirtualExplorationFloat = static_cast<float>(childVirtualExploration);
     const float explorationRate =
-        (::logf((parentVirtualExploration + _explorationRateBase + 1.f) / _explorationRateBase) + _explorationRateInit) *
-        ::sqrtf(parentVirtualExploration) / (childVirtualExploration + 1.f);
+        (::logf((parentVirtualExplorationFloat + _explorationRateBase + 1.f) / _explorationRateBase) + _explorationRateInit) *
+        ::sqrtf(parentVirtualExplorationFloat) / (childVirtualExplorationFloat + 1.f);
 
     // (a) prior score
     const float priorScore = explorationRate * child->prior;
@@ -1325,6 +1346,49 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     const float mateScore = child->terminalValue.MateScore(explorationRate);
 
     return (child->Value() + priorScore + mateScore);
+}
+template float SelfPlayWorker::CalculateUcbScore<true>(const Node* parent, const Node* child) const;
+template float SelfPlayWorker::CalculateUcbScore<false>(const Node* parent, const Node* child) const;
+
+float SelfPlayWorker::CalculateUcbScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
+{
+    // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
+    return (CalculateUcbScore<false>(parent, child) - child->Value() + fixedValue);
+}
+
+void SelfPlayWorker::PrunePolicyTarget(Node* root) const
+{
+    // Find the most-visited child: ignore hard mate selection rules.
+    Node* best = root->firstChild;
+    for (Node& child : *root)
+    {
+        if (child.visitCount > best->visitCount)
+        {
+            best = &child;
+        }
+    }
+
+    // Prune visits to other nodes based on UCB regret vs. the most-visited child.
+    const float bestScore = CalculateUcbScore<false>(root, best);
+    int pruneCount = 0;
+    for (Node& child : *root)
+    {
+        if (&child == best)
+        {
+            continue;
+        }
+
+        // Pre-decrement before "CalculateUcbScore" to save one calculation per child.
+        const float fixedValue = child.Value();
+        while ((--child.visitCount >= 0) && (CalculateUcbScoreFixedValue(root, &child, fixedValue) < bestScore))
+        {
+            pruneCount++;
+        }
+        child.visitCount++;
+    }
+
+    // Use the root's original visit count for exploration terms while pruning, and delay corresponding adjustments until the end here.
+    root->visitCount -= pruneCount;
 }
 
 void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float value)
@@ -1854,7 +1918,7 @@ void SelfPlayWorker::CheckTimeControl()
     if ((_searchState.timeControl.nodes <= 0) &&
         (_searchState.timeControl.moveTimeMs <= 0) &&
         (timeAllowed <= 0) &&
-        (_mctsSimulations[0] >= Config().SelfPlay.NumSimulations))
+        (_searchState.nodeCount >= Config().SelfPlay.NumSimulations))
     {
         _searchState.searching = false;
         return;

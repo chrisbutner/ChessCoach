@@ -330,8 +330,12 @@ public:
         std::vector<Node*>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     Node* SelectMove(const SelfPlayGame& game) const;
+    template <bool ForcePlayouts>
     Node* SelectChild(Node* node) const;
+    template <bool ForcePlayouts>
     float CalculateUcbScore(const Node* parent, const Node* child) const;
+    float CalculateUcbScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const;
+    void PrunePolicyTarget(Node* root) const;
     void Backpropagate(const std::vector<Node*>& searchPath, float value);
     void BackpropagateMate(const std::vector<Node*>& searchPath);
     void FixPrincipleVariation(const std::vector<Node*>& searchPath, Node* node);

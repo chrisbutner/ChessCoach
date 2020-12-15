@@ -405,7 +405,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << "," << child.prior
                     << "," << child.Value()
-                    << "," << _selfPlayWorker->CalculateUcbScore(root, &child)
+                    << "," << _selfPlayWorker->CalculateUcbScore<false>(root, &child)
                     << "," << (child.visitCount + child.visitingCount)
                     << std::endl;
             }
@@ -414,7 +414,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << " prior=" << child.prior
                     << " value=" << child.Value()
-                    << " ucb=" << _selfPlayWorker->CalculateUcbScore(root, &child)
+                    << " ucb=" << _selfPlayWorker->CalculateUcbScore<false>(root, &child)
                     << " visits=" << (child.visitCount + child.visitingCount)
                     << std::endl;
             }

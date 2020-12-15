@@ -1,15 +1,22 @@
-GUI - IMPROVEMENTS
-- deal with info panel height/scrolling, move list
-- change the square background rather than adding overlay, need more consistency between black/white squares
-- implement search tool with slider over node count
-- websocket reconnect?
+TODO
+- check 2f training run vs. 2d
+- add SE to whichever is better (still with commentary)
+- evaluate, check in L2 and/or SE
+
+TODO
+- try to make mate-visiting stop wasting time, instantly push up to 2nd best
+	- complicated with multiple levels of visits
+	- complicated if 2nd best is also mate/terminal
+- need to fix 350 NPS situation in stockfish games
+	- try out a backtracking implementation of virtual exploration/loss that goes as deep
+	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
+	  choosing better nodes overall and avoiding failed simulations
 
 Training improvements
 - SE (lc0)
 	- try batchnorm/relu before SE since we have v2 residuals
 - SE-ish-as-bias (Wu)
 	- (TODO)
-- forced playouts/pruning (Wu)
 - playout cap randomization (Wu)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
 - try 1 vs. 8 vs. 32 value head filters again
@@ -19,12 +26,19 @@ Training improvements
 	- could also conceivably blend, like 1.0 for legal moves and 0.15 zero-pressure for others
 - find some positions where engine misses shallow tactics, play with FPU and criticality
 	- try to quantify and train criticality, feed into FPU (or deeper FPU, multi-move decay)
-		- actually only need immediate FPU since each node in the tree gets its own criticality prediction from the network
+	- training target needs to be good/consistent even when already good at predicting; e.g. can't base on how wrong we were before searching, oscillate - intrinsic to position
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
 	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
 - investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
 	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
 	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
+
+GUI
+- "gui moves f3e5", like ~ ucb, pin data pushes to that sub-position and show history over it?
+- deal with info panel height/scrolling, move list
+- change the square background rather than adding overlay, need more consistency between black/white squares
+- implement search tool with slider over node count
+- websocket reconnect
 
 Cluster
 - got an answer about DNS, either scale up kube-dns vs. preemption or use a critical node pool
@@ -178,6 +192,7 @@ Revisit
 
 Bugs
 - Read-AV in game stateinfo cleanup when quitting UCI
+- Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
@@ -195,7 +210,6 @@ Low priority
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
 - Richer UCI features like multiPV
-- GUI for play/debug, only UCI debug commands
 - CPU optimization - not measurable enough while GPU-dominated
 - endgame tablebases (e.g. leveraging Stockfish probing code)
 	- UCI: not interesting enough, others can add if going for pure strength
