@@ -41,7 +41,7 @@ struct INetwork
     constexpr static uint16_t QuantizeProbabilityNoZero(float probability01)
     {
         probability01 = std::max((1.f / 65536.f), probability01);
-        return (static_cast<uint16_t>(probability01 * 65536.f + 0.5f) - 1);
+        return static_cast<uint16_t>(probability01 * 65536.f + 0.5f - 1.f);
     }
 
     // To allow zero we would use (quantizedProbability / 65535.f).

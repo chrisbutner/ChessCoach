@@ -17,13 +17,18 @@ spec:
         app: chesscoach-train
     spec:
       restartPolicy: Always
+      tolerations:
+      - key: dedicated
+        operator: Equal
+        value: preemptible
+        effect: NoSchedule
       volumes:
       - name: service-credentials
         secret:
           secretName: chesscoach-credentials
       containers:
       - name: chesscoach-train-container
-        image: gcr.io/chesscoach/chesscoach-train:chesscoach2_v3
+        image: gcr.io/chesscoach/chesscoach-train:chesscoach1m_v4
         volumeMounts:
         - name: service-credentials
           mountPath: /var/secrets/google
@@ -35,12 +40,9 @@ spec:
           value: /var/secrets/google/key.json
         resources:
           requests:
-            cpu: 3
-            memory: 30Gi
+            cpu: 3.7
+            memory: 31Gi
             cloud-tpus.google.com/v2: 8 # v2-8
             ephemeral-storage: 4Gi
           limits:
-            cpu: 3.75
-            memory: 30Gi
             cloud-tpus.google.com/v2: 8 # v2-8
-            ephemeral-storage: 4Gi
