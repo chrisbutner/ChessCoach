@@ -24,7 +24,7 @@ class DatasetBuilder:
   # Chunk parameters
   compression_type = "ZLIB"
   chunk_read_buffer_size = 8 * 1024 * 1024
-  positions_per_game = 135
+  positions_per_game = 135 # Estimate
 
   def __init__(self, config):
     self.config = config

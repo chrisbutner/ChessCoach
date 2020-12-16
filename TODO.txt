@@ -41,7 +41,6 @@ GUI
 - websocket reconnect
 
 Cluster
-- got an answer about DNS, either scale up kube-dns vs. preemption or use a critical node pool
 - still waiting on core dump issue
 
 Bigger ideas
@@ -59,6 +58,7 @@ Speed up training, play with tf.function
 	- https://github.com/tensorflow/tpu/tree/master/models/official/resnet
 
 Quality
+- modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
 - print config summary when starting a run
 - switch to even number of history positions for repetitions (what if we only did every 2nd going back)
 	- wait for a solid baseline and measure

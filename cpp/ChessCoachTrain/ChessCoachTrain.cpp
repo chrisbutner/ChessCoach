@@ -39,6 +39,7 @@ private:
     void StageSave(const TrainingState& state, SelfPlayWorker& selfPlayWorker);
     void StageStrengthTest(const TrainingState& state, SelfPlayWorker& selfPlayWorker);
     
+    void ValidateSchedule(const TrainingState& state);
     void ResumeTraining(TrainingState& stateInOut);
     bool IsStageComplete(const TrainingState& state);
 
@@ -106,6 +107,7 @@ void ChessCoachTrain::TrainChessCoach()
     state.networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
     state.networkNumber = (networkStepCount / config.Training.CheckpointInterval);
     state.stageIndex = 0;
+    ValidateSchedule(state);
     ResumeTraining(state);
 
     // Run through all checkpoints with n in [1, networkCount].
@@ -332,6 +334,24 @@ void ChessCoachTrain::StageStrengthTest(const TrainingState& state, SelfPlayWork
         if (!markerRelativePath.empty())
         {
             state.network->SaveFile(markerRelativePath, "");
+        }
+    }
+}
+
+void ChessCoachTrain::ValidateSchedule(const TrainingState& state)
+{
+    for (const StageConfig& stage : state.config->Training.Stages)
+    {
+        if (stage.Stage == StageType_Train)
+        {
+            const int positionsPerGame = 135; // Estimate
+            const int totalPositions = (stage.NumGames * positionsPerGame);
+            const int totalSamples = (state.config->Training.Steps * state.config->Training.BatchSize);
+            const float sampleRatio = (static_cast<float>(totalSamples) / totalPositions);
+            if (sampleRatio >= 1.f)
+            {
+                throw std::invalid_argument("Invalid training schedule; sample ratio is too high; increase num_games and window");
+            }
         }
     }
 }

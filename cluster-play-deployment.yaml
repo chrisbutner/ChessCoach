@@ -28,7 +28,7 @@ spec:
           secretName: chesscoach-credentials
       containers:
       - name: chesscoach-play-container
-        image: gcr.io/chesscoach/chesscoach-play:chesscoach1m_v4
+        image: gcr.io/chesscoach/chesscoach-play:selfplay1_v5
         volumeMounts:
         - name: service-credentials
           mountPath: /var/secrets/google

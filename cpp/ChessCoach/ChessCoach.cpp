@@ -44,12 +44,8 @@ void ChessCoach::PrintExceptions()
                 {
                     std::cout << "Unhandled exception (unknown type)" << std::endl;
                 }
-                std::abort();
             }
-            else
-            {
-                // Finished running, graceful termination.
-            }
+            std::_Exit(1);
         });
 }
 

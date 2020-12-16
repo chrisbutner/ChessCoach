@@ -4,8 +4,8 @@
 
 [network]
 
-training_network_name = "chesscoach1m"
-uci_network_name = "chesscoach1m"
+training_network_name = "selfplay1"
+uci_network_name = "selfplay1"
 role = "train|play"
 
 [[networks]]
@@ -60,18 +60,20 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
+        { stage = "play", window_size_start = 12_000, window_size_finish = 400_000, num_games = 1_440_000 },
 
         # Train self-play, teacher then distill
-        { stage = "train", target = "teacher", type = "training", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
+        { stage = "train", target = "teacher", type = "training", window_size_start = 12_000, window_size_finish = 400_000, num_games = 1_440_000 },
         { stage = "save", target = "teacher" },
-        { stage = "train", target = "student", type = "training", window_size_start = 6_000, window_size_finish = 200_000, num_games = 720_000 },
+        { stage = "train", target = "student", type = "training", window_size_start = 12_000, window_size_finish = 400_000, num_games = 1_440_000 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
         { stage = "strength_test", target = "teacher" },
         { stage = "strength_test", target = "student" },
     ]
+
+    games_path_training = "Games/SelfPlay"
 
 [[networks]]
 

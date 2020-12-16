@@ -9,6 +9,7 @@ RUN sed -i -e "s/training_network_name.*=.*\".*\"/training_network_name = \"${NE
   -e "s/uci_network_name.*=.*\".*\"/uci_network_name = \"${NETWORK}\"/" \
   -e "s/role.*=.*\".*\"/role = \"play\"/" \
   /chesscoach/config.toml && \
-  /chesscoach/build.sh release install
+  /chesscoach/build.sh release install && \
+  rm -r /chesscoach/build
 
 CMD ["ChessCoachTrain"]
