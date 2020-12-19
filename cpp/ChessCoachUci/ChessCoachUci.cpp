@@ -277,9 +277,7 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
 void ChessCoachUci::HandleGo(std::stringstream& commands)
 {
     // TODO: searchmoves
-    // TODO: ponder
     // TODO: movestogo
-    // TODO: mate
 
     TimeControl timeControl = {};
 
@@ -290,9 +288,13 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         {
             timeControl.infinite = true;
         }
-        if ((token == "nodes"))
+        else if ((token == "nodes"))
         {
             commands >> timeControl.nodes;
+        }
+        else if ((token == "mate"))
+        {
+            commands >> timeControl.mate;
         }
         else if (token == "movetime")
         {

@@ -1,18 +1,27 @@
-TODO
+Criticality
+- test STS and Arasan(slow) with base, 0.5check/k=5, 0.5check/k=10, 0.5check/k=50, 0.1/0.9 squish
+- think about training target for stddev
+	- since it's stddev as an error estimator, it could actually be non-consistent, just a way to speed up feedback cycle to better priors?
+	- but probably still better if consistent
+
+SE
+- (do more work on self-play only runs before evaluating SE again)
 - check 2f training run vs. 2d
 - add SE to whichever is better (still with commentary)
 - evaluate, check in L2 and/or SE
 
-TODO
+Node visits
 - try to make mate-visiting stop wasting time, instantly push up to 2nd best
 	- complicated with multiple levels of visits
 	- complicated if 2nd best is also mate/terminal
+	- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?
 - need to fix 350 NPS situation in stockfish games
 	- try out a backtracking implementation of virtual exploration/loss that goes as deep
 	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
 	  choosing better nodes overall and avoiding failed simulations
 
 Training improvements
+- reevaluate auxiliary heads on latest self-play only data
 - SE (lc0)
 	- try batchnorm/relu before SE since we have v2 residuals
 - SE-ish-as-bias (Wu)
@@ -198,7 +207,7 @@ Bugs
 - Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
 	- Looks like it's actually the training code - need to investigate in Python
 - Tiny configs with self-play don't work now with minimum 2000 chunking
-- network.js doesn't listen to CHESSCOACH_SILENT when set in NetworkTest.cpp
+- Tests need to set CHESSCOACH_SILENT before initializing python somehow (mostly for NetworkTest.cpp)
 
 Low priority
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
@@ -209,7 +218,7 @@ Low priority
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
-- Richer UCI features like multiPV
+- Richer UCI features like multiPV or ponder
 - CPU optimization - not measurable enough while GPU-dominated
 - endgame tablebases (e.g. leveraging Stockfish probing code)
 	- UCI: not interesting enough, others can add if going for pure strength

@@ -1160,7 +1160,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             {
                 // Force playouts during training only, at the root only.
                 const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
-                Node* selected =  forcePlayouts ?
+                Node* selected = forcePlayouts ?
                     SelectChild<true>(scratchGame.Root()) :
                     SelectChild<false>(scratchGame.Root());
 
@@ -1577,7 +1577,7 @@ void SelfPlayWorker::DebugResetGame(int index)
     _scratchGames[index] = SelfPlayGame();
 }
 
-void SelfPlayWorker::Search(std::function<INetwork*()> networkFactory)
+void SelfPlayWorker::Search(std::function<INetwork* ()> networkFactory)
 {
     // Create the network on the worker thread (slow).
     std::unique_ptr<INetwork> network(networkFactory());
@@ -1804,7 +1804,7 @@ void SelfPlayWorker::CheckPrintInfo()
 void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 {
     const int interval = Config::Misc.Search_GuiUpdateIntervalNodes;
-    if (_searchState.gui && (forceUpdate || 
+    if (_searchState.gui && (forceUpdate ||
         ((_searchState.nodeCount / interval) > (_searchState.previousNodeCount / interval))))
     {
         const SelfPlayGame& game = _games[0];
@@ -1892,6 +1892,17 @@ void SelfPlayWorker::CheckTimeControl()
         return;
     }
 
+    // Mate can stop the search.
+    if (_searchState.timeControl.mate > 0)
+    {
+        const int eitherMateN = _games[0].Root()->bestChild->terminalValue.EitherMateN();
+        if ((eitherMateN > 0) && (eitherMateN <= _searchState.timeControl.mate))
+        {
+            _searchState.searching = false;
+            return;
+        }
+    }
+
     const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState.searchStart);
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
 
@@ -1916,6 +1927,7 @@ void SelfPlayWorker::CheckTimeControl()
 
     // No limits set/remaining: make at least the training number of simulations.
     if ((_searchState.timeControl.nodes <= 0) &&
+        (_searchState.timeControl.mate <= 0) &&
         (_searchState.timeControl.moveTimeMs <= 0) &&
         (timeAllowed <= 0) &&
         (_searchState.nodeCount >= Config().SelfPlay.NumSimulations))

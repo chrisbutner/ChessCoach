@@ -189,6 +189,7 @@ struct TimeControl
 {
     bool infinite;
     int nodes;
+    int mate;
     int64_t moveTimeMs;
 
     int64_t timeRemainingMs[COLOR_NB];
