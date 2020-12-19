@@ -259,8 +259,8 @@ stages = []
 
 [training.learning_rate_schedule]
 
-steps = [0, 60_000, 120_000, 180_000]
-rates = [2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5]
+steps = [0] #[0, 60_000, 120_000, 180_000]
+rates = [2.5e-2] #[2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5]
 
 [training.commentary_learning_rate_schedule]
 
