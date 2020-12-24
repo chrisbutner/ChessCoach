@@ -435,9 +435,9 @@ def update_gui(*args):
   gui.update(*args)
 
 def debug_decompress(result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
-  images, values, policies, reply_policies = datasets.decompress(result, image_pieces_auxiliary,
+  images, values, policies = datasets.decompress(result, image_pieces_auxiliary,
     mcts_values, policy_row_lengths, policy_indices, policy_values)
-  return np.array(memoryview(images)), np.array(memoryview(values)), np.array(memoryview(policies)), np.array(memoryview(reply_policies))
+  return np.array(memoryview(images)), np.array(memoryview(values)), np.array(memoryview(policies))
 
 # --- Initialize ---
 

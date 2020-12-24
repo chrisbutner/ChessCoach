@@ -75,11 +75,6 @@ class DatasetBuilder:
   def decompress_policies(self, indices, values):
     return tf.map_fn(self.scatter_policy, (indices, values), fn_output_signature=tf.float32)
 
-  def decompress_reply_policies(self, policies):
-    reply_policies = policies[1:]
-    reply_policies = tf.pad(reply_policies, [[0, 1], [0, 0], [0, 0], [0, 0]])
-    return reply_policies
-
   def decompress(self, result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
     # Slice out piece and auxiliary planes.
     image_pieces = image_pieces_auxiliary[:, :self.input_piece_planes_per_position]
@@ -98,9 +93,8 @@ class DatasetBuilder:
     images = self.decompress_images(image_pieces, image_auxiliary)
     values = self.decompress_values(result, tf.shape(mcts_values))
     policies = self.decompress_policies(policy_indices, policy_values)
-    reply_policies = self.decompress_reply_policies(policies)
 
-    return (images, values, policies, reply_policies)
+    return (images, values, policies)
 
   def parse_game(self, serialized, options):
     # Parse raw features from the tf.train.Example representing the game.
@@ -113,9 +107,9 @@ class DatasetBuilder:
     policy_values = example["policy_values"]
 
     # Break apart and stitch together tensors, and decompress using position history.
-    images, values, policies, reply_policies = self.decompress(
+    images, values, policies = self.decompress(
       result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values)
-    dataset = tf.data.Dataset.from_tensor_slices((images, (values, mcts_values, policies, reply_policies)))
+    dataset = tf.data.Dataset.from_tensor_slices((images, (values, mcts_values, policies)))
 
     # Throw away a proportion of *positions* to avoid overly correlated/periodic data. This is a time/space trade-off.
     # Throwing away more saves memory but costs CPU. Increasing shuffle buffer size saves CPU but costs memory.
@@ -189,7 +183,7 @@ class DatasetBuilder:
     #
     # If e.g. 2 cycles could fit in the shuffle buffer then we could have doubled the cycle length with similar results,
     # allowing for greater I/O and CPU parallelism, so aim for cycles per shuffle buffer in [1, 2).
-    dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
+    #dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
 
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)

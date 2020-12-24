@@ -111,10 +111,9 @@ class Trainer:
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=self.get_learning_rate(0),
       momentum=self.config.training["momentum"])
-    losses = ["mean_squared_error", "mean_squared_error", flat_categorical_crossentropy_from_logits, flat_categorical_crossentropy_from_logits]
-    loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"],
-      self.config.training["policy_loss_weight"], self.config.training["reply_policy_loss_weight"]]
-    metrics = [[], [], [flat_categorical_accuracy], [flat_categorical_accuracy]]
+    losses = ["mean_squared_error", "mean_squared_error", flat_categorical_crossentropy_from_logits]
+    loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"], self.config.training["policy_loss_weight"]]
+    metrics = [[], [], [flat_categorical_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
   # The student network trains on a combination of soft teacher labels and hard supervised labels.
@@ -123,10 +122,9 @@ class Trainer:
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=self.get_learning_rate(0),
       momentum=self.config.training["momentum"])
-    losses = ["mean_squared_error", "mean_squared_error", student_policy_loss, student_policy_loss]
-    loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"],
-      self.config.training["policy_loss_weight"], self.config.training["reply_policy_loss_weight"]]
-    metrics = [[], [], [student_policy_accuracy], [student_policy_accuracy]]
+    losses = ["mean_squared_error", "mean_squared_error", student_policy_loss]
+    loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"], self.config.training["policy_loss_weight"]]
+    metrics = [[], [], [student_policy_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
 
   # Explicitly reclaim dataset memory before active self-play or strength testing.
@@ -216,18 +214,16 @@ class Trainer:
   def stack_teacher_targets(self, teacher_network, images, targets):
     # Predict teacher logits.
     distributed_images = self.distribute_batch(images)
-    _, _, teacher_policies, teacher_reply_policies = self.strategy.run(
+    _, _, teacher_policies = self.strategy.run(
       teacher_network.tf_predict_for_training, args=(distributed_images,))
     if self.device_count > 1:
       teacher_policies = self.collect_batch(teacher_policies)
-      teacher_reply_policies = self.collect_batch(teacher_reply_policies)
 
     # Stack with provided labels in axis=1 so that axis=0 can remain the batch axis
     # and be auto-distributed to replicas by train_on_batch/test_on_batch.
-    values, mcts_values, policies, reply_policies = targets
+    values, mcts_values, policies = targets
     policies = tf.stack([teacher_policies, policies], axis=1)
-    reply_policies = tf.stack([teacher_reply_policies, reply_policies], axis=1)
-    targets = (values, mcts_values, policies, reply_policies)
+    targets = (values, mcts_values, policies)
     return targets
 
   def distribute_batch(self, x):
@@ -310,7 +306,7 @@ class Trainer:
       tf.summary.trace_on(graph=True, profiler=False)
 
   def log_training(self, type, writer, step, losses, model):
-    self.log(f"Loss: {losses[0]:.4f} (V: {losses[1]:.4f}, MV: {losses[2]:.4f}, P: {losses[3]:.4f}, RP: {losses[4]:.4f}), Acc. (P): {losses[5]:.4f}, Acc. (RP): {losses[6]:.4f} ({type})")
+    self.log(f"Loss: {losses[0]:.4f} (V: {losses[1]:.4f}, MV: {losses[2]:.4f}, P: {losses[3]:.4f}), Accuracy (P): {losses[4]:.4f} ({type})")
     with writer.as_default():
       tf.summary.experimental.set_step(step)
       if self.should_log_graph(step):
@@ -337,14 +333,12 @@ class Trainer:
       tf.summary.scalar("value loss", losses[1])
       tf.summary.scalar("mcts value loss", losses[2])
       tf.summary.scalar("policy loss", losses[3])
-      tf.summary.scalar("reply policy loss", losses[4])
       # Equivalent to tf.math.add_n(model.losses)
       loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"],
-        self.config.training["policy_loss_weight"], self.config.training["reply_policy_loss_weight"]]
-      tf.summary.scalar("L2 loss", losses[0] - (losses[1] * loss_weights[0]) - (losses[2] * loss_weights[1]) - (losses[3] * loss_weights[2]) - (losses[4] * loss_weights[3])) 
+        self.config.training["policy_loss_weight"]]
+      tf.summary.scalar("L2 loss", losses[0] - (losses[1] * loss_weights[0]) - (losses[2] * loss_weights[1]) - (losses[3] * loss_weights[2])) 
     with tf.name_scope("accuracy"):
-      tf.summary.scalar("policy accuracy", losses[5])
-      tf.summary.scalar("reply policy accuracy", losses[6])
+      tf.summary.scalar("policy accuracy", losses[4])
 
   def log_loss_accuracy_commentary(self, losses):
     with tf.name_scope("loss"):

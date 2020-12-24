@@ -31,7 +31,6 @@ class ModelBuilder:
   output_value_name = "OutputValue"
   output_mcts_value_name = "OutputMctsValue"
   output_policy_name = "OutputPolicy"
-  output_reply_policy_name = "OutputReplyPolicy"
   output_commentary_encoder_name = "OutputCommentaryEncoder"
   
   token_start = "<start>"
@@ -150,26 +149,25 @@ class ModelBuilder:
     value = self.value_head(tower, "value", self.output_value_name)
     mcts_value = self.value_head(tower, "mcts_value", self.output_mcts_value_name)
 
-    # Policy heads
+    # Policy head
     policy = self.policy_head(tower, "policy", self.output_policy_name, config)
-    reply_policy = self.policy_head(tower, "reply_policy", self.output_reply_policy_name, config)
 
     # Commentary encoder head
     commentary_encoder = self.commentary_encoder_head(tower, "commentary_encoder", self.output_commentary_encoder_name)
 
-    return tf.keras.Model(input, [value, mcts_value, policy, reply_policy, commentary_encoder])
+    return tf.keras.Model(input, [value, mcts_value, policy, commentary_encoder])
 
   def build_student(self, config):
     return self.build(config, residual_count=8, filter_count=128, dense_count=128)
 
   def subset_train(self, model):
-    return tf.keras.Model(model.input, model.outputs[:4])
+    return tf.keras.Model(model.input, model.outputs[:3])
 
   def subset_predict(self, model):
     return tf.keras.Model(model.input, model.outputs[0:4:2])
 
   def subset_commentary_encoder(self, model):
-    return tf.keras.Model(model.input, model.outputs[4:])
+    return tf.keras.Model(model.input, model.outputs[3:])
 
   def build_commentary_decoder(self, config):
     vocab_size = self.transformer_num_words + 1

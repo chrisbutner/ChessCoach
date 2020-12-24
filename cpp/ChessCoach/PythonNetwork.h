@@ -71,7 +71,7 @@ public:
         const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& policyValues);
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
-        float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut);
+        float* valuesOut, OutputPlanes* policiesOut);
 
 private:
 

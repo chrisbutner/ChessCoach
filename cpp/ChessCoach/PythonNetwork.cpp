@@ -440,7 +440,7 @@ void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::
 
 void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
     float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
-    float* valuesOut, OutputPlanes* policiesOut, OutputPlanes* replyPoliciesOut)
+    float* valuesOut, OutputPlanes* policiesOut)
 {
     PythonContext context;
 
@@ -514,16 +514,6 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
 
     const int policyCount = (positionCount * OutputPlanesFloatCount);
     std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<PlanesPointerFlat>(policiesOut));
-
-    // Extract the reply policies.
-    PyObject* pythonReplyPolicies = PyTuple_GetItem(tupleResult, 3); // PyTuple_GetItem does not INCREF
-    PyAssert(pythonReplyPolicies);
-    PyAssert(PyArray_Check(pythonReplyPolicies));
-
-    PyArrayObject* pythonReplyPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonReplyPolicies);
-    PlanesPointerFlat pythonReplyPoliciesPtr = reinterpret_cast<PlanesPointerFlat>(PyArray_DATA(pythonReplyPoliciesArray));
-
-    std::copy(pythonReplyPoliciesPtr, pythonReplyPoliciesPtr + policyCount, reinterpret_cast<PlanesPointerFlat>(replyPoliciesOut));
 
     Py_DECREF(tupleResult);
     Py_DECREF(pythonPolicyValues);

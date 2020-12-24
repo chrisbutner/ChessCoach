@@ -9,14 +9,13 @@ def test_train(teacher):
   values = numpy.full((batch_size, 1), 0.123, dtype=numpy.float32)
   mcts_values = numpy.full((batch_size, 1), 0.1234, dtype=numpy.float32)
   policies = numpy.zeros((batch_size, ModelBuilder.output_planes_count, ModelBuilder.board_side, ModelBuilder.board_side), dtype=numpy.float32)
-  reply_policies = numpy.zeros((batch_size, ModelBuilder.output_planes_count, ModelBuilder.board_side, ModelBuilder.board_side), dtype=numpy.float32)
   for i in range(batch_size):
     policies[i][1][2][3] = 1.0
 
   #network.config.training_network["validation_interval"] = 1
   network.load_network(network.config.training_network["name"])
   train_batch_method = network.train_batch_teacher if teacher else network.train_batch_student
-  train_batch_method(step=1, images=images, values=values, mcts_values=mcts_values, policies=policies, reply_policies=reply_policies)
+  train_batch_method(step=1, images=images, values=values, mcts_values=mcts_values, policies=policies)
 
 def test_train_commentary():
   import network

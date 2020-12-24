@@ -189,12 +189,11 @@ TEST(Network, CompressDecompress)
     std::vector<INetwork::InputPlanes> images(savedGame.moveCount);
     std::vector<float> values(savedGame.moveCount);
     std::vector<INetwork::OutputPlanes> policies(savedGame.moveCount);
-    std::vector<INetwork::OutputPlanes> replyPolicies(savedGame.moveCount);
 
     std::unique_ptr<INetwork> network(chessCoach.CreateNetwork(Config::TrainingNetwork));
     network->DebugDecompress(savedGame.moveCount, policyIndices.size(), result.mutable_data(), imagePiecesAuxiliary.mutable_data(),
         mctsValues.mutable_data(), policyRowLengths.mutable_data(), policyIndices.mutable_data(), policyValues.mutable_data(), images.data(),
-        values.data(), policies.data(), replyPolicies.data());
+        values.data(), policies.data());
 
     // Generate full training tensors to compare.
     Game scratchGame;
@@ -203,7 +202,6 @@ TEST(Network, CompressDecompress)
         INetwork::InputPlanes image;
         float value;
         INetwork::OutputPlanes policy{}; // "GeneratePolicy" requires zeroed planes.
-        INetwork::OutputPlanes replyPolicy{}; // "GeneratePolicy" requires zeroed planes.
 
         scratchGame.GenerateImage(image);
 
@@ -211,34 +209,18 @@ TEST(Network, CompressDecompress)
 
         scratchGame.GeneratePolicy(savedGame.childVisits[i], policy);
 
-        const int replyIndex = (i + 1);
-        if (replyIndex < moves.size())
-        {
-            Game reply = scratchGame;
-            reply.ApplyMove(moves[i]);
-            reply.GeneratePolicy(savedGame.childVisits[replyIndex], replyPolicy);
-        }
-        else
-        {
-            float* data = reinterpret_cast<float*>(replyPolicy.data());
-            std::fill(data, data + INetwork::OutputPlanesFloatCount, 0.f);
-        }
-
         // Compare compressed to uncompressed.
         EXPECT_EQ(image, images[i]);
         EXPECT_EQ(value, values[i]);
         EXPECT_EQ(policy, policies[i]);
-        EXPECT_EQ(replyPolicy, replyPolicies[i]);
 
         // Sanity-check.
         image[5] += 7;
         value += 0.0000005f;
         policy[5][3][2] += 0.00000025f;
-        replyPolicy[7][5][3] += 0.00000075f;
         EXPECT_NE(image, images[i]);
         EXPECT_NE(value, values[i]);
         EXPECT_NE(policy, policies[i]);
-        EXPECT_NE(replyPolicy, replyPolicies[i]);
 
         scratchGame.ApplyMove(moves[i]);
     }
@@ -248,7 +230,6 @@ TEST(Network, CompressDecompress)
     static_assert(INetwork::InputPreviousPositionCount == 7);
     EXPECT_EQ(images[6][0], 0);
     EXPECT_NE(images[7][0], 0);
-    EXPECT_EQ(policies[1], replyPolicies[0]);
 }
 
 TEST(Network, QueenKnightPlanes)
