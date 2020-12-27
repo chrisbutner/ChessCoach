@@ -3,7 +3,7 @@ from model import ModelBuilder
 
 class DatasetOptions:
 
-  def __init__(self, global_batch_size, position_shuffle_size=2**17, keep_game_proportion=0.1, keep_position_proportion=0.1, cycle_length=32):
+  def __init__(self, global_batch_size, position_shuffle_size=2**17, keep_game_proportion=0.2, keep_position_proportion=0.1, cycle_length=16):
     self.global_batch_size = global_batch_size
     self.position_shuffle_size = position_shuffle_size
     self.keep_game_proportion = keep_game_proportion
@@ -49,20 +49,20 @@ class DatasetBuilder:
     return -value
 
   # Result is from the first player's POV, including the starting position, and flips per player/position.
-  def decompress_values(self, result, shape):
-    same = tf.fill(shape, result)
-    flipped = self.flip_value(same)
-    values = tf.stack([same, flipped], axis=1)
-    values = tf.reshape(values, [-1])
-    values = values[:shape[0]]
-    return values
+  def decompress_values(self, result, indices):
+    return tf.where(indices % 2 == 0, result, self.flip_value(result))
 
-  def decompress_images(self, image_pieces, image_auxiliary):
+  def decompress_images(self, image_pieces_auxiliary, indices):
+    # Slice out piece and auxiliary planes.
+    image_pieces = image_pieces_auxiliary[:, :self.input_piece_planes_per_position]
+    image_auxiliary = image_pieces_auxiliary[:, self.input_piece_planes_per_position:]
+
+    # Take a slice of the last N positions' piece planes and concatenate this position's auxiliary planes.
     image_pieces_padded = tf.pad(image_pieces, [[self.input_previous_position_count, 0], [0, 0]])
-    image_piece_histories = tf.image.extract_patches(image_pieces_padded[tf.newaxis, :, :, tf.newaxis],
-      [1, self.input_previous_position_plus_current_count, self.input_piece_planes_per_position, 1], [1, 1, 1, 1], [1, 1, 1, 1], "VALID")
-    image_piece_histories = tf.squeeze(image_piece_histories)
-    images = tf.concat([image_piece_histories, image_auxiliary], axis=1)
+    gathered_pieces = tf.map_fn(lambda x: image_pieces_padded[x:x + self.input_previous_position_plus_current_count], indices)
+    gathered_pieces = tf.reshape(gathered_pieces, [-1, self.input_previous_position_plus_current_count * self.input_piece_planes_per_position])
+    gathered_auxiliary = tf.gather(image_auxiliary, indices)
+    images = tf.concat([gathered_pieces, gathered_auxiliary], axis=1)
     return images
 
   def scatter_policy(self, indices_values):
@@ -72,33 +72,55 @@ class DatasetBuilder:
     policy = tf.reshape(policy, self.output_planes_shape)
     return policy
 
-  def decompress_policies(self, indices, values):
-    return tf.map_fn(self.scatter_policy, (indices, values), fn_output_signature=tf.float32)
-
-  def decompress(self, result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
-    # Slice out piece and auxiliary planes.
-    image_pieces = image_pieces_auxiliary[:, :self.input_piece_planes_per_position]
-    image_auxiliary = image_pieces_auxiliary[:, self.input_piece_planes_per_position:]
-
+  def decompress_policies(self, policy_row_lengths, policy_indices, policy_values, indices):
     # Cast down from protobuf 64-bit.
     policy_row_lengths = tf.cast(policy_row_lengths, tf.int32)
     policy_indices = tf.cast(policy_indices, tf.int32)
-
+    
     # Policy indices and values are ragged (different move possibilities per position), reconstruct.
-    policy_indices = tf.RaggedTensor.from_row_lengths(policy_indices, policy_row_lengths)
-    policy_values = tf.RaggedTensor.from_row_lengths(policy_values, policy_row_lengths)
+    # Validate=false improves performance and is required because policy_indices/policy_values are padded
+    # by tf.io.parse_example across the batch.
+    policy_indices = tf.RaggedTensor.from_row_lengths(policy_indices, policy_row_lengths, validate=False)
+    policy_values = tf.RaggedTensor.from_row_lengths(policy_values, policy_row_lengths, validate=False)
 
-    # Games are written with sparse policies and implicit history/replies,
+    # We couldn't be selective with "keep_position_proportion" indices before the "from_row_lengths"
+    # reconstruction unfortunately, but reduce down now to the selected positions.
+    policy_indices = tf.gather(policy_indices, indices)
+    policy_values = tf.gather(policy_values, indices)
+
+    # Reconstruct the dense policy from sparse policy indices/values.
+    return tf.map_fn(self.scatter_policy, (policy_indices, policy_values), fn_output_signature=tf.float32)
+
+  def decompress(self, result, image_pieces_auxiliary, policy_row_lengths, policy_indices, policy_values, indices):
+    # Games are written with sparse policies and implicit history,
     # so decompress to self-contained positions ready for training.
-    images = self.decompress_images(image_pieces, image_auxiliary)
-    values = self.decompress_values(result, tf.shape(mcts_values))
-    policies = self.decompress_policies(policy_indices, policy_values)
+    images = self.decompress_images(image_pieces_auxiliary, indices)
+    values = self.decompress_values(result, indices)
+    policies = self.decompress_policies(policy_row_lengths, policy_indices, policy_values, indices)
 
     return (images, values, policies)
 
-  def parse_game(self, serialized, options):
-    # Parse raw features from the tf.train.Example representing the game.
-    example = tf.io.parse_single_example(serialized, self.feature_map)
+  def parse_game(self, position_count, selected, result, mcts_values, image_pieces_auxiliary, policy_row_lengths, policy_indices, policy_values, options):
+    # Unpad down from the dense shape across all games in the chunk to this particular game's position count.
+    mcts_values = mcts_values[:position_count]
+    image_pieces_auxiliary = image_pieces_auxiliary[:position_count]
+    policy_row_lengths = policy_row_lengths[:position_count]
+
+    # Generate indices for this game's "keep_position_proportion" selection to "tf.gather" with.
+    selected = selected[:position_count]
+    indices = tf.reshape(tf.where(selected), [-1])
+
+    # Break apart and stitch together tensors, and decompress using position history.
+    images, values, policies = self.decompress(result, image_pieces_auxiliary, policy_row_lengths, policy_indices, policy_values, indices)
+    mcts_values = tf.gather(mcts_values, indices)
+
+    # Return the dataset mapping images to labels.
+    dataset = tf.data.Dataset.from_tensor_slices((images, (values, mcts_values, policies)))
+    return dataset
+
+  def parse_games(self, batch, options):
+    # Parse raw features from the tf.train.Examples representing the games.
+    example = tf.io.parse_example(batch, self.feature_map)
     result = example["result"]
     mcts_values = example["mcts_values"]
     image_pieces_auxiliary = example["image_pieces_auxiliary"]
@@ -106,15 +128,16 @@ class DatasetBuilder:
     policy_indices = example["policy_indices"]
     policy_values = example["policy_values"]
 
-    # Break apart and stitch together tensors, and decompress using position history.
-    images, values, policies = self.decompress(
-      result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values)
-    dataset = tf.data.Dataset.from_tensor_slices((images, (values, mcts_values, policies)))
-
     # Throw away a proportion of *positions* to avoid overly correlated/periodic data. This is a time/space trade-off.
     # Throwing away more saves memory but costs CPU. Increasing shuffle buffer size saves CPU but costs memory.
-    if options.keep_position_proportion < 1.0:
-      dataset = dataset.filter(lambda *_: tf.random.uniform([]) < options.keep_position_proportion)
+    position_count = tf.math.count_nonzero(policy_row_lengths, axis=1, dtype=tf.int32)
+    selected = tf.random.uniform(tf.shape(policy_row_lengths)) < options.keep_position_proportion
+
+    # Each game needs to be decompressed separately to avoid history leaking across games
+    # and to reconstruct the ragged (across positions) and sparse (within a position) policy tensors.
+    dataset = tf.data.Dataset.from_tensor_slices((position_count, selected, result, mcts_values, image_pieces_auxiliary, policy_row_lengths, policy_indices, policy_values))
+    dataset = dataset.filter(lambda position_count, selected, *_: tf.math.reduce_any(selected[:position_count]))
+    dataset = dataset.flat_map(lambda *x: self.parse_game(*x, options))
     return dataset
 
   def parse_chunk(self, filename, options):
@@ -131,7 +154,8 @@ class DatasetBuilder:
     #
     # As long as the shuffle buffer is large enough to hold at least one cycle's positions, after throw-aways, there's no point
     # intentionally shuffling here.
-    dataset = dataset.flat_map(lambda x: self.parse_game(x, options))
+    dataset = dataset.batch(self.games_per_chunk, drop_remainder=False)
+    dataset = dataset.flat_map(lambda x: self.parse_games(x, options))
     return dataset
 
   def build_dataset_source(self, glob, window, options):
@@ -155,10 +179,6 @@ class DatasetBuilder:
 
     # Repeat chunk loading for each source.
     dataset = dataset.repeat()
-
-    # Parse chunks in parallel, cycling through as large a number as possible while staying under memory budget.
-    dataset = dataset.interleave(lambda x: self.parse_chunk(x, options), cycle_length=options.cycle_length,
-      num_parallel_calls=tf.data.experimental.AUTOTUNE, deterministic=False)
     return dataset
 
   def build_dataset(self, sources, options):
@@ -168,11 +188,15 @@ class DatasetBuilder:
     assert (cycles_per_shuffle_buffer >= 1.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect >= 1.0"
     assert (cycles_per_shuffle_buffer < 2.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect < 2.0"
 
-    # Use a deterministic interleave between dataset sources to ensure that the shuffle buffer
-    # gets an equal number of positions from each, even if the sources are differently sized.
-    # The block size doesn't matter too much as long as it's far smaller than the shuffle buffer size.
+    # Dataset sources repeat internally, so interleaving them should give an equal number of positions
+    # from each, even if the sources are differently sized.
     dataset = tf.data.Dataset.from_tensor_slices(sources)
-    dataset = dataset.interleave(lambda x: x, cycle_length=len(sources), block_length=options.global_batch_size)
+    dataset = dataset.interleave(lambda x: x, cycle_length=len(sources))
+
+    # Parse chunks in parallel, cycling through as large a number as possible while staying under memory budget.
+    # Autotune isn't sufficient to keep the GPU loaded locally: 4 seems best experimentally.
+    dataset = dataset.interleave(lambda x: self.parse_chunk(x, options), cycle_length=options.cycle_length,
+      num_parallel_calls=4, deterministic=False)
 
     # Shuffle positions. This is still very necessary because we're exhausting each cycle of chunks before moving on to
     # the next cycle, etc., giving highly correlated positions so far. The buffer should be large enough to mix up multiple
@@ -183,7 +207,8 @@ class DatasetBuilder:
     #
     # If e.g. 2 cycles could fit in the shuffle buffer then we could have doubled the cycle length with similar results,
     # allowing for greater I/O and CPU parallelism, so aim for cycles per shuffle buffer in [1, 2).
-    #dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
+    dataset = dataset.prefetch(options.cycle_length)
+    dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
 
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
@@ -201,7 +226,7 @@ class DatasetBuilder:
     options = DatasetOptions(
       global_batch_size=global_batch_size,
       position_shuffle_size=2**12,
-      keep_game_proportion=0.003125)
+      keep_game_proportion=0.2 / 32) # Shuffle buffer 32 times as small, 2**17/2**12
     sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
     return self.build_dataset(sources, options)
 
