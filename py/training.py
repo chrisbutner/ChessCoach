@@ -1,8 +1,8 @@
 import time
 import tensorflow as tf
 from tensorflow.keras import backend as K
-import numpy as np
 import transformer
+from model import ModelBuilder
 
 knowledge_distillation_temperature = 2.0
 knowledge_distillation_teacher_weight = 0.7
@@ -18,9 +18,8 @@ def flat_categorical_accuracy(y_true, y_pred):
 
 # Weighted sum of knowledge_distillation_temperature**2 * teacher loss + ground truth loss
 def student_policy_loss(y_true, y_pred):
-  # See "Trainer.stack_teacher_targets" for stacking details.
-  teacher_logits = K.batch_flatten(y_true[:, 0])
-  true_labels = K.batch_flatten(y_true[:, 1])
+  teacher_logits = K.batch_flatten(y_true[0])
+  true_labels = K.batch_flatten(y_true[1])
   y_pred = K.batch_flatten(y_pred)
 
   teacher_loss = knowledge_distillation_temperature**2 * tf.keras.losses.categorical_crossentropy(
@@ -31,12 +30,13 @@ def student_policy_loss(y_true, y_pred):
 # Accuracy against ground truth (argmax).
 def student_policy_accuracy(y_true, y_pred):
   # See "Trainer.stack_teacher_targets" for stacking details.
-  return flat_categorical_accuracy(y_true[:, 1], y_pred)
+  return flat_categorical_accuracy(y_true[1], y_pred)
 
 class Trainer:
 
   def __init__(self, networks, tpu_strategy, devices, datasets):
     self.networks = networks
+    self.log = networks.log
     self.networks.teacher.training_compiler = self.compile_teacher
     self.networks.student.training_compiler = self.compile_student
     self.config = networks.config
@@ -45,9 +45,6 @@ class Trainer:
     self.commentary_optimizer = None
 
     self.datasets = datasets
-    self.data_training = None
-    self.data_validation = None
-    self.data_training_key = None
     self.data_commentary_training = None
     self.data_globs = {
       # GameType_Supervised (Config.h)
@@ -81,60 +78,35 @@ class Trainer:
       self.log("Strategy: Default")
       self.strategy = tf.distribute.get_strategy()
 
-  def log(self, *args):
-    self.networks.log(*args)
-
-  # Would use PiecewiseConstantDecay but it hangs.
-  def get_learning_rate_common(self, schedule, step):
-    scale_learning_rate_with_batch_size = (self.device_count ** .67)
-    warmup = np.interp(step, [0, self.config.training["warmup_steps"]], [0.0, 1.0]).item()
-    multiplier = scale_learning_rate_with_batch_size * warmup
-
-    rate = 0.0
-    for key, value in schedule:
-      if step >= key:
-        rate = value
-      else:
-        break
-    return rate * multiplier
-
-  def get_learning_rate(self, step):
-    schedule = self.config.training["learning_rate_schedule"]
-    return self.get_learning_rate_common(schedule, step)
-
-  def get_commentary_learning_rate(self, step):
-    schedule = self.config.training["commentary_learning_rate_schedule"]
-    return self.get_learning_rate_common(schedule, step)
+  def get_learning_rate(self, schedule):
+    return Schedule(schedule["steps"], schedule["rates"], self.config.training["warmup_steps"], self.device_count)
 
   # The teacher network trains directly on supervised labels.
   def compile_teacher(self, model):
     optimizer = tf.keras.optimizers.SGD(
-      learning_rate=self.get_learning_rate(0),
+      learning_rate=self.get_learning_rate(self.config.training["learning_rate_schedule"]),
       momentum=self.config.training["momentum"])
     losses = ["mean_squared_error", "mean_squared_error", flat_categorical_crossentropy_from_logits]
     loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"], self.config.training["policy_loss_weight"]]
     metrics = [[], [], [flat_categorical_accuracy]]
-    model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
+    model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics, steps_per_execution=self.config.training["steps_per_execution"])
 
   # The student network trains on a combination of soft teacher labels and hard supervised labels.
   # Policy accuracy is still measured against the supervised labels.
   def compile_student(self, model):
     optimizer = tf.keras.optimizers.SGD(
-      learning_rate=self.get_learning_rate(0),
+      learning_rate=self.get_learning_rate(self.config.training["learning_rate_schedule"]),
       momentum=self.config.training["momentum"])
     losses = ["mean_squared_error", "mean_squared_error", student_policy_loss]
     loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"], self.config.training["policy_loss_weight"]]
     metrics = [[], [], [student_policy_accuracy]]
-    model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics)
+    model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics, steps_per_execution=self.config.training["steps_per_execution"])
 
   # Explicitly reclaim dataset memory before active self-play or strength testing.
   # Relying on working set eviction doesn't seem to be enough to avoid OOM kills, Kubernetes evictions, etc.
   def clear_data(self):
-    if self.data_training_key or self.data_commentary_training:
+    if self.data_commentary_training:
       self.log("Clearing datasets")
-    self.data_training = None
-    self.data_validation = None
-    self.data_training_key = None
     self.data_commentary_training = None
 
   def train(self, network, teacher_network, game_types, training_windows, starting_step, checkpoint):
@@ -144,93 +116,31 @@ class Trainer:
       if teacher_network:
         teacher_network.ensure_training()
 
-    # Set up data pipelines, or re-use existing if not cleared by self-play.
-    # Numpy hijacks == and bool testing and enforces any() or all(), so convert to lists first.
-    data_training_key = (game_types.tolist(), training_windows.tolist())
-    if data_training_key != self.data_training_key:
-      data_start = time.time()
-      globs_training = [self.data_globs[t] for t in game_types]
-      globs_validation = [self.data_glob_validation]
-      self.data_training = iter(self.datasets.build_training_dataset(globs_training, training_windows, self.global_batch_size))
-      self.data_validation = iter(self.datasets.build_validation_dataset(globs_validation, self.global_batch_size))
-      self.data_training_key = data_training_key
-      next(self.data_training)
-      next(self.data_validation)
-      print(f"Datasets prepared in {(time.time() - data_start):.2f} seconds")
+    # Set up data pipelines.
+    globs_training = [self.data_globs[t] for t in game_types]
+    globs_validation = [self.data_glob_validation]
+    data_training = self.datasets.build_training_dataset(globs_training, training_windows, self.global_batch_size)
+    data_validation = self.datasets.build_validation_dataset(globs_validation, self.global_batch_size)
 
-    # Iterate over all steps in the checkpoint, striding by the device count.
-    # E.g. on a GPU, 1 device, 1-1000 steps, range(1, 1001, 1), 1000 iterations
-    # E.g. on a TPU, 8 devices, 1-1000 steps, range(1, 1001, 8), 125 iterations, 125*8=1000 effective iterations
-    for step in range(starting_step, checkpoint + 1, self.device_count):
-      # Set the learning rate.
-      K.set_value(model.optimizer.lr, self.get_learning_rate(step))
-
-      # Train.
-      batch_training = next(self.data_training)
-      self.train_batch(network, teacher_network, model, step, images=batch_training[0], targets=batch_training[1])
-
-      # Sometimes validate.
-      if self.is_validation_step(step):
-        batch_validation = next(self.data_validation)
-        self.validate_batch(network, teacher_network, model, step, images=batch_validation[0], targets=batch_validation[1])
-
-  def is_validation_step(self, step):
-    # Striding steps by the device count, so validate when at or just past the validation interval.
-    # E.g. on a GPU, 1 device, 100 validation interval, steps 1, 2, 3, etc., validate on step 100.
-    # E.g. on a TPU, 8 devices, 100 validation interval, steps 1, 9, 17, etc., validate on step 105.
-    return ((step % self.config.training["validation_interval"]) < self.device_count)
-
-  def train_batch(self, network, teacher_network, model, step, images, targets):
-    # Prepare TensorBoard logging.
-    do_log_training = self.is_validation_step(step)
-    if do_log_training:
-      self.log_training_prepare(step)
+    # Work out steps and intervals. Use the validation interval as an epoch to match fit()'s model.
+    validation_interval = self.config.training["validation_interval"]
+    assert validation_interval % self.device_count == 0, f"Validation interval ({validation_interval}) must be a multiple of the device count ({self.device_count})"
+    actual_validation_interval = validation_interval // self.device_count
+    steps_per_execution = self.config.training["steps_per_execution"]
+    assert actual_validation_interval % steps_per_execution == 0, f"Validation interval ÷ device count ({actual_validation_interval}) must be a multiple of steps_per_execution ({steps_per_execution})"
+    steps_per_epoch = actual_validation_interval
+    initial_epoch = starting_step // self.device_count // steps_per_epoch
+    epochs = checkpoint // self.device_count // steps_per_epoch
 
     # If a teacher was provided, predict soft targets and combine with the provided hard targets.
     if teacher_network:
-      targets = self.stack_teacher_targets(teacher_network, images, targets)
+      model.init(teacher_network)
 
-    # Train the model.
-    losses = model.train_on_batch(images, targets, reset_metrics=False)
-
-    # Do Tensorboard logging.
-    if do_log_training:
-      self.log_training("training", network.tensorboard_writer_training, step, losses, model)
-
-  def validate_batch(self, network, teacher_network, model, step, images, targets):
-    # Prepare TensorBoard logging.
-    self.log_training_prepare(step)
-
-    # If a teacher was provided, predict soft targets and combine with the provided hard targets.
-    if teacher_network:
-      targets = self.stack_teacher_targets(teacher_network, images, targets)
-
-    # Train the model.
-    losses = model.test_on_batch(images, targets, reset_metrics=False)
-
-    # Do Tensorboard logging.
-    self.log_training("validation", network.tensorboard_writer_validation, step, losses, model)
-
-  def stack_teacher_targets(self, teacher_network, images, targets):
-    # Predict teacher logits.
-    distributed_images = self.distribute_batch(images)
-    _, _, teacher_policies = self.strategy.run(
-      teacher_network.tf_predict_for_training, args=(distributed_images,))
-    if self.device_count > 1:
-      teacher_policies = self.collect_batch(teacher_policies)
-
-    # Stack with provided labels in axis=1 so that axis=0 can remain the batch axis
-    # and be auto-distributed to replicas by train_on_batch/test_on_batch.
-    values, mcts_values, policies = targets
-    policies = tf.stack([teacher_policies, policies], axis=1)
-    targets = (values, mcts_values, policies)
-    return targets
-
-  def distribute_batch(self, x):
-    return next(iter(self.strategy.experimental_distribute_dataset(tf.data.Dataset.from_tensors(x))))
-
-  def collect_batch(self, x):
-    return tf.concat(x.values, axis=0)
+    # Train.
+    log_callback = LogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)
+    model.fit(data_training, verbose=0, callbacks=[log_callback],
+      validation_data=data_validation, validation_steps=1, validation_freq=1,
+      steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
 
   def train_commentary(self, network, starting_step, checkpoint):
     with self.strategy.scope():
@@ -239,7 +149,7 @@ class Trainer:
       # Set up the commentary optimizer in strategy scope, for use with GradientTape in transformer.py.
       if not self.commentary_optimizer:
         self.commentary_optimizer = tf.keras.optimizers.SGD(
-          learning_rate=self.get_commentary_learning_rate(0),
+          learning_rate=self.get_learning_rate(self.config.training["commentary_learning_rate_schedule"]),
           momentum=self.config.training["momentum"])
 
       # Set up the commentary metrics in strategy scope.
@@ -247,12 +157,9 @@ class Trainer:
 
     # Set up data pipelines, or re-use existing if not cleared by self-play.
     if not self.data_commentary_training:
-      data_start = time.time()
       tokenizer = network.models_train.commentary_tokenizer
-      self.data_commentary_training = iter(self.datasets.build_commentary_dataset(
-        self.data_glob_commentary, self.global_batch_size_commentary, tokenizer, self.strategy))
-      next(self.data_commentary_training)
-      print(f"Datasets prepared in {(time.time() - data_start):.2f} seconds (commentary)")
+      self.data_commentary_training = self.datasets.build_commentary_dataset(
+        self.data_glob_commentary, self.global_batch_size_commentary, tokenizer, self.strategy)
 
     # Set up the training step tf.function.
     optimizer = self.commentary_optimizer
@@ -298,25 +205,97 @@ class Trainer:
       for name, value in zip(names, values):
         tf.summary.scalar(name.decode("utf-8"), value)
 
-  def should_log_graph(self, step):
-    return (step == 1)
+class StudentModel(tf.keras.Model):
 
-  def log_training_prepare(self, step):
-    if self.should_log_graph(step):
-      tf.summary.trace_on(graph=True, profiler=False)
+  def init(self, teacher_network):
+    self.teacher_network = teacher_network
 
-  def log_training(self, type, writer, step, losses, model):
+  def train_step(self, data):
+    from tensorflow.python.eager import backprop
+    from tensorflow.python.keras.engine import data_adapter
+    data = data_adapter.expand_1d(data)
+    x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+
+    # Predict teacher logits and stack with provided labels to unpack in "student_policy_loss"/"student_policy_accuracy".
+    y = (y[0], y[1], tf.stack([self.teacher_network.tf_predict_for_training(x)[2], y[2]], axis=0))
+
+    with backprop.GradientTape() as tape:
+      y_pred = self(x, training=True)
+      loss = self.compiled_loss(
+          y, y_pred, sample_weight, regularization_losses=self.losses)
+    self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
+    self.compiled_metrics.update_state(y, y_pred, sample_weight)
+    return {m.name: m.result() for m in self.metrics}
+
+  def test_step(self, data):
+    from tensorflow.python.keras.engine import data_adapter
+    data = data_adapter.expand_1d(data)
+    x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
+
+    # Predict teacher logits and stack with provided labels to unpack in "student_policy_loss"/"student_policy_accuracy".
+    y = (y[0], y[1], tf.stack([self.teacher_network.tf_predict_for_training(x)[2], y[2]], axis=0))
+
+    y_pred = self(x, training=False)
+    # Updates stateful loss metrics.
+    self.compiled_loss(
+        y, y_pred, sample_weight, regularization_losses=self.losses)
+
+    self.compiled_metrics.update_state(y, y_pred, sample_weight)
+    return {m.name: m.result() for m in self.metrics}
+
+class Schedule(tf.keras.optimizers.schedules.PiecewiseConstantDecay):
+
+  def __init__(self, steps, rates, warmup_steps, device_count):
+    boundaries = steps.copy()[1:]
+    values = rates.copy()
+    if not boundaries:
+      boundaries.append(0)
+      values.append(values[0])
+    super().__init__(boundaries, values)
+    self.warmup_steps = warmup_steps
+    self.device_count = device_count
+
+  def __call__(self, step):
+    value = super().__call__(step)
+    value *= (self.device_count ** .67)
+    if self.warmup_steps:
+      value *= tf.clip_by_value(step / self.warmup_steps, 0.0, 1.0)
+    return value
+
+class LogCallback(tf.keras.callbacks.Callback):
+
+  def __init__(self, config, log, training_writer, validation_writer, model, validation_interval):
+    self.config = config
+    self.log = log
+    self.training_writer = training_writer
+    self.validation_writer = validation_writer
+    self.model = model
+    self.validation_interval = validation_interval
+
+  def on_epoch_end(self, epoch, logs=None):
+    effective_step = (epoch + 1) * self.validation_interval
+    training_losses = self.map_losses(logs, "")
+    validation_losses = self.map_losses(logs, "val_")
+    self.log_training("training", self.training_writer, effective_step, training_losses)
+    self.log_training("validation", self.validation_writer, effective_step, validation_losses)
+
+  def map_losses(self, logs, prefix):
+    return [
+      logs[prefix + "loss"],
+      logs[prefix + ModelBuilder.output_value_name + "_loss"],
+      logs[prefix + ModelBuilder.output_mcts_value_name + "_loss"],
+      logs[prefix + ModelBuilder.output_policy_name + "_loss"],
+      logs.get(prefix + ModelBuilder.output_policy_name + "_" + flat_categorical_accuracy.__name__,
+        logs.get(prefix + ModelBuilder.output_policy_name + "_" + student_policy_accuracy.__name__))
+    ]
+
+  def log_training(self, type, writer, step, losses):
     self.log(f"Loss: {losses[0]:.4f} (V: {losses[1]:.4f}, MV: {losses[2]:.4f}, P: {losses[3]:.4f}), Accuracy (P): {losses[4]:.4f} ({type})")
     with writer.as_default():
       tf.summary.experimental.set_step(step)
-      if self.should_log_graph(step):
-        tf.summary.trace_export("model")
       self.log_loss_accuracy(losses)
-      self.log_weights(model)
+      self.log_weights(self.model)
       writer.flush()
-
-    # Reset metrics after "validation_interval" training batches or 1 validation batch, ready for the next "validation_interval"/1.
-    model.reset_metrics()
 
   def log_training_commentary(self, type, writer, step, losses, model):
     self.log(f"Loss: {losses[0]:.4f}, Accuracy: {losses[1]:.4f} ({type})")

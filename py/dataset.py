@@ -144,6 +144,7 @@ class DatasetBuilder:
     # Parse games from the chunk, stored as tf.train.Examples in TFRecords (see Storage.cpp).
     dataset = tf.data.TFRecordDataset(filename, compression_type=self.compression_type,
       buffer_size=self.chunk_read_buffer_size)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     # Throw away a proportion of *games* to avoid overly correlated/periodic data. This is a time/space trade-off.
     # Throwing away more saves memory but costs CPU. Increasing shuffle buffer size saves CPU but costs memory.
@@ -156,6 +157,7 @@ class DatasetBuilder:
     # intentionally shuffling here.
     dataset = dataset.batch(self.games_per_chunk, drop_remainder=False)
     dataset = dataset.flat_map(lambda x: self.parse_games(x, options))
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
 
   def build_dataset_source(self, glob, window, options):
@@ -194,9 +196,10 @@ class DatasetBuilder:
     dataset = dataset.interleave(lambda x: x, cycle_length=len(sources))
 
     # Parse chunks in parallel, cycling through as large a number as possible while staying under memory budget.
-    # Autotune isn't sufficient to keep the GPU loaded locally: 4 seems best experimentally.
+    # Autotune isn't sufficient to keep the GPU/TPU loaded via disk/storage: experimentally 4/8 seem best.
+    num_parallel_calls = 8 if self.config.is_tpu else 4
     dataset = dataset.interleave(lambda x: self.parse_chunk(x, options), cycle_length=options.cycle_length,
-      num_parallel_calls=4, deterministic=False)
+      num_parallel_calls=num_parallel_calls, deterministic=False)
 
     # Shuffle positions. This is still very necessary because we're exhausting each cycle of chunks before moving on to
     # the next cycle, etc., giving highly correlated positions so far. The buffer should be large enough to mix up multiple
@@ -207,7 +210,6 @@ class DatasetBuilder:
     #
     # If e.g. 2 cycles could fit in the shuffle buffer then we could have doubled the cycle length with similar results,
     # allowing for greater I/O and CPU parallelism, so aim for cycles per shuffle buffer in [1, 2).
-    dataset = dataset.prefetch(options.cycle_length)
     dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
 
     # Batch to the global size.

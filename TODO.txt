@@ -1,3 +1,21 @@
+Next
+- stripe the 3 datasets - Training/Training2/SelfPlay
+	- do a full self-play run with the faster training code
+	- use custom huge checkpoints to save time
+
+
+Next
+- adapt commentary, use fit()
+- speed up validation dataset (iter() every validation)
+- update docker/cluster and test
+
+Tests after dataset changes
+- re-run unit tests
+- add test for sparse decompression (currently does full batch)
+
+Training
+- check out gradient_aggregator for local GPU case
+
 Criticality
 - test STS and Arasan(slow) with base, 0.5check/k=5, 0.5check/k=10, 0.5check/k=50, 0.1/0.9 squish
 - think about training target for stddev
@@ -19,9 +37,9 @@ Node visits
 	- try out a backtracking implementation of virtual exploration/loss that goes as deep
 	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
 	  choosing better nodes overall and avoiding failed simulations
+- can calculate global exploration factor much less often
 
 Training improvements
-- reevaluate auxiliary heads on latest self-play only data
 - SE (lc0)
 	- try batchnorm/relu before SE since we have v2 residuals
 - SE-ish-as-bias (Wu)
@@ -46,7 +64,6 @@ GUI
 - "gui moves f3e5", like ~ ucb, pin data pushes to that sub-position and show history over it?
 - deal with info panel height/scrolling, move list
 - change the square background rather than adding overlay, need more consistency between black/white squares
-- implement search tool with slider over node count
 - websocket reconnect
 
 Cluster
@@ -60,17 +77,9 @@ Bigger ideas
 	- could use a generation-style system to periodically start new networks fresher with less supervised/early and lower sample ratio,
 	  now that they have more data available to them, then take over on self-play once they emperically reach parity
 
-Speed up training, play with tf.function
-	- don't log step 1 to tensorboard (switch to just before, not just-after? in conjunction with multi-step-in-tf-function)
-	- TPU training perf:
-	- https://github.com/tensorflow/tensorflow/issues/20068
-	- https://github.com/tensorflow/tpu/tree/master/models/official/resnet
-
 Quality
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
 - print config summary when starting a run
-- switch to even number of history positions for repetitions (what if we only did every 2nd going back)
-	- wait for a solid baseline and measure
 
 Commentary cleanup
 - use model garden transformer now?
@@ -106,26 +115,13 @@ Additional head ideas:
 - predict final board state or piece distribution (like Wu's final ownership)
 - king safety, mobility, etc.
 
-At 20-30k steps:
-- test without mcts value/reply policy, see whether they truly help/hurt
-- try out "sleeping" in the rotation - train random noise, different distributions
-- make sure piece-value understanding is improving; think about standard A/B positions to log avg queen/rook/etc. value to tensorboard
-
-Once value loss is converging below 0.4 on big network:
-- Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
-
 Training - later
-- once we're getting to 2600-3200, test raw student-as-teacher training to make sure distillation is worth it
+- test raw student-as-teacher training to make sure distillation is worth it
+- try out "sleeping" in the rotation - train random noise, different distributions
+- Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 - like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
 - stochastic weight averaging
-
-TensorFlow training speed (mostly dataset issues, local/GPU speed regression)
 - move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
-- try also batching across examples in dataset.py
-- need to solve pipeline threading issues again, make sure Cuda >= 90% locally
-	- also "experimental_steps_per_execution" for TPU
-- throw away positions before expensive decompression in dataset.py, keep all/more games, keep fewer positions
-- run full local training to validate
 
 UCI (#2)
 - tune on GPU and TPU (methods below)
@@ -143,14 +139,10 @@ CPU+GPU integration performance:
 - try vectorize/GPU softmax/UCT calcs
 - break down MCTS timing details just in case anything's off (instrumented, already did some sampling measurements/optimization)
 - image key for prediction cache can be incrementally updated if it helps enough
-- do some timeline charting for CPU vs. GPU use
-	- it may make sense to keep shared images/values/policies but have separate CPU worker threads
-	  drop in/pick up there, using a GPU worker like very beginning, and maybe oversubscribe
-	  like double-buffer games? might just be equivalent to doubling threads though. seem to be
-	  limited by Node memory use now. anyway, think about it.
 - for Nodes can point last sibling at root and unrecurse deletion (sacrificing breadth-at-once)
 
 Code quality
+- either remove dataset/training mixing (C++/Python) or fix "ValidateSchedule" to handle division factor
 - try multistage docker build, debian only for building chesscoach, copy over to tensorflow base
 - inject config.toml into cluster volume, take out of image tags, make sure it takes priority over installed
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm

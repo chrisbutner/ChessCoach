@@ -122,7 +122,8 @@ class ModelBuilder:
     encoder = tf.transpose(x, [0, 2, 1], name=output_name)
     return encoder
 
-  def build(self, config, residual_count=None, filter_count=None, dense_count=None):
+  def build(self, config, subclass=None, residual_count=None, filter_count=None, dense_count=None):
+    subclass = subclass or tf.keras.Model
     if residual_count:
       self.residual_count = residual_count
     if filter_count:
@@ -155,19 +156,19 @@ class ModelBuilder:
     # Commentary encoder head
     commentary_encoder = self.commentary_encoder_head(tower, "commentary_encoder", self.output_commentary_encoder_name)
 
-    return tf.keras.Model(input, [value, mcts_value, policy, commentary_encoder])
+    return subclass(input, [value, mcts_value, policy, commentary_encoder])
 
-  def build_student(self, config):
-    return self.build(config, residual_count=8, filter_count=128, dense_count=128)
+  def build_student(self, config, subclass):
+    return self.build(config, subclass, residual_count=8, filter_count=128, dense_count=128)
 
   def subset_train(self, model):
-    return tf.keras.Model(model.input, model.outputs[:3])
+    return type(model)(model.input, model.outputs[:3])
 
   def subset_predict(self, model):
-    return tf.keras.Model(model.input, model.outputs[0:4:2])
+    return type(model)(model.input, model.outputs[0:4:2])
 
   def subset_commentary_encoder(self, model):
-    return tf.keras.Model(model.input, model.outputs[3:])
+    return type(model)(model.input, model.outputs[3:])
 
   def build_commentary_decoder(self, config):
     vocab_size = self.transformer_num_words + 1

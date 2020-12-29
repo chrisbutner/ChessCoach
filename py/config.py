@@ -41,15 +41,6 @@ class Config:
     self_play_overrides = training_network_config.get("self_play", {})
     self_play_defaults = config.get("self_play", {})
     self.self_play = { **self_play_defaults, **self_play_overrides }
-
-    # Build the learning rate schedule dictionaries
-    self.training["learning_rate_schedule"] = list(zip(
-      self.training["learning_rate_schedule"]["steps"],
-      self.training["learning_rate_schedule"]["rates"]))
-
-    self.training["commentary_learning_rate_schedule"] = list(zip(
-      self.training["commentary_learning_rate_schedule"]["steps"],
-      self.training["commentary_learning_rate_schedule"]["rates"]))
     
     # Make some miscellaneous config available.
     self.misc = {

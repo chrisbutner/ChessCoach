@@ -7,6 +7,11 @@ silent = bool(os.environ.get("CHESSCOACH_SILENT"))
 if silent:
   os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+# Work around https://github.com/tensorflow/tensorflow/issues/45994
+import sys
+if not sys.argv:
+  sys.argv.append("(C++)")
+
 def log(*args):
   if not silent:
     print(*args)
@@ -48,7 +53,7 @@ import numpy as np
 from config import Config, PredictionStatus
 from model import ModelBuilder
 import transformer
-from training import Trainer
+from training import Trainer, StudentModel
 from dataset import DatasetBuilder
 
 # --- Network ---
@@ -330,7 +335,7 @@ class Networks:
     self.teacher = Network(config, "teacher", lambda: ModelBuilder().build(config), self._name)
 
     # The student network uses the smaller 8*64 model.
-    self.student = Network(config, "student", lambda: ModelBuilder().build_student(config), self._name)
+    self.student = Network(config, "student", lambda: ModelBuilder().build_student(config, StudentModel), self._name)
 
   @property
   def name(self):
