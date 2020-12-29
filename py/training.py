@@ -122,15 +122,20 @@ class Trainer:
     data_training = self.datasets.build_training_dataset(globs_training, training_windows, self.global_batch_size)
     data_validation = self.datasets.build_validation_dataset(globs_validation, self.global_batch_size)
 
+    # TF forces re-iteration of validation data, so hack around it by using a subclass to maintain an iterator.
+    data_validation = RollingDataset(data_validation)
+
     # Work out steps and intervals. Use the validation interval as an epoch to match fit()'s model.
     validation_interval = self.config.training["validation_interval"]
+    checkpoint_interval = (checkpoint - starting_step + 1)
+    assert checkpoint_interval % validation_interval == 0, f"Checkpoint interval ({checkpoint_interval}) must be a multiple of the validation interval ({validation_interval})"
     assert validation_interval % self.device_count == 0, f"Validation interval ({validation_interval}) must be a multiple of the device count ({self.device_count})"
     actual_validation_interval = validation_interval // self.device_count
     steps_per_execution = self.config.training["steps_per_execution"]
-    assert actual_validation_interval % steps_per_execution == 0, f"Validation interval ÷ device count ({actual_validation_interval}) must be a multiple of steps_per_execution ({steps_per_execution})"
+    assert actual_validation_interval % steps_per_execution == 0, f"Validation interval / device count ({actual_validation_interval}) must be a multiple of steps_per_execution ({steps_per_execution})"
     steps_per_epoch = actual_validation_interval
-    initial_epoch = starting_step // self.device_count // steps_per_epoch
-    epochs = checkpoint // self.device_count // steps_per_epoch
+    initial_epoch = (starting_step - 1) // validation_interval
+    epochs = checkpoint // validation_interval
 
     # If a teacher was provided, predict soft targets and combine with the provided hard targets.
     if teacher_network:
@@ -261,6 +266,25 @@ class Schedule(tf.keras.optimizers.schedules.PiecewiseConstantDecay):
     if self.warmup_steps:
       value *= tf.clip_by_value(step / self.warmup_steps, 0.0, 1.0)
     return value
+
+class RollingDataset(tf.data.Dataset):
+
+  def __init__(self, wrapped):
+    self.wrapped = wrapped
+    self.iterator = iter(wrapped)
+    # Pretend that the wrapped data isn't changing, have to pass in a variant_tensor.
+    super().__init__(wrapped._variant_tensor_attr)
+
+  def __iter__(self):
+    # Return the same iterator each time to avoid resetting on new iterations.
+    return self.iterator
+
+  def _inputs(self):
+    return [self.wrapped]
+
+  @property
+  def element_spec(self):
+    return self.wrapped.element_spec
 
 class LogCallback(tf.keras.callbacks.Callback):
 
