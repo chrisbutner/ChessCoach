@@ -57,7 +57,7 @@ class Config:
     self.training["commentary_path_training"] = self.make_dir_path(self.training["commentary_path_training"])
     self.training["commentary_path_validation"] = self.make_dir_path(self.training["commentary_path_validation"])
     for key, value in self.misc["paths"].items():
-      if not key.startswith("gcloud"):
+      if not key.startswith("gcloud") and not key.startswith("strength_test"):
         self.misc["paths"][key] = self.make_dir_path(value)
 
   def determine_data_root(self):

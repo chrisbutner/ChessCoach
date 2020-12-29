@@ -1,10 +1,4 @@
 Next
-- stripe the 3 datasets - Training/Training2/SelfPlay
-	- do a full self-play run with the faster training code
-	- use custom huge checkpoints to save time
-
-
-Next
 - adapt commentary, use fit()
 - speed up validation dataset (iter() every validation)
 - update docker/cluster and test
@@ -17,7 +11,6 @@ Training
 - check out gradient_aggregator for local GPU case
 
 Criticality
-- test STS and Arasan(slow) with base, 0.5check/k=5, 0.5check/k=10, 0.5check/k=50, 0.1/0.9 squish
 - think about training target for stddev
 	- since it's stddev as an error estimator, it could actually be non-consistent, just a way to speed up feedback cycle to better priors?
 	- but probably still better if consistent
