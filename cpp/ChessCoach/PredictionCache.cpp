@@ -89,9 +89,16 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
 
 void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float* priors)
 {
+    // If the same full key is found than that entry needs to be replaced so that
+    // TryGet finds it. Otherwise, replace the oldest entry.
     int oldestIndex = 0;
-    for (int i = 1; i < EntryCount; i++)
+    for (int i = 0; i < EntryCount; i++)
     {
+        if (_entries[i].key == key)
+        {
+            oldestIndex = i;
+            break;
+        }
         if (_entries[i].age > _entries[oldestIndex].age)
         {
             oldestIndex = i;
@@ -119,6 +126,10 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float*
     // Place a "guard" probability of 1.0 immediately after the N legal moves' probabilities
     // so that "TryGet" can more often detect incorrect probability sums (rather than potentially
     // seeing only trailing zeros and still summing to 1.0).
+    //
+    // This unfortunately won't help with all trailing zeros - e.g. placing 5 priors, {0.1, 0.2, 0.3, 0.4, 0.0},
+    // and reading back 4 - but we shouldn't be placing actual quantized zeros (rounded up to one quantum) - just
+    // have to worry about small values not triggering the quantization error allowance check.
     if (moveCount < _entries[oldestIndex].policyPriors.size())
     {
         _entries[oldestIndex].policyPriors[moveCount] = INetwork::QuantizeProbabilityNoZero(1.f);

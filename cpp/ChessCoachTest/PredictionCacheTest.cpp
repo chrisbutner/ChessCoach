@@ -6,14 +6,14 @@
 #include <ChessCoach/PredictionCache.h>
 #include <ChessCoach/ChessCoach.h>
 
-bool TryGetPrediction(Key key)
+bool TryGetPrediction(Key key, bool putOnFailedGet = true, std::vector<float> priors = { 0.1f, 0.2f, 0.3f, 0.4f })
 {
     PredictionCacheChunk* chunk;
     float value;
-    std::array<float, 4> priors = { 0.1f, 0.2f, 0.3f, 0.4f };
 
-    bool hit = PredictionCache::Instance.TryGetPrediction(key, static_cast<int>(priors.size()), &chunk, &value, priors.data());
-    if (!hit)
+    std::vector<float> trashablePriors(priors);
+    bool hit = PredictionCache::Instance.TryGetPrediction(key, static_cast<int>(trashablePriors.size()), &chunk, &value, trashablePriors.data());
+    if (!hit && putOnFailedGet)
     {
         chunk->Put(key, 0.33f, static_cast<int>(priors.size()), priors.data());
     }
@@ -45,6 +45,40 @@ TEST(PredictionCache, Basic)
 
     EXPECT_TRUE(TryGetPrediction(game1_key));
     EXPECT_TRUE(TryGetPrediction(game2_key));
+}
+
+TEST(PredictionCache, SumValidation)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    const Game startingPosition;
+    const Game game1 = startingPosition;
+    const Key game1_key1 = game1.GenerateImageKey();
+
+    // Simple priors
+    EXPECT_FALSE(TryGetPrediction(game1_key1, true, { 0.1f, 0.2f, 0.3f, 0.4f }));
+    EXPECT_TRUE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f, 0.0f }));
+    EXPECT_FALSE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f }));
+    EXPECT_FALSE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }));
+
+    // Trailing zeros
+    EXPECT_FALSE(TryGetPrediction(game1_key1, true, { 0.1f, 0.2f, 0.3f, 0.4f, 0.f, 0.f }));
+    EXPECT_TRUE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f, 0.0f, 0.f, 0.f }));
+    EXPECT_TRUE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f, 0.f, 0.f })); // Unfortunately cannot detect this case: want FALSE but expect TRUE
+    EXPECT_FALSE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.f, 0.f }));
+
+    // Must sum to one
+    EXPECT_FALSE(TryGetPrediction(game1_key1, true, { 0.1f, 0.2f, 0.3f }));
+    EXPECT_FALSE(TryGetPrediction(game1_key1, false, { 0.f, 0.f, 0.f }));
+
+    // Avoid duplicate entries
+    EXPECT_FALSE(TryGetPrediction(game1_key1, true, { 0.1f, 0.2f, 0.3f, 0.4f }));
+    EXPECT_FALSE(TryGetPrediction(game1_key1, true, { 0.1f, 0.1f, 0.1f, 0.3f, 0.4f }));
+    EXPECT_FALSE(TryGetPrediction(game1_key1, true, { 0.1f, 0.1f, 0.1f, 0.1f, 0.2f, 0.4f }));
+    EXPECT_FALSE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f, 0.f }));
+    EXPECT_FALSE(TryGetPrediction(game1_key1, false, { 0.0f, 0.0f, 0.0f, 0.f, 0.f }));
+    EXPECT_TRUE(TryGetPrediction(game1_key1, true, { 0.0f, 0.0f, 0.0f, 0.f, 0.f, 0.f }));
 }
 
 TEST(PredictionCache, PathDependence)
@@ -138,7 +172,8 @@ TEST(PredictionCache, Quantization)
     // Put into the cache.
     PredictionCacheChunk* chunk;
     float value;
-    const bool hit1 = PredictionCache::Instance.TryGetPrediction(game1_key, moveCount, &chunk, &value, priors1.data());
+    std::vector<float> trashablePriors1(priors1);
+    const bool hit1 = PredictionCache::Instance.TryGetPrediction(game1_key, moveCount, &chunk, &value, trashablePriors1.data());
     EXPECT_FALSE(hit1);
     chunk->Put(game1_key, value, moveCount, priors1.data());
 
