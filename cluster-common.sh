@@ -9,7 +9,7 @@ CREDENTIALS_NAME=chesscoach-credentials
 CLUSTER_VERSION=1.17
 CLUSTER_NAME=chesscoach-cluster
 NUM_NODES=4
-MACHINE_TYPE=custom-4-36864-ext
+MACHINE_TYPE=n2-highmem-4
 DISK_SIZE=40
 
 CRITICAL_NAME=critical-node-pool

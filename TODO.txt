@@ -1,6 +1,3 @@
-Next
-- update docker/cluster and test (also n2, 32GB)
-
 Tests after dataset changes
 - re-run unit tests
 - add test for sparse decompression (currently does full batch)
@@ -104,6 +101,9 @@ Commentary
 - build deterministic train/validate split (e.g. in Pgn tool that reads/dumps)
 - try encode before-and-after positions (no flip?) - comment on the move, not the position
 	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
+
+Cluster
+- validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
 UCI (#2)
 - tune on GPU and TPU (methods below)

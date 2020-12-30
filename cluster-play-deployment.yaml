@@ -12,7 +12,7 @@ spec:
   template:
     metadata:
       annotations:
-        tf-version.cloud-tpus.google.com: "2.3.1"
+        tf-version.cloud-tpus.google.com: "2.4.0"
       labels:
         app: chesscoach-play
     spec:
@@ -28,7 +28,7 @@ spec:
           secretName: chesscoach-credentials
       containers:
       - name: chesscoach-play-container
-        image: gcr.io/chesscoach/chesscoach-play:selfplay1_v6
+        image: gcr.io/chesscoach/chesscoach-play:selfplay3_v7
         volumeMounts:
         - name: service-credentials
           mountPath: /var/secrets/google
@@ -41,7 +41,7 @@ spec:
         resources:
           requests:
             cpu: 3.7
-            memory: 31Gi
+            memory: 28200Mi
             cloud-tpus.google.com/v2: 8 # v2-8
             ephemeral-storage: 4Gi
           limits:
