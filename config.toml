@@ -291,7 +291,8 @@ wait_for_updated_network = false
 
 [prediction_cache]
 
-size_gibibytes = 8
+request_gibibytes = 8
+min_gibibytes = 1
 max_ply = 24
 
 [time_control]

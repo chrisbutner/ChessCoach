@@ -45,15 +45,16 @@ public:
 
 private:
 
-    static const int TableBytes = 1024 * 1024 * 1024;
-    static const int ChunksPerTable = (TableBytes / sizeof(PredictionCacheChunk));
+    static const int MaxTableCount = (1 << 8);
+    static const int MaxChunksPerTable = (1 << 20);
 
 public:
 
     PredictionCache();
     ~PredictionCache();
 
-    void Allocate(int sizeGb);
+    void Allocate(int requestGib, int minGib);
+    bool TryAllocate(int tableSizeBytes, int tableCount, int chunks);
     void Free();
 
     bool TryGetPrediction(Key key, int moveCount, PredictionCacheChunk** chunkOut, float* valueOut, float* priorsOut);
@@ -67,7 +68,10 @@ public:
 
 private:
 
+    int _allocatedRequestGib;
+    int _allocatedMinGib;
     std::vector<PredictionCacheChunk*> _tables;
+    int _chunksPerTable;
 
     uint64_t _hitCount;
     uint64_t _evictionCount;

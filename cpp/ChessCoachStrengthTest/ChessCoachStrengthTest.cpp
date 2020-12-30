@@ -109,8 +109,7 @@ void ChessCoachStrengthTest::Initialize()
     InitializeStockfish();
     InitializeChessCoach();
 
-    // Use an 8 GB prediction cache for now. In future, should be configurable per MB by UCI options.
-    PredictionCache::Instance.Allocate(8 /* sizeGb */);
+    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
 
 void ChessCoachStrengthTest::StrengthTest()

@@ -169,7 +169,8 @@ MiscConfig ParseMisc(const TomlValue& config)
 {
     MiscConfig misc;
 
-    misc.PredictionCache_SizeGibibytes = toml::find<int>(config, "prediction_cache", "size_gibibytes");
+    misc.PredictionCache_RequestGibibytes = toml::find<int>(config, "prediction_cache", "request_gibibytes");
+    misc.PredictionCache_MinGibibytes = toml::find<int>(config, "prediction_cache", "min_gibibytes");
     misc.PredictionCache_MaxPly = toml::find<int>(config, "prediction_cache", "max_ply");
 
     misc.TimeControl_SafetyBufferMilliseconds = toml::find<int>(config, "time_control", "safety_buffer_milliseconds");

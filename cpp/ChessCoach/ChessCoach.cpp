@@ -119,7 +119,7 @@ void ChessCoach::InitializeChessCoach()
 
 void ChessCoach::InitializePredictionCache()
 {
-    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_SizeGibibytes);
+    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
 void ChessCoach::FinalizePython()
 {
