@@ -439,8 +439,8 @@ void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::
 }
 
 void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
-    float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
-    float* valuesOut, OutputPlanes* policiesOut)
+    int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, int decompressPositionsModulus,
+    InputPlanes* imagesOut, float* valuesOut, OutputPlanes* policiesOut)
 {
     PythonContext context;
 
@@ -456,10 +456,6 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
     PyAssert(pythonImagePiecesAuxiliary);
 
     npy_intp perPositionDims[1]{ positionCount };
-    PyObject* pythonMctsValues = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(perPositionDims), perPositionDims, NPY_FLOAT32, mctsValues);
-    PyAssert(pythonMctsValues);
-
     PyObject* pythonPolicyRowLengths = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(perPositionDims), perPositionDims, NPY_INT64, policyRowLengths);
     PyAssert(pythonPolicyRowLengths);
@@ -473,9 +469,12 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
         Py_ARRAY_LENGTH(policyDims), policyDims, NPY_FLOAT32, policyValues);
     PyAssert(pythonPolicyValues);
 
+    PyObject* pythonDecompressPositionsModulus = PyLong_FromLong(decompressPositionsModulus);
+    PyAssert(pythonDecompressPositionsModulus);
+
     // Make the call.
     PyObject* tupleResult = PyObject_CallFunctionObjArgs(_debugDecompressFunction, pythonResult, pythonImagePiecesAuxiliary,
-        pythonMctsValues, pythonPolicyRowLengths, pythonPolicyIndices, pythonPolicyValues, nullptr);
+        pythonPolicyRowLengths, pythonPolicyIndices, pythonPolicyValues, pythonDecompressPositionsModulus, nullptr);
     PyAssert(tupleResult);
     PyAssert(PyTuple_Check(tupleResult));
 
@@ -487,7 +486,8 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
     PyArrayObject* pythonImagesArray = reinterpret_cast<PyArrayObject*>(pythonImages);
     PackedPlane* pythonImagesPtr = reinterpret_cast<PackedPlane*>(PyArray_DATA(pythonImagesArray));
 
-    const int imageCount = (positionCount * InputPlaneCount);
+    const int outputPositionCount = (positionCount / decompressPositionsModulus);
+    const int imageCount = (outputPositionCount * InputPlaneCount);
     std::copy(pythonImagesPtr, pythonImagesPtr + imageCount, reinterpret_cast<PackedPlane*>(imagesOut));
 
     // Extract the values.
@@ -498,7 +498,7 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
     PyArrayObject* pythonValuesArray = reinterpret_cast<PyArrayObject*>(pythonValues);
     float* pythonValuesPtr = reinterpret_cast<float*>(PyArray_DATA(pythonValuesArray));
 
-    const int valueCount = positionCount;
+    const int valueCount = outputPositionCount;
     std::copy(pythonValuesPtr, pythonValuesPtr + valueCount, valuesOut);
 
     // Network deals with tanh outputs/targets in (-1, 1)/[-1, 1]. MCTS deals with probabilities in [0, 1].
@@ -512,14 +512,14 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
     PyArrayObject* pythonPoliciesArray = reinterpret_cast<PyArrayObject*>(pythonPolicies);
     PlanesPointerFlat pythonPoliciesPtr = reinterpret_cast<PlanesPointerFlat>(PyArray_DATA(pythonPoliciesArray));
 
-    const int policyCount = (positionCount * OutputPlanesFloatCount);
+    const int policyCount = (outputPositionCount * OutputPlanesFloatCount);
     std::copy(pythonPoliciesPtr, pythonPoliciesPtr + policyCount, reinterpret_cast<PlanesPointerFlat>(policiesOut));
 
     Py_DECREF(tupleResult);
+    Py_DECREF(pythonDecompressPositionsModulus);
     Py_DECREF(pythonPolicyValues);
     Py_DECREF(pythonPolicyIndices);
     Py_DECREF(pythonPolicyRowLengths);
-    Py_DECREF(pythonMctsValues);
     Py_DECREF(pythonImagePiecesAuxiliary);
     Py_DECREF(pythonResult);
 }

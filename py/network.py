@@ -439,9 +439,10 @@ def update_gui(*args):
   import gui
   gui.update(*args)
 
-def debug_decompress(result, image_pieces_auxiliary, mcts_values, policy_row_lengths, policy_indices, policy_values):
+def debug_decompress(result, image_pieces_auxiliary, policy_row_lengths, policy_indices, policy_values, decompress_positions_modulus):
+  indices = tf.range(0, len(policy_row_lengths), decompress_positions_modulus, dtype=tf.int64)
   images, values, policies = datasets.decompress(result, image_pieces_auxiliary,
-    mcts_values, policy_row_lengths, policy_indices, policy_values)
+    policy_row_lengths, policy_indices, policy_values, indices)
   return np.array(memoryview(images)), np.array(memoryview(values)), np.array(memoryview(policies))
 
 # --- Initialize ---

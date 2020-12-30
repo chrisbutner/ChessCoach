@@ -100,8 +100,8 @@ struct INetwork
     virtual void UpdateGui(const std::string& fen, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
         const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& policyValues) = 0;
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
-        float* mctsValues, int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, InputPlanes* imagesOut,
-        float* valuesOut, OutputPlanes* policiesOut) = 0;
+        int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, int decompressPositionsModulus,
+        InputPlanes* imagesOut, float* valuesOut, OutputPlanes* policiesOut) = 0;
 };
 
 static_assert(INetwork::QuantizeProbabilityNoZero(1.f) == 65535);

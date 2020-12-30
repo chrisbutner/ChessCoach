@@ -190,10 +190,11 @@ TEST(Network, CompressDecompress)
     std::vector<float> values(savedGame.moveCount);
     std::vector<INetwork::OutputPlanes> policies(savedGame.moveCount);
 
+    const int decompressPositionsModulus = 1; // Every position
     std::unique_ptr<INetwork> network(chessCoach.CreateNetwork(Config::TrainingNetwork));
     network->DebugDecompress(savedGame.moveCount, policyIndices.size(), result.mutable_data(), imagePiecesAuxiliary.mutable_data(),
-        mctsValues.mutable_data(), policyRowLengths.mutable_data(), policyIndices.mutable_data(), policyValues.mutable_data(), images.data(),
-        values.data(), policies.data());
+        policyRowLengths.mutable_data(), policyIndices.mutable_data(), policyValues.mutable_data(), decompressPositionsModulus,
+        images.data(), values.data(), policies.data());
 
     // Generate full training tensors to compare.
     Game scratchGame;
@@ -230,6 +231,80 @@ TEST(Network, CompressDecompress)
     static_assert(INetwork::InputPreviousPositionCount == 7);
     EXPECT_EQ(images[6][0], 0);
     EXPECT_NE(images[7][0], 0);
+}
+
+TEST(Network, CompressDecompressSparse)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayGame game(nullptr, nullptr, nullptr);
+
+    // Play some moves, generating mostly different policy distributions for each move.
+    const std::vector<Move> moves =
+    {
+        make_move(SQ_E2, SQ_E4), make_move(SQ_E7, SQ_E5), make_move(SQ_G1, SQ_F3), make_move(SQ_D7, SQ_D6),
+        make_move(SQ_D2, SQ_D4), make_move(SQ_C8, SQ_G4), make_move(SQ_D4, SQ_E5), make_move(SQ_G4, SQ_F3),
+        make_move(SQ_D1, SQ_F3), make_move(SQ_D6, SQ_E5), make_move(SQ_F1, SQ_C4), make_move(SQ_G8, SQ_F6),
+    };
+    for (int i = 0; i < moves.size(); i++)
+    {
+        ApplyMoveExpandWithPattern(game, moves[i], i);
+    }
+    game.Root()->terminalValue = TerminalValue::MateIn<1>(); // Fudge a non-draw so that flips are interesting.
+    game.Complete();
+    const SavedGame savedGame = game.Save();
+
+    // Generate compressed training tensors.
+    const Storage storage(Config::TrainingNetwork, Config::Misc);
+    message::Example compressed = storage.DebugPopulateGame(savedGame);
+
+    // Decompress in Python.
+    auto& features = *compressed.mutable_features()->mutable_feature();
+    auto& result = *features["result"].mutable_float_list()->mutable_value();
+    auto& imagePiecesAuxiliary = *features["image_pieces_auxiliary"].mutable_int64_list()->mutable_value();
+    auto& policyRowLengths = *features["policy_row_lengths"].mutable_int64_list()->mutable_value();
+    auto& policyIndices = *features["policy_indices"].mutable_int64_list()->mutable_value();
+    auto& policyValues = *features["policy_values"].mutable_float_list()->mutable_value();
+
+    std::vector<INetwork::InputPlanes> images(savedGame.moveCount);
+    std::vector<float> values(savedGame.moveCount);
+    std::vector<INetwork::OutputPlanes> policies(savedGame.moveCount);
+
+    const int decompressPositionsModulus = 3; // Every 3rd position
+    std::unique_ptr<INetwork> network(chessCoach.CreateNetwork(Config::TrainingNetwork));
+    network->DebugDecompress(savedGame.moveCount, policyIndices.size(), result.mutable_data(), imagePiecesAuxiliary.mutable_data(),
+        policyRowLengths.mutable_data(), policyIndices.mutable_data(), policyValues.mutable_data(), decompressPositionsModulus,
+        images.data(), values.data(), policies.data());
+
+    // Generate full training tensors to compare.
+    Game scratchGame;
+    for (int i = 0; i < moves.size(); i++)
+    {
+        INetwork::InputPlanes image;
+        float value;
+        INetwork::OutputPlanes policy{}; // "GeneratePolicy" requires zeroed planes.
+
+        scratchGame.GenerateImage(image);
+
+        value = Game::FlipValue(scratchGame.ToPlay(), savedGame.result);
+
+        scratchGame.GeneratePolicy(savedGame.childVisits[i], policy);
+
+        // Compare compressed to uncompressed.
+        if (i % decompressPositionsModulus == 0)
+        {
+            EXPECT_EQ(image, images[i / decompressPositionsModulus]);
+            EXPECT_EQ(value, values[i / decompressPositionsModulus]);
+            EXPECT_EQ(policy, policies[i / decompressPositionsModulus]);
+        }
+
+        // Don't repeat sanity-checks.
+
+        scratchGame.ApplyMove(moves[i]);
+    }
+
+    // Don't repeat sanity-checks.
 }
 
 TEST(Network, QueenKnightPlanes)
