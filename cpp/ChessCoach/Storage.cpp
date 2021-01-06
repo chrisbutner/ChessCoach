@@ -328,19 +328,22 @@ bool Storage::SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) co
     const void* buffer;
     int size = 0;
     uint64_t payloadLength = 0;
+    int payloadLengthOffset = 0;
     while ((ok = stream.Next(&buffer, &size)))
     {
-        if (size < sizeof(payloadLength))
+        const int copyLength = std::min(size, static_cast<int>(sizeof(payloadLength)) - payloadLengthOffset);
+        if (copyLength > 0)
         {
-            // This isn't technically sound if the stream only offers say a byte-at-once,
-            // but I don't want to live in a world like that.
-            stream.BackUp(size);
-            continue;
-        }
+            // Just assume we're running on little-endian.
+            std::memcpy(reinterpret_cast<char*>(&payloadLength) + payloadLengthOffset, buffer, copyLength);
+            stream.BackUp(size - copyLength);
 
-        payloadLength = *reinterpret_cast<const uint64_t*>(buffer);
-        stream.BackUp(size - sizeof(payloadLength));
-        break;
+            payloadLengthOffset += copyLength;
+            if (payloadLengthOffset >= sizeof(payloadLength))
+            {
+                break;
+            }
+        }
     }
     if (ok)
     {
