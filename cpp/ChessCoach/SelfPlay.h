@@ -158,6 +158,7 @@ public:
 
     bool IsExpanded() const;
     float Value() const;
+    void AdjustVisitCount(int newVisitCount);
 
     Node* Child(Move match);
     int CountChildren() const;

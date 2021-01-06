@@ -210,6 +210,15 @@ float Node::Value() const
     return (valueSum / visitCount);
 }
 
+void Node::AdjustVisitCount(int newVisitCount)
+{
+    if (visitCount > 0)
+    {
+        valueSum *= (static_cast<float>(newVisitCount) / visitCount);
+    }
+    visitCount = newVisitCount;
+}
+
 Node* Node::Child(Move match)
 {
     for (Node& child : *this)
@@ -394,18 +403,12 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     // stays accurate and in the [0, 1] range. It would be best to excise the original as-leaf neural
     // network evaluation, but without adding additional Node fields/tracking that's already mixed in,
     // so just average down to the new visit count.
-    const int previousVisitCount = _root->visitCount;
-
-    _root->visitCount = 0;
+    int newVisitCount = 0;
     for (const Node& child : *_root)
     {
-        _root->visitCount += child.visitCount;
+        newVisitCount += child.visitCount;
     }
-
-    if (previousVisitCount > 0)
-    {
-        _root->valueSum *= (static_cast<float>(_root->visitCount) / previousVisitCount);
-    }
+    _root->AdjustVisitCount(newVisitCount);
 }
 
 float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore)
@@ -1370,7 +1373,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
 
     // Prune visits to other nodes based on UCB regret vs. the most-visited child.
     const float bestScore = CalculateUcbScore<false>(root, best);
-    int pruneCount = 0;
+    int rootPruneCount = 0;
     for (Node& child : *root)
     {
         if (&child == best)
@@ -1379,16 +1382,23 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
         }
 
         // Pre-decrement before "CalculateUcbScore" to save one calculation per child.
+        int pruneCount = 0;
+        const int originalVisitCount = child.visitCount;
         const float fixedValue = child.Value();
         while ((--child.visitCount >= 0) && (CalculateUcbScoreFixedValue(root, &child, fixedValue) < bestScore))
         {
             pruneCount++;
         }
-        child.visitCount++;
+        child.visitCount = originalVisitCount; // Would need to increment to fix final pre-decrement but clobbering anyway.
+        child.AdjustVisitCount(originalVisitCount - pruneCount);
+        rootPruneCount += pruneCount;
+
+        // Note that further descendants aren't having visits pruned here. That's okay because (a) they can eventually pruned here
+        // after further moves are played, and (b) the parent count is fixed to match the sum of children in "ApplyMoveWithRootAndHistory".
     }
 
     // Use the root's original visit count for exploration terms while pruning, and delay corresponding adjustments until the end here.
-    root->visitCount -= pruneCount;
+    root->AdjustVisitCount(root->visitCount - rootPruneCount);
 }
 
 void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float value)
@@ -1804,7 +1814,7 @@ void SelfPlayWorker::CheckPrintInfo()
 void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 {
     const int interval = Config::Misc.Search_GuiUpdateIntervalNodes;
-    if (_searchState.gui && (forceUpdate ||
+    if (_searchState.gui && (forceUpdate || 
         ((_searchState.nodeCount / interval) > (_searchState.previousNodeCount / interval))))
     {
         const SelfPlayGame& game = _games[0];
