@@ -398,7 +398,8 @@ void PythonNetwork::LaunchGui(const std::string& mode)
 }
 
 void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
-    const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& policyValues)
+    const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& targets,
+    std::vector<float>& priors, std::vector<float>& values, std::vector<float>& ucb, std::vector<int>& visits, std::vector<int>& weights)
 {
     PythonContext context;
 
@@ -418,17 +419,42 @@ void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::
     PyObject* pythonFroms = PackNumpyStringArray(froms);
     PyObject* pythonTos = PackNumpyStringArray(tos);
 
-    npy_intp policyValueDims[1]{ static_cast<int>(policyValues.size()) };
-    PyObject* pythonPolicyValues = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(policyValueDims), policyValueDims, NPY_FLOAT32, policyValues.data());
-    PythonNetwork::PyAssert(pythonPolicyValues);
+    npy_intp moveDims[1]{ static_cast<int>(targets.size()) };
+    PyObject* pythonTargets = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_FLOAT32, targets.data());
+    PythonNetwork::PyAssert(pythonTargets);
+
+    PyObject* pythonPriors = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_FLOAT32, priors.data());
+    PythonNetwork::PyAssert(pythonPriors);
+
+    PyObject* pythonValues = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_FLOAT32, values.data());
+    PythonNetwork::PyAssert(pythonValues);
+
+    PyObject* pythonUcb = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_FLOAT32, ucb.data());
+    PythonNetwork::PyAssert(pythonUcb);
+
+    PyObject* pythonVisits = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_INT32, visits.data());
+    PythonNetwork::PyAssert(pythonVisits);
+
+    PyObject* pythonWeights = PyArray_SimpleNewFromData(
+        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_INT32, weights.data());
+    PythonNetwork::PyAssert(pythonWeights);
 
     PyObject* result = PyObject_CallFunctionObjArgs(_updateGuiFunction, pythonFen, pythonNodeCount, pythonEvaluation, pythonPrincipleVariation,
-        pythonSans, pythonFroms, pythonTos, pythonPolicyValues, nullptr);
+        pythonSans, pythonFroms, pythonTos, pythonTargets, pythonPriors, pythonValues, pythonUcb, pythonVisits, pythonWeights, nullptr);
     PyAssert(result);
 
     Py_DECREF(result);
-    Py_DECREF(pythonPolicyValues);
+    Py_DECREF(pythonWeights);
+    Py_DECREF(pythonVisits);
+    Py_DECREF(pythonUcb);
+    Py_DECREF(pythonValues);
+    Py_DECREF(pythonPriors);
+    Py_DECREF(pythonTargets);
     Py_DECREF(pythonTos);
     Py_DECREF(pythonFroms);
     Py_DECREF(pythonSans);

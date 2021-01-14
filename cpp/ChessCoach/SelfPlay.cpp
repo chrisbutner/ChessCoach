@@ -1870,8 +1870,12 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         std::vector<std::string> sans;
         std::vector<std::string> froms;
         std::vector<std::string> tos;
-        std::vector<float> policyValues;
-        float sumChildVisits = 0.f;
+        std::vector<float> targets;
+        std::vector<float> priors;
+        std::vector<float> values;
+        std::vector<float> ucb;
+        std::vector<int> visits;
+        std::vector<int> weights;
 
         for (const Node& child : *game.Root())
         {
@@ -1879,16 +1883,16 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             sans.emplace_back(Pgn::San(game.GetPosition(), move, true /* showCheckmate */));
             froms.emplace_back(Game::SquareName[from_sq(move)]);
             tos.emplace_back(Game::SquareName[to_sq(move)]);
-            const float floatVisitCount = static_cast<float>(child.visitCount);
-            policyValues.push_back(floatVisitCount);
-            sumChildVisits += floatVisitCount;
-        }
-        for (float& value : policyValues)
-        {
-            value /= sumChildVisits;
+            targets.push_back(static_cast<float>(child.visitCount) / game.Root()->visitCount);
+            priors.push_back(child.prior);
+            values.push_back(child.Value());
+            ucb.push_back(CalculateUcbScore<false>(game.Root(), &child));
+            visits.push_back(child.visitCount);
+            weights.push_back(0);
         }
 
-        network->UpdateGui(fen, _searchState.nodeCount, evaluation.str(), principleVariation.str(), sans, froms, tos, policyValues);
+        network->UpdateGui(fen, _searchState.nodeCount, evaluation.str(), principleVariation.str(),
+            sans, froms, tos, targets, priors, values, ucb, visits, weights);
     }
 }
 

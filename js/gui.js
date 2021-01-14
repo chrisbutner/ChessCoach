@@ -14,8 +14,8 @@
             proportions[square] = 0;
         }
         for (const move of data.policy) {
-            proportions[move.from] = Math.min(1, proportions[move.from] + move.value);
-            proportions[move.to] = Math.min(1, proportions[move.to] + move.value);
+            proportions[move.from] = Math.min(1, proportions[move.from] + move.target);
+            proportions[move.to] = Math.min(1, proportions[move.to] + move.target);
         }
         for (const square in proportions) {
             highlight(overlays[square], proportions[square]);
@@ -26,36 +26,43 @@
         for (const overlay of Object.values(overlays)) {
             overlay.style.backgroundColor = null;
         }
-        highlight(overlays[move.from], move.value);
-        highlight(overlays[move.to], move.value);
+        highlight(overlays[move.from], move.target);
+        highlight(overlays[move.to], move.target);
     }
 
-    function clearMoves() {
-        document.getElementById("moves").innerHTML = "";
+    function clearMoves(example) {
+        document.getElementById("moves").innerHTML = (example["prior"] !== undefined) ?
+            "<tr><th>Move</th><th>Policy</th><th>Prior</th><th>Value</th><th>UCB</th><th>Visits</th><th>Weight</th></tr>" :
+            "<tr><th>Move</th><th>Policy</th>";
+    }
+
+    function addField(row, move, field) {
+        const cell = document.createElement("td");
+        cell.textContent = String(move[field]);
+        row.appendChild(cell);
     }
 
     function addMove(move) {
-        const element = document.createElement("div");
-        element.className = "move";
-        document.getElementById("moves").appendChild(element);
+        const row = document.createElement("tr");
+        document.getElementById("moves").appendChild(row);
 
-        const san = document.createElement("span");
-        san.className = "san";
-        san.textContent = move.san;
-        element.appendChild(san);
+        addField(row, move, "san");
+        addField(row, move, "target");
+        if (move["prior"] !== undefined) {
+            addField(row, move, "prior");
+            addField(row, move, "value");
+            addField(row, move, "ucb");
+            addField(row, move, "visits");
+            addField(row, move, "weight");
+        }
 
-        const details = document.createElement("span");
-        details.className = "details";
-        details.textContent = `${move.value}`;
-        element.appendChild(details);
-
-        element.addEventListener("mouseover", () => {
-            highlight(element, move.value);
+        row.addEventListener("mouseover", () => {
+            highlight(row, move.target);
             overlaysHighlightMove(move);
         });
 
-        element.addEventListener("mouseout", () => {
-            element.style.backgroundColor = null;
+        row.addEventListener("mouseout", () => {
+            row.style.backgroundColor = null;
             overlaysHighlightAll();
         });
     }
@@ -74,14 +81,6 @@
         if (game_count > 0) {
             requestPosition();
         }
-    }
-
-    function probabilityToPawns(value) {
-        value = (2 * value - 1);
-        value = Math.tan(value * 1.5620688421) * 111.714640912;
-        value = value / 100;
-        value = Math.round(value * 1000000) / 1000000;
-        return value;
     }
 
     function handleTrainingData(trainingData) {
@@ -104,9 +103,9 @@
         document.getElementById("positionInfo").textContent = `Position ${displayPosition} of ${position_count}`;
         document.getElementById("evaluation").textContent = data.evaluation;
 
-        data.policy.sort((a, b) => { return b.value - a.value; });
+        data.policy.sort((a, b) => { return b.target - a.target; });
 
-        clearMoves();
+        clearMoves(data.policy[0]);
         for (const move of data.policy) {
             addMove(move);
         }
@@ -149,9 +148,9 @@
         document.getElementById("evaluation").textContent = data.evaluation;
         document.getElementById("principleVariation").textContent = "Principle variation: " + data.principle_variation;
 
-        data.policy.sort((a, b) => { return b.value - a.value; });
+        data.policy.sort((a, b) => { return b.target - a.target; });
 
-        clearMoves();
+        clearMoves(data.policy[0]);
         for (const move of data.policy) {
             addMove(move);
         }

@@ -395,7 +395,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
 
         if (csv)
         {
-            std::cout << "move,prior,value,ucb,visits" << std::endl;
+            std::cout << "move,prior,value,ucb,visits,weight" << std::endl;
         }
 
         Node* root = ucbGame.Root();
@@ -407,7 +407,8 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                     << "," << child.prior
                     << "," << child.Value()
                     << "," << _selfPlayWorker->CalculateUcbScore<false>(root, &child)
-                    << "," << (child.visitCount + child.visitingCount)
+                    << "," << child.visitCount
+                    << "," << 0.f
                     << std::endl;
             }
             else
@@ -416,7 +417,8 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                     << " prior=" << child.prior
                     << " value=" << child.Value()
                     << " ucb=" << _selfPlayWorker->CalculateUcbScore<false>(root, &child)
-                    << " visits=" << (child.visitCount + child.visitingCount)
+                    << " visits=" << child.visitCount
+                    << " weight=" << 0.f
                     << std::endl;
             }
         }

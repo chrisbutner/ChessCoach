@@ -146,7 +146,7 @@ async def show_position(requested_game, requested_position):
     Position.position, *Position.data = chesscoach.load_position(position)
     
   # Send to JS.
-  fen, evaluation, sans, froms, tos, policy_values = Position.data
+  fen, evaluation, sans, froms, tos, targets = Position.data
   await send(json.dumps({
     "type": "training_data",
     "game": Position.game,
@@ -155,8 +155,8 @@ async def show_position(requested_game, requested_position):
     "pgn": Position.pgn,
     "fen": fen,
     "evaluation": evaluation,
-    "policy": [{ "san": san.decode("utf-8"), "from": move_from.decode("utf-8"), "to": move_to.decode("utf-8"), "value": round(float(value), 6)}
-      for (san, move_from, move_to, value) in zip(sans, froms, tos, policy_values)],
+    "policy": [{ "san": san.decode("utf-8"), "from": move_from.decode("utf-8"), "to": move_to.decode("utf-8"), "target": round(float(target), 6)}
+      for (san, move_from, move_to, target) in zip(sans, froms, tos, targets)],
   }))
 
 # ----- API -----
@@ -167,7 +167,7 @@ def launch(mode):
   _ensure_serving()
   webbrowser.open(f"http://localhost:{port}/gui.html")
 
-def update(fen, node_count, evaluation, principle_variation, sans, froms, tos, policy_values):
+def update(fen, node_count, evaluation, principle_variation, sans, froms, tos, targets, priors, values, ucb, visits, weights):
   assert gui_mode == "push"
   dispatch(json.dumps({
     "type": "uci_data",
@@ -175,8 +175,9 @@ def update(fen, node_count, evaluation, principle_variation, sans, froms, tos, p
     "node_count": node_count,
     "evaluation": evaluation,
     "principle_variation": principle_variation,
-    "policy": [{ "san": san.decode("utf-8"), "from": move_from.decode("utf-8"), "to": move_to.decode("utf-8"), "value": round(float(value), 6)}
-      for (san, move_from, move_to, value) in zip(sans, froms, tos, policy_values)],
+    "policy": [{ "san": san.decode("utf-8"), "from": move_from.decode("utf-8"), "to": move_to.decode("utf-8"), "target": round(float(target), 6),
+      "prior": round(float(prior), 6), "value": round(float(value), 6), "ucb": round(float(ucb), 6), "visits": int(visits), "weight": int(weight)}
+      for (san, move_from, move_to, target, prior, value, ucb, visits, weight) in zip(sans, froms, tos, targets, priors, values, ucb, visits, weights)],
   }))
 
 # Example training data format (pull mode):
@@ -190,8 +191,8 @@ def update(fen, node_count, evaluation, principle_variation, sans, froms, tos, p
 #   "fen": "3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13",
 #   "evaluation": "0.5 (0.0 pawns)",
 #   "policy": [
-#     { "san": "e4", "from": "e2", "to": "e4", "value": 0.25 },
-#     { "san": "d4", "from": "d2", "to": "d4", "value": 0.75 },
+#     { "san": "e4", "from": "e2", "to": "e4", "target": 0.25 },
+#     { "san": "d4", "from": "d2", "to": "d4", "target": 0.75 },
 #   ]
 # }
 #
@@ -204,8 +205,8 @@ def update(fen, node_count, evaluation, principle_variation, sans, froms, tos, p
 #   "evaluation": "0.527982 (0.0979088 pawns)",
 #   "principle_variation": "d4 d5 c4 c6 Nf3 Nf6 Nc3 e6 e3 Nbd7 Qc2 Bd6 Bd3 O-O O-O dxc4 Bxc4 b5 Be2 Bb7 e4 e5 Rd1 Qc7 dxe5 Nxe5 Nxe5 Bxe5 g3 ",
 #   "policy": [
-#     {"san": "a3", "from": "a2", "to": "a3", "value": 0.000583},
-#     {"san": "b3", "from": "b2", "to": "b3", "value": 0.001246},
+#     {"san": "a3", "from": "a2", "to": "a3", "target": 0.000583, ...},
+#     {"san": "b3", "from": "b2", "to": "b3", "target": 0.001246, ...},
 #     ...
 #   ]
 # }

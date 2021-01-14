@@ -31,17 +31,25 @@ button {
 
 #moves {
     margin-top: 20px;
+    width: 100%;
+    text-align: left;
+    border-collapse: collapse;
 }
 
-.move {
-    padding: 5px;
-    border: 1px solid gray;
-    margin-top: -1px;
+#moves th, #moves td {
+    padding: 2px;
 }
 
-.move .san {
-    display: inline-block;
-    width: 50px;
+#moves, #moves th, #moves td {
+    border: 1px solid black;
+}
+
+#moves tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+#moves td:first-child {
+    width: 65px;
 }
 
 input[type=text] {
