@@ -17,6 +17,7 @@ public:
     static Move ParseSan(const Position& position, const std::string& san);
 
     static void GeneratePgn(std::ostream& content, const SavedGame& game);
+    static std::string San(const std::string& fen, Move move, bool showCheckmate);
     static std::string San(const Position& position, Move move, bool showCheckmate);
 
 private:

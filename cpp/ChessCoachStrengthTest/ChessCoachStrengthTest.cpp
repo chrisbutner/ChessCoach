@@ -112,6 +112,11 @@ void ChessCoachStrengthTest::Initialize()
     PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
 
+static void PrintProgress(const std::string& fen, const std::string& target, const std::string& chosen, int score, int total)
+{
+    std::cout << fen << ", " << target << ", " << chosen << ", " << score << ", " << total << std::endl;
+}
+
 void ChessCoachStrengthTest::StrengthTest()
 {
     std::cout << "Preparing network..." << std::endl;
@@ -120,16 +125,16 @@ void ChessCoachStrengthTest::StrengthTest()
     std::unique_ptr<INetwork> network(CreateNetwork(Config::UciNetwork));
     SelfPlayWorker worker(Config::UciNetwork, nullptr /* storage */);
 
-    std::cout << "Testing " << _epdPath.stem() << "..." << std::endl;
+    std::cout << "Testing " << _epdPath.stem() << "...\n\nPosition, Target, Chosen, Score, Total" << std::endl;
 
     const auto start = std::chrono::high_resolution_clock::now();
 
-    const auto [score, total, positions] = worker.StrengthTestEpd(network.get(), _networkType, _epdPath, _moveTimeMs);
+    const auto [score, total, positions] = worker.StrengthTestEpd(network.get(), _networkType, _epdPath, _moveTimeMs, PrintProgress);
 
     const float secondsExpected = std::chrono::duration<float>(std::chrono::duration<float, std::milli>(_moveTimeMs * positions)).count();
     const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();
 
-    std::cout << "Tested " << positions << " positions in " << secondsTaken << " seconds, expected " << secondsExpected << " seconds." << std::endl;
+    std::cout << "\nTested " << positions << " positions in " << secondsTaken << " seconds, expected " << secondsExpected << " seconds." << std::endl;
     std::cout << "Score: " << score << " out of " << total << std::endl;
 
     // Use score/positions (not score/total) with slope and intercept to match STS.

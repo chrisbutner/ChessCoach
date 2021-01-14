@@ -360,7 +360,8 @@ public:
     void WaitUntilReady();
 
     void StrengthTest(INetwork* network, NetworkType networkType, int step);
-    std::tuple<int, int, int> StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs);
+    std::tuple<int, int, int> StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs,
+        std::function<void(const std::string&, const std::string&, const std::string&, int, int)> progress);
 
 private:
 
@@ -375,7 +376,7 @@ private:
     void SearchPlay(int mctsParallelism);
     void CommentOnPosition(INetwork* network);
 
-    int StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs);
+    std::pair<Move, int> StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs);
     int JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move);
 
 private:

@@ -939,7 +939,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
         }
 
         std::cout << "Testing " << entry.path().filename() << "..." << std::endl;
-        const auto [score, total, positions] = StrengthTestEpd(network, networkType, entry.path(), moveTimeMs);
+        const auto [score, total, positions] = StrengthTestEpd(network, networkType, entry.path(), moveTimeMs, nullptr /* progress */);
         testResults[testName] = score;
         testPositions[testName] = positions;
     }
@@ -965,7 +965,8 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
 }
 
 // Returns (score, total, positions).
-std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs)
+std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs,
+    std::function<void(const std::string&, const std::string&, const std::string&, int, int)> progress)
 {
     int score = 0;
     int total = 0;
@@ -982,9 +983,18 @@ std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, Net
 
     for (const StrengthTestSpec& spec : specs)
     {
-        const int points = StrengthTestPosition(network, networkType, spec, moveTimeMs);
+        const auto [move, points] = StrengthTestPosition(network, networkType, spec, moveTimeMs);
+        const int available = (spec.points.empty() ? 1 : *std::max_element(spec.points.begin(), spec.points.end()));
         score += points;
-        total += (spec.points.empty() ? 1 : *std::max_element(spec.points.begin(), spec.points.end()));
+        total += available;
+
+        if (progress)
+        {
+            // This target string is a bit of a minimal hack, not as general as scoring behavior.
+            const std::string target = !spec.pointSans.empty() ? spec.pointSans.front() : ("avoid " + spec.avoidSans.front());
+            const std::string chosen = Pgn::San(spec.fen, move, false /* showCheckmate */); // Assume no mate-in-ones.
+            progress(spec.fen, target, chosen, points, available);
+        }
     }
 
     // Clean up after ourselves, e.g. for self-play during training rotations.
@@ -995,7 +1005,7 @@ std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, Net
 
 // For best-move tests returns 1 if correct or 0 if incorrect.
 // For points/alternative tests returns N points or 0 if incorrect.
-int SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs)
+std::pair<Move, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs)
 {
     // Set up the position.
     _games[0].PruneAll();
@@ -1031,13 +1041,14 @@ int SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkT
     }
 
     // Pick a best move and judge points.
-    const Node* bestMove = SelectMove(_games[0]);
-    const int points = JudgeStrengthTestPosition(spec, Move(bestMove->move));
+    const Node* best = SelectMove(_games[0]);
+    const Move bestMove = Move(best->move);
+    const int points = JudgeStrengthTestPosition(spec, bestMove);
 
     // Free nodes after strength testing (especially for the final position, for which there's no following PruneAll/SetUpGame).
     _games[0].PruneAll();
 
-    return points;
+    return { bestMove, points };
 }
 
 int SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move)

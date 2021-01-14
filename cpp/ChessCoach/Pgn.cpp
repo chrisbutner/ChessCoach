@@ -636,6 +636,14 @@ void Pgn::GeneratePgn(std::ostream& content, const SavedGame& game)
         << std::endl;
 }
 
+std::string Pgn::San(const std::string& fen, Move move, bool showCheckmate)
+{
+    Position position;
+    StateInfo state;
+    position.set(fen, false /* isChess960 */, &state, Threads.main());
+    return San(position, move, showCheckmate);
+}
+
 std::string Pgn::San(const Position& position, Move move, bool showCheckmate)
 {
     if (move == MOVE_NONE)
