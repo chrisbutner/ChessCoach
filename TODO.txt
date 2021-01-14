@@ -1,5 +1,41 @@
-Training
-- check out gradient_aggregator for local GPU case
+UCI
+- need to zero visiting counts when stopping search
+- check for other bad states - can get into "hung" search when resuming sometimes
+
+PUCT
+- write parameter optimization harness
+	- some kind of CLOP or bayesian optimization
+	- configurable target, e.g. STS, Arasan21, subset of EPD, etc.
+	- configurable metric; may want score, but may want nodes-required/or-N-if-failed, not sure yet
+	- configurable budget, per-test (e.g. nodes), overall (number of tests)
+- try hard exhaustive term (e.g. 1 per child after N visits)
+- try catch up on unpropagated value when returning via AZPUCT
+- try value stddev
+- try elimination
+- try softer backprop weights (e.g. help with 0.77 vs. 0.78 value example)
+- try use virtual loss only for selection PUCT, not for AZPUCT/backprop-check (lose a lot of backprops, probably not viable)
+- try integrate trained criticality back in
+- CPU-optimize: e.g. can calculate global exploration factor much less often, much more required with new terms
+- need long long search time parameter optimization for 1.25+ constant, e.g. applying similar to new terms
+
+Mate term
+- try eliminate mate term, force value() for proved mate/opponent mate
+	- read over notes from initial work there, check for pitfalls
+	- try to make mate-visiting stop wasting time, instantly push up to 2nd best
+		- complicated with multiple levels of visits
+		- complicated if 2nd best is also mate/terminal
+		- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?
+
+PUCT - later
+- try use saturation point of visits/ucb to extend 800 simulations or UCI time control if visits would exceed current best
+
+PUCT questions
+- force AZPUCT in search path after first non-AZPUCT choice?
+- accept damaging 800-node distribution and prune aggressively to compensate?
+
+PUCT - 800 convergence
+- should we use 1.03 temperature at root (Wu)
+- should we use artificially increased band width (~virtual loss) in self-play games
 
 Criticality
 - think about training target for stddev
@@ -12,16 +48,21 @@ SE
 - add SE to whichever is better (still with commentary)
 - evaluate, check in L2 and/or SE
 
-Node visits
-- try to make mate-visiting stop wasting time, instantly push up to 2nd best
-	- complicated with multiple levels of visits
-	- complicated if 2nd best is also mate/terminal
-	- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?
-- need to fix 350 NPS situation in stockfish games
-	- try out a backtracking implementation of virtual exploration/loss that goes as deep
+Search parallelism
+- implement multi-threaded search
+	- see old paper links around virtual loss, e.g. atomics in C++ example
+- try speculative budgeting in addition to virtual exploration/loss
+	- for N+small delta, which would have UCB > current best
+	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
+- try out a backtracking implementation of virtual exploration/loss that goes as deep
 	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
 	  choosing better nodes overall and avoiding failed simulations
-- can calculate global exploration factor much less often
+- test vs. stockfish, need to avoid single-thread, 350 NPS situation
+
+Student training
+- make student prefer matching teacher for repeatability
+- test raw student-as-teacher training to make sure distillation is worth it
+- try low-hanging fruit on self-play network/data, e.g. higher learning rate
 
 Training improvements
 - SE (lc0)
@@ -44,20 +85,7 @@ Training improvements
 	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
 	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
 
-Additional head ideas:
-- (Wu): "whenever a desired target can be expressed as a sum, conjunction, or disjunction of separate subevents, or would be highly correlated with such subevents, predicting those subevents is likely to help""
-- autoencode position
-- count all pieces?
-- count total square control/ratio/difference/"policy"?
-- count piece types
-- count piece imbalances
-- predict opponent move (Wu uses 0.15 factor)
-- principle variation (big output surface, complicated idea)
-- predict final board state or piece distribution (like Wu's final ownership)
-- king safety, mobility, etc.
-
 Training - later
-- test raw student-as-teacher training to make sure distillation is worth it
 - try out "sleeping" in the rotation - train random noise, different distributions
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 - like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
@@ -65,7 +93,12 @@ Training - later
 - move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
 
 GUI
-- "gui moves f3e5", like ~ ucb, pin data pushes to that sub-position and show history over it?
+- invert uci/gui relationship after working out in-proc/out details
+	- switch between database/UCI modes
+	- browse EPDs
+	- set up positions (paste pgn, fen, move pieces, uci from database position)
+	- go X buttons
+	- drill into moves to see deeper breakdowns during UCI (like ~ ucb moves ...)
 - deal with info panel height/scrolling, move list
 - change the square background rather than adding overlay, need more consistency between black/white squares
 - websocket reconnect
@@ -190,7 +223,6 @@ Low priority
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
 - Richer UCI features like multiPV or ponder
-- CPU optimization - not measurable enough while GPU-dominated
 - endgame tablebases (e.g. leveraging Stockfish probing code)
 	- UCI: not interesting enough, others can add if going for pure strength
 	- Training: complicated, scope too large - self-play needs to make mistakes to learn imbalances

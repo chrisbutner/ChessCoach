@@ -207,7 +207,7 @@ float Node::Value() const
         return CHESSCOACH_VALUE_LOSS;
     }
 
-    return (valueSum / visitCount);
+    return (valueSum / (visitCount + (visitingCount * 0.25f)));
 }
 
 void Node::AdjustVisitCount(int newVisitCount)
