@@ -1,7 +1,3 @@
-UCI
-- need to zero visiting counts when stopping search
-- check for other bad states - can get into "hung" search when resuming sometimes
-
 PUCT
 - write parameter optimization harness
 	- some kind of CLOP or bayesian optimization

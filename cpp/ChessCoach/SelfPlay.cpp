@@ -807,6 +807,13 @@ void SelfPlayWorker::ClearGame(int index)
     _states[index] = SelfPlayState::Working;
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
     _mctsSimulations[index] = 0;
+    for (Node* node : _searchPaths[index])
+    {
+        // We may be reusing an existing search tree when resuming a UCI search for a compatible position
+        // that previously stopped while waiting on a network prediction, whether by time control or command.
+        node->visitingCount--;
+        node->expanding = false;
+    }
     _searchPaths[index].clear();
     _cacheStores[index] = nullptr;
 }
@@ -1166,6 +1173,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             }
 
             scratchGame = game;
+            assert(searchPath.empty());
             searchPath.clear();
             searchPath.push_back(scratchGame.Root());
             scratchGame.Root()->visitingCount++;
@@ -1187,6 +1195,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                     {
                         node->visitingCount--;
                     }
+                    searchPath.clear();
                     _searchState.failedNodeCount++;
                     return nullptr;
                 }
@@ -1251,6 +1260,9 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                 AddExplorationNoise(game);
             }
         }
+
+        // Clear the search path after decrementing "visitingCount" to avoid duplicate decrement on search stop/resume.
+        searchPath.clear();
     }
 
     mctsSimulation = 0;
