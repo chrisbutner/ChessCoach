@@ -76,6 +76,7 @@ PythonNetwork::PythonNetwork()
     _launchGuiFunction = LoadFunction(module, "launch_gui");
     _updateGuiFunction = LoadFunction(module, "update_gui");
     _debugDecompressFunction = LoadFunction(module, "debug_decompress");
+    _optimizeParametersFunction = LoadFunction(module, "optimize_parameters");
 
     Py_DECREF(module);
     Py_DECREF(pythonPath);
@@ -85,6 +86,7 @@ PythonNetwork::PythonNetwork()
 
 PythonNetwork::~PythonNetwork()
 {
+    Py_XDECREF(_optimizeParametersFunction);
     Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_fileExistsFunction);
     Py_XDECREF(_updateGuiFunction);
@@ -548,6 +550,16 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
     Py_DECREF(pythonPolicyRowLengths);
     Py_DECREF(pythonImagePiecesAuxiliary);
     Py_DECREF(pythonResult);
+}
+
+void PythonNetwork::OptimizeParameters()
+{
+    PythonContext context;
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_optimizeParametersFunction, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
 }
 
 PyObject* PythonNetwork::LoadFunction(PyObject* module, const char* name)

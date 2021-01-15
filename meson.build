@@ -210,6 +210,22 @@ chesscoachgui = executable(
   )
 
 ###############################################################################
+# ChessCoachOptimizeParameters
+###############################################################################
+
+chesscoachoptimizeparameters_sources = [
+  'cpp/ChessCoachOptimizeParameters/ChessCoachOptimizeParameters.cpp',
+  ]
+
+chesscoachoptimizeparameters = executable(
+  'ChessCoachOptimizeParameters',
+  chesscoachoptimizeparameters_sources,
+  include_directories: [cpp_includes, tclap_includes],
+  link_with: [chesscoach, chesscoachprotobuf, stockfish, hunspell, crc32c],
+  install: true,
+  )
+
+###############################################################################
 # ChessCoachTrain
 ###############################################################################
 

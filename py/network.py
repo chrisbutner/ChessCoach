@@ -445,6 +445,10 @@ def debug_decompress(result, image_pieces_auxiliary, policy_row_lengths, policy_
     policy_row_lengths, policy_indices, policy_values, indices)
   return np.array(memoryview(images)), np.array(memoryview(values)), np.array(memoryview(policies))
 
+def optimize_parameters():
+  import optimization
+  optimization.Session().run()
+
 # --- Initialize ---
 
 # Build the device mapping safely.

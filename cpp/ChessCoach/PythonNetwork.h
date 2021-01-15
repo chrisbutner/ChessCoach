@@ -73,6 +73,7 @@ public:
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, int decompressPositionsModulus,
         InputPlanes* imagesOut, float* valuesOut, OutputPlanes* policiesOut);
+    virtual void OptimizeParameters();
 
 private:
 
@@ -94,6 +95,7 @@ private:
     PyObject* _launchGuiFunction;
     PyObject* _updateGuiFunction;
     PyObject* _debugDecompressFunction;
+    PyObject* _optimizeParametersFunction;
 };
 
 #endif // _PYTHONNETWORK_H_
