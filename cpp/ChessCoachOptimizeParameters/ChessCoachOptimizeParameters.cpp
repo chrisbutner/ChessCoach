@@ -1,6 +1,7 @@
 #include <thread>
 
 #include <ChessCoach/ChessCoach.h>
+#include <ChessCoach/SelfPlay.h>
 
 class ChessCoachOptimizeParameters : public ChessCoach
 {
@@ -40,7 +41,11 @@ void ChessCoachOptimizeParameters::FinalizeLight()
 
 void ChessCoachOptimizeParameters::Run()
 {
+    // Prepare to run strength tests to evaluate parameters. Use the UCI network.
+    std::unique_ptr<INetwork> network(CreateNetwork(Config::UciNetwork));
+    SelfPlayWorker worker(Config::UciNetwork, nullptr /* storage */);
+    InitializePythonModule(nullptr /* storage */, &worker, network.get());
+
     // Call in to Python.
-    std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
     network->OptimizeParameters();
 }

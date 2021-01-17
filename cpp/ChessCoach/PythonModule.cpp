@@ -12,6 +12,7 @@ PyMethodDef PythonModule::ChessCoachMethods[] = {
     { "load_chunk",  PythonModule::LoadChunk, METH_VARARGS, nullptr },
     { "load_game",  PythonModule::LoadGame, METH_VARARGS, nullptr },
     { "load_position",  PythonModule::LoadPosition, METH_VARARGS, nullptr },
+    { "evaluate_parameters",  PythonModule::EvaluateParameters, METH_VARARGS, nullptr },
     { nullptr, nullptr, 0, nullptr }
 };
 
@@ -31,12 +32,6 @@ PyObject* PythonModule::PyInit_ChessCoachModule()
     return PyModule_Create(&ChessCoachModule);
 }
 
-PythonModule::PythonModule()
-    : _storage(Config::UciNetwork, Config::Misc)
-{
-}
-
-// Storage has to be initialized after Stockfish, so do it here on first access.
 PythonModule& PythonModule::Instance()
 {
     static PythonModule instance;
@@ -83,7 +78,8 @@ PyObject* PythonModule::LoadGame(PyObject* self, PyObject* args)
     {
         NonPythonContext context;
 
-        Instance()._storage.LoadGameFromChunk(Instance()._chunkContents, gameInChunk, &Instance()._game);
+        assert(Instance().Storage);
+        Instance().Storage->LoadGameFromChunk(Instance()._chunkContents, gameInChunk, &Instance()._game);
 
         Pgn::GeneratePgn(pgn, Instance()._game);
     }
@@ -174,5 +170,63 @@ PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
     Py_DECREF(pythonFroms);
     Py_DECREF(pythonTos);
     Py_DECREF(pythonPolicyValues);
+    return pythonTuple;
+}
+
+PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
+{
+    (void)self;
+    PyObject* pythonNames;
+    PyObject* pythonValues;
+    std::vector<std::string> names;
+    std::vector<float> values;
+
+    if (!PyArg_UnpackTuple(args, "evaluate_parameters", 2, 2, &pythonNames, &pythonValues) ||
+        !pythonNames ||
+        !pythonValues ||
+        !PyList_Check(pythonNames) ||
+        !PyList_Check(pythonValues))
+    {
+        PyErr_SetString(PyExc_TypeError, "Expected 2 args: names, values");
+        return nullptr;
+    }
+
+    const Py_ssize_t size = PyList_Size(pythonNames);
+    names.resize(size);
+    values.resize(size);
+    for (int i = 0; i < size; i++)
+    {
+        names[i] = PyBytes_AsString(PyList_GetItem(pythonNames, i));
+        values[i] = static_cast<float>(PyFloat_AsDouble(PyList_GetItem(pythonValues, i)));
+    }
+
+    double evaluationScore;
+    double evaluationError;
+    {
+        NonPythonContext context;
+
+        // TODO: Apply params
+
+        // Use the faster student network, matching UCI.
+        assert(Instance().Worker);
+        assert(Instance().Network);
+        const std::filesystem::path epdPath = (Platform::InstallationDataPath() / "StrengthTests" / Config::Misc.Optimization_Epd);
+        auto [score, total, positions, totalNodesRequired] = Instance().Worker->StrengthTestEpd(
+            Instance().Network, NetworkType_Student, epdPath, 0 /* moveTimeMs */, Config::Misc.Optimization_Nodes,
+            Config::Misc.Optimization_FailureNodes, Config::Misc.Optimization_PositionLimit, nullptr /* progress */);
+
+        // Wild guess at error for now: too expensive to run multiple samples.
+        evaluationScore = totalNodesRequired;
+        evaluationError = 0.0001 * Config::Misc.Optimization_FailureNodes * Config::Misc.Optimization_PositionLimit;
+    }
+
+    PyObject* pythonScore = PyFloat_FromDouble(evaluationScore);
+    PyObject* pythonError = PyFloat_FromDouble(evaluationError);
+
+    // Pack and return a 2-tuple.
+    PyObject* pythonTuple = PyTuple_Pack(2, pythonScore, pythonError);
+    PythonNetwork::PyAssert(pythonTuple);
+    Py_DECREF(pythonScore);
+    Py_DECREF(pythonError);
     return pythonTuple;
 }

@@ -1,9 +1,8 @@
+Parameter optimization
+- wire up overridable params
+- build and test on linux
+
 PUCT
-- write parameter optimization harness
-	- some kind of CLOP or bayesian optimization
-	- configurable target, e.g. STS, Arasan21, subset of EPD, etc.
-	- configurable metric; may want score, but may want nodes-required/or-N-if-failed, not sure yet
-	- configurable budget, per-test (e.g. nodes), overall (number of tests)
 - try hard exhaustive term (e.g. 1 per child after N visits)
 - try catch up on unpropagated value when returning via AZPUCT
 - try value stddev
@@ -13,6 +12,9 @@ PUCT
 - try integrate trained criticality back in
 - CPU-optimize: e.g. can calculate global exploration factor much less often, much more required with new terms
 - need long long search time parameter optimization for 1.25+ constant, e.g. applying similar to new terms
+
+Quality
+- policy target pruning - do while saving statistics, rather than in-place? - affects PUCT of next position
 
 Mate term
 - try eliminate mate term, force value() for proved mate/opponent mate

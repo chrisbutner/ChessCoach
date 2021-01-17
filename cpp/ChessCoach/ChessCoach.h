@@ -3,6 +3,9 @@
 
 #include "Network.h"
 
+class Storage;
+class SelfPlayWorker;
+
 class ChessCoach
 {
 public:
@@ -19,6 +22,7 @@ protected:
     void InitializeStockfish();
     void InitializeChessCoach();
     void InitializePredictionCache();
+    void InitializePythonModule(Storage* storage, SelfPlayWorker* worker, INetwork* network);
 
     void FinalizePython();
     void FinalizeStockfish();

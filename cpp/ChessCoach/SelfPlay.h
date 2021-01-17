@@ -174,10 +174,18 @@ public:
     float prior;
     int visitCount;
     float valueSum;
+    float valueWeight;
     TerminalValue terminalValue;
+    // 4 bytes implicit padding
 };
 static_assert(sizeof(TerminalValue) == 8);
-static_assert(sizeof(Node) == 48);
+static_assert(sizeof(Node) == 56); // 52=56
+
+struct WeightedNode
+{
+    Node* node;
+    float weight;
+};
 
 enum class SelfPlayState
 {
@@ -251,7 +259,7 @@ public:
 
     Node* Root() const;
     float Result() const;
-    
+
     bool TryHard() const;
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
@@ -329,19 +337,19 @@ public:
     void SaveToStorageAndLog(INetwork* network, int index);
     void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
     Node* RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-        std::vector<Node*>& searchPath, PredictionCacheChunk*& cacheStore);
+        std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     Node* SelectMove(const SelfPlayGame& game) const;
     template <bool ForcePlayouts>
-    Node* SelectChild(Node* node) const;
+    WeightedNode SelectChild(Node* node) const;
     template <bool ForcePlayouts>
-    float CalculateUcbScore(const Node* parent, const Node* child) const;
-    float CalculateUcbScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const;
+    std::pair<float, float> CalculatePuctScore(const Node* parent, const Node* child) const;
+    float CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const;
     void PrunePolicyTarget(Node* root) const;
-    void Backpropagate(const std::vector<Node*>& searchPath, float value);
-    void BackpropagateMate(const std::vector<Node*>& searchPath);
-    void FixPrincipleVariation(const std::vector<Node*>& searchPath, Node* node);
-    void UpdatePrincipleVariation(const std::vector<Node*>& searchPath);
+    void Backpropagate(std::vector<WeightedNode>& searchPath, float value);
+    void BackpropagateMate(const std::vector<WeightedNode>& searchPath);
+    void FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* node);
+    void UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath);
     void ValidatePrincipleVariation(const Node* root);
     bool WorseThan(const Node* lhs, const Node* rhs) const;
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
@@ -360,7 +368,8 @@ public:
     void WaitUntilReady();
 
     void StrengthTest(INetwork* network, NetworkType networkType, int step);
-    std::tuple<int, int, int> StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs,
+    std::tuple<int, int, int, int> StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath,
+        int moveTimeMs, int nodes, int failureNodes, int positionLimit,
         std::function<void(const std::string&, const std::string&, const std::string&, int, int)> progress);
 
 private:
@@ -376,8 +385,8 @@ private:
     void SearchPlay(int mctsParallelism);
     void CommentOnPosition(INetwork* network);
 
-    std::pair<Move, int> StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs);
-    int JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move);
+    std::tuple<Move, int, int> StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes);
+    std::pair<int, int> JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes);
 
 private:
 
@@ -395,7 +404,7 @@ private:
     std::vector<SelfPlayGame> _scratchGames;
     std::vector<std::chrono::time_point<std::chrono::high_resolution_clock>> _gameStarts;
     std::vector<int> _mctsSimulations;
-    std::vector<std::vector<Node*>> _searchPaths;
+    std::vector<std::vector<WeightedNode>> _searchPaths;
     std::vector<PredictionCacheChunk*> _cacheStores;
 
     SearchConfig _searchConfig;

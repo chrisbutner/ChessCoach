@@ -447,7 +447,7 @@ def debug_decompress(result, image_pieces_auxiliary, policy_row_lengths, policy_
 
 def optimize_parameters():
   import optimization
-  optimization.Session().run()
+  optimization.Session(config).run()
 
 # --- Initialize ---
 

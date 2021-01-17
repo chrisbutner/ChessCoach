@@ -144,6 +144,7 @@ Node::Node(uint16_t setMove, float setPrior)
     , prior(setPrior)
     , visitCount(0)
     , valueSum(0.f)
+    , valueWeight(0.f)
     , terminalValue{}
 {
     assert(!std::isnan(setPrior));
@@ -202,20 +203,16 @@ bool Node::IsExpanded() const
 float Node::Value() const
 {
     // First-play urgency (FPU) is zero, a loss.
-    if (visitCount <= 0)
+    if (valueWeight == 0)
     {
         return CHESSCOACH_VALUE_LOSS;
     }
 
-    return (valueSum / (visitCount + (visitingCount * 0.25f)));
+    return (valueSum / (valueWeight + (visitingCount * 0.25f)));
 }
 
 void Node::AdjustVisitCount(int newVisitCount)
 {
-    if (visitCount > 0)
-    {
-        valueSum *= (static_cast<float>(newVisitCount) / visitCount);
-    }
     visitCount = newVisitCount;
 }
 
@@ -807,7 +804,7 @@ void SelfPlayWorker::ClearGame(int index)
     _states[index] = SelfPlayState::Working;
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
     _mctsSimulations[index] = 0;
-    for (Node* node : _searchPaths[index])
+    for (auto [node, weight] : _searchPaths[index])
     {
         // We may be reusing an existing search tree when resuming a UCI search for a compatible position
         // that previously stopped while waiting on a network prediction, whether by time control or command.
@@ -946,7 +943,8 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
         }
 
         std::cout << "Testing " << entry.path().filename() << "..." << std::endl;
-        const auto [score, total, positions] = StrengthTestEpd(network, networkType, entry.path(), moveTimeMs, nullptr /* progress */);
+        const auto [score, total, positions, totalNodesRequired] = StrengthTestEpd(network, networkType, entry.path(),
+            moveTimeMs, 0 /* nodes */, 0 /* failureNodes */, 0 /* positionLimit */, nullptr /* progress */);
         testResults[testName] = score;
         testPositions[testName] = positions;
     }
@@ -971,13 +969,15 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
     network->LogScalars(networkType, step, names, values.data());
 }
 
-// Returns (score, total, positions).
-std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs,
+// Returns (score, total, positions, totalNodesRequired).
+std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath,
+    int moveTimeMs, int nodes, int failureNodes, int positionLimit,
     std::function<void(const std::string&, const std::string&, const std::string&, int, int)> progress)
 {
     int score = 0;
     int total = 0;
     int positions = 0;
+    int totalNodesRequired = 0;
 
     // Make sure that the prediction cache is clear, for consistent results.
     PredictionCache::Instance.Clear();
@@ -988,12 +988,19 @@ std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, Net
     const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
     positions = static_cast<int>(specs.size());
 
-    for (const StrengthTestSpec& spec : specs)
+    for (int i = 0; i < positions; i++)
     {
-        const auto [move, points] = StrengthTestPosition(network, networkType, spec, moveTimeMs);
+        if ((positionLimit > 0) && (i >= positionLimit))
+        {
+            break;
+        }
+
+        const StrengthTestSpec& spec = specs[i];
+        const auto [move, points, nodesRequired] = StrengthTestPosition(network, networkType, spec, moveTimeMs, nodes, failureNodes);
         const int available = (spec.points.empty() ? 1 : *std::max_element(spec.points.begin(), spec.points.end()));
         score += points;
         total += available;
+        totalNodesRequired += nodesRequired;
 
         if (progress)
         {
@@ -1007,12 +1014,17 @@ std::tuple<int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, Net
     // Clean up after ourselves, e.g. for self-play during training rotations.
     PredictionCache::Instance.Clear();
 
-    return std::tuple(score, total, positions);
+    if (failureNodes == 0)
+    {
+        totalNodesRequired = 0;
+    }
+
+    return { score, total, positions, totalNodesRequired };
 }
 
 // For best-move tests returns 1 if correct or 0 if incorrect.
 // For points/alternative tests returns N points or 0 if incorrect.
-std::pair<Move, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs)
+std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes)
 {
     // Set up the position.
     _games[0].PruneAll();
@@ -1021,6 +1033,7 @@ std::pair<Move, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, Net
     // Set up search and time control.
     TimeControl timeControl = {};
     timeControl.moveTimeMs = moveTimeMs;
+    timeControl.nodes = nodes;
 
     _searchState.searching = true;
     _searchState.gui = false;
@@ -1037,11 +1050,24 @@ std::pair<Move, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, Net
     SearchInitialize(mctsParallelism);
 
     // Run the search.
+    Move lastBestMove = MOVE_NONE;
+    int lastBestNodes = 0;
     while (_searchState.searching)
     {
         // Use the specified network type for predictions.
         SearchPlay(mctsParallelism);
         network->PredictBatch(networkType, mctsParallelism, _images.data(), _values.data(), _policies.data());
+
+        if (_searchState.principleVariationChanged)
+        {
+            Move newBest = Move(SelectMove(_games[0])->move);
+            if (newBest != lastBestMove)
+            {
+                lastBestMove = newBest;
+                lastBestNodes = _searchState.nodeCount;
+            }
+            _searchState.principleVariationChanged = false;
+        }
 
         // TODO: Only check every N times
         CheckTimeControl();
@@ -1050,15 +1076,15 @@ std::pair<Move, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, Net
     // Pick a best move and judge points.
     const Node* best = SelectMove(_games[0]);
     const Move bestMove = Move(best->move);
-    const int points = JudgeStrengthTestPosition(spec, bestMove);
+    const auto [points, nodesRequired] = JudgeStrengthTestPosition(spec, bestMove, lastBestNodes, failureNodes);
 
     // Free nodes after strength testing (especially for the final position, for which there's no following PruneAll/SetUpGame).
     _games[0].PruneAll();
 
-    return { bestMove, points };
+    return { bestMove, points, nodesRequired };
 }
 
-int SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move)
+std::pair<int, int> SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes)
 {
     assert(spec.pointSans.empty() ^ spec.avoidSans.empty());
     assert(spec.pointSans.size() == spec.points.size());
@@ -1069,25 +1095,27 @@ int SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move
         assert(avoid != MOVE_NONE);
         if (avoid == move)
         {
-            return 0;
+            return { 0, failureNodes };
         }
     }
 
+    const int bestPoints = *std::max_element(spec.points.begin(), spec.points.end());
     for (int i = 0; i < spec.pointSans.size(); i++)
     {
         const Move bestOrAlternative = _games[0].ParseSan(spec.pointSans[i]);
         assert(bestOrAlternative != MOVE_NONE);
         if (bestOrAlternative == move)
         {
-            return spec.points[i];
+            return { spec.points[i], (spec.points[i] == bestPoints) ? lastBestNodes : failureNodes };
         }
     }
 
     if (spec.pointSans.empty() && !spec.avoidSans.empty())
     {
-        return 1;
+        // There's no granular node information for avoid-move (am) positions.
+        return { 1, 0 };
     }
-    return 0;
+    return { 0, failureNodes };
 }
 
 void SelfPlayWorker::Play(int index)
@@ -1147,7 +1175,7 @@ void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* /
 }
 
 Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
-    std::vector<Node*>& searchPath, PredictionCacheChunk*& cacheStore)
+    std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore)
 {
     // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
     // We need to break out and check for PV changes, search stopping, etc. However, need to keep number
@@ -1175,23 +1203,23 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             scratchGame = game;
             assert(searchPath.empty());
             searchPath.clear();
-            searchPath.push_back(scratchGame.Root());
+            searchPath.push_back({ scratchGame.Root(), 1.f });
             scratchGame.Root()->visitingCount++;
 
             while (scratchGame.Root()->IsExpanded())
             {
                 // Force playouts during training only, at the root only.
                 const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
-                Node* selected = forcePlayouts ?
+                WeightedNode selected = forcePlayouts ?
                     SelectChild<true>(scratchGame.Root()) :
                     SelectChild<false>(scratchGame.Root());
 
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration, just fix up visitingCounts.
-                if (!selected)
+                if (!selected.node)
                 {
                     assert(game.TryHard());
-                    for (Node* node : searchPath)
+                    for (auto [node, weight] : searchPath)
                     {
                         node->visitingCount--;
                     }
@@ -1200,9 +1228,9 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                     return nullptr;
                 }
 
-                scratchGame.ApplyMoveWithRoot(Move(selected->move), selected);
+                scratchGame.ApplyMoveWithRoot(Move(selected.node->move), selected.node);
                 searchPath.push_back(selected /* == scratchGame.Root() */);
-                selected->visitingCount++;
+                selected.node->visitingCount++;
             }
         }
 
@@ -1221,14 +1249,11 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // (e.g. prediction cache hit) or no children possible (terminal node).
         scratchGame.Root()->expanding = false;
 
-        // The value we get is from the final node of the scratch game (could be WHITE or BLACK),
-        // from its parent's perspective, and we start applying it at the current position of
-        // the actual game (could again be WHITE or BLACK), again from its parent's perspective,
-        // so flip it if they differ (the ^). This seems a little strange for the root node, because
+        // The value we get is from the final node of the scratch game from its parent's perspective,
+        // so start applying it there and work backwards. This seems a little strange for the root node, because
         // it doesn't really have a parent in the game, but you can still consider the flipped value
         // as the side-to-play's broad evaluation of the position.
         assert(!std::isnan(value));
-        value = SelfPlayGame::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), value);
         Backpropagate(searchPath, value);
         _searchState.nodeCount++;
 
@@ -1253,6 +1278,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             assert(searchPath.size() == 1);
             game.Root()->visitCount = 0;
             game.Root()->valueSum = 0.f;
+            game.Root()->valueWeight = 0.f;
 
             // Add exploration noise if not searching.
             if (!game.TryHard())
@@ -1320,30 +1346,42 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game) const
 // It's possible because of nodes marked off-limits via "expanding"
 // that this method cannot select a child, instead returning NONE/nullptr.
 template <bool ForcePlayouts>
-Node* SelfPlayWorker::SelectChild(Node* parent) const
+WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
 {
-    float maxUcbScore = -std::numeric_limits<float>::infinity();
-    Node* max = nullptr;
+    float maxAzPuct = -std::numeric_limits<float>::infinity();
+    float maxSblePuct = -std::numeric_limits<float>::infinity();
+    Node* maxAz = nullptr;
+    Node* maxSble = nullptr;
     for (Node& child : *parent)
     {
         if (!child.expanding)
         {
-            const float ucbScore = CalculateUcbScore<ForcePlayouts>(parent, &child);
-            if (ucbScore > maxUcbScore)
+            const auto [azPuct, sblePuct] = CalculatePuctScore<ForcePlayouts>(parent, &child);
+            if (azPuct > maxAzPuct)
             {
-                maxUcbScore = ucbScore;
-                max = &child;
+                maxAzPuct = azPuct;
+                maxAz = &child;
+            }
+            if (sblePuct > maxSblePuct)
+            {
+                maxSblePuct = sblePuct;
+                maxSble = &child;
             }
         }
     }
-    return max;
-}
-template Node* SelfPlayWorker::SelectChild<true>(Node* parent) const;
-template Node* SelfPlayWorker::SelectChild<false>(Node* parent) const;
 
-// TODO: Profile, see if significant, whether vectorizing is viable/worth it
+    // Select child using max(SBLE-PUCT), but only backpropagate value if it matches max(AZ-PUCT).
+    const float weight = (maxAz == maxSble) ? 1.f : 0.f;
+    return { maxSble, weight };
+}
+template WeightedNode SelfPlayWorker::SelectChild<true>(Node* parent) const;
+template WeightedNode SelfPlayWorker::SelectChild<false>(Node* parent) const;
+
+// Returns { AZ-PUCT, SBLE-PUCT }.
+// AZ-PUCT is the AlphaZero Predictor-Upper Confidence bound applied to Trees (with a mate-term modification).
+// SBLE-PUCT is the Selective-Backpropagation, Linear Exploration, Predictor-Upper Confidence bound applied to Trees.
 template <bool ForcePlayouts>
-float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) const
+std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, const Node* child) const
 {
     const int parentVirtualExploration = (parent->visitCount + parent->visitingCount);
     const int childVirtualExploration = (child->visitCount + child->visitingCount);
@@ -1353,7 +1391,7 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     if (ForcePlayouts &&
         (childVirtualExploration < static_cast<int>(::sqrtf(2.f * child->prior * parentVirtualExploration))))
     {
-        return std::numeric_limits<float>::infinity();
+        return { std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity() };
     }
 
     // Calculate the exploration rate, which is multiplied by (a) the prior to incentivize exploration,
@@ -1371,15 +1409,22 @@ float SelfPlayWorker::CalculateUcbScore(const Node* parent, const Node* child) c
     // (b) mate-in-N score
     const float mateScore = child->terminalValue.MateScore(explorationRate);
 
-    return (child->Value() + priorScore + mateScore);
-}
-template float SelfPlayWorker::CalculateUcbScore<true>(const Node* parent, const Node* child) const;
-template float SelfPlayWorker::CalculateUcbScore<false>(const Node* parent, const Node* child) const;
+    // Calculate SBLE-PUCT terms.
+    // TODO: Work in progress
+    const float sublinear = std::pow(parentVirtualExplorationFloat, 0.75f) / (200.f * (childVirtualExplorationFloat + 1.f));
+    const float linear = parentVirtualExplorationFloat / (10000.f * (childVirtualExplorationFloat + 1.f));
 
-float SelfPlayWorker::CalculateUcbScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
+    const float azPuct = (child->Value() + priorScore + mateScore);
+    const float sblePuct = (azPuct + sublinear + linear);
+    return { azPuct, sblePuct };
+}
+template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<true>(const Node* parent, const Node* child) const;
+template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false>(const Node* parent, const Node* child) const;
+
+float SelfPlayWorker::CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
 {
     // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
-    return (CalculateUcbScore<false>(parent, child) - child->Value() + fixedValue);
+    return (CalculatePuctScore<false>(parent, child).first - child->Value() + fixedValue);
 }
 
 void SelfPlayWorker::PrunePolicyTarget(Node* root) const
@@ -1395,7 +1440,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
     }
 
     // Prune visits to other nodes based on UCB regret vs. the most-visited child.
-    const float bestScore = CalculateUcbScore<false>(root, best);
+    const float bestScore = CalculatePuctScore<false>(root, best).first;
     int rootPruneCount = 0;
     for (Node& child : *root)
     {
@@ -1408,7 +1453,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
         int pruneCount = 0;
         const int originalVisitCount = child.visitCount;
         const float fixedValue = child.Value();
-        while ((--child.visitCount >= 0) && (CalculateUcbScoreFixedValue(root, &child, fixedValue) < bestScore))
+        while ((--child.visitCount >= 0) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
         {
             pruneCount++;
         }
@@ -1424,19 +1469,24 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
     root->AdjustVisitCount(root->visitCount - rootPruneCount);
 }
 
-void SelfPlayWorker::Backpropagate(const std::vector<Node*>& searchPath, float value)
+void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value)
 {
     // Each ply has a different player, so flip each time.
-    for (Node* node : searchPath)
+    float weight = 1.f;
+    for (int i = static_cast<int>(searchPath.size()) - 1; i >= 0; i--)
     {
+        Node* node = searchPath[i].node;
         node->visitingCount--;
         node->visitCount++;
-        node->valueSum += value;
+        node->valueSum += weight * value;
+        node->valueWeight += weight;
         value = SelfPlayGame::FlipValue(value);
+
+        weight = std::min(weight, searchPath[i].weight);
     }
 }
 
-void SelfPlayWorker::BackpropagateMate(const std::vector<Node*>& searchPath)
+void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPath)
 {
     // To calculate mate values for the tree from scratch we'd need to follow two rules:
     // - If *any* children are a MateIn<N...M> then the parent is an OpponentMateIn<N> (prefer to mate faster).
@@ -1446,13 +1496,13 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<Node*>& searchPath)
     bool childIsMate = true;
     for (int i = static_cast<int>(searchPath.size()) - 2; i >= 0; i--)
     {
-        Node* parent = searchPath[i];
+        Node* parent = searchPath[i].node;
 
         if (childIsMate)
         {
             // The child in the searchPath just became a mate, or a faster mate.
             // Does this make the parent an opponent mate or faster opponent mate?
-            const Node* child = searchPath[i + 1];
+            const Node* child = searchPath[i + 1].node;
             const int8_t newMateN = child->terminalValue.MateN();
             assert(newMateN > 0);
             if (!parent->terminalValue.IsOpponentMateInN() ||
@@ -1469,7 +1519,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<Node*>& searchPath)
                     // It's tempting to try validate the principle variation after this fix, but we
                     // may still be waiting to update it after backpropagating visit counts and mates.
                     // This is only a local fix that ensures that the overall update will be valid.
-                    FixPrincipleVariation(searchPath, searchPath[grandparentIndex]);
+                    FixPrincipleVariation(searchPath, searchPath[grandparentIndex].node);
                 }
             }
             else
@@ -1502,7 +1552,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<Node*>& searchPath)
     }
 }
 
-void SelfPlayWorker::FixPrincipleVariation(const std::vector<Node*>& searchPath, Node* parent)
+void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* parent)
 {
     bool updatedBestChild = false;
     for (Node& child : *parent)
@@ -1519,12 +1569,12 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<Node*>& searchPath,
     {
         for (int i = 0; i < searchPath.size() - 1; i++)
         {
-            if (searchPath[i] == parent)
+            if (searchPath[i].node == parent)
             {
                 _searchState.principleVariationChanged = true;
                 break;
             }
-            if (searchPath[i]->bestChild != searchPath[i + 1])
+            if (searchPath[i].node->bestChild != searchPath[i + 1].node)
             {
                 break;
             }
@@ -1532,19 +1582,19 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<Node*>& searchPath,
     }
 }
 
-void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<Node*>& searchPath)
+void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath)
 {
     bool isPrincipleVariation = true;
     for (int i = 0; i < searchPath.size() - 1; i++)
     {
-        if (WorseThan(searchPath[i]->bestChild, searchPath[i + 1]))
+        if (WorseThan(searchPath[i].node->bestChild, searchPath[i + 1].node))
         {
-            searchPath[i]->bestChild = searchPath[i + 1];
+            searchPath[i].node->bestChild = searchPath[i + 1].node;
             _searchState.principleVariationChanged |= isPrincipleVariation;
         }
         else
         {
-            isPrincipleVariation &= (searchPath[i]->bestChild == searchPath[i + 1]);
+            isPrincipleVariation &= (searchPath[i].node->bestChild == searchPath[i + 1].node);
         }
     }
 }
@@ -1898,9 +1948,9 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             targets.push_back(static_cast<float>(child.visitCount) / game.Root()->visitCount);
             priors.push_back(child.prior);
             values.push_back(child.Value());
-            ucb.push_back(CalculateUcbScore<false>(game.Root(), &child));
+            ucb.push_back(CalculatePuctScore<false>(game.Root(), &child).first);
             visits.push_back(child.visitCount);
-            weights.push_back(0);
+            weights.push_back(static_cast<int>(child.valueWeight));
         }
 
         network->UpdateGui(fen, _searchState.nodeCount, evaluation.str(), principleVariation.str(),

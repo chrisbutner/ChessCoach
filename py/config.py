@@ -46,6 +46,7 @@ class Config:
     self.misc = {
       "paths": config["paths"],
       "storage": config["storage"],
+      "optimization": config["optimization"],
     }
 
     # Root all paths.
@@ -75,12 +76,13 @@ class Config:
 
   def make_dir_path(self, path):
     path = self.make_path(path)
+    self.make_dirs(path)
+    return path
 
+  def make_dirs(self, path):
     # Create directories (unless they're on gcloud storage).
     if not self.is_tpu:
       os.makedirs(path, exist_ok=True)
-
-    return path
 
   def make_path(self, path):
     # These need to be backslashes on Windows for TensorFlow's recursive creation code (tf.summary.create_file_writer).

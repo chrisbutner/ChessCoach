@@ -189,6 +189,11 @@ MiscConfig ParseMisc(const TomlValue& config)
     misc.Paths_Pgns = toml::find<std::string>(config, "paths", "pgns");
     misc.Paths_StrengthTestMarkerPrefix = toml::find<std::string>(config, "paths", "strength_test_marker_prefix");
 
+    misc.Optimization_Epd = toml::find<std::string>(config, "optimization", "epd");
+    misc.Optimization_Nodes = toml::find<int>(config, "optimization", "nodes");
+    misc.Optimization_FailureNodes = toml::find<int>(config, "optimization", "failure_nodes");
+    misc.Optimization_PositionLimit = toml::find<int>(config, "optimization", "position_limit");
+
     return misc;
 }
 

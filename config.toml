@@ -282,6 +282,9 @@ root_exploration_fraction = 0.25
 exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
+sublinear_exploration_rate = 200
+linear_exploration_rate = 10_000
+
 network_update_check_interval_seconds = 300.0
 wait_for_updated_network = false
 
@@ -319,7 +322,22 @@ networks = "Networks"
 tensorboard = "TensorBoard"
 logs = "Logs"
 pgns = "Pgns"
+optimization = "Optimization"
 
 strength_test_marker_prefix = "StrengthTestComplete"
+
+[optimization]
+
+epd = "Arasan21.epd"
+nodes = 100_000
+failure_nodes = 10_000_000
+position_limit = 1
+log_interval = 10
+plot_interval = 10
+
+[optimization.parameters]
+
+sublinear_exploration_rate = "Real(1e-2, 1e6, prior=log-uniform)"
+linear_exploration_rate = "Real(1e-2, 1e6, prior=log-uniform)"
 
 ###############################################################################

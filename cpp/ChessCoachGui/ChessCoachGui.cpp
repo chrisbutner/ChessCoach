@@ -2,6 +2,7 @@
 
 #include <ChessCoach/ChessCoach.h>
 #include <ChessCoach/Platform.h>
+#include <ChessCoach/Storage.h>
 
 class ChessCoachGui : public ChessCoach
 {
@@ -46,6 +47,10 @@ void ChessCoachGui::FinalizeLight()
 
 void ChessCoachGui::Run()
 {
+    // Ready the PythonModule for incoming requests for position data.
+    Storage storage(Config::TrainingNetwork, Config::Misc);
+    InitializePythonModule(&storage, nullptr /* worker */, nullptr /* network */);
+
     // Call in to Python.
     std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
     network->LaunchGui("pull");

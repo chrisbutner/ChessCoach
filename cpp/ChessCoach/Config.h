@@ -143,6 +143,12 @@ struct MiscConfig
     std::string Paths_Logs;
     std::string Paths_Pgns;
     std::string Paths_StrengthTestMarkerPrefix;
+
+    // Optimization
+    std::string Optimization_Epd;
+    int Optimization_Nodes;
+    int Optimization_FailureNodes;
+    int Optimization_PositionLimit;
 };
 
 class Config

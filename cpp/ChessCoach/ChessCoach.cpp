@@ -121,6 +121,14 @@ void ChessCoach::InitializePredictionCache()
 {
     PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
+
+void ChessCoach::InitializePythonModule(Storage* storage, SelfPlayWorker* worker, INetwork* network)
+{
+    PythonModule::Instance().Storage = storage;
+    PythonModule::Instance().Worker = worker;
+    PythonModule::Instance().Network = network;
+}
+
 void ChessCoach::FinalizePython()
 {
     PyGILState_Ensure();
