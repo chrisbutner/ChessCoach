@@ -178,8 +178,7 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
     (void)self;
     PyObject* pythonNames;
     PyObject* pythonValues;
-    std::vector<std::string> names;
-    std::vector<float> values;
+    std::map<std::string, float> parameters;
 
     if (!PyArg_UnpackTuple(args, "evaluate_parameters", 2, 2, &pythonNames, &pythonValues) ||
         !pythonNames ||
@@ -192,12 +191,10 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
     }
 
     const Py_ssize_t size = PyList_Size(pythonNames);
-    names.resize(size);
-    values.resize(size);
     for (int i = 0; i < size; i++)
     {
-        names[i] = PyBytes_AsString(PyList_GetItem(pythonNames, i));
-        values[i] = static_cast<float>(PyFloat_AsDouble(PyList_GetItem(pythonValues, i)));
+        parameters[PyBytes_AsString(PyList_GetItem(pythonNames, i))] =
+            static_cast<float>(PyFloat_AsDouble(PyList_GetItem(pythonValues, i)));
     }
 
     double evaluationScore;
@@ -205,7 +202,8 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
     {
         NonPythonContext context;
 
-        // TODO: Apply params
+        // Propagate the provided parameters through Config and UCI search code.
+        Config::UpdateParameters(parameters);
 
         // Use the faster student network, matching UCI.
         assert(Instance().Worker);

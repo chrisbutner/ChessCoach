@@ -392,8 +392,6 @@ private:
 
     const NetworkConfig* _networkConfig;
     Storage* _storage;
-    float _explorationRateBase;
-    float _explorationRateInit;
 
     std::vector<SelfPlayState> _states;
     std::vector<INetwork::InputPlanes> _images;

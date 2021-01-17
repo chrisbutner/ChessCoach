@@ -1,5 +1,4 @@
 Parameter optimization
-- wire up overridable params
 - build and test on linux
 
 PUCT

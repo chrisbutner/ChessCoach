@@ -105,6 +105,19 @@ class Session:
     writer.write(data + "\n")
     writer.flush()
 
+  def log_config(self, writer):
+    config = self.config
+    self.log(writer, "################################################################################")
+    self.log(writer, "Starting parameter optimization")
+    self.log(writer, f'EPD: {config.misc["optimization"]["epd"]}')
+    self.log(writer, f'Nodes: {config.misc["optimization"]["nodes"]}')
+    self.log(writer, f'Failure nodes: {config.misc["optimization"]["failure_nodes"]}')
+    self.log(writer, f'Position limit: {config.misc["optimization"]["position_limit"]}')
+    self.log(writer, "Parameters:")
+    for name, definition in self.param_ranges.items():
+      self.log(writer, f"{name}: {definition}")
+    self.log(writer, "################################################################################")
+
   def evaluate(self, point_dict):
     names = list(n.encode("ascii") for n in point_dict.keys())
     values = list(point_dict.values())
@@ -117,6 +130,7 @@ class Session:
     self.config.make_dirs(self.output_path)
     log_path = self.config.join(self.output_path, "log.txt")
     with open(log_path, "w") as writer:
+      self.log_config(writer)
       optimizer = self.optimizer
       iteration = 1
       while True:

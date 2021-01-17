@@ -203,7 +203,7 @@ bool Node::IsExpanded() const
 float Node::Value() const
 {
     // First-play urgency (FPU) is zero, a loss.
-    if (valueWeight == 0)
+    if (valueWeight == 0.f)
     {
         return CHESSCOACH_VALUE_LOSS;
     }
@@ -701,8 +701,6 @@ Throttle SelfPlayWorker::PredictionCacheResetThrottle(300 * 1000 /* durationMill
 SelfPlayWorker::SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage)
     : _networkConfig(&networkConfig)
     , _storage(storage)
-    , _explorationRateBase(networkConfig.SelfPlay.ExplorationRateBase)
-    , _explorationRateInit(networkConfig.SelfPlay.ExplorationRateInit)
     , _states(networkConfig.SelfPlay.PredictionBatchSize)
     , _images(networkConfig.SelfPlay.PredictionBatchSize)
     , _values(networkConfig.SelfPlay.PredictionBatchSize)
@@ -1399,8 +1397,10 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     // Include "visitingCount" to help parallel searches diverge.
     const float parentVirtualExplorationFloat = static_cast<float>(parentVirtualExploration);
     const float childVirtualExplorationFloat = static_cast<float>(childVirtualExploration);
+    const float explorationRateBase = _networkConfig->SelfPlay.ExplorationRateBase;
+    const float explorationRateInit = _networkConfig->SelfPlay.ExplorationRateInit;
     const float explorationRate =
-        (::logf((parentVirtualExplorationFloat + _explorationRateBase + 1.f) / _explorationRateBase) + _explorationRateInit) *
+        (::logf((parentVirtualExplorationFloat + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
         ::sqrtf(parentVirtualExplorationFloat) / (childVirtualExplorationFloat + 1.f);
 
     // (a) prior score
@@ -1411,8 +1411,10 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
 
     // Calculate SBLE-PUCT terms.
     // TODO: Work in progress
-    const float sublinear = std::pow(parentVirtualExplorationFloat, 0.75f) / (200.f * (childVirtualExplorationFloat + 1.f));
-    const float linear = parentVirtualExplorationFloat / (10000.f * (childVirtualExplorationFloat + 1.f));
+    const float sublinearExplorationRate = _networkConfig->SelfPlay.SublinearExplorationRate;
+    const float linearExplorationRate = _networkConfig->SelfPlay.LinearExplorationRate;
+    const float sublinear = std::pow(parentVirtualExplorationFloat, 0.75f) / (sublinearExplorationRate * (childVirtualExplorationFloat + 1.f));
+    const float linear = parentVirtualExplorationFloat / (linearExplorationRate * (childVirtualExplorationFloat + 1.f));
 
     const float azPuct = (child->Value() + priorScore + mateScore);
     const float sblePuct = (azPuct + sublinear + linear);

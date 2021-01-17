@@ -282,8 +282,8 @@ root_exploration_fraction = 0.25
 exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
-sublinear_exploration_rate = 200
-linear_exploration_rate = 10_000
+sublinear_exploration_rate = 200.0
+linear_exploration_rate = 10_000.0
 
 network_update_check_interval_seconds = 300.0
 wait_for_updated_network = false
@@ -331,7 +331,7 @@ strength_test_marker_prefix = "StrengthTestComplete"
 epd = "Arasan21.epd"
 nodes = 100_000
 failure_nodes = 10_000_000
-position_limit = 1
+position_limit = 0
 log_interval = 10
 plot_interval = 10
 

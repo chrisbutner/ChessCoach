@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 #define SAMPLE_BATCH_FIXED 0
 
@@ -105,6 +106,9 @@ struct SelfPlayConfig
     float ExplorationRateBase;
     float ExplorationRateInit;
 
+    float SublinearExplorationRate;
+    float LinearExplorationRate;
+
     float NetworkUpdateCheckIntervalSeconds;
     bool WaitForUpdatedNetwork;
 };
@@ -159,6 +163,7 @@ public:
 
 public:
 
+    static NetworkConfig DefaultNetwork;
     static NetworkConfig TrainingNetwork;
     static NetworkConfig UciNetwork;
     static MiscConfig Misc;
@@ -166,6 +171,11 @@ public:
 public:
 
     static void Initialize();
+    static void UpdateParameters(const std::map<std::string, float>& parameters);
+
+private:
+
+    static void Parse(const std::map<std::string, float>& parameters);
 };
 
 #endif // _CONFIG_H_
