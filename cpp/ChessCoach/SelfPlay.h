@@ -370,7 +370,7 @@ public:
     void StrengthTest(INetwork* network, NetworkType networkType, int step);
     std::tuple<int, int, int, int> StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath,
         int moveTimeMs, int nodes, int failureNodes, int positionLimit,
-        std::function<void(const std::string&, const std::string&, const std::string&, int, int)> progress);
+        std::function<void(const std::string&, const std::string&, const std::string&, int, int, int)> progress);
 
 private:
 

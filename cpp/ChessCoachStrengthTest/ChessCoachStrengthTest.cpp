@@ -9,7 +9,8 @@ class ChessCoachStrengthTest : public ChessCoach
 {
 public:
 
-    ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs, float slopeArg, float interceptArg);
+    ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath,
+        int moveTimeMs, int nodes, int failureNodes, int positionLimit, float slopeArg, float interceptArg);
 
     void Initialize();
 
@@ -20,6 +21,9 @@ private:
     NetworkType _networkType;
     std::filesystem::path _epdPath;
     int _moveTimeMs;
+    int _nodes;
+    int _failureNodes;
+    int _positionLimit;
     float _slope;
     float _intercept;
 };
@@ -30,6 +34,9 @@ int main(int argc, char* argv[])
     NetworkType networkType = NetworkType_Count;
     std::string epdPath;
     int moveTimeMs;
+    int nodes;
+    int failureNodes;
+    int positionLimit;
     float slope;
     float intercept;
 
@@ -39,13 +46,19 @@ int main(int argc, char* argv[])
 
         TCLAP::ValueArg<std::string> networkArg("n", "network", "Network to test, teacher or student", false /* req */, "student", "string");
         TCLAP::ValueArg<std::string> epdArg("e", "epd", "Path to the .epd file to test", true /* req */, "", "string");
-        TCLAP::ValueArg<int> moveTimeArg("t", "movetime", "Move time per position (ms)", true /* req */, 0, "whole number");
+        TCLAP::ValueArg<int> moveTimeArg("t", "movetime", "Move time per position (ms)", false /* req */, 0, "whole number");
+        TCLAP::ValueArg<int> nodesArg("o", "nodes", "Nodes per position", false /* req */, 0, "whole number");
+        TCLAP::ValueArg<int> failureNodesArg("u", "failure", "Failure nodes per position", false /* req */, 0, "whole number");
+        TCLAP::ValueArg<int> positionLimitArg("l", "limit", "Number of positions in the EPD to run", false /* req */, 0, "whole number");
         TCLAP::ValueArg<float> slopeArg("s", "slope", "Slope for linear rating calculation based on score", false /* req */, 0.f, "decimal");
         TCLAP::ValueArg<float> interceptArg("i", "intercept", "Intercept for linear rating calculation based on score", false /* req */, 0.f, "decimal");
 
         // Usage/help seems to reverse this order.
         cmd.add(interceptArg);
         cmd.add(slopeArg);
+        cmd.add(positionLimitArg);
+        cmd.add(failureNodesArg);
+        cmd.add(nodesArg);
         cmd.add(moveTimeArg);
         cmd.add(epdArg);
         cmd.add(networkArg);
@@ -69,6 +82,9 @@ int main(int argc, char* argv[])
 
         epdPath = epdArg.getValue();
         moveTimeMs = moveTimeArg.getValue();
+        nodes = nodesArg.getValue();
+        failureNodes = failureNodesArg.getValue();
+        positionLimit = positionLimitArg.getValue();
         slope = slopeArg.getValue();
         intercept = interceptArg.getValue();
     }
@@ -78,7 +94,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    ChessCoachStrengthTest strengthTest(networkType, epdPath, moveTimeMs, slope, intercept);
+    ChessCoachStrengthTest strengthTest(networkType, epdPath, moveTimeMs, nodes, failureNodes, positionLimit, slope, intercept);
 
     strengthTest.PrintExceptions();
     strengthTest.Initialize();
@@ -90,10 +106,14 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-ChessCoachStrengthTest::ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath, int moveTimeMs, float slope, float intercept)
+ChessCoachStrengthTest::ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath,
+    int moveTimeMs, int nodes, int failureNodes, int positionLimit, float slope, float intercept)
     : _networkType(networkType)
     , _epdPath(epdPath)
     , _moveTimeMs(moveTimeMs)
+    , _nodes(nodes)
+    , _failureNodes(failureNodes)
+    , _positionLimit(positionLimit)
     , _slope(slope)
     , _intercept(intercept)
 {
@@ -112,9 +132,9 @@ void ChessCoachStrengthTest::Initialize()
     PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
 
-static void PrintProgress(const std::string& fen, const std::string& target, const std::string& chosen, int score, int total)
+static void PrintProgress(const std::string& fen, const std::string& target, const std::string& chosen, int score, int total, int nodeScore)
 {
-    std::cout << fen << ", " << target << ", " << chosen << ", " << score << ", " << total << std::endl;
+    std::cout << fen << ", " << target << ", " << chosen << ", " << score << ", " << total << ", " << nodeScore << std::endl;
 }
 
 void ChessCoachStrengthTest::StrengthTest()
@@ -125,17 +145,17 @@ void ChessCoachStrengthTest::StrengthTest()
     std::unique_ptr<INetwork> network(CreateNetwork(Config::UciNetwork));
     SelfPlayWorker worker(Config::UciNetwork, nullptr /* storage */);
 
-    std::cout << "Testing " << _epdPath.stem() << "...\n\nPosition, Target, Chosen, Score, Total" << std::endl;
+    std::cout << "Testing " << _epdPath.stem() << "...\n\nPosition, Target, Chosen, Score, Total, Nodes" << std::endl;
 
     const auto start = std::chrono::high_resolution_clock::now();
 
     const auto [score, total, positions, totalNodesRequired] = worker.StrengthTestEpd(network.get(), _networkType, _epdPath,
-        _moveTimeMs, 0 /* nodes */, 0 /* failureNodes */, 0 /* positionLimit */, PrintProgress);
+        _moveTimeMs, _nodes, _failureNodes, _positionLimit, PrintProgress);
 
-    const float secondsExpected = std::chrono::duration<float>(std::chrono::duration<float, std::milli>(_moveTimeMs * positions)).count();
     const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();
 
-    std::cout << "\nTested " << positions << " positions in " << secondsTaken << " seconds, expected " << secondsExpected << " seconds." << std::endl;
+    std::cout << "\nTested " << positions << " positions in " << secondsTaken << " seconds." << std::endl;
+    std::cout << "Nodes required: " << totalNodesRequired << std::endl;
     std::cout << "Score: " << score << " out of " << total << std::endl;
 
     // Use score/positions (not score/total) with slope and intercept to match STS.

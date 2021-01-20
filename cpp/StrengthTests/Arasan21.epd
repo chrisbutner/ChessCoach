@@ -167,7 +167,7 @@ r1br2k1/1p3pp1/p1nBp2p/q3n3/2P1N1P1/4Q3/3RB2P/5RK1 w - - bm g5; c0 "Jendrian-Gen
 2bq1b2/1p3k2/1r1p1p1p/pNpP1PpP/P1P3P1/6B1/1P5Q/2K1R3 w - - bm Re6; c0 "Vincent Lejeune, Hard 2016 beta 6 #22";
 r1b3Q1/pp1k4/4pqp1/2pp2N1/3n3P/P5P1/5PK1/R6R w - - bm h5; c0 "Deep Shredder 13 x64-Chiron 3.01 MP x64, SSDF 2016";
 7k/4r1p1/1p2P2p/P1p4q/1r5P/4Q1PB/4R2K/8 w - - bm a6; c0 "Komodo 1589.00 64-bit 8CPU-Stockfish 020316 64-bit 8CPU, G. Banks 2016";
-4r1k1/1ppr1p1p/1nnq2p1/p3pP2/5P2/3PP2Q/4B2P/B1R3RK w - - bm Rcf1 Re3; c0 "Andscacs 0.90-Deep Shredder 13, Andreas Strangmueller 2017";
+4r1k1/1ppr1p1p/1nnq2p1/p3pP2/5P2/3PP2Q/4B2P/B1R3RK w - - bm Rcf1; c0 "Andscacs 0.90-Deep Shredder 13, Andreas Strangmueller 2017";
 1r2kb1r/p5p1/1np1p1N1/3pPnB1/1p1P2B1/qP6/2PQ1P1P/1K1R3R b k - bm Nc4; c0 "Van Foreest-L'Ami, Dutch Chmp., Amsterdam 2017";
 8/6bk/8/p1pp1R1P/r7/2PN4/1P4KP/8 w - - bm Nxc5 Rxd5; c0 "Morozov-Kozlov, RCCA 20, fin (RUS) ICCF 2016";
 Q7/6pk/P2B4/1r3p2/3n3P/3q1P2/8/6RK b - - bm Rb1; c0 "Arasan-ipfreely, chessclub.com 2017";

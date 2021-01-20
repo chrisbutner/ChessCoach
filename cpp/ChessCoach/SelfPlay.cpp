@@ -970,7 +970,7 @@ void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, in
 // Returns (score, total, positions, totalNodesRequired).
 std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath,
     int moveTimeMs, int nodes, int failureNodes, int positionLimit,
-    std::function<void(const std::string&, const std::string&, const std::string&, int, int)> progress)
+    std::function<void(const std::string&, const std::string&, const std::string&, int, int, int)> progress)
 {
     int score = 0;
     int total = 0;
@@ -985,14 +985,13 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
 
     const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
     positions = static_cast<int>(specs.size());
+    if (positionLimit > 0)
+    {
+        positions = std::min(positions, positionLimit);
+    }
 
     for (int i = 0; i < positions; i++)
     {
-        if ((positionLimit > 0) && (i >= positionLimit))
-        {
-            break;
-        }
-
         const StrengthTestSpec& spec = specs[i];
         const auto [move, points, nodesRequired] = StrengthTestPosition(network, networkType, spec, moveTimeMs, nodes, failureNodes);
         const int available = (spec.points.empty() ? 1 : *std::max_element(spec.points.begin(), spec.points.end()));
@@ -1005,7 +1004,7 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
             // This target string is a bit of a minimal hack, not as general as scoring behavior.
             const std::string target = !spec.pointSans.empty() ? spec.pointSans.front() : ("avoid " + spec.avoidSans.front());
             const std::string chosen = Pgn::San(spec.fen, move, false /* showCheckmate */); // Assume no mate-in-ones.
-            progress(spec.fen, target, chosen, points, available);
+            progress(spec.fen, target, chosen, points, available, nodesRequired);
         }
     }
 
@@ -1097,14 +1096,14 @@ std::pair<int, int> SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTest
         }
     }
 
-    const int bestPoints = *std::max_element(spec.points.begin(), spec.points.end());
+    const auto bestPoints = std::max_element(spec.points.begin(), spec.points.end());
     for (int i = 0; i < spec.pointSans.size(); i++)
     {
         const Move bestOrAlternative = _games[0].ParseSan(spec.pointSans[i]);
         assert(bestOrAlternative != MOVE_NONE);
         if (bestOrAlternative == move)
         {
-            return { spec.points[i], (spec.points[i] == bestPoints) ? lastBestNodes : failureNodes };
+            return { spec.points[i], (spec.points[i] == *bestPoints) ? lastBestNodes : failureNodes };
         }
     }
 
