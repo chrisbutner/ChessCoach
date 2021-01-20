@@ -274,9 +274,9 @@ TEST(Mcts, MateProving)
     // Make ply2child0 a mate-in-1 (M1) and backpropagate.
     game->Root()->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { game->Root()},
-        { game->Root()->Child(Move(0)) },
-        { game->Root()->Child(Move(0))->Child(Move(0)) }});
+        { game->Root(), 1.f },
+        { game->Root()->Child(Move(0)), 1.f },
+        { game->Root()->Child(Move(0))->Child(Move(0)), 1.f }});
     CheckMateN(game->Root()->Child(Move(0))->Child(Move(0)), 1);
     CheckOpponentMateN(game->Root()->Child(Move(0)), 1);
     CheckNonTerminal(game->Root());
@@ -288,11 +288,11 @@ TEST(Mcts, MateProving)
     // Make ply2child5 a mate-in-2 (M2) and backpropagate.
     game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { game->Root()},
-        { game->Root()->Child(Move(1)) },
-        { game->Root()->Child(Move(1))->Child(Move(1)) },
-        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)) },
-        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)) }});
+        { game->Root(), 1.f },
+        { game->Root()->Child(Move(1)), 1.f },
+        { game->Root()->Child(Move(1))->Child(Move(1)), 1.f },
+        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)), 1.f },
+        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)), 1.f }});
     CheckMateN(game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)), 1);
     CheckOpponentMateN(game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)), 1);
     CheckMateN(game->Root()->Child(Move(1))->Child(Move(1)), 2);
@@ -303,13 +303,13 @@ TEST(Mcts, MateProving)
     // This should cause the root to get recognized as a mate-in-4 (M4).
     game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { game->Root()},
-        { game->Root()->Child(Move(2)) },
-        { game->Root()->Child(Move(2))->Child(Move(2)) },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0)) },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)) },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)) },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)) }});
+        { game->Root(), 1.f },
+        { game->Root()->Child(Move(2)), 1.f },
+        { game->Root()->Child(Move(2))->Child(Move(2)), 1.f },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0)), 1.f },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)), 1.f },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1.f },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1.f }});
     CheckMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1);
     CheckOpponentMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1);
     CheckMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)), 2);

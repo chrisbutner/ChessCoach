@@ -78,8 +78,8 @@ PyObject* PythonModule::LoadGame(PyObject* self, PyObject* args)
     {
         NonPythonContext context;
 
-        assert(Instance().Storage);
-        Instance().Storage->LoadGameFromChunk(Instance()._chunkContents, gameInChunk, &Instance()._game);
+        assert(Instance().storage);
+        Instance().storage->LoadGameFromChunk(Instance()._chunkContents, gameInChunk, &Instance()._game);
 
         Pgn::GeneratePgn(pgn, Instance()._game);
     }
@@ -205,11 +205,11 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
         Config::UpdateParameters(parameters);
 
         // Use the faster student network, matching UCI.
-        assert(Instance().Worker);
-        assert(Instance().Network);
+        assert(Instance().worker);
+        assert(Instance().network);
         const std::filesystem::path epdPath = (Platform::InstallationDataPath() / "StrengthTests" / Config::Misc.Optimization_Epd);
-        auto [score, total, positions, totalNodesRequired] = Instance().Worker->StrengthTestEpd(
-            Instance().Network, NetworkType_Student, epdPath, 0 /* moveTimeMs */, Config::Misc.Optimization_Nodes,
+        auto [score, total, positions, totalNodesRequired] = Instance().worker->StrengthTestEpd(
+            Instance().network, NetworkType_Student, epdPath, 0 /* moveTimeMs */, Config::Misc.Optimization_Nodes,
             Config::Misc.Optimization_FailureNodes, Config::Misc.Optimization_PositionLimit, nullptr /* progress */);
 
         evaluationScore = totalNodesRequired;

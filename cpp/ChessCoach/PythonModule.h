@@ -26,9 +26,9 @@ private:
 
 public:
 
-    SelfPlayWorker* Worker = nullptr;
-    INetwork* Network = nullptr;
-    Storage* Storage = nullptr;
+    SelfPlayWorker* worker = nullptr;
+    INetwork* network = nullptr;
+    Storage* storage = nullptr;
 
 private:
 

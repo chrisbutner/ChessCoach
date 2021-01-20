@@ -32,7 +32,9 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
         ASSERT_LT(patternIndex, 32);
         const float value = (patternIndex / 32.f);
         child->valueSum += (visitCount * value);
+        child->valueWeight += visitCount;
         game.Root()->valueSum += (visitCount * Game::FlipValue(value));
+        game.Root()->valueWeight += visitCount;
         ASSERT_GE(game.Root()->Value(), 0.f);
         ASSERT_LE(game.Root()->Value(), 1.f);
 

@@ -124,9 +124,9 @@ void ChessCoach::InitializePredictionCache()
 
 void ChessCoach::InitializePythonModule(Storage* storage, SelfPlayWorker* worker, INetwork* network)
 {
-    PythonModule::Instance().Storage = storage;
-    PythonModule::Instance().Worker = worker;
-    PythonModule::Instance().Network = network;
+    PythonModule::Instance().storage = storage;
+    PythonModule::Instance().worker = worker;
+    PythonModule::Instance().network = network;
 }
 
 void ChessCoach::FinalizePython()
