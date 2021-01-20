@@ -283,6 +283,7 @@ python_sources = [
   'py/layers.py',
   'py/model.py',
   'py/network.py',
+  'py/optimization.py',
   'py/training.py',
   'py/transformer.py',
   ]

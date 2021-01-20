@@ -1,5 +1,6 @@
 import numpy as np
 np.random.seed(1234)
+import os
 import time
 import numpy as np
 import re
@@ -20,9 +21,9 @@ class Session:
 
   def __init__(self, config):
     self.config = config
-    self.output_path = config.join(config.misc["paths"]["optimization"], time.strftime("%Y%m%d-%H%M%S"))
-    self.config.make_dirs(self.output_path)
-    self.writer = open(self.config.join(self.output_path, "log.txt"), "w")
+    self.local_output_path = config.join(config.make_local_path(config.misc["paths"]["optimization"]), time.strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(self.local_output_path, exist_ok=True)
+    self.writer = open(self.config.join(self.local_output_path, "log.txt"), "w")
     self.parameters = self.parse_parameters(config.misc["optimization"]["parameters"])
     self.optimizer = Optimizer(list(self.parameters.values()), n_initial_points=self.n_initial_points, acq_func="EI")
 
@@ -48,7 +49,7 @@ class Session:
       for j in range(len(ax[0])):
           ax[i, j].set_facecolor(self.plot_color)
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    full_plotpath = self.config.join(self.output_path, f"{timestr}-{iteration}.png")
+    full_plotpath = self.config.join(self.local_output_path, f"{timestr}-{iteration}.png")
     plt.gcf().patch.set_facecolor(self.plot_color)
     plt.savefig(full_plotpath, dpi=300, facecolor=self.plot_color, bbox_inches="tight")
 
@@ -62,6 +63,7 @@ class Session:
     config = self.config
     self.log("################################################################################")
     self.log("Starting parameter optimization")
+    self.log(f'Output path: {self.local_output_path}')
     self.log(f'EPD: {config.misc["optimization"]["epd"]}')
     self.log(f'Nodes: {config.misc["optimization"]["nodes"]}')
     self.log(f'Failure nodes: {config.misc["optimization"]["failure_nodes"]}')

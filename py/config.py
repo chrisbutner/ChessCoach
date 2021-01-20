@@ -66,24 +66,24 @@ class Config:
       bucket = self.misc["paths"]["gcloud_bucket"]
       prefix = self.misc["paths"]["gcloud_prefix"]
       self.gcloud_preamble = f"gs://{bucket}/"
-      data_root = f"{self.gcloud_preamble}{prefix}"
-    elif (platform.system() == "Windows"):
-      data_root = self.join(os.environ["localappdata"], "ChessCoach")
+      return f"{self.gcloud_preamble}{prefix}"
+    else:
+      return self.determine_local_data_root()
+
+  def determine_local_data_root(self):
+    if (platform.system() == "Windows"):
+      return self.join(os.environ["localappdata"], "ChessCoach")
     else:
       data_home = os.environ.get("XDG_DATA_HOME") or self.join(os.environ["HOME"], ".local/share")
-      data_root = self.join(data_home, "ChessCoach")
-    return data_root
+      return self.join(data_home, "ChessCoach")
 
   def make_dir_path(self, path):
     path = self.make_path(path)
-    self.make_dirs(path)
-    return path
-
-  def make_dirs(self, path):
     # Create directories (unless they're on gcloud storage).
     if not self.is_tpu:
       os.makedirs(path, exist_ok=True)
-
+    return path
+  
   def make_path(self, path):
     # These need to be backslashes on Windows for TensorFlow's recursive creation code (tf.summary.create_file_writer).
     if not self.is_tpu and (platform.system() == "Windows"):
@@ -97,6 +97,9 @@ class Config:
 
   def unmake_path(self, path):
     return self.path.relpath(path, self.data_root)
+
+  def make_local_path(self, path):
+    return self.join(self.determine_local_data_root(), self.unmake_path(path))
 
   def latest_network_path_for_type(self, network_name, network_type):
     glob = self.join(self.misc["paths"]["networks"], network_name + "_*", network_type)
