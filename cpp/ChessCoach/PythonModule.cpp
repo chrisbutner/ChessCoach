@@ -198,7 +198,6 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
     }
 
     double evaluationScore;
-    double evaluationError;
     {
         NonPythonContext context;
 
@@ -213,18 +212,9 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
             Instance().Network, NetworkType_Student, epdPath, 0 /* moveTimeMs */, Config::Misc.Optimization_Nodes,
             Config::Misc.Optimization_FailureNodes, Config::Misc.Optimization_PositionLimit, nullptr /* progress */);
 
-        // Wild guess at error for now: too expensive to run multiple samples.
         evaluationScore = totalNodesRequired;
-        evaluationError = 0.0001 * Config::Misc.Optimization_FailureNodes * Config::Misc.Optimization_PositionLimit;
     }
 
-    PyObject* pythonScore = PyFloat_FromDouble(evaluationScore);
-    PyObject* pythonError = PyFloat_FromDouble(evaluationError);
-
-    // Pack and return a 2-tuple.
-    PyObject* pythonTuple = PyTuple_Pack(2, pythonScore, pythonError);
-    PythonNetwork::PyAssert(pythonTuple);
-    Py_DECREF(pythonScore);
-    Py_DECREF(pythonError);
-    return pythonTuple;
+    // Return a scalar.
+    return PyFloat_FromDouble(evaluationScore);
 }

@@ -331,13 +331,13 @@ strength_test_marker_prefix = "StrengthTestComplete"
 epd = "Arasan21.epd"
 nodes = 100_000
 failure_nodes = 10_000_000
-position_limit = 0
+position_limit = 10
 log_interval = 10
 plot_interval = 10
 
 [optimization.parameters]
 
-sublinear_exploration_rate = "Real(1e-2, 1e6, prior=log-uniform)"
-linear_exploration_rate = "Real(1e-2, 1e6, prior=log-uniform)"
+sublinear_exploration_rate = '(1e1, 1e4, "log-uniform")'
+linear_exploration_rate = '(1e3, 1e6, "log-uniform")'
 
 ###############################################################################

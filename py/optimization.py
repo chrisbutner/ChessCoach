@@ -1,36 +1,13 @@
-# Apache Software License 2.0
-#
-# Copyright (c) 2020, Karlson Pfannschmidt
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-##############################################################################
-#
-# Modifications by Chris Butner, 2021.
-#
-# Based on https://github.com/kiudee/chess-tuning-tools/blob/master/tune/cli.py
-
+import numpy as np
+np.random.seed(1234)
 import time
 import numpy as np
-import skopt.space as skspace
-from skopt.utils import create_result
-from scipy.special import erfinv
+import re
+from ast import literal_eval
+from skopt import Optimizer
+from skopt import expected_minimum
 import matplotlib.pyplot as plt
-from bask.optimizer import Optimizer
-from tune.io import parse_ranges
-from tune.utils import expected_ucb
-from tune.summary import confidence_intervals
-from tune.plots import plot_objective
+from skopt.plots import plot_objective
 try:
   import chesscoach
 except:
@@ -38,113 +15,104 @@ except:
 
 class Session:
 
-  confidence_val = 0.9
-  confidence_mult = erfinv(confidence_val) * np.sqrt(2)
-  confidence_percent = confidence_val * 100.0
+  n_initial_points = 16
+  plot_color = "#36393f"
 
   def __init__(self, config):
     self.config = config
     self.output_path = config.join(config.misc["paths"]["optimization"], time.strftime("%Y%m%d-%H%M%S"))
-    self.param_ranges = parse_ranges(config.misc["optimization"]["parameters"])
-    self.optimizer = Optimizer(
-      dimensions=list(self.param_ranges.values()),
-      n_points=500,
-      n_initial_points=16,
-      gp_kwargs=dict(normalize_y=False, warp_inputs=True),
-      acq_func="mes",
-      acq_func_kwargs=dict(alpha="inf", n_thompson=20))
-    self.X = []
-    self.y = []
+    self.config.make_dirs(self.output_path)
+    self.writer = open(self.config.join(self.output_path, "log.txt"), "w")
+    self.parameters = self.parse_parameters(config.misc["optimization"]["parameters"])
+    self.optimizer = Optimizer(list(self.parameters.values()), n_initial_points=self.n_initial_points, acq_func="EI")
 
-  def burnt_in(self):
-    return self.optimizer.gp.chain_ is not None
+  def parse_parameters(self, parameters_raw):
+    return dict((name, literal_eval(definition)) for name, definition in parameters_raw.items())
 
-  def log_results(self, writer):
-    optimizer = self.optimizer
-    result_object = create_result(Xi=self.X, yi=self.y, space=optimizer.space, models=[optimizer.gp])
-    best_point, best_value = expected_ucb(result_object, alpha=0.0)
-    best_point_dict = dict(zip(self.param_ranges.keys(), best_point))
-    with optimizer.gp.noise_set_to_zero():
-      _, best_std = optimizer.gp.predict(
-          optimizer.space.transform([best_point]), return_std=True
-      )
-    self.log(writer, f"\nCurrent optimum: {best_point_dict}")
-    self.log(writer, f"Estimated score: {best_value} (lower is better)")
-    self.log(writer, f"{self.confidence_percent}% confidence interval of score: "
-      f"({np.around(best_value - self.confidence_mult * best_std, 4).item()}, "
-      f"{np.around(best_value + self.confidence_mult * best_std, 4).item()})")
-    confidence_out = confidence_intervals(
-      optimizer=optimizer,
-      param_names=list(self.param_ranges.keys()),
-      hdi_prob=self.confidence_val,
-      opt_samples=1000,
-      multimodal=False)
-    self.log(writer, f"{self.confidence_percent}% confidence intervals of parameters:\n{confidence_out}")
+  def burnt_in(self, result):
+    return len(result.x_iters) >= self.n_initial_points
 
-  def plot_results(self, iteration):
-    optimizer = self.optimizer
-    result_object = create_result(Xi=self.X, yi=self.y, space=optimizer.space, models=[optimizer.gp])
+  def log_results(self, result):
+    best_point = result.x
+    best_value = result.fun
+    best_point_dict = dict(zip(self.parameters.keys(), best_point))
+    expected_best_point, expected_best_value = expected_minimum(result)
+    expected_best_point_dict = dict(zip(self.parameters.keys(), expected_best_point))
+    self.log(f"Found best: {best_value} = {best_point_dict}")
+    self.log(f"Expected best: {expected_best_value} = {expected_best_point_dict}")
+
+  def plot_results(self, iteration, result):
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(
-        nrows=optimizer.space.n_dims,
-        ncols=optimizer.space.n_dims,
-        figsize=(3 * optimizer.space.n_dims, 3 * optimizer.space.n_dims),
-    )
-    fig.patch.set_facecolor("#36393f")
-    for i in range(optimizer.space.n_dims):
-        for j in range(optimizer.space.n_dims):
-            ax[i, j].set_facecolor("#36393f")
+    ax = plot_objective(result, dimensions=list(self.parameters.keys()))
+    for i in range(len(ax)):
+      for j in range(len(ax[0])):
+          ax[i, j].set_facecolor(self.plot_color)
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    plot_objective(result_object, dimensions=list(self.param_ranges.keys()), fig=fig, ax=ax)
     full_plotpath = self.config.join(self.output_path, f"{timestr}-{iteration}.png")
-    plt.savefig(full_plotpath, dpi=300, facecolor="#36393f")
-    plt.close(fig)
+    plt.gcf().patch.set_facecolor(self.plot_color)
+    plt.savefig(full_plotpath, dpi=300, facecolor=self.plot_color, bbox_inches="tight")
 
-  def log(self, writer, data):
+  def log(self, data):
     print(data)
+    writer = self.writer
     writer.write(data + "\n")
     writer.flush()
 
-  def log_config(self, writer):
+  def log_config(self):
     config = self.config
-    self.log(writer, "################################################################################")
-    self.log(writer, "Starting parameter optimization")
-    self.log(writer, f'EPD: {config.misc["optimization"]["epd"]}')
-    self.log(writer, f'Nodes: {config.misc["optimization"]["nodes"]}')
-    self.log(writer, f'Failure nodes: {config.misc["optimization"]["failure_nodes"]}')
-    self.log(writer, f'Position limit: {config.misc["optimization"]["position_limit"]}')
-    self.log(writer, "Parameters:")
-    for name, definition in self.param_ranges.items():
-      self.log(writer, f"{name}: {definition}")
-    self.log(writer, "################################################################################")
+    self.log("################################################################################")
+    self.log("Starting parameter optimization")
+    self.log(f'EPD: {config.misc["optimization"]["epd"]}')
+    self.log(f'Nodes: {config.misc["optimization"]["nodes"]}')
+    self.log(f'Failure nodes: {config.misc["optimization"]["failure_nodes"]}')
+    self.log(f'Position limit: {config.misc["optimization"]["position_limit"]}')
+    self.log("Parameters:")
+    for name, definition in self.parameters.items():
+      self.log(f"{name}: {definition}")
+    self.log("################################################################################")
 
   def evaluate(self, point_dict):
     names = list(n.encode("ascii") for n in point_dict.keys())
     values = list(point_dict.values())
     return chesscoach.evaluate_parameters(names, values)
 
-  # See for documentation:
-  # High-level tuning loop: https://chess-tuning-tools.readthedocs.io/
-  # Underlying Bayesian optimization: https://bayes-skopt.readthedocs.io/
+  def tell(self, iteration, point_dict, point, score):
+    optimizer = self.optimizer
+    self.log(f"{iteration}: {score} = {point_dict}")
+    while True:
+      try:
+        result = optimizer.tell(point, score)
+        break
+      except AttributeError:
+        # https://github.com/scikit-optimize/scikit-optimize/issues/981
+        pass
+    if self.burnt_in(result) and (iteration % self.config.misc["optimization"]["log_interval"] == 0):
+      self.log_results(result)
+    if self.burnt_in(result) and (optimizer.space.n_dims > 1) and (iteration % self.config.misc["optimization"]["plot_interval"] == 0):
+      self.plot_results(iteration, result)
+
+  def resume(self):
+    iteration = 1
+    log_path = None
+    if log_path:
+      self.log(f"Replaying data from {log_path}")
+      with open(log_path, "r") as reader:
+        for line in reader:
+          if line.startswith(f"{iteration}:"):
+            score, *point = [float(n) for n in re.findall(r"\d+.\d+", line)]
+            point_dict = dict(zip(self.parameters.keys(), point))
+            self.tell(iteration, point_dict, point, score)
+            iteration += 1
+    self.log("Starting")
+    return iteration
+
   def run(self):
-    self.config.make_dirs(self.output_path)
-    log_path = self.config.join(self.output_path, "log.txt")
-    with open(log_path, "w") as writer:
-      self.log_config(writer)
-      optimizer = self.optimizer
-      iteration = 1
-      while True:
-        point = optimizer.ask()
-        point_dict = dict(zip(self.param_ranges.keys(), point))
-        score, error = self.evaluate(point_dict)
-        self.log(writer, f"{iteration}: {score} = {point_dict}")
-        gp_burnin = 5 if self.burnt_in() else 100
-        gp_samples = 300
-        optimizer.tell(point, score, noise_vector=error, n_samples=1, gp_samples=gp_samples, gp_burnin=gp_burnin)
-        if self.burnt_in() and (iteration % self.config.misc["optimization"]["log_interval"] == 0):
-          self.log_results(writer)
-        if self.burnt_in() and (optimizer.space.n_dims > 1) and (iteration % self.config.misc["optimization"]["plot_interval"] == 0):
-          self.plot_results(iteration)
-        self.X.append(point)
-        self.y.append(score)
-        iteration += 1
+    optimizer = self.optimizer
+    self.log_config()
+    iteration = self.resume()
+    while True:
+      point = optimizer.ask()
+      point_dict = dict(zip(self.parameters.keys(), point))
+      score = self.evaluate(point_dict)
+      self.tell(iteration, point_dict, point, score)
+      iteration += 1
