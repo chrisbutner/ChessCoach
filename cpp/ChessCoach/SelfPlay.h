@@ -51,7 +51,7 @@ public:
 
     TerminalValue();
     TerminalValue(const int8_t value);
-    
+
     TerminalValue& operator=(const int8_t value);
     bool operator==(const int8_t other) const;
 
@@ -157,7 +157,7 @@ public:
     const_iterator cend() const;
 
     bool IsExpanded() const;
-    float Value() const;
+    float Value(const NetworkConfig* config) const;
     void AdjustVisitCount(int newVisitCount);
 
     Node* Child(Move match);
@@ -267,8 +267,8 @@ public:
     void Expand(int moveCount);
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
-    float CalculateMctsValue() const;
-    void StoreSearchStatistics();
+    float CalculateMctsValue(const NetworkConfig* config) const;
+    void StoreSearchStatistics(const NetworkConfig* config);
     void Complete();
     SavedGame Save() const;
     void PruneExcept(Node* root, Node*& except);

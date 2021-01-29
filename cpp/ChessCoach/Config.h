@@ -108,6 +108,9 @@ struct SelfPlayConfig
 
     float SublinearExplorationRate;
     float LinearExplorationRate;
+    float VirtualLossCoefficient;
+    float MovingAverageBuild;
+    float MovingAverageCap;
 
     float NetworkUpdateCheckIntervalSeconds;
     bool WaitForUpdatedNetwork;

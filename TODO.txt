@@ -1,22 +1,39 @@
-Parameter optimization
-- build and test on linux
+Next
+- try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
 
-PUCT
+PUCT - medium confidence
 - try hard exhaustive term (e.g. 1 per child after N visits)
-- try catch up on unpropagated value when returning via AZPUCT
 - try value stddev
 - try elimination
-- try softer backprop weights (e.g. help with 0.77 vs. 0.78 value example)
+- try softer backprop weights (e.g. help with 0.77 vs. 0.78 value example - although threshold with hard weights may still work there)
+- try only linear, no sublinear, in the interest of performance - may need to wait until other techniques go in, optimize together
+- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing
+
+PUCT - low confidence
+- try sufficiency threshold or minimum value delta
 - try use virtual loss only for selection PUCT, not for AZPUCT/backprop-check (lose a lot of backprops, probably not viable)
 - try integrate trained criticality back in
+
+PUCT - expensive/failed ideas
+- catch up on unpropagated value when returning via AZPUCT (+upSum, +upWeight)
+- regret-pruning (+upSum, +upWeight)
+- RAVE term, decaying with exploration (+amafSum, +amafWeight)
+
+PUCT - finishing
 - CPU-optimize: e.g. can calculate global exploration factor much less often, much more required with new terms
 - need long long search time parameter optimization for 1.25+ constant, e.g. applying similar to new terms
 
-Quality
+PUCT - training
+- see if anything helps 800 node range (i.e. optimize parameters with nodes=800), or 1600, etc.
+- if trained criticality can't help with search, look over extreme examples manually, see if it's worth driving 800-1600 range or something
+
+Quality (*** before any self-play ***)
 - policy target pruning - do while saving statistics, rather than in-place? - affects PUCT of next position
+- make sure that policy target pruning is still valid after weight, etc. changes
+- remove the training/uci network config separation, high chance for bugs with python always using training, can access statically in C++
 
 Mate term
-- try eliminate mate term, force value() for proved mate/opponent mate
+- already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
 	- read over notes from initial work there, check for pitfalls
 	- try to make mate-visiting stop wasting time, instantly push up to 2nd best
 		- complicated with multiple levels of visits
@@ -25,6 +42,8 @@ Mate term
 
 PUCT - later
 - try use saturation point of visits/ucb to extend 800 simulations or UCI time control if visits would exceed current best
+	- could this also be used earlier during search, backpropagate up a pending/bounty value via separate field to be replaced
+	  by actual backprops - set it up when saturation point would take from below 1st to 1st in visits
 
 PUCT questions
 - force AZPUCT in search path after first non-AZPUCT choice?
@@ -33,11 +52,6 @@ PUCT questions
 PUCT - 800 convergence
 - should we use 1.03 temperature at root (Wu)
 - should we use artificially increased band width (~virtual loss) in self-play games
-
-Criticality
-- think about training target for stddev
-	- since it's stddev as an error estimator, it could actually be non-consistent, just a way to speed up feedback cycle to better priors?
-	- but probably still better if consistent
 
 SE
 - (do more work on self-play only runs before evaluating SE again)
@@ -62,6 +76,7 @@ Student training
 - try low-hanging fruit on self-play network/data, e.g. higher learning rate
 
 Training improvements
+- add domain features (e.g. piece counts, fading king positions)
 - SE (lc0)
 	- try batchnorm/relu before SE since we have v2 residuals
 - SE-ish-as-bias (Wu)
@@ -114,6 +129,7 @@ Quality
 
 Commentary
 - try tf.text, see if 2.4.0 is supported on Windows or 2.4.1 needed (sub-word tokenization)
+- read up on "learning without forgetting"
 - try BERT/GPT-2, check out huggingface
 - better prediction code, top-k or w/e rather than greedy (not beam search, has issues)
 - bring back network.js cleanup from stashed fit() port
@@ -132,6 +148,7 @@ Cluster
 - validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
 UCI (#2)
+- tail Backpropagate into BackpropagateVisitsOnly
 - tune on GPU and TPU (methods below)
 - try to increase in-thread parallelism without sacrificing STS strength
 	- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
@@ -200,12 +217,11 @@ Revisit
 	- while not full hit rate should be higher? add some new metrics
 
 Bugs
+- Prediction cache collisions during single search UCI affecting value convergence (details in 1/28 notes)
 - Read-AV in game stateinfo cleanup when quitting UCI
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
-- Still may be a leak between multiple self-play rotations separated by training - doesn't require strength testing to repro
-	- Looks like it's actually the training code - need to investigate in Python
 - Rare ephemeral storage issue on cluster, might be core dumps
 - Tiny configs with self-play don't work now with minimum 2000 chunking
 - Tests need to set CHESSCOACH_SILENT before initializing python somehow (mostly for NetworkTest.cpp)

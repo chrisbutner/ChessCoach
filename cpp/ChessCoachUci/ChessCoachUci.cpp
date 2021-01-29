@@ -108,8 +108,6 @@ void ChessCoachUci::Initialize()
     InitializeStockfish();
     InitializeChessCoach();
 
-    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
-
     // UCI commands
     _commandHandlers.emplace_back("uci", std::bind(&ChessCoachUci::HandleUci, this, std::placeholders::_1));
     _commandHandlers.emplace_back("debug", std::bind(&ChessCoachUci::HandleDebug, this, std::placeholders::_1));
@@ -405,7 +403,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
             {
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << "," << child.prior
-                    << "," << child.Value()
+                    << "," << child.Value(&Config::UciNetwork)
                     << "," << _selfPlayWorker->CalculatePuctScore<false>(root, &child).first
                     << "," << child.visitCount
                     << "," << child.valueWeight
@@ -415,7 +413,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
             {
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << " prior=" << child.prior
-                    << " value=" << child.Value()
+                    << " value=" << child.Value(&Config::UciNetwork)
                     << " ucb=" << _selfPlayWorker->CalculatePuctScore<false>(root, &child).first
                     << " visits=" << child.visitCount
                     << " weight=" << child.valueWeight

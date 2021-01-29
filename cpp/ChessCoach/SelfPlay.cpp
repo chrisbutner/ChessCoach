@@ -200,15 +200,24 @@ bool Node::IsExpanded() const
     return (firstChild != nullptr);
 }
 
-float Node::Value() const
+float Node::Value(const NetworkConfig* config) const
 {
-    // First-play urgency (FPU) is zero, a loss.
+    // Return a win for a proved mate or loss for a proved opponent mate.
+    const int eitherMateN = terminalValue.EitherMateN();
+    const int mateSign = ((eitherMateN > 0) - (eitherMateN < 0));
+    if (mateSign != 0)
+    {
+        return INetwork::MapProbability11To01(static_cast<float>(mateSign));
+    }
+
+    // First-play urgency (FPU) is zero, a loss. Start with "valueSum" and "valueWeight" at zero.
     if (valueWeight == 0.f)
     {
         return CHESSCOACH_VALUE_LOSS;
     }
 
-    return (valueSum / (valueWeight + (visitingCount * 0.25f)));
+    const float virtualLossCount = (visitingCount * config->SelfPlay.VirtualLossCoefficient);
+    return valueSum * valueWeight / (valueWeight + virtualLossCount);
 }
 
 void Node::AdjustVisitCount(int newVisitCount)
@@ -597,13 +606,13 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
     }
 }
 
-float SelfPlayGame::CalculateMctsValue() const
+float SelfPlayGame::CalculateMctsValue(const NetworkConfig* config) const
 {
     // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
-    return FlipValue(_root->Value());
+    return FlipValue(_root->Value(config));
 }
 
-void SelfPlayGame::StoreSearchStatistics()
+void SelfPlayGame::StoreSearchStatistics(const NetworkConfig* config)
 {
     std::map<Move, float>& visits = _childVisits.emplace_back();
     const float sumChildVisits = static_cast<float>(_root->visitCount);
@@ -611,7 +620,7 @@ void SelfPlayGame::StoreSearchStatistics()
     {
         visits[Move(child.move)] = static_cast<float>(child.visitCount) / sumChildVisits;
     }
-    _mctsValues.push_back(CalculateMctsValue());
+    _mctsValues.push_back(CalculateMctsValue(config));
 }
 
 void SelfPlayGame::Complete()
@@ -1131,7 +1140,7 @@ void SelfPlayWorker::Play(int index)
 
         assert(selected != nullptr);
         PrunePolicyTarget(root);
-        game.StoreSearchStatistics();
+        game.StoreSearchStatistics(_networkConfig);
         game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
         game.PruneExcept(root, selected /* == game.Root() */);
         _searchState.principleVariationChanged = true; // First move in PV is now gone.
@@ -1415,7 +1424,7 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     const float sublinear = std::pow(parentVirtualExplorationFloat, 0.75f) / (sublinearExplorationRate * (childVirtualExplorationFloat + 1.f));
     const float linear = parentVirtualExplorationFloat / (linearExplorationRate * (childVirtualExplorationFloat + 1.f));
 
-    const float azPuct = (child->Value() + priorScore + mateScore);
+    const float azPuct = (child->Value(_networkConfig) + priorScore + mateScore);
     const float sblePuct = (azPuct + sublinear + linear);
     return { azPuct, sblePuct };
 }
@@ -1425,7 +1434,7 @@ template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false>(const
 float SelfPlayWorker::CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
 {
     // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
-    return (CalculatePuctScore<false>(parent, child).first - child->Value() + fixedValue);
+    return (CalculatePuctScore<false>(parent, child).first - child->Value(_networkConfig) + fixedValue);
 }
 
 void SelfPlayWorker::PrunePolicyTarget(Node* root) const
@@ -1453,7 +1462,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
         // Pre-decrement before "CalculateUcbScore" to save one calculation per child.
         int pruneCount = 0;
         const int originalVisitCount = child.visitCount;
-        const float fixedValue = child.Value();
+        const float fixedValue = child.Value(_networkConfig);
         while ((--child.visitCount >= 0) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
         {
             pruneCount++;
@@ -1473,14 +1482,16 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
 void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value)
 {
     // Each ply has a different player, so flip each time.
+    const float movingAverageBuild = _networkConfig->SelfPlay.MovingAverageBuild;
+    const float movingAverageCap = _networkConfig->SelfPlay.MovingAverageCap;
     float weight = 1.f;
     for (int i = static_cast<int>(searchPath.size()) - 1; i >= 0; i--)
     {
         Node* node = searchPath[i].node;
         node->visitingCount--;
         node->visitCount++;
-        node->valueSum += weight * value;
         node->valueWeight += weight;
+        node->valueSum += weight * (value - node->valueSum) / std::clamp(node->valueWeight * movingAverageBuild, 1.f, movingAverageCap);
         value = SelfPlayGame::FlipValue(value);
 
         weight = std::min(weight, searchPath[i].weight);
@@ -1888,7 +1899,7 @@ void SelfPlayWorker::CheckPrintInfo()
 void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 {
     const int interval = Config::Misc.Search_GuiUpdateIntervalNodes;
-    if (_searchState.gui && (forceUpdate || 
+    if (_searchState.gui && (forceUpdate ||
         ((_searchState.nodeCount / interval) > (_searchState.previousNodeCount / interval))))
     {
         const SelfPlayGame& game = _games[0];
@@ -1904,7 +1915,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         std::stringstream evaluation;
         const Node* pvFirst = root->bestChild;
         const int eitherMateN = pvFirst->terminalValue.EitherMateN();
-        const float pvValue = pvFirst->Value();
+        const float pvValue = pvFirst->Value(_networkConfig);
         if (eitherMateN != 0)
         {
             evaluation << std::fixed << std::setprecision(6) << pvValue
@@ -1948,7 +1959,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             tos.emplace_back(Game::SquareName[to_sq(move)]);
             targets.push_back(static_cast<float>(child.visitCount) / game.Root()->visitCount);
             priors.push_back(child.prior);
-            values.push_back(child.Value());
+            values.push_back(child.Value(_networkConfig));
             ucb.push_back(CalculatePuctScore<false>(game.Root(), &child).first);
             visits.push_back(child.visitCount);
             weights.push_back(static_cast<int>(child.valueWeight));
@@ -2048,7 +2059,7 @@ void SelfPlayWorker::PrintPrincipleVariation()
     // Value is from the parent's perspective, so that's already correct for the root perspective
     const Node* pvFirst = _games[0].Root()->bestChild;
     const int eitherMateN = pvFirst->terminalValue.EitherMateN();
-    const float value = pvFirst->Value();
+    const float value = pvFirst->Value(_networkConfig);
     const int depth = static_cast<int>(principleVariation.size());
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState.nodeCount;

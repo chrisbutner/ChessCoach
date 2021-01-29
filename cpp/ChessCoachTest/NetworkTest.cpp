@@ -11,6 +11,9 @@
 
 void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
 {
+    // Just use training network config.
+    const NetworkConfig& networkConfig = Config::TrainingNetwork;
+
     const MoveList legalMoves = MoveList<LEGAL>(game.GetPosition());
     const int legalMoveCount = static_cast<int>(legalMoves.size());
 
@@ -35,8 +38,8 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
         child->valueWeight += visitCount;
         game.Root()->valueSum += (visitCount * Game::FlipValue(value));
         game.Root()->valueWeight += visitCount;
-        ASSERT_GE(game.Root()->Value(), 0.f);
-        ASSERT_LE(game.Root()->Value(), 1.f);
+        ASSERT_GE(game.Root()->Value(&networkConfig), 0.f);
+        ASSERT_LE(game.Root()->Value(&networkConfig), 1.f);
 
         if (lastSibling)
         {
@@ -51,7 +54,7 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
     ASSERT_NE(moveNode, nullptr);
 
     Node* previousRoot = game.Root();
-    game.StoreSearchStatistics();
+    game.StoreSearchStatistics(&networkConfig);
     game.ApplyMoveWithRootAndHistory(move, moveNode);
     game.PruneExcept(previousRoot, moveNode);
 }
@@ -96,7 +99,7 @@ TEST(Network, Policy)
 
     // Generate policy labels. Make sure that legal moves are non-zero and the rest are zero.
     Node* previousRoot = game.Root();
-    game.StoreSearchStatistics();
+    game.StoreSearchStatistics(&networkConfig);
     game.ApplyMoveWithRootAndHistory(firstMove, selected);
     game.PruneExcept(previousRoot, selected);
     game.Complete();

@@ -128,8 +128,6 @@ void ChessCoachStrengthTest::Initialize()
     InitializePython();
     InitializeStockfish();
     InitializeChessCoach();
-
-    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
 
 static void PrintProgress(const std::string& fen, const std::string& target, const std::string& chosen, int score, int total, int nodeScore)

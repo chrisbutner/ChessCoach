@@ -283,7 +283,10 @@ exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
 sublinear_exploration_rate = 200.0
-linear_exploration_rate = 10_000.0
+linear_exploration_rate = 1_000.0
+virtual_loss_coefficient = 0.5
+moving_average_build = 0.95
+moving_average_cap = 100.0
 
 network_update_check_interval_seconds = 300.0
 wait_for_updated_network = false
@@ -339,5 +342,8 @@ plot_interval = 10
 
 sublinear_exploration_rate = '(1e1, 1e4, "log-uniform")'
 linear_exploration_rate = '(1e3, 1e6, "log-uniform")'
+virtual_loss_coefficient = '(0.1, 2.0)'
+moving_average_build = '(0.8, 1.0)'
+moving_average_cap = '(50.0, 1000.0)'
 
 ###############################################################################
