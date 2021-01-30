@@ -332,7 +332,6 @@ bool PredictionCache::TryGetPrediction(Key key, int moveCount, PredictionCacheCh
 
 void PredictionCache::Clear()
 {
-    std::cout << "Clearing the prediction cache" << std::endl;
     for (PredictionCacheChunk* table : _tables)
     {
         assert(_chunksPerTable > 0); // If there are _tables then _chunksPerTable shouldn't be zero.

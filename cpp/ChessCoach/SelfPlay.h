@@ -233,7 +233,7 @@ struct SearchState
     bool searching;
     bool gui;
     std::chrono::time_point<std::chrono::high_resolution_clock> searchStart;
-    std::chrono::time_point<std::chrono::high_resolution_clock>lastPrincipleVariationPrint;
+    std::chrono::time_point<std::chrono::high_resolution_clock> lastPrincipleVariationPrint;
     TimeControl timeControl;
     int nodeCount;
     int previousNodeCount;
@@ -376,7 +376,7 @@ private:
 
     void UpdatePosition();
     void UpdateSearch();
-    void OnSearchFinished();
+    void OnSearchFinished(int mctsParallelism);
     void CheckPrintInfo();
     void CheckUpdateGui(INetwork* network, bool forceUpdate);
     void CheckTimeControl();

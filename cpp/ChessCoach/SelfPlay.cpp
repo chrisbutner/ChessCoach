@@ -752,6 +752,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
         if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
         {
             // This thread has permission to clear the prediction cache after seeing an updated network.
+            std::cout << "Clearing the prediction cache" << std::endl;
             PredictionCache::Instance.Clear();
         }
 
@@ -796,6 +797,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
                 if ((status & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
                 {
                     // This thread has permission to clear the prediction cache after seeing an updated network.
+                    std::cout << "Clearing the prediction cache" << std::endl;
                     PredictionCache::Instance.Clear();
                 }
             }
@@ -811,13 +813,6 @@ void SelfPlayWorker::ClearGame(int index)
     _states[index] = SelfPlayState::Working;
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
     _mctsSimulations[index] = 0;
-    for (auto [node, weight] : _searchPaths[index])
-    {
-        // We may be reusing an existing search tree when resuming a UCI search for a compatible position
-        // that previously stopped while waiting on a network prediction, whether by time control or command.
-        node->visitingCount--;
-        node->expanding = false;
-    }
     _searchPaths[index].clear();
     _cacheStores[index] = nullptr;
 }
@@ -986,9 +981,6 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
     int positions = 0;
     int totalNodesRequired = 0;
 
-    // Make sure that the prediction cache is clear, for consistent results.
-    PredictionCache::Instance.Clear();
-
     // Warm up the GIL and predictions, and reclaim training memory.
     WarmUpPredictions(network, networkType, 1);
 
@@ -1032,6 +1024,9 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
 // For points/alternative tests returns N points or 0 if incorrect.
 std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes)
 {
+    // Make sure that the prediction cache is clear, for consistent results.
+    PredictionCache::Instance.Clear();
+
     // Set up the position.
     _games[0].PruneAll();
     SetUpGame(0, spec.fen, {}, true /* tryHard */);
@@ -1759,10 +1754,9 @@ void SelfPlayWorker::Search(std::function<INetwork* ()> networkFactory)
 
             CheckUpdateGui(network.get(), true /* forceUpdate */);
 
-            OnSearchFinished();
-
             // Don't free nodes here: leave them available for reuse/freeing with the next UpdatePosition(),
-            // and instead clean up below, when quitting.
+            // and instead prune below, when quitting. However, do fix up node visits/expansions in flight.
+            OnSearchFinished(mctsParallelism);
         }
     }
 
@@ -1861,10 +1855,22 @@ void SelfPlayWorker::UpdateSearch()
     }
 }
 
-void SelfPlayWorker::OnSearchFinished()
+void SelfPlayWorker::OnSearchFinished(int mctsParallelism)
 {
     // We may have finished via position update or quit, so update our state.
     _searchState.searching = false;
+
+    // We may reuse this search tree on the next UCI search if the position is compatible, and likely have
+    // node visits and expansions in flight that we just interrupted, so fix everything up.
+    for (int i = 0; i < mctsParallelism; i++)
+    {
+        for (auto [node, weight] : _searchPaths[i])
+        {
+            node->visitingCount--;
+            node->expanding = false;
+        }
+        _searchPaths[i].clear();
+    }
 
     // Print the final PV info and bestmove.
     const Node* bestMove = SelectMove(_games[0]);

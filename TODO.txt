@@ -172,6 +172,7 @@ CPU+GPU integration performance:
 - for Nodes can point last sibling at root and unrecurse deletion (sacrificing breadth-at-once)
 
 Code quality
+- only allocate "mctsParallelism" games in UCI/strength test binaries, simplify away std::min, etc.
 - either remove dataset/training mixing (C++/Python) or fix "ValidateSchedule" to handle division factor
 - try multistage docker build, debian only for building chesscoach, copy over to tensorflow base
 - inject config.toml into cluster volume, take out of image tags, make sure it takes priority over installed
