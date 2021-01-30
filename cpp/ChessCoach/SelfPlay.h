@@ -173,7 +173,7 @@ public:
     uint8_t visitingCount;
     float prior;
     int visitCount;
-    float valueSum;
+    float valueAverage;
     float valueWeight;
     TerminalValue terminalValue;
     // 4 bytes implicit padding

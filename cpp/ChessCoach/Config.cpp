@@ -1,6 +1,7 @@
 #include "Config.h"
 
 #include <functional>
+#include <set>
 
 #include <toml11/toml.hpp>
 
@@ -96,12 +97,14 @@ struct DefaultPolicy
     {
         if (AssignParameter(value, *parameters, key))
         {
+            assigned->insert(key);
             return;
         }
         value = toml::find<T>(config, key);
     }
 
     const std::map<std::string, float>* parameters;
+    std::set<std::string>* assigned;
 };
 
 template <>
@@ -117,12 +120,14 @@ struct OverridePolicy
     {
         if (AssignParameter(value, *parameters, key))
         {
+            assigned->insert(key);
             return;
         }
         value = toml::find_or(config, key, value);
     }
 
     const std::map<std::string, float>* parameters;
+    std::set<std::string>* assigned;
 };
 
 template <>
@@ -194,7 +199,6 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.ExplorationRateBase, config, "exploration_rate_base");
     policy.template Parse<float>(selfPlay.ExplorationRateInit, config, "exploration_rate_init");
 
-    policy.template Parse<float>(selfPlay.SublinearExplorationRate, config, "sublinear_exploration_rate");
     policy.template Parse<float>(selfPlay.LinearExplorationRate, config, "linear_exploration_rate");
     policy.template Parse<float>(selfPlay.VirtualLossCoefficient, config, "virtual_loss_coefficient");
     policy.template Parse<float>(selfPlay.MovingAverageBuild, config, "moving_average_build");
@@ -244,8 +248,9 @@ void Config::Parse(const std::map<std::string, float>& parameters)
     const TomlValue config = toml::parse<toml::discard_comments, std::map, std::vector>(configTomlPath.string());
 
     // Set up parsing policies.
-    const DefaultPolicy defaultPolicy{ &parameters };
-    const OverridePolicy overridePolicy{ &parameters };
+    std::set<std::string> assigned;
+    const DefaultPolicy defaultPolicy{ &parameters, &assigned };
+    const OverridePolicy overridePolicy{ &parameters, &assigned };
 
     // Parse default values.
     DefaultNetwork.Role = ParseRole(toml::find<std::string>(config, "network", "role"));
@@ -283,6 +288,15 @@ void Config::Parse(const std::map<std::string, float>& parameters)
         network->SelfPlay.PredictionBatchSize = 1;
     }
 #endif
+
+    // Validate parameter assignment.
+    for (const auto& [parameter, value] : parameters)
+    {
+        if (assigned.find(parameter) == assigned.end())
+        {
+            throw std::runtime_error("Failed to assign parameter: " + parameter);
+        }
+    }
 }
 
 void Config::Initialize()

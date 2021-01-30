@@ -1,9 +1,11 @@
 Next
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
+- prediction cache - test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions (if good, see TODOs below)
 
 PUCT - medium confidence
 - try hard exhaustive term (e.g. 1 per child after N visits)
 - try value stddev
+- try decouple linear term from value/prior deltas - not enough pure linear, not enough backprops in low-value-squish subtrees
 - try elimination
 - try softer backprop weights (e.g. help with 0.77 vs. 0.78 value example - although threshold with hard weights may still work there)
 - try only linear, no sublinear, in the interest of performance - may need to wait until other techniques go in, optimize together
@@ -20,7 +22,10 @@ PUCT - expensive/failed ideas
 - RAVE term, decaying with exploration (+amafSum, +amafWeight)
 
 PUCT - finishing
+- ablate PUCT terms, trim down to just parallelism/mate improvements, confidently measure what helps
 - CPU-optimize: e.g. can calculate global exploration factor much less often, much more required with new terms
+- see if there's enough speedup from cache-aligning nodes and just paying for the extra self-play memory
+	- (assume not because we usually need to visit a bunch of children at once; depends on isolated parent access)
 - need long long search time parameter optimization for 1.25+ constant, e.g. applying similar to new terms
 
 PUCT - training
@@ -115,14 +120,6 @@ GUI
 - change the square background rather than adding overlay, need more consistency between black/white squares
 - websocket reconnect
 
-Bigger ideas
-- what if we just shove the supervised games at the beginning of a larger "virtual" window, so that training starts with 100% supervised and finishes with 0%
-	- window would need to start large, e.g. 1m or 2m, then shrink fast enough to reach milestones like 50% selfplay by X steps, 0% by Y steps
-	  (without requiring many millions of self-play games)
-- seems like networks may be getting too "set in their ways" with early unfortunate/shortcut data and heavy sample ratio
-	- could use a generation-style system to periodically start new networks fresher with less supervised/early and lower sample ratio,
-	  now that they have more data available to them, then take over on self-play once they emperically reach parity
-
 Quality
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
 - print config summary when starting a run
@@ -147,6 +144,13 @@ Commentary
 Cluster
 - validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
+Prediction cache
+- investigate collisions during single search UCI affecting value convergence (details in 1/28 notes)
+- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
+- try stockfish-style prefetch asap after hash key update
+- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
+	- while not full hit rate should be higher? add some new metrics
+
 UCI (#2)
 - tail Backpropagate into BackpropagateVisitsOnly
 - tune on GPU and TPU (methods below)
@@ -157,6 +161,7 @@ UCI (#2)
 - try multi-thread
 	- need to sync std::cout - use Reply() everywhere
 - basic improvements to time control
+	- badly need to play well with X moves in Y, "movestogo", loses games vs. stockfish
 	- don't waste time when only 1 or few legal moves
 	- if dangerous time left, take mate-in-N rather than trying to find faster
 
@@ -177,7 +182,6 @@ Code quality
 - privatize C++ methods (got too python-brained)
 - try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
 - try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
-- improve config use in C++, feels messy
 - add Python type info everywhere - look up best practices for linting etc.
 - poison self-play workers and join threads properly
 - check for any unnecessary move constructors
@@ -202,22 +206,19 @@ UCI (#3)
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
 
+Finalizing training
+- work out learning rate schedule to fine-tune with final self-play budget known
+
 Deployment
 - installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
+- add windows command line build script, binplace somewhere cleanly
 
 Publishing
 - write-ups
 - website - game-in-10, one at a time, people can watch, comments shown for each move
 
-Revisit
-- try batch renorm + ghost batch norm
-	- Bug: https://github.com/tensorflow/tensorflow/issues/32380
-- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
-	- while not full hit rate should be higher? add some new metrics
-
 Bugs
-- Prediction cache collisions during single search UCI affecting value convergence (details in 1/28 notes)
 - Read-AV in game stateinfo cleanup when quitting UCI
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++

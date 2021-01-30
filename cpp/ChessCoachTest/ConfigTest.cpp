@@ -10,3 +10,12 @@ TEST(Config, Basic)
     EXPECT_TRUE(!Config::TrainingNetwork.Name.empty());
     EXPECT_TRUE(!Config::UciNetwork.Name.empty());
 }
+
+TEST(Config, ParameterAssignment)
+{
+    Config::Initialize();
+
+    Config::UpdateParameters({ { "batch_size", 512.f } });
+
+    EXPECT_THROW(Config::UpdateParameters({ { "batch_sizez", 512.f } }), std::runtime_error);
+}

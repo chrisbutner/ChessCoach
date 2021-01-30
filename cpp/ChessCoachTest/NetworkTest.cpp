@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #pragma warning(disable:4100) // Ignore unused args in generated code
 #pragma warning(disable:4127) // Ignore const-per-architecture warning
 #include <protobuf/ChessCoach.pb.h>
@@ -34,10 +36,10 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
 
         ASSERT_LT(patternIndex, 32);
         const float value = (patternIndex / 32.f);
-        child->valueSum += (visitCount * value);
+        child->valueAverage += value;
         child->valueWeight += visitCount;
-        game.Root()->valueSum += (visitCount * Game::FlipValue(value));
         game.Root()->valueWeight += visitCount;
+        game.Root()->valueAverage += visitCount * (Game::FlipValue(value) - game.Root()->valueAverage) / game.Root()->valueWeight; // Arithmetic mean here
         ASSERT_GE(game.Root()->Value(&networkConfig), 0.f);
         ASSERT_LE(game.Root()->Value(&networkConfig), 1.f);
 

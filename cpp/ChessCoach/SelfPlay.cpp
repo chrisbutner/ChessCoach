@@ -143,7 +143,7 @@ Node::Node(uint16_t setMove, float setPrior)
     , visitingCount(0)
     , prior(setPrior)
     , visitCount(0)
-    , valueSum(0.f)
+    , valueAverage(0.f)
     , valueWeight(0.f)
     , terminalValue{}
 {
@@ -210,14 +210,14 @@ float Node::Value(const NetworkConfig* config) const
         return INetwork::MapProbability11To01(static_cast<float>(mateSign));
     }
 
-    // First-play urgency (FPU) is zero, a loss. Start with "valueSum" and "valueWeight" at zero.
+    // First-play urgency (FPU) is zero, a loss. Start with "valueAverage" and "valueWeight" at zero.
     if (valueWeight == 0.f)
     {
         return CHESSCOACH_VALUE_LOSS;
     }
 
     const float virtualLossCount = (visitingCount * config->SelfPlay.VirtualLossCoefficient);
-    return valueSum * valueWeight / (valueWeight + virtualLossCount);
+    return valueAverage * valueWeight / (valueWeight + virtualLossCount);
 }
 
 void Node::AdjustVisitCount(int newVisitCount)
@@ -451,8 +451,8 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     // (all should tend to be high, or all should tend to be low):
     // - visits
     // - network policy prediction (prior)
-    // - network value prediction (valueSum / visitCount, back-propagated)
-    // - terminal valuation (valueSum / visitCount, back-propagated)
+    // - network value prediction (valueAverage, back-propagated)
+    // - terminal valuation (valueAverage, back-propagated)
 
     if (state == SelfPlayState::Working)
     {
@@ -1277,13 +1277,13 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // and then whenever a previously-unexplored node is reached as a root (like a 2-repetition,
         // or a child that wasn't visited, but alternatives were getting mated).
         // We need to fix the root's visitCount so that it equals the sum of its children,
-        // and correspondingly fix valueSum so that MCTS value (root->Value()) makes sense.
+        // and correspondingly fix valueAverage so that MCTS value (root->Value()) makes sense.
         if (game.Root() == scratchGame.Root())
         {
             assert(game.Root()->visitCount == 1);
             assert(searchPath.size() == 1);
             game.Root()->visitCount = 0;
-            game.Root()->valueSum = 0.f;
+            game.Root()->valueAverage = 0.f;
             game.Root()->valueWeight = 0.f;
 
             // Add exploration noise if not searching.
@@ -1419,13 +1419,11 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
 
     // Calculate SBLE-PUCT terms.
     // TODO: Work in progress
-    const float sublinearExplorationRate = _networkConfig->SelfPlay.SublinearExplorationRate;
     const float linearExplorationRate = _networkConfig->SelfPlay.LinearExplorationRate;
-    const float sublinear = std::pow(parentVirtualExplorationFloat, 0.75f) / (sublinearExplorationRate * (childVirtualExplorationFloat + 1.f));
     const float linear = parentVirtualExplorationFloat / (linearExplorationRate * (childVirtualExplorationFloat + 1.f));
 
     const float azPuct = (child->Value(_networkConfig) + priorScore + mateScore);
-    const float sblePuct = (azPuct + sublinear + linear);
+    const float sblePuct = (azPuct + linear);
     return { azPuct, sblePuct };
 }
 template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<true>(const Node* parent, const Node* child) const;
@@ -1491,7 +1489,7 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
         node->visitingCount--;
         node->visitCount++;
         node->valueWeight += weight;
-        node->valueSum += weight * (value - node->valueSum) / std::clamp(node->valueWeight * movingAverageBuild, 1.f, movingAverageCap);
+        node->valueAverage += weight * (value - node->valueAverage) / std::clamp(node->valueWeight * movingAverageBuild, 1.f, movingAverageCap);
         value = SelfPlayGame::FlipValue(value);
 
         weight = std::min(weight, searchPath[i].weight);
