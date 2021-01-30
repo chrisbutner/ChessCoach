@@ -331,7 +331,7 @@ strength_test_marker_prefix = "StrengthTestComplete"
 [optimization]
 
 epd = "Arasan21.epd"
-nodes = 50_000
+nodes = 100_000
 failure_nodes = 10_000_000
 position_limit = 10
 log_interval = 10

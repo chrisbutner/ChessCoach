@@ -761,7 +761,10 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       // Update material hash key and prefetch access to materialTable
       k ^= Zobrist::psq[captured][capsq];
       st->materialKey ^= Zobrist::psq[captured][pieceCount[captured]];
-      prefetch(thisThread->materialTable[st->materialKey]);
+      // cbutner-start
+      // Not using Stockfish search or evaluation, so don't prefetch here.
+      //prefetch(thisThread->materialTable[st->materialKey]);
+      // cbutner-finish
 
       // Reset rule 50 counter
       st->rule50 = 0;
@@ -966,7 +969,10 @@ void Position::do_null_move(StateInfo& newSt) {
   }
 
   st->key ^= Zobrist::side;
-  prefetch(TT.first_entry(st->key));
+  // cbutner-start
+  // Not using Stockfish search or evaluation, so don't prefetch here.
+  //prefetch(TT.first_entry(st->key));
+  // cbutner-finish
 
   ++st->rule50;
   st->pliesFromNull = 0;

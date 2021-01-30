@@ -1,15 +1,22 @@
-Next
-- try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
-- prediction cache - test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions (if good, see TODOs below)
+UCI
+- try to increase in-thread parallelism without sacrificing strength
+- implement multi-threaded search
+	- see old paper links around virtual loss, e.g. atomics in C++ example
+	- need to sync std::cout - use Reply() everywhere - better if only one worker is chatty, but needs to sync with input handler still
+- try speculative budgeting in addition to virtual exploration/loss
+	- for N+small delta, which would have UCB > current best
+	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
 
 PUCT - medium confidence
-- try hard exhaustive term (e.g. 1 per child after N visits)
+- try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
+	- try hard exhaustive term (e.g. 1 per child after N visits)
 - try value stddev
 - try decouple linear term from value/prior deltas - not enough pure linear, not enough backprops in low-value-squish subtrees
 - try elimination
 - try softer backprop weights (e.g. help with 0.77 vs. 0.78 value example - although threshold with hard weights may still work there)
-- try only linear, no sublinear, in the interest of performance - may need to wait until other techniques go in, optimize together
-- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing
+- last all-out attempt at position #3 before returning to 800 training target and actual training again
+	- try last-value again but scaled down (constant or f(n))
+	- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing
 
 PUCT - low confidence
 - try sufficiency threshold or minimum value delta
@@ -30,12 +37,26 @@ PUCT - finishing
 
 PUCT - training
 - see if anything helps 800 node range (i.e. optimize parameters with nodes=800), or 1600, etc.
-- if trained criticality can't help with search, look over extreme examples manually, see if it's worth driving 800-1600 range or something
 
 Quality (*** before any self-play ***)
 - policy target pruning - do while saving statistics, rather than in-place? - affects PUCT of next position
 - make sure that policy target pruning is still valid after weight, etc. changes
 - remove the training/uci network config separation, high chance for bugs with python always using training, can access statically in C++
+- make sure that mate value() changes didn't damage anything, check mate-in-N puzzles back through notes, two main batches
+- if trained criticality can't help with search, look over extreme examples manually, see if it's worth driving 800-1600 range or something
+- final validation of 800 convergence - check starting position, some selection of others
+	- maybe use 1.03 temperature at root (Wu)
+	- maybe use artificially increased band width (~virtual loss) in self-play games
+
+Prediction cache
+- investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
+- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
+	- no gain/loss earlier, try again after more PUCT work that does better for more nodes
+- test speed gain for self-play generation ignoring path dependence, transposition table-style
+- try stockfish-style prefetch asap after hash key update
+- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
+	- while not full hit rate should be higher? add some new metrics
+	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
 
 Mate term
 - already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
@@ -54,10 +75,6 @@ PUCT questions
 - force AZPUCT in search path after first non-AZPUCT choice?
 - accept damaging 800-node distribution and prune aggressively to compensate?
 
-PUCT - 800 convergence
-- should we use 1.03 temperature at root (Wu)
-- should we use artificially increased band width (~virtual loss) in self-play games
-
 SE
 - (do more work on self-play only runs before evaluating SE again)
 - check 2f training run vs. 2d
@@ -65,15 +82,11 @@ SE
 - evaluate, check in L2 and/or SE
 
 Search parallelism
-- implement multi-threaded search
-	- see old paper links around virtual loss, e.g. atomics in C++ example
-- try speculative budgeting in addition to virtual exploration/loss
-	- for N+small delta, which would have UCB > current best
-	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
 - try out a backtracking implementation of virtual exploration/loss that goes as deep
 	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
 	  choosing better nodes overall and avoiding failed simulations
 - test vs. stockfish, need to avoid single-thread, 350 NPS situation
+	- (this was probably the fixed lingering-expanding-true bug, play more games to try repro again)
 
 Student training
 - make student prefer matching teacher for repeatability
@@ -144,22 +157,9 @@ Commentary
 Cluster
 - validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
-Prediction cache
-- investigate collisions during single search UCI affecting value convergence (details in 1/28 notes)
-- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
-- try stockfish-style prefetch asap after hash key update
-- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
-	- while not full hit rate should be higher? add some new metrics
-
 UCI (#2)
+- profile CPU again
 - tail Backpropagate into BackpropagateVisitsOnly
-- tune on GPU and TPU (methods below)
-- try to increase in-thread parallelism without sacrificing STS strength
-	- some kind of idea around only the first N backpropagating, the rest just setting up children/priors?
-	- can always look into some of the failing positions and see what's going differently (harder without multiPV though)
-- also test different FPU schemes for strength, but care, and def. don't change training
-- try multi-thread
-	- need to sync std::cout - use Reply() everywhere
 - basic improvements to time control
 	- badly need to play well with X moves in Y, "movestogo", loses games vs. stockfish
 	- don't waste time when only 1 or few legal moves

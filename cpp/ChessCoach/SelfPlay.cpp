@@ -981,6 +981,10 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
     int positions = 0;
     int totalNodesRequired = 0;
 
+    // Make sure that the prediction cache is clear, for consistent results.
+    // It would be better to clear before every position in the EPD, but too slow.
+    PredictionCache::Instance.Clear();
+
     // Warm up the GIL and predictions, and reclaim training memory.
     WarmUpPredictions(network, networkType, 1);
 
@@ -1024,9 +1028,6 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
 // For points/alternative tests returns N points or 0 if incorrect.
 std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes)
 {
-    // Make sure that the prediction cache is clear, for consistent results.
-    PredictionCache::Instance.Clear();
-
     // Set up the position.
     _games[0].PruneAll();
     SetUpGame(0, spec.fen, {}, true /* tryHard */);
