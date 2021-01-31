@@ -157,7 +157,8 @@ public:
     const_iterator cend() const;
 
     bool IsExpanded() const;
-    float Value(const NetworkConfig* config) const;
+    float Value() const;
+    float ValueWithVirtualLoss(const NetworkConfig* config) const;
     void AdjustVisitCount(int newVisitCount);
 
     Node* Child(Move match);
@@ -267,8 +268,8 @@ public:
     void Expand(int moveCount);
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
-    float CalculateMctsValue(const NetworkConfig* config) const;
-    void StoreSearchStatistics(const NetworkConfig* config);
+    float CalculateMctsValue() const;
+    void StoreSearchStatistics();
     void Complete();
     SavedGame Save() const;
     void PruneExcept(Node* root, Node*& except);
@@ -339,7 +340,7 @@ public:
     Node* RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
-    Node* SelectMove(const SelfPlayGame& game) const;
+    Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
     template <bool ForcePlayouts>
     WeightedNode SelectChild(Node* node) const;
     template <bool ForcePlayouts>
@@ -352,6 +353,7 @@ public:
     void UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath);
     void ValidatePrincipleVariation(const Node* root);
     bool WorseThan(const Node* lhs, const Node* rhs) const;
+    std::vector<Node*> CollectBestMoves(Node* parent, float valueDeltaThreshold) const;
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
     SearchState& DebugSearchState();
     void DebugResetGame(int index);

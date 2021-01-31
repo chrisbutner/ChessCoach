@@ -200,7 +200,7 @@ bool Node::IsExpanded() const
     return (firstChild != nullptr);
 }
 
-float Node::Value(const NetworkConfig* config) const
+float Node::Value() const
 {
     // Return a win for a proved mate or loss for a proved opponent mate.
     const int eitherMateN = terminalValue.EitherMateN();
@@ -211,13 +211,22 @@ float Node::Value(const NetworkConfig* config) const
     }
 
     // First-play urgency (FPU) is zero, a loss. Start with "valueAverage" and "valueWeight" at zero.
-    if (valueWeight == 0.f)
+    return valueAverage;
+}
+
+float Node::ValueWithVirtualLoss(const NetworkConfig* config) const
+{
+    // Return a win for a proved mate or loss for a proved opponent mate.
+    const int eitherMateN = terminalValue.EitherMateN();
+    const int mateSign = ((eitherMateN > 0) - (eitherMateN < 0));
+    if (mateSign != 0)
     {
-        return CHESSCOACH_VALUE_LOSS;
+        return INetwork::MapProbability11To01(static_cast<float>(mateSign));
     }
 
+    // First-play urgency (FPU) is zero, a loss. Start with "valueAverage" and "valueWeight" at zero.
     const float virtualLossCount = (visitingCount * config->SelfPlay.VirtualLossCoefficient);
-    return valueAverage * valueWeight / (valueWeight + virtualLossCount);
+    return valueAverage * valueWeight / std::max(1.f, (valueWeight + virtualLossCount));
 }
 
 void Node::AdjustVisitCount(int newVisitCount)
@@ -606,13 +615,13 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
     }
 }
 
-float SelfPlayGame::CalculateMctsValue(const NetworkConfig* config) const
+float SelfPlayGame::CalculateMctsValue() const
 {
     // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
-    return FlipValue(_root->Value(config));
+    return FlipValue(_root->Value());
 }
 
-void SelfPlayGame::StoreSearchStatistics(const NetworkConfig* config)
+void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float>& visits = _childVisits.emplace_back();
     const float sumChildVisits = static_cast<float>(_root->visitCount);
@@ -620,7 +629,7 @@ void SelfPlayGame::StoreSearchStatistics(const NetworkConfig* config)
     {
         visits[Move(child.move)] = static_cast<float>(child.visitCount) / sumChildVisits;
     }
-    _mctsValues.push_back(CalculateMctsValue(config));
+    _mctsValues.push_back(CalculateMctsValue());
 }
 
 void SelfPlayGame::Complete()
@@ -1062,7 +1071,7 @@ std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(INetwork* networ
 
         if (_searchState.principleVariationChanged)
         {
-            Move newBest = Move(SelectMove(_games[0])->move);
+            Move newBest = Move(SelectMove(_games[0], false /* allowDiversity */)->move);
             if (newBest != lastBestMove)
             {
                 lastBestMove = newBest;
@@ -1076,7 +1085,7 @@ std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(INetwork* networ
     }
 
     // Pick a best move and judge points.
-    const Node* best = SelectMove(_games[0]);
+    const Node* best = SelectMove(_games[0], false /* allowDiversity */);
     const Move bestMove = Move(best->move);
     const auto [points, nodesRequired] = JudgeStrengthTestPosition(spec, bestMove, lastBestNodes, failureNodes);
 
@@ -1136,7 +1145,7 @@ void SelfPlayWorker::Play(int index)
 
         assert(selected != nullptr);
         PrunePolicyTarget(root);
-        game.StoreSearchStatistics(_networkConfig);
+        game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
         game.PruneExcept(root, selected /* == game.Root() */);
         _searchState.principleVariationChanged = true; // First move in PV is now gone.
@@ -1294,7 +1303,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
     }
 
     mctsSimulation = 0;
-    return SelectMove(game);
+    return SelectMove(game, false /* allowDiversity */);
 }
 
 void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
@@ -1319,7 +1328,7 @@ void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
     }
 }
 
-Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game) const
+Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) const
 {
     if (!game.TryHard() && (game.Ply() < Config().SelfPlay.NumSampingMoves))
     {
@@ -1336,6 +1345,27 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game) const
         }
         assert(false);
         return nullptr;
+    }
+    else if (game.TryHard() && allowDiversity && (game.Ply() < Config().SelfPlay.NumSampingMoves))
+    {
+        // "When we forced AlphaZero to play with greater diversity (by softmax sampling with a temperature of 10.0 among moves
+        // for which the value was no more than 1% away from the best move for the first 30 plies) the winning rate increased from 5.8% to 14%."
+        const float valueDeltaThreshold = 0.01f;
+        const float softmaxSampleTemperature = 10.f;
+        std::vector<Node*> best = CollectBestMoves(game.Root(), valueDeltaThreshold);
+        if (best.size() == 1)
+        {
+            return best.back();
+        }
+        std::vector<float> visits(best.size());
+        for (int i = 0; i < best.size(); i++)
+        {
+            // "Definition of temperature is the standard definition in softmax - exp(N / 10) is correct."
+            visits[i] = std::log(static_cast<float>(best[i]->visitCount)) / softmaxSampleTemperature;
+        }
+        game.Softmax(static_cast<int>(visits.size()), visits.data());
+        std::discrete_distribution distribution(visits.begin(), visits.end());
+        return best[distribution(Random::Engine)];
     }
     else
     {
@@ -1418,7 +1448,7 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     const float linearExplorationRate = _networkConfig->SelfPlay.LinearExplorationRate;
     const float linear = parentVirtualExplorationFloat / (linearExplorationRate * (childVirtualExplorationFloat + 1.f));
 
-    const float azPuct = (child->Value(_networkConfig) + priorScore + mateScore);
+    const float azPuct = (child->ValueWithVirtualLoss(_networkConfig) + priorScore + mateScore);
     const float sblePuct = (azPuct + linear);
     return { azPuct, sblePuct };
 }
@@ -1428,7 +1458,7 @@ template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false>(const
 float SelfPlayWorker::CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
 {
     // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
-    return (CalculatePuctScore<false>(parent, child).first - child->Value(_networkConfig) + fixedValue);
+    return (CalculatePuctScore<false>(parent, child).first - child->ValueWithVirtualLoss(_networkConfig) + fixedValue);
 }
 
 void SelfPlayWorker::PrunePolicyTarget(Node* root) const
@@ -1456,7 +1486,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
         // Pre-decrement before "CalculateUcbScore" to save one calculation per child.
         int pruneCount = 0;
         const int originalVisitCount = child.visitCount;
-        const float fixedValue = child.Value(_networkConfig);
+        const float fixedValue = child.Value();
         while ((--child.visitCount >= 0) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
         {
             pruneCount++;
@@ -1644,6 +1674,31 @@ bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
 
     // Prefer more visits.
     return (lhs->visitCount < rhs->visitCount);
+}
+
+std::vector<Node*> SelfPlayWorker::CollectBestMoves(Node* parent, float valueDeltaThreshold) const
+{
+    Node* bestChild = parent->bestChild;
+    assert(bestChild);
+    std::vector<Node*> best = { bestChild };
+    const int bestEitherMateN = bestChild->terminalValue.EitherMateN();
+    const float valueThreshold = (bestChild->Value() - valueDeltaThreshold);
+    for (Node& child : *parent)
+    {
+        // Other candidates must be in the same mate category as the best child.
+        if ((&child == bestChild) || (child.terminalValue.EitherMateN() != bestEitherMateN))
+        {
+            continue;
+        }
+
+        // Other candidates must be within an absolute value difference:
+        // "By 1% we mean in absolute value. All our values are between 0 and 1, so if the best move has a value of 0.8, we would sample from all moves with values >= 0.79."
+        if (child.Value() > valueThreshold)
+        {
+            best.push_back(&child);
+        }
+    }
+    return best;
 }
 
 void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut)
@@ -1874,7 +1929,7 @@ void SelfPlayWorker::OnSearchFinished(int mctsParallelism)
     }
 
     // Print the final PV info and bestmove.
-    const Node* bestMove = SelectMove(_games[0]);
+    const Node* bestMove = SelectMove(_games[0], true /* allowDiversity */);
     PrintPrincipleVariation();
     std::cout << "bestmove " << UCI::move(Move(bestMove->move), false /* chess960 */) << std::endl;
 
@@ -1920,7 +1975,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         std::stringstream evaluation;
         const Node* pvFirst = root->bestChild;
         const int eitherMateN = pvFirst->terminalValue.EitherMateN();
-        const float pvValue = pvFirst->Value(_networkConfig);
+        const float pvValue = pvFirst->Value();
         if (eitherMateN != 0)
         {
             evaluation << std::fixed << std::setprecision(6) << pvValue
@@ -1964,7 +2019,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             tos.emplace_back(Game::SquareName[to_sq(move)]);
             targets.push_back(static_cast<float>(child.visitCount) / game.Root()->visitCount);
             priors.push_back(child.prior);
-            values.push_back(child.Value(_networkConfig));
+            values.push_back(child.Value());
             ucb.push_back(CalculatePuctScore<false>(game.Root(), &child).first);
             visits.push_back(child.visitCount);
             weights.push_back(static_cast<int>(child.valueWeight));
@@ -2064,11 +2119,13 @@ void SelfPlayWorker::PrintPrincipleVariation()
     // Value is from the parent's perspective, so that's already correct for the root perspective
     const Node* pvFirst = _games[0].Root()->bestChild;
     const int eitherMateN = pvFirst->terminalValue.EitherMateN();
-    const float value = pvFirst->Value(_networkConfig);
+    const float value = pvFirst->Value();
     const int depth = static_cast<int>(principleVariation.size());
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState.nodeCount;
-    const int nodesPerSecond = static_cast<int>(nodeCount / std::chrono::duration<float>(sinceSearchStart).count());
+    const float searchTimeSeconds = std::chrono::duration<float>(sinceSearchStart).count();
+    const int nodesPerSecond = static_cast<int>(nodeCount / searchTimeSeconds);
+    const int failedNodesPerSecond = static_cast<int>(_searchState.failedNodeCount / searchTimeSeconds);
     const int hashfullPermille = PredictionCache::Instance.PermilleFull();
 
     std::cout << "info depth " << depth;
@@ -2083,20 +2140,23 @@ void SelfPlayWorker::PrintPrincipleVariation()
         std::cout << " score cp " << score;
     }
 
-    std::cout << " nodes " << nodeCount << " nps " << nodesPerSecond << " time " << searchTimeMs
-        << " hashfull " << hashfullPermille << " pv";
+    std::cout << " nodes " << nodeCount << " nps " << nodesPerSecond;
+    if (_searchConfig.debug)
+    {
+        std::cout << " fnps " << failedNodesPerSecond;
+    }
+    std::cout << " time " << searchTimeMs << " hashfull " << hashfullPermille;
+    if (_searchConfig.debug)
+    {
+        std::cout << " hashhit " << PredictionCache::Instance.PermilleHits()
+            << " hashevict " << PredictionCache::Instance.PermilleEvictions();
+    }
+    std::cout << " pv";
     for (Move move : principleVariation)
     {
         std::cout << " " << UCI::move(move, false /* chess960 */);
     }
     std::cout << std::endl;
-
-    // Debug: print cache info.
-    if (_searchConfig.debug)
-    {
-        std::cout << "info string [cache] hitrate " << PredictionCache::Instance.PermilleHits() <<
-            " evictionrate " << PredictionCache::Instance.PermilleEvictions() << std::endl;
-    }
 }
 
 void SelfPlayWorker::SignalDebug(bool debug)

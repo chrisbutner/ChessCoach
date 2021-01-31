@@ -12,6 +12,8 @@ PUCT - medium confidence
 	- try hard exhaustive term (e.g. 1 per child after N visits)
 - try value stddev
 - try decouple linear term from value/prior deltas - not enough pure linear, not enough backprops in low-value-squish subtrees
+	- causes scrambling at low value squish, even prior exploration term maybe
+	- look at 2r2rk1/1b2qppp/pp3n2/n2p4/P2N4/RPN1P3/2Q1BPPP/5RK1 w - - 1 17 (need to find b4)
 - try elimination
 - try softer backprop weights (e.g. help with 0.77 vs. 0.78 value example - although threshold with hard weights may still work there)
 - last all-out attempt at position #3 before returning to 800 training target and actual training again
@@ -191,10 +193,6 @@ Code quality
 - StrengthTestNetwork (naming)
 
 UCI (#3)
-- "random move with eval within 1%"
-	- if best is value N, softmax sample with temperature 10 among (value >= N - 0.01), where 0.01 = (win-loss)/100
-	- "best" I'm assuming is the otherwise usual selection, i.e. most visited
-	- code for shorter mates, etc., should override this behavior (no diversity needed then)
 - mate
 	- if root node's terminal value is known, and allowed to stop searching, make a move instantly and save time
 	- add global depth cut-off (a little tricky, need to allow MCTS to "back up" and ban paths that don't reach a leaf in time)
