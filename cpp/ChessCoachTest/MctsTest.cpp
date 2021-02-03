@@ -384,3 +384,89 @@ TEST(Mcts, TwofoldRepetition)
 
     game->PruneAll();
 }
+
+TEST(Mcts, SamplingSelfPlay)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SelfPlayGame* game;
+    selfPlayWorker.SetUpGame(0, Config::StartingPosition, {}, false /* tryHard */); // SamplingSelfPlay means tryHard is false.
+    selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
+
+    // Set up visit counts for four moves.
+    Node* child1 = new Node(make_move(SQ_E2, SQ_E4), 0.25f);
+    child1->visitCount = 350;
+    Node* child2 = new Node(make_move(SQ_D2, SQ_D4), 0.25f);
+    child2->visitCount = 250;
+    Node* child3 = new Node(make_move(SQ_E2, SQ_E3), 0.25f);
+    child3->visitCount = 150;
+    Node* child4 = new Node(make_move(SQ_C2, SQ_C4), 0.25f);
+    child4->visitCount = 50;
+    game->Root()->visitCount = (child1->visitCount + child2->visitCount + child3->visitCount + child4->visitCount);
+    game->Root()->firstChild = child1;
+    game->Root()->bestChild = child1;
+    child1->nextSibling = child2;
+    child2->nextSibling = child3;
+    child3->nextSibling = child4;
+
+    // Validate self-play sampling. Just shove samples in "valueWeight".
+    // Expect visits in proportion to visit count.
+    const int epsilon = 50;
+    for (int i = 0; i < game->Root()->visitCount; i++)
+    {
+        Node* selected = selfPlayWorker.SelectMove(*game, true /* allowDiversity */);
+        selected->valueWeight++;
+    }
+    EXPECT_NEAR(child1->valueWeight, child1->visitCount, epsilon);
+    EXPECT_NEAR(child2->valueWeight, child2->visitCount, epsilon);
+    EXPECT_NEAR(child3->valueWeight, child3->visitCount, epsilon);
+    EXPECT_NEAR(child4->valueWeight, child4->visitCount, epsilon);
+
+    game->PruneAll();
+}
+
+TEST(Mcts, SamplingUci)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SelfPlayGame* game;
+    selfPlayWorker.SetUpGame(0, Config::StartingPosition, {}, true /* tryHard */); // SamplingUci means tryHard is true.
+    selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
+
+    // Set up visit counts for four moves.
+    Node* child1 = new Node(make_move(SQ_E2, SQ_E4), 0.25f);
+    child1->visitCount = 350;
+    Node* child2 = new Node(make_move(SQ_D2, SQ_D4), 0.25f);
+    child2->visitCount = 250;
+    Node* child3 = new Node(make_move(SQ_E2, SQ_E3), 0.25f);
+    child3->visitCount = 150;
+    Node* child4 = new Node(make_move(SQ_C2, SQ_C4), 0.25f);
+    child4->visitCount = 50;
+    game->Root()->visitCount = (child1->visitCount + child2->visitCount + child3->visitCount + child4->visitCount);
+    game->Root()->firstChild = child1;
+    game->Root()->bestChild = child1;
+    child1->nextSibling = child2;
+    child2->nextSibling = child3;
+    child3->nextSibling = child4;
+
+    // Validate UCI sampling. Just shove samples in "valueWeight".
+    // Expect visits in proportion to visit counts re-exponentiated with temperature 10.
+    const int sampleCount = 100000;
+    const float epsilon = 0.005f;
+    for (int i = 0; i < sampleCount; i++)
+    {
+        Node* selected = selfPlayWorker.SelectMove(*game, true /* allowDiversity */);
+        selected->valueWeight++;
+    }
+    EXPECT_NEAR(child1->valueWeight / sampleCount, 0.2696f, epsilon);
+    EXPECT_NEAR(child2->valueWeight / sampleCount, 0.2607f, epsilon);
+    EXPECT_NEAR(child3->valueWeight / sampleCount, 0.2477f, epsilon);
+    EXPECT_NEAR(child4->valueWeight / sampleCount, 0.2219f, epsilon);
+
+    game->PruneAll();
+}
+

@@ -605,13 +605,13 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
     float expSum = 0.f;
     for (int i = 0; i < moveCount; i++)
     {
-        expSum += ::expf(distribution[i] - max);
+        expSum += std::exp(distribution[i] - max);
     }
 
-    const float logSumExp = ::logf(expSum) + max;
+    const float logSumExp = std::log(expSum) + max;
     for (int i = 0; i < moveCount; i++)
     {
-        distribution[i] = ::expf(distribution[i] - logSumExp);
+        distribution[i] = std::exp(distribution[i] - logSumExp);
     }
 }
 
@@ -1303,7 +1303,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
     }
 
     mctsSimulation = 0;
-    return SelectMove(game, false /* allowDiversity */);
+    return SelectMove(game, true /* allowDiversity */);
 }
 
 void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
@@ -1330,9 +1330,10 @@ void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
 
 Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) const
 {
-    if (!game.TryHard() && (game.Ply() < Config().SelfPlay.NumSampingMoves))
+    if (!game.TryHard() && allowDiversity && (game.Ply() < Config().SelfPlay.NumSampingMoves))
     {
-        // Use temperature=1; i.e., no need to exponentiate, just use visit counts as the distribution.
+        // Sample using temperature=1, treating normalized visit counts as a probability distribution
+        // (like when they're passed as truth labels to cross-entropy loss). So, no need to exponentiate.
         const int sumChildVisits = game.Root()->visitCount;
         int sample = std::uniform_int_distribution<>(0, sumChildVisits - 1)(Random::Engine);
         for (Node& child : *game.Root())
@@ -1357,14 +1358,16 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         {
             return best.back();
         }
-        std::vector<float> visits(best.size());
+        // CollectBestMoves only selects from the same mate category as "bestMove", so "bestMove" has the most visits among the collected.
+        // Re-exponentiate using temperature=10. |(N/max(N))^(1/t)| gives the same result as softmax(log(N)/t) but skips the logarithm.
+        assert(game.Root()->bestChild);
+        const float bestVisitCount = static_cast<float>(game.Root()->bestChild->visitCount);
+        std::vector<float> bestWeights(best.size());
         for (int i = 0; i < best.size(); i++)
         {
-            // "Definition of temperature is the standard definition in softmax - exp(N / 10) is correct."
-            visits[i] = std::log(static_cast<float>(best[i]->visitCount)) / softmaxSampleTemperature;
+            bestWeights[i] = std::pow(static_cast<float>(best[i]->visitCount) / bestVisitCount, 1 / softmaxSampleTemperature);
         }
-        game.Softmax(static_cast<int>(visits.size()), visits.data());
-        std::discrete_distribution distribution(visits.begin(), visits.end());
+        std::discrete_distribution distribution(bestWeights.begin(), bestWeights.end());
         return best[distribution(Random::Engine)];
     }
     else
@@ -1421,7 +1424,7 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     // We force playouts only during training, so we don't care about virtual loss or exploration issues
     // that would otherwise occur when returning a constant infinity.
     if (ForcePlayouts &&
-        (childVirtualExploration < static_cast<int>(::sqrtf(2.f * child->prior * parentVirtualExploration))))
+        (childVirtualExploration < static_cast<int>(std::sqrt(2.f * child->prior * parentVirtualExploration))))
     {
         return { std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity() };
     }
@@ -1434,8 +1437,8 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     const float explorationRateBase = _networkConfig->SelfPlay.ExplorationRateBase;
     const float explorationRateInit = _networkConfig->SelfPlay.ExplorationRateInit;
     const float explorationRate =
-        (::logf((parentVirtualExplorationFloat + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
-        ::sqrtf(parentVirtualExplorationFloat) / (childVirtualExplorationFloat + 1.f);
+        (std::log((parentVirtualExplorationFloat + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
+        std::sqrt(parentVirtualExplorationFloat) / (childVirtualExplorationFloat + 1.f);
 
     // (a) prior score
     const float priorScore = explorationRate * child->prior;
