@@ -17,17 +17,19 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
     const int legalMoveCount = static_cast<int>(legalMoves.size());
 
     int moveIndex = 0;
-    Node* lastSibling = nullptr;
     Node* moveNode = nullptr;
+    game.Root()->childCount = static_cast<int>(legalMoves.size());
+    game.Root()->children = new Node[game.Root()->childCount]{};
     for (Move legalMove : legalMoves)
     {
-        Node* child = new Node(legalMove, 0.f);
+        Node* child = &game.Root()->children[moveIndex];
+        child->move = static_cast<uint16_t>(legalMove);
         if (move == legalMove)
         {
             moveNode = child;
         }
 
-        const int visitCount = (((moveIndex++ + patternIndex) % legalMoveCount) + 1);
+        const int visitCount = (((moveIndex + patternIndex) % legalMoveCount) + 1);
         child->visitCount += visitCount;
         game.Root()->visitCount += visitCount;
 
@@ -39,16 +41,7 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
         game.Root()->valueAverage += visitCount * (Game::FlipValue(value) - game.Root()->valueAverage) / game.Root()->valueWeight; // Arithmetic mean here
         ASSERT_GE(game.Root()->Value(), 0.f);
         ASSERT_LE(game.Root()->Value(), 1.f);
-
-        if (lastSibling)
-        {
-            lastSibling->nextSibling = child;
-        }
-        else
-        {
-            game.Root()->firstChild = child;
-        }
-        lastSibling = child;
+        moveIndex++;
     }
     ASSERT_NE(moveNode, nullptr);
 
@@ -75,24 +68,18 @@ TEST(Network, Policy)
     const int legalMoveCount = static_cast<int>(legalMoves.size());
 
     // Give 5 visits evenly across legal moves, then the rest to the first move.
+    game.Root()->childCount = static_cast<int>(legalMoves.size());
+    game.Root()->children = new Node[game.Root()->childCount]{};
     const int evenCount = 5;
-    Node* lastSibling = nullptr;
+    int moveIndex = 0;
     for (Move move : legalMoves)
     {
-        Node* child = new Node(move, 0.f);
+        Node* child = &game.Root()->children[moveIndex++];
+        child->move = static_cast<uint16_t>(move);
         child->visitCount += evenCount;
-        if (lastSibling)
-        {
-            lastSibling->nextSibling = child;
-        }
-        else
-        {
-            game.Root()->firstChild = child;
-        }
-        lastSibling = child;
     }
     Move firstMove = *legalMoves.begin();
-    Node* selected = game.Root()->firstChild;
+    Node* selected = &game.Root()->children[0];
     selected->visitCount += (networkConfig.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
     game.Root()->visitCount = networkConfig.SelfPlay.NumSimulations;
 

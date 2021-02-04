@@ -16,7 +16,6 @@
 #include "SavedGame.h"
 #include "Threading.h"
 #include "PredictionCache.h"
-#include "PoolAllocator.h"
 #include "Epd.h"
 
 class TerminalValue
@@ -75,79 +74,14 @@ private:
     float _mateTerm;
 };
 
-template <typename T>
-class SiblingIterator
-{
-public:
-
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = T;
-    using difference_type = int;
-    using pointer = T*;
-    using reference = T&;
-
-public:
-
-    SiblingIterator(T* current)
-        : _current(current)
-    {
-    }
-
-    SiblingIterator& operator++()
-    {
-        _current = _current->nextSibling;
-        return *this;
-    }
-
-    SiblingIterator operator++(int)
-    {
-        SiblingIterator pre = *this;
-        _current = _current->nextSibling;
-        return pre;
-    }
-
-    T& operator*()
-    {
-        return *_current;
-    }
-
-    T* operator->()
-    {
-        return _current;
-    }
-
-    bool operator==(const SiblingIterator& other)
-    {
-        return (_current == other._current);
-    }
-
-    bool operator!=(const SiblingIterator& other)
-    {
-        return (_current != other._current);
-    }
-
-private:
-
-    T* _current;
-};
-
 struct Node
 {
 public:
 
-    static const size_t BlockSizeBytes = 64 * 1024 * 1024; // 64 MiB
-    thread_local static PoolAllocator<Node, BlockSizeBytes> Allocator;
-
-    using iterator = SiblingIterator<Node>;
-    using const_iterator = SiblingIterator<const Node>;
+    using iterator = Node*;
+    using const_iterator = const Node*;
 
 public:
-
-    Node(uint16_t setMove, float setPrior);
-    Node(Move setMove, float setPrior);
-
-    void* operator new(size_t byteCount);
-    void operator delete(void* memory) noexcept;
 
     iterator begin();
     iterator end();
@@ -162,13 +96,12 @@ public:
     void AdjustVisitCount(int newVisitCount);
 
     Node* Child(Move match);
-    int CountChildren() const;
 
 public:
 
     Node* bestChild;
-    Node* firstChild;
-    Node* nextSibling;
+    Node* children;
+    int32_t childCount;
     uint16_t move;
     bool expanding;
     uint8_t visitingCount;
@@ -177,10 +110,9 @@ public:
     float valueAverage;
     float valueWeight;
     TerminalValue terminalValue;
-    // 4 bytes implicit padding
 };
 static_assert(sizeof(TerminalValue) == 8);
-static_assert(sizeof(Node) == 56); // 52=56
+static_assert(sizeof(Node) == 48);
 
 struct WeightedNode
 {

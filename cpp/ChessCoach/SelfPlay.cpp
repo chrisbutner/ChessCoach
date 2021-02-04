@@ -132,72 +132,39 @@ float TerminalValue::MateScore(float explorationRate) const
     return (explorationRate * _mateTerm);
 }
 
-thread_local PoolAllocator<Node, Node::BlockSizeBytes> Node::Allocator;
-
-Node::Node(uint16_t setMove, float setPrior)
-    : bestChild(nullptr)
-    , firstChild(nullptr)
-    , nextSibling(nullptr)
-    , move(setMove)
-    , expanding(false)
-    , visitingCount(0)
-    , prior(setPrior)
-    , visitCount(0)
-    , valueAverage(0.f)
-    , valueWeight(0.f)
-    , terminalValue{}
-{
-    assert(!std::isnan(setPrior));
-}
-
-Node::Node(Move setMove, float setPrior)
-    : Node(static_cast<uint16_t>(setMove), setPrior)
-{
-}
-
-void* Node::operator new(size_t /*count*/)
-{
-    return Allocator.Allocate();
-}
-
-void Node::operator delete(void* ptr) noexcept
-{
-    Allocator.Free(ptr);
-}
-
 Node::iterator Node::begin()
 {
-    return iterator(firstChild);
+    return children;
 }
 
 Node::iterator Node::end()
 {
-    return iterator(nullptr);
+    return (children + childCount);
 }
 
 Node::const_iterator Node::begin() const
 {
-    return const_iterator(firstChild);
+    return children;
 }
 
 Node::const_iterator Node::end() const
 {
-    return const_iterator(nullptr);
+    return (children + childCount);
 }
 
 Node::const_iterator Node::cbegin() const
 {
-    return const_iterator(firstChild);
+    return children;
 }
 
 Node::const_iterator Node::cend() const
 {
-    return const_iterator(nullptr);
+    return (children + childCount);
 }
 
 bool Node::IsExpanded() const
 {
-    return (firstChild != nullptr);
+    return (children != nullptr);
 }
 
 float Node::Value() const
@@ -246,11 +213,6 @@ Node* Node::Child(Move match)
     return nullptr;
 }
 
-int Node::CountChildren() const
-{
-    return std::distance(begin(), end());
-}
-
 // TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
 // TODO: Also input/output planes? e.g. for StoredGames vector storage
 
@@ -268,7 +230,7 @@ SelfPlayGame::SelfPlayGame()
 
 SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
     : Game()
-    , _root(new Node(MOVE_NONE, 0.f))
+    , _root(new Node())
     , _tryHard(false)
     , _image(image)
     , _value(value)
@@ -281,7 +243,7 @@ SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork:
 SelfPlayGame::SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard,
     INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
     : Game(fen, moves)
-    , _root(new Node(MOVE_NONE, 0.f))
+    , _root(new Node())
     , _tryHard(tryHard)
     , _image(image)
     , _value(value)
@@ -572,16 +534,15 @@ void SelfPlayGame::Expand(int moveCount)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
-    assert(root->firstChild == nullptr);
+    assert(root->children == nullptr);
     assert(moveCount > 0);
 
-    Node** next = &root->firstChild;
+    root->children = new Node[moveCount]{};
+    root->childCount = moveCount;
     for (int i = 0; i < moveCount; i++)
     {
-        const Move move = _expandAndEvaluate_moves[i].move;
-        assert(_position.legal(move));
-        *next = new Node(move, _cachedPriors[i]);
-        next = &(*next)->nextSibling;
+        root->children[i].move = static_cast<uint16_t>(_expandAndEvaluate_moves[i].move);
+        root->children[i].prior = _cachedPriors[i];
     }
 }
 
@@ -659,15 +620,17 @@ void SelfPlayGame::PruneExcept(Node* root, Node*& except)
     assert(_root != root);
     assert(_root == except);
 
-    // Minimize fragmentation by cloning "except" and pruning the original.
+    // Hoist "except" from an array member to its own root allocation.
     _root = new Node(*except);
-    _root->nextSibling = nullptr;
 
     // Don't let "except"'s descendants get pruned when the original is deleted.
-    except->firstChild = nullptr;
+    except->children = nullptr;
+    except->childCount = 0;
 
     // Prune, then update the caller's "except" pointer (now deleted) to the clone.
     PruneAllInternal(root);
+    delete root;
+    root = nullptr;
     except = _root;
 }
 
@@ -679,27 +642,22 @@ void SelfPlayGame::PruneAll()
     }
 
     PruneAllInternal(_root);
-
-    // All nodes in the related tree are gone, so don't leave _root dangling.
+    delete _root;
     _root = nullptr;
 }
 
-// Delete siblings contiguously. For now they'll still end up reversed in the PoolAllocator
-// but if benchmarking ends up better later, a "recycling" staging area can be used to correct.
 void SelfPlayGame::PruneAllInternal(Node* node)
 {
-    Node* parent = node;
-    while (parent)
+    for (Node& child : *node)
     {
-        if (parent->firstChild) PruneAllInternal(parent->firstChild);
-        parent = parent->nextSibling;
+        if (child.IsExpanded())
+        {
+            PruneAllInternal(&child);
+        }
     }
-    while (node)
-    {
-        Node* prune = node;
-        node = node->nextSibling;
-        delete prune;
-    }
+    delete[] node->children;
+    node->children = nullptr;
+    node->childCount = 0;
 }
 
 void SelfPlayGame::UpdateSearchRootPly()
@@ -872,7 +830,7 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
         }
         else
         {
-            newRoot = ((i == (moves.size() - 1)) ? new Node(MOVE_NONE, 0.f) : nullptr);
+            newRoot = ((i == (moves.size() - 1)) ? new Node() : nullptr);
             game.PruneAll();
             game.ApplyMoveWithRoot(move, newRoot);
         }
@@ -1309,7 +1267,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
 void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
 {
     std::gamma_distribution<float> gamma(Config().SelfPlay.RootDirichletAlpha, 1.f);
-    std::vector<float> noise(game.Root()->CountChildren());
+    std::vector<float> noise(game.Root()->childCount);
 
     float noiseSum = 0.f;
     for (int i = 0; i < noise.size(); i++)
@@ -1467,12 +1425,12 @@ float SelfPlayWorker::CalculatePuctScoreFixedValue(const Node* parent, const Nod
 void SelfPlayWorker::PrunePolicyTarget(Node* root) const
 {
     // Find the most-visited child: ignore hard mate selection rules.
-    Node* best = root->firstChild;
-    for (Node& child : *root)
+    Node* best = &root->children[0];
+    for (int i = 1; i < root->childCount; i++)
     {
-        if (child.visitCount > best->visitCount)
+        if (root->children[i].visitCount > best->visitCount)
         {
-            best = &child;
+            best = &root->children[i];
         }
     }
 

@@ -67,19 +67,12 @@ void MockExpand(Node* node, int count)
 {
     const float prior = (1.f / count);
 
-    Node* lastSibling = nullptr;
+    node->children = new Node[count]{};
+    node->childCount = count;
     for (int i = 0; i < count; i++)
     {
-        Node* child = new Node(Move(i), prior);
-        if (lastSibling)
-        {
-            lastSibling->nextSibling = child;
-        }
-        else
-        {
-            node->firstChild = child;
-        }
-        lastSibling = child;
+        node->children[i].move = static_cast<uint16_t>(i);
+        node->children[i].prior = prior;
     }
 }
 
@@ -129,30 +122,6 @@ void CheckNonTerminal(Node* node)
     EXPECT_EQ(node->terminalValue.MateN(), 0);
     EXPECT_EQ(node->terminalValue.OpponentMateN(), 0);
     EXPECT_EQ(node->terminalValue.EitherMateN(), 0);
-}
-
-TEST(Mcts, NodeLeaks)
-{
-    ChessCoach chessCoach;
-    chessCoach.Initialize();
-
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
-
-// Allocations are only tracked with DEBUG.
-#ifdef _DEBUG
-    auto [currentBefore, peakBefore] = Node::Allocator.DebugAllocations();
-    EXPECT_EQ(currentBefore, 0);
-    EXPECT_EQ(peakBefore, 0);
-#endif
-
-    PlayGame(selfPlayWorker, [](auto&) {});
-
-// Allocations are only tracked with DEBUG.
-#ifdef _DEBUG
-    auto [currentAfter, peakAfter] = Node::Allocator.DebugAllocations();
-    EXPECT_EQ(currentAfter, 0);
-    EXPECT_GT(peakAfter, 0);
-#endif
 }
 
 TEST(Mcts, StateLeaks)
@@ -218,7 +187,7 @@ TEST(Mcts, MateComparisons)
 
     // Set up nodes from expected worst to best.
     const int nodeCount = 7;
-    Node nodes[nodeCount] = { {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f}, {MOVE_NONE, 0.f} };
+    Node nodes[nodeCount] = {};
     nodes[0].terminalValue = TerminalValue::OpponentMateIn<2>();
     nodes[1].terminalValue = TerminalValue::OpponentMateIn<4>();
     nodes[2].visitCount = 10;
@@ -340,8 +309,12 @@ TEST(Mcts, TwofoldRepetition)
     Node* node = game->Root();
     for (Move move : moves)
     {
-        nodes.push_back(new Node(move, 1.f));
-        node = node->firstChild = nodes.back();
+        node->childCount = 1;
+        node->children = new Node[1]{};
+        node = &node->children[0];
+        node->move = static_cast<uint16_t>(move);
+        node->prior = 1.f;
+        nodes.push_back(node);
     }
 
     // Apply the moves and evaluate the 2-repetition as a draw using the
@@ -396,20 +369,22 @@ TEST(Mcts, SamplingSelfPlay)
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up visit counts for four moves.
-    Node* child1 = new Node(make_move(SQ_E2, SQ_E4), 0.25f);
-    child1->visitCount = 350;
-    Node* child2 = new Node(make_move(SQ_D2, SQ_D4), 0.25f);
-    child2->visitCount = 250;
-    Node* child3 = new Node(make_move(SQ_E2, SQ_E3), 0.25f);
-    child3->visitCount = 150;
-    Node* child4 = new Node(make_move(SQ_C2, SQ_C4), 0.25f);
-    child4->visitCount = 50;
-    game->Root()->visitCount = (child1->visitCount + child2->visitCount + child3->visitCount + child4->visitCount);
-    game->Root()->firstChild = child1;
-    game->Root()->bestChild = child1;
-    child1->nextSibling = child2;
-    child2->nextSibling = child3;
-    child3->nextSibling = child4;
+    game->Root()->childCount = 4;
+    game->Root()->children = new Node[4]{};
+    game->Root()->children[0].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E4));
+    game->Root()->children[0].prior = 0.25f;
+    game->Root()->children[0].visitCount = 350;
+    game->Root()->children[1].move = static_cast<uint16_t>(make_move(SQ_D2, SQ_D4));
+    game->Root()->children[1].prior = 0.25f;
+    game->Root()->children[1].visitCount = 250;
+    game->Root()->children[2].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E3));
+    game->Root()->children[2].prior = 0.25f;
+    game->Root()->children[2].visitCount = 150;
+    game->Root()->children[3].move = static_cast<uint16_t>(make_move(SQ_C2, SQ_C4));
+    game->Root()->children[3].prior = 0.25f;
+    game->Root()->children[3].visitCount = 50;
+    game->Root()->visitCount = (game->Root()->children[0].visitCount + game->Root()->children[1].visitCount + game->Root()->children[2].visitCount + game->Root()->children[3].visitCount);
+    game->Root()->bestChild = &game->Root()->children[0];
 
     // Validate self-play sampling. Just shove samples in "valueWeight".
     // Expect visits in proportion to visit count.
@@ -419,10 +394,10 @@ TEST(Mcts, SamplingSelfPlay)
         Node* selected = selfPlayWorker.SelectMove(*game, true /* allowDiversity */);
         selected->valueWeight++;
     }
-    EXPECT_NEAR(child1->valueWeight, child1->visitCount, epsilon);
-    EXPECT_NEAR(child2->valueWeight, child2->visitCount, epsilon);
-    EXPECT_NEAR(child3->valueWeight, child3->visitCount, epsilon);
-    EXPECT_NEAR(child4->valueWeight, child4->visitCount, epsilon);
+    EXPECT_NEAR(game->Root()->children[0].valueWeight, game->Root()->children[0].visitCount, epsilon);
+    EXPECT_NEAR(game->Root()->children[1].valueWeight, game->Root()->children[1].visitCount, epsilon);
+    EXPECT_NEAR(game->Root()->children[2].valueWeight, game->Root()->children[2].visitCount, epsilon);
+    EXPECT_NEAR(game->Root()->children[3].valueWeight, game->Root()->children[3].visitCount, epsilon);
 
     game->PruneAll();
 }
@@ -438,20 +413,22 @@ TEST(Mcts, SamplingUci)
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up visit counts for four moves.
-    Node* child1 = new Node(make_move(SQ_E2, SQ_E4), 0.25f);
-    child1->visitCount = 350;
-    Node* child2 = new Node(make_move(SQ_D2, SQ_D4), 0.25f);
-    child2->visitCount = 250;
-    Node* child3 = new Node(make_move(SQ_E2, SQ_E3), 0.25f);
-    child3->visitCount = 150;
-    Node* child4 = new Node(make_move(SQ_C2, SQ_C4), 0.25f);
-    child4->visitCount = 50;
-    game->Root()->visitCount = (child1->visitCount + child2->visitCount + child3->visitCount + child4->visitCount);
-    game->Root()->firstChild = child1;
-    game->Root()->bestChild = child1;
-    child1->nextSibling = child2;
-    child2->nextSibling = child3;
-    child3->nextSibling = child4;
+    game->Root()->childCount = 4;
+    game->Root()->children = new Node[4]{};
+    game->Root()->children[0].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E4));
+    game->Root()->children[0].prior = 0.25f;
+    game->Root()->children[0].visitCount = 350;
+    game->Root()->children[1].move = static_cast<uint16_t>(make_move(SQ_D2, SQ_D4));
+    game->Root()->children[1].prior = 0.25f;
+    game->Root()->children[1].visitCount = 250;
+    game->Root()->children[2].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E3));
+    game->Root()->children[2].prior = 0.25f;
+    game->Root()->children[2].visitCount = 150;
+    game->Root()->children[3].move = static_cast<uint16_t>(make_move(SQ_C2, SQ_C4));
+    game->Root()->children[3].prior = 0.25f;
+    game->Root()->children[3].visitCount = 50;
+    game->Root()->visitCount = (game->Root()->children[0].visitCount + game->Root()->children[1].visitCount + game->Root()->children[2].visitCount + game->Root()->children[3].visitCount);
+    game->Root()->bestChild = &game->Root()->children[0];
 
     // Validate UCI sampling. Just shove samples in "valueWeight".
     // Expect visits in proportion to visit counts re-exponentiated with temperature 10.
@@ -462,10 +439,10 @@ TEST(Mcts, SamplingUci)
         Node* selected = selfPlayWorker.SelectMove(*game, true /* allowDiversity */);
         selected->valueWeight++;
     }
-    EXPECT_NEAR(child1->valueWeight / sampleCount, 0.2696f, epsilon);
-    EXPECT_NEAR(child2->valueWeight / sampleCount, 0.2607f, epsilon);
-    EXPECT_NEAR(child3->valueWeight / sampleCount, 0.2477f, epsilon);
-    EXPECT_NEAR(child4->valueWeight / sampleCount, 0.2219f, epsilon);
+    EXPECT_NEAR(game->Root()->children[0].valueWeight / sampleCount, 0.2696f, epsilon);
+    EXPECT_NEAR(game->Root()->children[1].valueWeight / sampleCount, 0.2607f, epsilon);
+    EXPECT_NEAR(game->Root()->children[2].valueWeight / sampleCount, 0.2477f, epsilon);
+    EXPECT_NEAR(game->Root()->children[3].valueWeight / sampleCount, 0.2219f, epsilon);
 
     game->PruneAll();
 }
