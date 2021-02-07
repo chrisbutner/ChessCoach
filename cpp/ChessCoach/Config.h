@@ -5,8 +5,6 @@
 #include <vector>
 #include <map>
 
-#define SAMPLE_BATCH_FIXED 0
-
 enum StageType
 {
     StageType_Play,
@@ -135,7 +133,8 @@ struct MiscConfig
     int TimeControl_FractionOfRemaining;
 
     // Search
-    int Search_MctsParallelism;
+    int Search_SearchThreads;
+    int Search_SearchParallelism;
     int Search_GuiUpdateIntervalNodes;
 
     // Storage
@@ -165,9 +164,7 @@ public:
 
 public:
 
-    static NetworkConfig DefaultNetwork;
-    static NetworkConfig TrainingNetwork;
-    static NetworkConfig UciNetwork;
+    static NetworkConfig Network;
     static MiscConfig Misc;
 
 public:

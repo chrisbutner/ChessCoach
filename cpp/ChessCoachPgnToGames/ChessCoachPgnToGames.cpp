@@ -179,7 +179,7 @@ void ChessCoachPgnToGames::ConvertAll()
         }
 
         // Write out the vocabulary document.
-        const std::filesystem::path vocabularyPath = (_outputDirectory / Config::TrainingNetwork.Training.VocabularyFilename);
+        const std::filesystem::path vocabularyPath = (_outputDirectory / Config::Network.Training.VocabularyFilename);
         std::ofstream vocabularyFile = std::ofstream(vocabularyPath, std::ios::out);
         for (const std::string& comment : vocabulary.vocabulary)
         {
@@ -199,7 +199,7 @@ void ChessCoachPgnToGames::ConvertAll()
 
 void ChessCoachPgnToGames::ConvertPgns()
 {
-    const Storage storage(Config::TrainingNetwork, Config::Misc);
+    const Storage storage;
     std::vector<SavedGame> games;
     std::vector<SavedCommentary> gameCommentary;
 

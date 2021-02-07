@@ -35,10 +35,8 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
 
         ASSERT_LT(patternIndex, 32);
         const float value = (patternIndex / 32.f);
-        child->valueAverage += value;
-        child->valueWeight += visitCount;
-        game.Root()->valueWeight += visitCount;
-        game.Root()->valueAverage += visitCount * (Game::FlipValue(value) - game.Root()->valueAverage) / game.Root()->valueWeight; // Arithmetic mean here
+        child->SampleValue(1.f, 1000.f, value);
+        game.Root()->SampleValue(1.f, 1000.f, Game::FlipValue(value));
         ASSERT_GE(game.Root()->Value(), 0.f);
         ASSERT_LE(game.Root()->Value(), 1.f);
         moveIndex++;
@@ -55,12 +53,9 @@ TEST(Network, Policy)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    // Just use training network config.
-    const NetworkConfig& networkConfig = Config::TrainingNetwork;
-
-    std::vector<INetwork::InputPlanes> images(networkConfig.SelfPlay.PredictionBatchSize);
-    std::vector<float> values(networkConfig.SelfPlay.PredictionBatchSize);
-    std::vector<INetwork::OutputPlanes> policies(networkConfig.SelfPlay.PredictionBatchSize);
+    std::vector<INetwork::InputPlanes> images(Config::Network.SelfPlay.PredictionBatchSize);
+    std::vector<float> values(Config::Network.SelfPlay.PredictionBatchSize);
+    std::vector<INetwork::OutputPlanes> policies(Config::Network.SelfPlay.PredictionBatchSize);
 
     SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {}, false /* tryHard */, &images[0], &values[0], &policies[0]);
     
@@ -80,8 +75,8 @@ TEST(Network, Policy)
     }
     Move firstMove = *legalMoves.begin();
     Node* selected = &game.Root()->children[0];
-    selected->visitCount += (networkConfig.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
-    game.Root()->visitCount = networkConfig.SelfPlay.NumSimulations;
+    selected->visitCount += (Config::Network.SelfPlay.NumSimulations - (legalMoveCount * evenCount));
+    game.Root()->visitCount = Config::Network.SelfPlay.NumSimulations;
 
     // Generate policy labels. Make sure that legal moves are non-zero and the rest are zero.
     Node* previousRoot = game.Root();
@@ -165,7 +160,7 @@ TEST(Network, CompressDecompress)
     const SavedGame savedGame = game.Save();
 
     // Generate compressed training tensors.
-    const Storage storage(Config::TrainingNetwork, Config::Misc);
+    const Storage storage;
     message::Example compressed = storage.DebugPopulateGame(savedGame);
 
     // Decompress in Python.
@@ -182,7 +177,7 @@ TEST(Network, CompressDecompress)
     std::vector<INetwork::OutputPlanes> policies(savedGame.moveCount);
 
     const int decompressPositionsModulus = 1; // Every position
-    std::unique_ptr<INetwork> network(chessCoach.CreateNetwork(Config::TrainingNetwork));
+    std::unique_ptr<INetwork> network(chessCoach.CreateNetwork());
     network->DebugDecompress(savedGame.moveCount, policyIndices.size(), result.mutable_data(), imagePiecesAuxiliary.mutable_data(),
         policyRowLengths.mutable_data(), policyIndices.mutable_data(), policyValues.mutable_data(), decompressPositionsModulus,
         images.data(), values.data(), policies.data());
@@ -247,7 +242,7 @@ TEST(Network, CompressDecompressSparse)
     const SavedGame savedGame = game.Save();
 
     // Generate compressed training tensors.
-    const Storage storage(Config::TrainingNetwork, Config::Misc);
+    const Storage storage;
     message::Example compressed = storage.DebugPopulateGame(savedGame);
 
     // Decompress in Python.
@@ -263,7 +258,7 @@ TEST(Network, CompressDecompressSparse)
     std::vector<INetwork::OutputPlanes> policies(savedGame.moveCount);
 
     const int decompressPositionsModulus = 3; // Every 3rd position
-    std::unique_ptr<INetwork> network(chessCoach.CreateNetwork(Config::TrainingNetwork));
+    std::unique_ptr<INetwork> network(chessCoach.CreateNetwork());
     network->DebugDecompress(savedGame.moveCount, policyIndices.size(), result.mutable_data(), imagePiecesAuxiliary.mutable_data(),
         policyRowLengths.mutable_data(), policyIndices.mutable_data(), policyValues.mutable_data(), decompressPositionsModulus,
         images.data(), values.data(), policies.data());

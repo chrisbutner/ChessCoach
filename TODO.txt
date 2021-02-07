@@ -1,8 +1,6 @@
 UCI
-- try to increase in-thread parallelism without sacrificing strength
-- implement multi-threaded search
-	- see old paper links around virtual loss, e.g. atomics in C++ example
-	- need to sync std::cout - use Reply() everywhere - better if only one worker is chatty, but needs to sync with input handler still
+- investigate position #3, UCI gets it, strength test doesn't, diverged again (consistently)
+- re-optimize parameters with 2*256 parallelism (+linear start constant)
 - try speculative budgeting in addition to virtual exploration/loss
 	- for N+small delta, which would have UCB > current best
 	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
@@ -43,8 +41,8 @@ PUCT - training
 Quality (*** before any self-play ***)
 - policy target pruning - do while saving statistics, rather than in-place? - affects PUCT of next position
 - make sure that policy target pruning is still valid after weight, etc. changes
-- remove the training/uci network config separation, high chance for bugs with python always using training, can access statically in C++
 - make sure that mate value() changes didn't damage anything, check mate-in-N puzzles back through notes, two main batches
+	- also try no exploration terms for opponent-mate
 - if trained criticality can't help with search, look over extreme examples manually, see if it's worth driving 800-1600 range or something
 - final validation of 800 convergence - check starting position, some selection of others
 	- maybe use 1.03 temperature at root (Wu)
@@ -82,13 +80,6 @@ SE
 - check 2f training run vs. 2d
 - add SE to whichever is better (still with commentary)
 - evaluate, check in L2 and/or SE
-
-Search parallelism
-- try out a backtracking implementation of virtual exploration/loss that goes as deep
-	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
-	  choosing better nodes overall and avoiding failed simulations
-- test vs. stockfish, need to avoid single-thread, 350 NPS situation
-	- (this was probably the fixed lingering-expanding-true bug, play more games to try repro again)
 
 Student training
 - make student prefer matching teacher for repeatability
@@ -160,6 +151,9 @@ Cluster
 - validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
 UCI (#2)
+- (still needed?) try out a backtracking implementation of virtual exploration/loss that goes as deep
+	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
+	  choosing better nodes overall and avoiding failed simulations
 - profile CPU again
 - tail Backpropagate into BackpropagateVisitsOnly
 - basic improvements to time control
@@ -174,7 +168,6 @@ CPU+GPU integration performance:
 - for Nodes can point last sibling at root and unrecurse deletion (sacrificing breadth-at-once)
 
 Code quality
-- only allocate "mctsParallelism" games in UCI/strength test binaries, simplify away std::min, etc.
 - either remove dataset/training mixing (C++/Python) or fix "ValidateSchedule" to handle division factor
 - try multistage docker build, debian only for building chesscoach, copy over to tensorflow base
 - inject config.toml into cluster volume, take out of image tags, make sure it takes priority over installed
@@ -186,7 +179,6 @@ Code quality
 - try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
 - try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
 - add Python type info everywhere - look up best practices for linting etc.
-- poison self-play workers and join threads properly
 - check for any unnecessary move constructors
 - add further architecture configuration to toml config (residuals*filters, etc.)
 - switch to sample ratio, rather than specifying games + steps (complicated, ties in to "curriculum schedule" in config maybe)
@@ -218,7 +210,6 @@ Publishing
 - website - game-in-10, one at a time, people can watch, comments shown for each move
 
 Bugs
-- Read-AV in game stateinfo cleanup when quitting UCI
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
@@ -228,8 +219,6 @@ Bugs
 
 Low priority
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
-- anything that uses the mainWorker will create new poolallocators on the primary (non-worker) thread, higher memory ceiling
-	- unavoidable if we keep all games around to resume, need higher ceiling
 - save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
 - structured binding, check all pairs
 

@@ -24,20 +24,20 @@
 #include "Preprocessing.h"
 #include "Random.h"
 
-Storage::Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig)
+Storage::Storage()
     : _trainingGameCount(0)
-    , _gamesPerChunk(miscConfig.Storage_GamesPerChunk)
-    , _pgnInterval(networkConfig.Training.PgnInterval)
+    , _gamesPerChunk(Config::Misc.Storage_GamesPerChunk)
+    , _pgnInterval(Config::Network.Training.PgnInterval)
     , _sessionNonce("UNINITIALIZED")
     , _sessionGameCount(0)
     , _sessionChunkCount(0)
 {
     const std::filesystem::path rootPath = Platform::UserDataPath();
 
-    _relativeTrainingGamePath = networkConfig.Training.GamesPathTraining;
+    _relativeTrainingGamePath = Config::Network.Training.GamesPathTraining;
     _localTrainingGamePath = MakeLocalPath(rootPath, _relativeTrainingGamePath);
-    _localLogsPath = MakeLocalPath(rootPath, miscConfig.Paths_Logs);
-    _relativePgnsPath = miscConfig.Paths_Pgns;
+    _localLogsPath = MakeLocalPath(rootPath, Config::Misc.Paths_Logs);
+    _relativePgnsPath = Config::Misc.Paths_Pgns;
 }
 
 void Storage::InitializeLocalGamesChunks(INetwork* network)

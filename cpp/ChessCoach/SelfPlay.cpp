@@ -132,6 +132,38 @@ float TerminalValue::MateScore(float explorationRate) const
     return (explorationRate * _mateTerm);
 }
 
+// GCC doesn't like "Node() = default", needs a nested brace for terminalValue.
+Node::Node()
+    : bestChild{}
+    , children{}
+    , childCount{}
+    , prior{}
+    , move{}
+    , expansion{}
+    , visitingCount{}
+    , visitCount{}
+    , valueAverage{}
+    , valueWeight{}
+    , terminalValue{{}}
+{
+}
+
+
+Node::Node(const Node& other)
+    : bestChild(other.bestChild.load(std::memory_order_relaxed))
+    , children(other.children)
+    , childCount(other.childCount)
+    , prior(other.prior)
+    , move(other.move)
+    , expansion(other.expansion.load(std::memory_order_relaxed))
+    , visitingCount(other.visitingCount.load(std::memory_order_relaxed))
+    , visitCount(other.visitCount.load(std::memory_order_relaxed))
+    , valueAverage(other.valueAverage.load(std::memory_order_relaxed))
+    , valueWeight(other.valueWeight.load(std::memory_order_relaxed))
+    , terminalValue(other.terminalValue.load(std::memory_order_relaxed))
+{
+}
+
 Node::iterator Node::begin()
 {
     return children;
@@ -170,7 +202,7 @@ bool Node::IsExpanded() const
 float Node::Value() const
 {
     // Return a win for a proved mate or loss for a proved opponent mate.
-    const int eitherMateN = terminalValue.EitherMateN();
+    const int eitherMateN = terminalValue.load(std::memory_order_relaxed).EitherMateN();
     const int mateSign = ((eitherMateN > 0) - (eitherMateN < 0));
     if (mateSign != 0)
     {
@@ -178,13 +210,13 @@ float Node::Value() const
     }
 
     // First-play urgency (FPU) is zero, a loss. Start with "valueAverage" and "valueWeight" at zero.
-    return valueAverage;
+    return valueAverage.load(std::memory_order_relaxed);
 }
 
-float Node::ValueWithVirtualLoss(const NetworkConfig* config) const
+float Node::ValueWithVirtualLoss() const
 {
     // Return a win for a proved mate or loss for a proved opponent mate.
-    const int eitherMateN = terminalValue.EitherMateN();
+    const int eitherMateN = terminalValue.load(std::memory_order_relaxed).EitherMateN();
     const int mateSign = ((eitherMateN > 0) - (eitherMateN < 0));
     if (mateSign != 0)
     {
@@ -192,13 +224,24 @@ float Node::ValueWithVirtualLoss(const NetworkConfig* config) const
     }
 
     // First-play urgency (FPU) is zero, a loss. Start with "valueAverage" and "valueWeight" at zero.
-    const float virtualLossCount = (visitingCount * config->SelfPlay.VirtualLossCoefficient);
-    return valueAverage * valueWeight / std::max(1.f, (valueWeight + virtualLossCount));
+    const float virtualLossCount = (visitingCount.load(std::memory_order_relaxed) * Config::Network.SelfPlay.VirtualLossCoefficient);
+    const float weight = static_cast<float>(valueWeight.load(std::memory_order_relaxed));
+    return valueAverage.load(std::memory_order_relaxed) * weight / std::max(1.f, (weight + virtualLossCount));
+}
+
+void Node::SampleValue(float movingAverageBuild, float movingAverageCap, float value)
+{
+    const int newWeight = (valueWeight.fetch_add(1, std::memory_order_relaxed) + 1);
+    float current = valueAverage.load(std::memory_order_relaxed);
+    while (!valueAverage.compare_exchange_weak(
+        current,
+        (current + (value - current) / std::clamp(newWeight * movingAverageBuild, 1.f, movingAverageCap)),
+        std::memory_order_relaxed));
 }
 
 void Node::AdjustVisitCount(int newVisitCount)
 {
-    visitCount = newVisitCount;
+    visitCount.store(newVisitCount, std::memory_order_relaxed);
 }
 
 Node* Node::Child(Move match)
@@ -212,9 +255,6 @@ Node* Node::Child(Move match)
     }
     return nullptr;
 }
-
-// TODO: Write a custom allocator for nodes (work out very maximum, then do some kind of ring/tree - important thing is all same size, capped number)
-// TODO: Also input/output planes? e.g. for StoredGames vector storage
 
 // Fast default-constructor with no resource ownership, used to size out vectors.
 SelfPlayGame::SelfPlayGame()
@@ -327,7 +367,7 @@ SelfPlayGame::~SelfPlayGame()
 {
 }
 
-SelfPlayGame SelfPlayGame::SpawnShadow(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
+SelfPlayGame SelfPlayGame::SpawnShadow(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy) const
 {
     SelfPlayGame shadow(*this);
 
@@ -383,22 +423,30 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     int newVisitCount = 0;
     for (const Node& child : *_root)
     {
-        newVisitCount += child.visitCount;
+        newVisitCount += child.visitCount.load(std::memory_order_relaxed);
     }
     _root->AdjustVisitCount(newVisitCount);
+}
+
+bool SelfPlayGame::TakeExpansionOwnership(Node* node)
+{
+    // We already did a relaxed load of "expansion" for this node in the most recent "SelectChild",
+    // so move straight to an optimistic "compare_exchange_strong".
+    Expansion expected = Expansion::None;
+    return node->expansion.compare_exchange_strong(expected, Expansion::Expanding, std::memory_order_relaxed);
 }
 
 float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore)
 {
     Node* root = _root;
-    assert(!root->IsExpanded());
 
     // A known-terminal leaf will remain a leaf, so be prepared to
     // quickly return its terminal value on repeated visits.
-    if (root->terminalValue.IsImmediate())
+    const TerminalValue terminalValue = root->terminalValue.load(std::memory_order_relaxed);
+    if (terminalValue.IsImmediate())
     {
         state = SelfPlayState::Working;
-        return root->terminalValue.ImmediateValue();
+        return terminalValue.ImmediateValue();
     }
 
     // It's very important in this method to always value a node from the parent's to-play perspective, so:
@@ -435,8 +483,10 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         if (workingMoveCount == 0)
         {
             // Value from the parent's perspective.
-            root->terminalValue = (_position.checkers() ? TerminalValue::MateIn<1>() : TerminalValue::Draw());
-            return root->terminalValue.ImmediateValue();
+            const TerminalValue newTerminalValue = (_position.checkers() ? TerminalValue::MateIn<1>() : TerminalValue::Draw());
+            root->terminalValue.store(newTerminalValue, std::memory_order_relaxed);
+            assert(state == SelfPlayState::Working);
+            return newTerminalValue.ImmediateValue();
         }
 
         // Check for draw by 50-move or repetition.
@@ -463,16 +513,33 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         if (IsDrawByNoProgressOrThreefoldRepetition())
         {
             // Value from the parent's perspective (easy, it's a draw).
-            root->terminalValue = TerminalValue::Draw();
-            return root->terminalValue.ImmediateValue();
+            const TerminalValue newTerminalValue = TerminalValue::Draw();
+            root->terminalValue.store(newTerminalValue, std::memory_order_relaxed);
+            assert(state == SelfPlayState::Working);
+            return newTerminalValue.ImmediateValue();
         }
         const int plyToSearchRoot = (Ply() - _searchRootPly);
         if (IsDrawByTwofoldRepetition(plyToSearchRoot))
         {
             // Value from the parent's perspective (easy, it's a draw).
             // Don't cache the 2-repetition; check again next time.
-            assert(root->terminalValue.IsNonTerminal());
+            assert(root->terminalValue.load(std::memory_order_relaxed).IsNonTerminal());
+            assert(state == SelfPlayState::Working);
             return TerminalValue(TerminalValue::Draw()).ImmediateValue();
+        }
+
+        // The node isn't terminal, so it's time to take expansion ownership. This protects against cases like:
+        // (a) another thread is racing us to expand and will definitely allocate a new Node[] for children
+        // (b) another thread just expanded and already allocated a new Node[] for children
+        //
+        // After successfully taking ownership, either (i) we get a cache hit and immediately expand,
+        // or (ii) we set state to WaitingForPrediction, which can imply expansion ownership in future.
+        //
+        // When failing to take ownership, the state remains Working to prepare for a fresh search path next time.
+        if (!TakeExpansionOwnership(root))
+        {
+            assert(state == SelfPlayState::Working);
+            return std::numeric_limits<float>::quiet_NaN();
         }
 
         // Try get a cached prediction. Only hit the cache up to a max ply for self-play since we
@@ -492,6 +559,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         {
             // Expand child nodes with the cached priors.
             Expand(workingMoveCount);
+            assert(state == SelfPlayState::Working);
             return cachedValue;
         }
 
@@ -501,7 +569,8 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         return std::numeric_limits<float>::quiet_NaN();
     }
 
-    // Received a prediction from the network.
+    // Received a prediction from the network. WaitingForPrediction implies that we have expansion ownership.
+    assert(state == SelfPlayState::WaitingForPrediction);
 
     // Value from the parent's perspective.
     const float value = FlipValue(*_value);
@@ -534,7 +603,6 @@ void SelfPlayGame::Expand(int moveCount)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
-    assert(root->children == nullptr);
     assert(moveCount > 0);
 
     root->children = new Node[moveCount]{};
@@ -585,10 +653,10 @@ float SelfPlayGame::CalculateMctsValue() const
 void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float>& visits = _childVisits.emplace_back();
-    const float sumChildVisits = static_cast<float>(_root->visitCount);
+    const float sumChildVisits = static_cast<float>(_root->visitCount.load(std::memory_order_relaxed));
     for (const Node& child : *_root)
     {
-        visits[Move(child.move)] = static_cast<float>(child.visitCount) / sumChildVisits;
+        visits[Move(child.move)] = static_cast<float>(child.visitCount.load(std::memory_order_relaxed)) / sumChildVisits;
     }
     _mctsValues.push_back(CalculateMctsValue());
 }
@@ -598,7 +666,7 @@ void SelfPlayGame::Complete()
     // Save state that depends on nodes.
     // Terminal value is from the parent's perspective, so unconditionally flip (~)
     // from *parent* to *self* before flipping from ToPlay() to white's perspective.
-    _result = FlipValue(~ToPlay(), _root->terminalValue.ImmediateValue());
+    _result = FlipValue(~ToPlay(), _root->terminalValue.load(std::memory_order_relaxed).ImmediateValue());
 
     // Clear and detach from all nodes.
     PruneAll();
@@ -674,41 +742,50 @@ Move SelfPlayGame::ParseSan(const std::string& san)
 // (aimed at preventing N self-play worker threads from each clearing).
 Throttle SelfPlayWorker::PredictionCacheResetThrottle(300 * 1000 /* durationMilliseconds */);
 
-SelfPlayWorker::SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage)
-    : _networkConfig(&networkConfig)
-    , _storage(storage)
-    , _states(networkConfig.SelfPlay.PredictionBatchSize)
-    , _images(networkConfig.SelfPlay.PredictionBatchSize)
-    , _values(networkConfig.SelfPlay.PredictionBatchSize)
-    , _policies(networkConfig.SelfPlay.PredictionBatchSize)
-    , _games(networkConfig.SelfPlay.PredictionBatchSize)
-    , _scratchGames(networkConfig.SelfPlay.PredictionBatchSize)
-    , _gameStarts(networkConfig.SelfPlay.PredictionBatchSize)
-    , _mctsSimulations(networkConfig.SelfPlay.PredictionBatchSize, 0)
-    , _searchPaths(networkConfig.SelfPlay.PredictionBatchSize)
-    , _cacheStores(networkConfig.SelfPlay.PredictionBatchSize)
-    , _searchConfig{}
-    , _searchState{}
+void SearchState::Reset(const TimeControl& setTimeControl)
+{
+    searchStart = std::chrono::high_resolution_clock::now();
+    lastPrincipleVariationPrint = searchStart;
+    lastBestMove = MOVE_NONE;
+    lastBestNodes = 0;
+    timeControl = setTimeControl;
+    previousNodeCount = 0;
+
+    nodeCount = 0;
+    failedNodeCount = 0;
+    principleVariationChanged = false;
+}
+
+SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int gameCount)
+    : _storage(storage)
+    , _states(gameCount)
+    , _images(gameCount)
+    , _values(gameCount)
+    , _policies(gameCount)
+    , _games(gameCount)
+    , _scratchGames(gameCount)
+    , _gameStarts(gameCount)
+    , _mctsSimulations(gameCount, 0)
+    , _searchPaths(gameCount)
+    , _cacheStores(gameCount)
+    , _searchState(searchState)
 {
 }
 
-const NetworkConfig& SelfPlayWorker::Config() const
+void SelfPlayWorker::Finalize()
 {
-    return *_networkConfig;
+    // Deallocate pooled StateInfos on the allocating worker thread.
+    _scratchGames.clear();
+    _games.clear();
 }
 
-void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* network)
+void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool /* primary */)
 {
-    // Use the faster student network for self-play.
-    const NetworkType networkType = NetworkType_Student;
-
-    while (true)
+    // Wait until games are required.
+    while (workCoordinator->WaitForWorkItems())
     {
-        // Wait until games are required.
-        workCoordinator.WaitForWorkItems();
-
         // Generate uniform predictions for the first network (rather than use random weights).
-        const bool uniform = workCoordinator.GenerateUniformPredictions();
+        const bool uniform = workCoordinator->GenerateUniformPredictions();
         if (uniform)
         {
             std::cout << "Generating uniform network predictions until trained" << std::endl;
@@ -734,7 +811,7 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
         }
 
         // Play games until required.
-        while (!workCoordinator.AllWorkItemsCompleted())
+        while (!workCoordinator->AllWorkItemsCompleted())
         {
             // CPU work
             for (int i = 0; i < _games.size(); i++)
@@ -742,11 +819,11 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
                 Play(i);
 
                 // In degenerate conditions whole games can finish in CPU via the prediction cache, so loop.
-                while ((_states[i] == SelfPlayState::Finished) && !workCoordinator.AllWorkItemsCompleted())
+                while ((_states[i] == SelfPlayState::Finished) && !workCoordinator->AllWorkItemsCompleted())
                 {
                     SaveToStorageAndLog(network, i);
 
-                    workCoordinator.OnWorkItemCompleted();
+                    workCoordinator->OnWorkItemCompleted();
 
                     SetUpGame(i);
                     Play(i);
@@ -756,11 +833,11 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
             // GPU work
             if (uniform)
             {
-                PredictBatchUniform(_networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+                PredictBatchUniform(Config::Network.SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
             }
             else
             {
-                const PredictionStatus status = network->PredictBatch(networkType, _networkConfig->SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+                const PredictionStatus status = network->PredictBatch(networkType, Config::Network.SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
                 if ((status & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
                 {
                     // This thread has permission to clear the prediction cache after seeing an updated network.
@@ -773,6 +850,8 @@ void SelfPlayWorker::PlayGames(WorkCoordinator& workCoordinator, INetwork* netwo
         // Don't free nodes here. Let the games and MCTS trees be continued using the next network
         // after clearing the prediction cache (via PredictionStatus flag).
     }
+
+    Finalize();
 }
 
 void SelfPlayWorker::ClearGame(int index)
@@ -872,74 +951,39 @@ void SelfPlayWorker::SaveNetwork(INetwork* network, NetworkType networkType, int
     network->SaveNetwork(networkType, checkpoint);
 }
 
-bool SelfPlayWorker::StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint)
+void SelfPlayWorker::StrengthTestNetwork(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int checkpoint)
 {
-    // Strength-test the engine every "StrengthTestInterval" steps.
-    assert(_networkConfig->Training.StrengthTestInterval >= _networkConfig->Training.CheckpointInterval);
-    assert((_networkConfig->Training.StrengthTestInterval % _networkConfig->Training.CheckpointInterval) == 0);
-    if ((checkpoint % _networkConfig->Training.StrengthTestInterval) == 0)
-    {
-        StrengthTest(network, networkType, checkpoint);
-        return true;
-    }
-    return false;
-}
-
-void SelfPlayWorker::StrengthTest(INetwork* network, NetworkType networkType, int step)
-{
-    std::map<std::string, int> testResults;
-    std::map<std::string, int> testPositions;
-
     std::cout << "Running strength tests..." << std::endl;
 
     // Only run STS in the interest of time.
     const std::string stsName = "STS";
     const int moveTimeMs = 200;
-
-    // Find strength test .epd files and match STS.
-    const std::filesystem::path testPath = (Platform::InstallationDataPath() / "StrengthTests");
-    for (const auto& entry : std::filesystem::directory_iterator(testPath))
-    {
-        if (entry.path().extension().string() != ".epd")
-        {
-            continue;
-        }
-
-        const std::string testName = entry.path().stem().string();
-        if (testName != stsName)
-        {
-            continue;
-        }
-
-        std::cout << "Testing " << entry.path().filename() << "..." << std::endl;
-        const auto [score, total, positions, totalNodesRequired] = StrengthTestEpd(network, networkType, entry.path(),
-            moveTimeMs, 0 /* nodes */, 0 /* failureNodes */, 0 /* positionLimit */, nullptr /* progress */);
-        testResults[testName] = score;
-        testPositions[testName] = positions;
-    }
+    const std::filesystem::path epdPath = (Platform::InstallationDataPath() / "StrengthTests" / "STS.epd");
+    std::cout << "Testing " << epdPath.filename() << "..." << std::endl;
+    const auto [score, total, positions, totalNodesRequired] = StrengthTestEpd(workCoordinator, epdPath,
+        moveTimeMs, 0 /* nodes */, 0 /* failureNodes */, 0 /* positionLimit */, nullptr /* progress */);
 
     // Estimate an Elo rating using logic here: https://github.com/fsmosca/STS-Rating/blob/master/sts_rating.py
     const float slope = 445.23f;
     const float intercept = -242.85f;
-    const float stsRating = (slope * testResults[stsName] / testPositions[stsName]) + intercept;
+    const float stsRating = (slope * score / positions) + intercept;
 
     // Log to TensorBoard.
     std::vector<std::string> names;
     std::vector<float> values;
-    for (const auto& [testName, score] : testResults)
-    {
-        names.emplace_back("strength/" + testName + "_score");
-        values.push_back(static_cast<float>(score));
-        std::cout << names.back() << ": " << values.back() << std::endl;
-    }
+    names.emplace_back("strength/" + stsName + "_score");
     names.emplace_back("strength/" + stsName + "_rating");
+    values.push_back(static_cast<float>(score));
     values.push_back(stsRating);
-    std::cout << names.back() << ": " << values.back() << std::endl;
-    network->LogScalars(networkType, step, names, values.data());
+    for (int i = 0; i < names.size(); i++)
+    {
+        std::cout << names[i] << ": " << values[i] << std::endl;
+    }
+    network->LogScalars(networkType, checkpoint, names, values.data());
 }
 
 // Returns (score, total, positions, totalNodesRequired).
-std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath,
+std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(WorkCoordinator* workCoordinator, const std::filesystem::path& epdPath,
     int moveTimeMs, int nodes, int failureNodes, int positionLimit,
     std::function<void(const std::string&, const std::string&, const std::string&, int, int, int)> progress)
 {
@@ -952,9 +996,6 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
     // It would be better to clear before every position in the EPD, but too slow.
     PredictionCache::Instance.Clear();
 
-    // Warm up the GIL and predictions, and reclaim training memory.
-    WarmUpPredictions(network, networkType, 1);
-
     const std::vector<StrengthTestSpec> specs = Epd::ParseEpds(epdPath);
     positions = static_cast<int>(specs.size());
     if (positionLimit > 0)
@@ -965,7 +1006,7 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
     for (int i = 0; i < positions; i++)
     {
         const StrengthTestSpec& spec = specs[i];
-        const auto [move, points, nodesRequired] = StrengthTestPosition(network, networkType, spec, moveTimeMs, nodes, failureNodes);
+        const auto [move, points, nodesRequired] = StrengthTestPosition(workCoordinator, spec, moveTimeMs, nodes, failureNodes);
         const int available = (spec.points.empty() ? 1 : *std::max_element(spec.points.begin(), spec.points.end()));
         score += points;
         total += available;
@@ -993,59 +1034,28 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(INetwork* network
 
 // For best-move tests returns 1 if correct or 0 if incorrect.
 // For points/alternative tests returns N points or 0 if incorrect.
-std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes)
+std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(WorkCoordinator* workCoordinator, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes)
 {
+    // Make sure that the workers are ready.
+    workCoordinator->WaitForWorkers();
+
     // Set up the position.
-    _games[0].PruneAll();
-    SetUpGame(0, spec.fen, {}, true /* tryHard */);
+    SearchUpdatePosition(std::string(spec.fen), {}, true /* forceNewPosition */);
 
     // Set up search and time control.
     TimeControl timeControl = {};
     timeControl.moveTimeMs = moveTimeMs;
     timeControl.nodes = nodes;
-
-    _searchState.searching = true;
-    _searchState.gui = false;
-    _searchState.searchStart = std::chrono::high_resolution_clock::now();
-    _searchState.lastPrincipleVariationPrint = _searchState.searchStart;
-    _searchState.timeControl = timeControl;
-    _searchState.nodeCount = 0;
-    _searchState.previousNodeCount = 0;
-    _searchState.failedNodeCount = 0;
-    _searchState.principleVariationChanged = false;
-
-    // Initialize the search.
-    const int mctsParallelism = std::min(static_cast<int>(_games.size()), Config::Misc.Search_MctsParallelism);
-    SearchInitialize(mctsParallelism);
+    _searchState->Reset(timeControl);
 
     // Run the search.
-    Move lastBestMove = MOVE_NONE;
-    int lastBestNodes = 0;
-    while (_searchState.searching)
-    {
-        // Use the specified network type for predictions.
-        SearchPlay(mctsParallelism);
-        network->PredictBatch(networkType, mctsParallelism, _images.data(), _values.data(), _policies.data());
-
-        if (_searchState.principleVariationChanged)
-        {
-            Move newBest = Move(SelectMove(_games[0], false /* allowDiversity */)->move);
-            if (newBest != lastBestMove)
-            {
-                lastBestMove = newBest;
-                lastBestNodes = _searchState.nodeCount;
-            }
-            _searchState.principleVariationChanged = false;
-        }
-
-        // TODO: Only check every N times
-        CheckTimeControl();
-    }
+    workCoordinator->ResetWorkItemsRemaining(1);
+    workCoordinator->WaitForWorkers();
 
     // Pick a best move and judge points.
     const Node* best = SelectMove(_games[0], false /* allowDiversity */);
     const Move bestMove = Move(best->move);
-    const auto [points, nodesRequired] = JudgeStrengthTestPosition(spec, bestMove, lastBestNodes, failureNodes);
+    const auto [points, nodesRequired] = JudgeStrengthTestPosition(spec, bestMove, _searchState->lastBestNodes, failureNodes);
 
     // Free nodes after strength testing (especially for the final position, for which there's no following PruneAll/SetUpGame).
     _games[0].PruneAll();
@@ -1106,7 +1116,8 @@ void SelfPlayWorker::Play(int index)
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
         game.PruneExcept(root, selected /* == game.Root() */);
-        _searchState.principleVariationChanged = true; // First move in PV is now gone.
+        // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
+        _searchState->principleVariationChanged.store(true, std::memory_order_release); // First move in PV is now gone.
     }
 
     // Clean up resources in use and save the result.
@@ -1117,7 +1128,7 @@ void SelfPlayWorker::Play(int index)
 
 bool SelfPlayWorker::IsTerminal(const SelfPlayGame& game) const
 {
-    return (game.Root()->terminalValue.IsImmediate() || (game.Ply() >= Config().SelfPlay.MaxMoves));
+    return (game.Root()->terminalValue.load(std::memory_order_relaxed).IsImmediate() || (game.Ply() >= Config::Network.SelfPlay.MaxMoves));
 }
 
 void SelfPlayWorker::SaveToStorageAndLog(INetwork* network, int index)
@@ -1149,7 +1160,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
     // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
     // We need to break out and check for PV changes, search stopping, etc. However, need to keep number
     // high enough to get good speed-up from prediction cache hits. Go with 1000 for now.
-    const int numSimulations = (game.TryHard() ? (mctsSimulation + 1000) : Config().SelfPlay.NumSimulations);
+    const int numSimulations = (game.TryHard() ? (mctsSimulation + 1000) : Config::Network.SelfPlay.NumSimulations);
     for (; mctsSimulation < numSimulations; mctsSimulation++)
     {
         if (state == SelfPlayState::Working)
@@ -1157,25 +1168,19 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             // MCTS tree parallelism - enabled when searching, not when training - needs some guidance
             // to avoid repeating the same deterministic child selections:
             // - Avoid branches + leaves by incrementing "visitingCount" while selecting a search path,
-            //   lowering the exploration incentive in the UCB score.
+            //   lowering the exploration incentive and value calculation in the PUCT score.
             // - However, let searches override this when it's important enough; e.g. going down the
             //   same deep line to explore sibling leaves, or revisiting a checkmate.
-
-            // If parallel MCTS is already expanding the root then we have to just give up this round.
-            if (game.Root()->expanding)
-            {
-                assert(game.TryHard());
-                _searchState.failedNodeCount++;
-                return nullptr;
-            }
 
             scratchGame = game;
             assert(searchPath.empty());
             searchPath.clear();
             searchPath.push_back({ scratchGame.Root(), 1.f });
-            scratchGame.Root()->visitingCount++;
+            scratchGame.Root()->visitingCount.fetch_add(1, std::memory_order_relaxed);
 
-            while (scratchGame.Root()->IsExpanded())
+            // We need this acquire-load to synchronize with the release-store of the expanding thread
+            // so that the side-effects - children - are visible here.
+            while (scratchGame.Root()->expansion.load(std::memory_order_acquire) == Expansion::Expanded)
             {
                 // Force playouts during training only, at the root only.
                 const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
@@ -1184,39 +1189,43 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                     SelectChild<false>(scratchGame.Root());
 
                 // If we can't select a child it's because parallel MCTS is already expanding all
-                // children. Give up on this one until next iteration, just fix up visitingCounts.
+                // children. Give up on this one until next iteration.
                 if (!selected.node)
                 {
                     assert(game.TryHard());
-                    for (auto [node, weight] : searchPath)
-                    {
-                        node->visitingCount--;
-                    }
-                    searchPath.clear();
-                    _searchState.failedNodeCount++;
+                    FailNode(searchPath);
                     return nullptr;
                 }
 
                 scratchGame.ApplyMoveWithRoot(Move(selected.node->move), selected.node);
                 searchPath.push_back(selected /* == scratchGame.Root() */);
-                selected.node->visitingCount++;
+                selected.node->visitingCount.fetch_add(1, std::memory_order_relaxed);
             }
         }
 
-        const bool wasImmediateMate = (scratchGame.Root()->terminalValue == TerminalValue::MateIn<1>());
+        // Call in to ExpandAndEvaluate straight away, since we want to allow multiple threads/games in to visit terminal nodes
+        // like wins simultaneously, and there's no other clean/efficient way to deal with situations like transient 2-repetition draws
+        // without thrashing the "expansion" flag.
+        //
+        // However, before allocating and expanding into "children", take ownership of the expansion inside ExpandAndEvaluate,
+        // and give up if beaten to it by another thread.
+        //
+        // Despite these complications, it's best to keep terminal and non-terminal evaluation consolidated within ExpandAndEvaluate
+        // because beyond trivially cached terminal evaluations, both depend on move generation.
+        const bool wasImmediateMate = (scratchGame.Root()->terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>());
         float value = scratchGame.ExpandAndEvaluate(state, cacheStore);
         if (state == SelfPlayState::WaitingForPrediction)
         {
-            // This is now a dangerous time when searching because this leaf is going to be expanded
-            // once the network evaluation/priors come back, but is not yet seen as expanded by
-            // parallel searches. Set "expanding" to mark it off-limits.
-            scratchGame.Root()->expanding = true;
+            // Wait for network evaluation/priors to come back.
             return nullptr;
         }
-
-        // Finished actually expanding children, or never needed to wait for an evaluation/priors
-        // (e.g. prediction cache hit) or no children possible (terminal node).
-        scratchGame.Root()->expanding = false;
+        else if (std::isnan(value))
+        {
+            // Another thread took ownership and is expanding or expanded the node. We have to just give up this round.
+            assert(game.TryHard());
+            FailNode(searchPath);
+            return nullptr;
+        }
 
         // The value we get is from the final node of the scratch game from its parent's perspective,
         // so start applying it there and work backwards. This seems a little strange for the root node, because
@@ -1224,10 +1233,10 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // as the side-to-play's broad evaluation of the position.
         assert(!std::isnan(value));
         Backpropagate(searchPath, value);
-        _searchState.nodeCount++;
+        _searchState->nodeCount.fetch_add(1, std::memory_order_relaxed);
 
         // If we *just found out* that this leaf is a checkmate, prove it backwards as far as possible.
-        if (!wasImmediateMate && scratchGame.Root()->terminalValue.IsMateInN())
+        if (!wasImmediateMate && scratchGame.Root()->terminalValue.load(std::memory_order_relaxed).IsMateInN())
         {
             BackpropagateMate(searchPath);
         }
@@ -1245,9 +1254,9 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         {
             assert(game.Root()->visitCount == 1);
             assert(searchPath.size() == 1);
-            game.Root()->visitCount = 0;
-            game.Root()->valueAverage = 0.f;
-            game.Root()->valueWeight = 0.f;
+            game.Root()->visitCount.store(0, std::memory_order_relaxed);
+            game.Root()->valueAverage.store(0.f, std::memory_order_relaxed);
+            game.Root()->valueWeight.store(0, std::memory_order_relaxed);
 
             // Add exploration noise if not searching.
             if (!game.TryHard())
@@ -1258,15 +1267,32 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
 
         // Clear the search path after decrementing "visitingCount" to avoid duplicate decrement on search stop/resume.
         searchPath.clear();
+
+        // If this node has children then we must have just finished expanding it. Advance the expansion flag
+        // and release-store to synchronize with the acquire-load of the search-path building and move selection.
+        if (scratchGame.Root()->IsExpanded())
+        {
+            scratchGame.Root()->expansion.store(Expansion::Expanded, std::memory_order_release);
+        }
     }
 
     mctsSimulation = 0;
     return SelectMove(game, true /* allowDiversity */);
 }
 
+void SelfPlayWorker::FailNode(std::vector<WeightedNode>& searchPath)
+{
+    for (auto [node, weight] : searchPath)
+    {
+        node->visitingCount.fetch_sub(1, std::memory_order_relaxed);
+    }
+    searchPath.clear();
+    _searchState->failedNodeCount.fetch_add(1, std::memory_order_relaxed);
+}
+
 void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
 {
-    std::gamma_distribution<float> gamma(Config().SelfPlay.RootDirichletAlpha, 1.f);
+    std::gamma_distribution<float> gamma(Config::Network.SelfPlay.RootDirichletAlpha, 1.f);
     std::vector<float> noise(game.Root()->childCount);
 
     float noiseSum = 0.f;
@@ -1282,30 +1308,50 @@ void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
         const float normalized = (noise[childIndex++] / noiseSum);
         assert(!std::isnan(normalized));
         assert(!std::isinf(normalized));
-        child.prior = (child.prior * (1 - Config().SelfPlay.RootExplorationFraction) + normalized * Config().SelfPlay.RootExplorationFraction);
+        child.prior = (child.prior * (1 - Config::Network.SelfPlay.RootExplorationFraction) + normalized * Config::Network.SelfPlay.RootExplorationFraction);
     }
 }
 
 Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) const
 {
-    if (!game.TryHard() && allowDiversity && (game.Ply() < Config().SelfPlay.NumSampingMoves))
+    Node* bestChild = game.Root()->bestChild.load(std::memory_order_relaxed);
+    if (!bestChild)
+    {
+        // Haven't had enough time to explore anything, so just pick the highest prior.
+        // We need this acquire-load to synchronize with the release-store of the expanding thread
+        // so that the side-effects - children - are visible here.
+        if (game.Root()->expansion.load(std::memory_order_acquire) == Expansion::Expanded)
+        {
+            Node* bestPrior = nullptr;
+            for (Node& child : *game.Root())
+            {
+                if (!bestPrior || (bestPrior->prior < child.prior))
+                {
+                    bestPrior = &child;
+                }
+            }
+            assert(bestPrior);
+            return bestPrior;
+        }
+        else
+        {
+            // No legal moves or priors visible, so just return a MOVE_NONE via the root.
+            return game.Root();
+        }
+    }
+    else if (!game.TryHard() && allowDiversity && (game.Ply() < Config::Network.SelfPlay.NumSampingMoves))
     {
         // Sample using temperature=1, treating normalized visit counts as a probability distribution
         // (like when they're passed as truth labels to cross-entropy loss). So, no need to exponentiate.
-        const int sumChildVisits = game.Root()->visitCount;
-        int sample = std::uniform_int_distribution<>(0, sumChildVisits - 1)(Random::Engine);
-        for (Node& child : *game.Root())
+        std::vector<int> weights(game.Root()->childCount);
+        for (int i = 0; i < game.Root()->childCount; i++)
         {
-            if (sample < child.visitCount)
-            {
-                return &child;
-            }
-            sample -= child.visitCount;
+            weights[i] = game.Root()->children[i].visitCount.load(std::memory_order_relaxed);
         }
-        assert(false);
-        return nullptr;
+        std::discrete_distribution distribution(weights.begin(), weights.end());
+        return &game.Root()->children[distribution(Random::Engine)];
     }
-    else if (game.TryHard() && allowDiversity && (game.Ply() < Config().SelfPlay.NumSampingMoves))
+    else if (game.TryHard() && allowDiversity && (game.Ply() < Config::Network.SelfPlay.NumSampingMoves))
     {
         // "When we forced AlphaZero to play with greater diversity (by softmax sampling with a temperature of 10.0 among moves
         // for which the value was no more than 1% away from the best move for the first 30 plies) the winning rate increased from 5.8% to 14%."
@@ -1318,12 +1364,11 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         }
         // CollectBestMoves only selects from the same mate category as "bestMove", so "bestMove" has the most visits among the collected.
         // Re-exponentiate using temperature=10. |(N/max(N))^(1/t)| gives the same result as softmax(log(N)/t) but skips the logarithm.
-        assert(game.Root()->bestChild);
-        const float bestVisitCount = static_cast<float>(game.Root()->bestChild->visitCount);
+        const float bestVisitCount = static_cast<float>(bestChild->visitCount.load(std::memory_order_relaxed));
         std::vector<float> bestWeights(best.size());
         for (int i = 0; i < best.size(); i++)
         {
-            bestWeights[i] = std::pow(static_cast<float>(best[i]->visitCount) / bestVisitCount, 1 / softmaxSampleTemperature);
+            bestWeights[i] = std::pow(static_cast<float>(best[i]->visitCount.load(std::memory_order_relaxed)) / bestVisitCount, 1.f / softmaxSampleTemperature);
         }
         std::discrete_distribution distribution(bestWeights.begin(), bestWeights.end());
         return best[distribution(Random::Engine)];
@@ -1331,8 +1376,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
     else
     {
         // Use temperature=0; i.e., just select the best (most-visited, overridden by mates).
-        assert(game.Root()->bestChild);
-        return game.Root()->bestChild;
+        return bestChild;
     }
 }
 
@@ -1347,7 +1391,7 @@ WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
     Node* maxSble = nullptr;
     for (Node& child : *parent)
     {
-        if (!child.expanding)
+        if (child.expansion.load(std::memory_order_relaxed) != Expansion::Expanding)
         {
             const auto [azPuct, sblePuct] = CalculatePuctScore<ForcePlayouts>(parent, &child);
             if (azPuct > maxAzPuct)
@@ -1376,15 +1420,17 @@ template WeightedNode SelfPlayWorker::SelectChild<false>(Node* parent) const;
 template <bool ForcePlayouts>
 std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, const Node* child) const
 {
-    const int parentVirtualExploration = (parent->visitCount + parent->visitingCount);
-    const int childVirtualExploration = (child->visitCount + child->visitingCount);
+    const int parentVirtualExploration = (parent->visitCount.load(std::memory_order_relaxed) + parent->visitingCount.load(std::memory_order_relaxed));
+    const int childVirtualExploration = (child->visitCount.load(std::memory_order_relaxed) + child->visitingCount.load(std::memory_order_relaxed));
 
     // We force playouts only during training, so we don't care about virtual loss or exploration issues
     // that would otherwise occur when returning a constant infinity.
-    if (ForcePlayouts &&
-        (childVirtualExploration < static_cast<int>(std::sqrt(2.f * child->prior * parentVirtualExploration))))
+    if constexpr (ForcePlayouts)
     {
-        return { std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity() };
+        if (childVirtualExploration < static_cast<int>(std::sqrt(2.f * child->prior * parentVirtualExploration)))
+        {
+            return { std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity() };
+        }
     }
 
     // Calculate the exploration rate, which is multiplied by (a) the prior to incentivize exploration,
@@ -1392,8 +1438,8 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     // Include "visitingCount" to help parallel searches diverge.
     const float parentVirtualExplorationFloat = static_cast<float>(parentVirtualExploration);
     const float childVirtualExplorationFloat = static_cast<float>(childVirtualExploration);
-    const float explorationRateBase = _networkConfig->SelfPlay.ExplorationRateBase;
-    const float explorationRateInit = _networkConfig->SelfPlay.ExplorationRateInit;
+    const float explorationRateBase = Config::Network.SelfPlay.ExplorationRateBase;
+    const float explorationRateInit = Config::Network.SelfPlay.ExplorationRateInit;
     const float explorationRate =
         (std::log((parentVirtualExplorationFloat + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
         std::sqrt(parentVirtualExplorationFloat) / (childVirtualExplorationFloat + 1.f);
@@ -1402,14 +1448,14 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     const float priorScore = explorationRate * child->prior;
 
     // (b) mate-in-N score
-    const float mateScore = child->terminalValue.MateScore(explorationRate);
+    const float mateScore = child->terminalValue.load(std::memory_order_relaxed).MateScore(explorationRate);
 
     // Calculate SBLE-PUCT terms.
     // TODO: Work in progress
-    const float linearExplorationRate = _networkConfig->SelfPlay.LinearExplorationRate;
+    const float linearExplorationRate = Config::Network.SelfPlay.LinearExplorationRate;
     const float linear = parentVirtualExplorationFloat / (linearExplorationRate * (childVirtualExplorationFloat + 1.f));
 
-    const float azPuct = (child->ValueWithVirtualLoss(_networkConfig) + priorScore + mateScore);
+    const float azPuct = (child->ValueWithVirtualLoss() + priorScore + mateScore);
     const float sblePuct = (azPuct + linear);
     return { azPuct, sblePuct };
 }
@@ -1419,7 +1465,7 @@ template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false>(const
 float SelfPlayWorker::CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
 {
     // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
-    return (CalculatePuctScore<false>(parent, child).first - child->ValueWithVirtualLoss(_networkConfig) + fixedValue);
+    return (CalculatePuctScore<false>(parent, child).first - child->ValueWithVirtualLoss() + fixedValue);
 }
 
 void SelfPlayWorker::PrunePolicyTarget(Node* root) const
@@ -1428,7 +1474,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
     Node* best = &root->children[0];
     for (int i = 1; i < root->childCount; i++)
     {
-        if (root->children[i].visitCount > best->visitCount)
+        if (root->children[i].visitCount.load(std::memory_order_relaxed) > best->visitCount.load(std::memory_order_relaxed))
         {
             best = &root->children[i];
         }
@@ -1446,13 +1492,13 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
 
         // Pre-decrement before "CalculateUcbScore" to save one calculation per child.
         int pruneCount = 0;
-        const int originalVisitCount = child.visitCount;
+        const int originalVisitCount = child.visitCount.load(std::memory_order_relaxed);
         const float fixedValue = child.Value();
-        while ((--child.visitCount >= 0) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
+        while ((child.visitCount.fetch_sub(1, std::memory_order_relaxed) >= 0) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
         {
             pruneCount++;
         }
-        child.visitCount = originalVisitCount; // Would need to increment to fix final pre-decrement but clobbering anyway.
+        child.visitCount.store(originalVisitCount, std::memory_order_relaxed); // Would need to increment to fix final pre-decrement but clobbering anyway.
         child.AdjustVisitCount(originalVisitCount - pruneCount);
         rootPruneCount += pruneCount;
 
@@ -1467,19 +1513,23 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
 void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value)
 {
     // Each ply has a different player, so flip each time.
-    const float movingAverageBuild = _networkConfig->SelfPlay.MovingAverageBuild;
-    const float movingAverageCap = _networkConfig->SelfPlay.MovingAverageCap;
-    float weight = 1.f;
+    const float movingAverageBuild = Config::Network.SelfPlay.MovingAverageBuild;
+    const float movingAverageCap = Config::Network.SelfPlay.MovingAverageCap;
+    int weight = 1;
     for (int i = static_cast<int>(searchPath.size()) - 1; i >= 0; i--)
     {
         Node* node = searchPath[i].node;
-        node->visitingCount--;
-        node->visitCount++;
-        node->valueWeight += weight;
-        node->valueAverage += weight * (value - node->valueAverage) / std::clamp(node->valueWeight * movingAverageBuild, 1.f, movingAverageCap);
+        node->visitingCount.fetch_sub(1, std::memory_order_relaxed);
+        node->visitCount.fetch_add(1, std::memory_order_relaxed);
+        if (weight)
+        {
+            node->SampleValue(movingAverageBuild, movingAverageCap, value);
+            
+        }
         value = SelfPlayGame::FlipValue(value);
 
-        weight = std::min(weight, searchPath[i].weight);
+        // Weights are always 0 or 1 with current SBLE-PUCT.
+        weight = std::min(weight, static_cast<int>(searchPath[i].weight));
     }
 }
 
@@ -1494,18 +1544,20 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
     for (int i = static_cast<int>(searchPath.size()) - 2; i >= 0; i--)
     {
         Node* parent = searchPath[i].node;
+        const TerminalValue parentTerminalValue = parent->terminalValue.load(std::memory_order_relaxed);
 
         if (childIsMate)
         {
             // The child in the searchPath just became a mate, or a faster mate.
             // Does this make the parent an opponent mate or faster opponent mate?
             const Node* child = searchPath[i + 1].node;
-            const int8_t newMateN = child->terminalValue.MateN();
+            const TerminalValue childTerminalValue = child->terminalValue.load(std::memory_order_relaxed);
+            const int8_t newMateN = childTerminalValue.MateN();
             assert(newMateN > 0);
-            if (!parent->terminalValue.IsOpponentMateInN() ||
-                (newMateN < parent->terminalValue.OpponentMateN()))
+            if (!parentTerminalValue.IsOpponentMateInN() ||
+                (newMateN < parentTerminalValue.OpponentMateN()))
             {
-                parent->terminalValue = TerminalValue::OpponentMateIn(newMateN);
+                parent->terminalValue.store(TerminalValue::OpponentMateIn(newMateN), std::memory_order_relaxed);
 
                 // The parent just became worse, so the grandparent may need a different best-child.
                 // The regular principle variation update isn't sufficient because it assumes that
@@ -1532,7 +1584,8 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
             int8_t longestChildOpponentMateN = std::numeric_limits<int8_t>::min();
             for (const Node& child : *parent)
             {
-                const int8_t childOpponentMateN = child.terminalValue.OpponentMateN();
+                const TerminalValue childTerminalValue = child.terminalValue.load(std::memory_order_relaxed);
+                const int8_t childOpponentMateN = childTerminalValue.OpponentMateN();
                 if (childOpponentMateN <= 0)
                 {
                     return;
@@ -1542,7 +1595,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
             }
 
             assert(longestChildOpponentMateN > 0);
-            parent->terminalValue = TerminalValue::MateIn(longestChildOpponentMateN + 1);
+            parent->terminalValue.store(TerminalValue::MateIn(longestChildOpponentMateN + 1), std::memory_order_relaxed);
         }
 
         childIsMate = !childIsMate;
@@ -1552,11 +1605,12 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
 void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* parent)
 {
     bool updatedBestChild = false;
+    const Node* parentBestChild = parent->bestChild.load(std::memory_order_relaxed);
     for (Node& child : *parent)
     {
-        if (WorseThan(parent->bestChild, &child))
+        if (WorseThan(parentBestChild, &child))
         {
-            parent->bestChild = &child;
+            parent->bestChild.store(&child, std::memory_order_relaxed);
             updatedBestChild = true;
         }
     }
@@ -1568,10 +1622,11 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& sear
         {
             if (searchPath[i].node == parent)
             {
-                _searchState.principleVariationChanged = true;
+                // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
+                _searchState->principleVariationChanged.store(true, std::memory_order_release);
                 break;
             }
-            if (searchPath[i].node->bestChild != searchPath[i + 1].node)
+            if (searchPath[i].node->bestChild.load(std::memory_order_relaxed) != searchPath[i + 1].node)
             {
                 break;
             }
@@ -1584,14 +1639,18 @@ void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<WeightedNode>& s
     bool isPrincipleVariation = true;
     for (int i = 0; i < searchPath.size() - 1; i++)
     {
-        if (WorseThan(searchPath[i].node->bestChild, searchPath[i + 1].node))
+        if (WorseThan(searchPath[i].node->bestChild.load(std::memory_order_relaxed), searchPath[i + 1].node))
         {
-            searchPath[i].node->bestChild = searchPath[i + 1].node;
-            _searchState.principleVariationChanged |= isPrincipleVariation;
+            searchPath[i].node->bestChild.store(searchPath[i + 1].node, std::memory_order_relaxed);
+            if (isPrincipleVariation)
+            {
+                // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
+                _searchState->principleVariationChanged.store(true, std::memory_order_release);
+            }
         }
         else
         {
-            isPrincipleVariation &= (searchPath[i].node->bestChild == searchPath[i + 1].node);
+            isPrincipleVariation &= (searchPath[i].node->bestChild.load(std::memory_order_relaxed) == searchPath[i + 1].node);
         }
     }
 }
@@ -1600,14 +1659,15 @@ void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
 {
     while (root)
     {
+        const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
         for (const Node& child : *root)
         {
             if (child.visitCount > 0)
             {
-                assert(!WorseThan(root->bestChild, &child));
+                assert(!WorseThan(bestChild, &child));
             }
         }
-        root = root->bestChild;
+        root = bestChild;
     }
 }
 
@@ -1621,15 +1681,15 @@ bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
     }
 
     // Prefer faster mates and slower opponent mates.
-    int lhsEitherMateN = lhs->terminalValue.EitherMateN();
-    int rhsEitherMateN = rhs->terminalValue.EitherMateN();
+    int lhsEitherMateN = lhs->terminalValue.load(std::memory_order_relaxed).EitherMateN();
+    int rhsEitherMateN = rhs->terminalValue.load(std::memory_order_relaxed).EitherMateN();
     if (lhsEitherMateN != rhsEitherMateN)
     {
         // For categories (>0, 0, <0), bigger is better.
         // Within categories (1 vs. 3, -2 vs. -4), smaller is better.
         // Add a large term opposing the category sign, then say smaller is better overall.
-        lhsEitherMateN += ((lhsEitherMateN < 0) - (lhsEitherMateN > 0)) * 2 * Config().SelfPlay.MaxMoves;
-        rhsEitherMateN += ((rhsEitherMateN < 0) - (rhsEitherMateN > 0)) * 2 * Config().SelfPlay.MaxMoves;
+        lhsEitherMateN += ((lhsEitherMateN < 0) - (lhsEitherMateN > 0)) * 2 * Config::Network.SelfPlay.MaxMoves;
+        rhsEitherMateN += ((rhsEitherMateN < 0) - (rhsEitherMateN > 0)) * 2 * Config::Network.SelfPlay.MaxMoves;
         return (lhsEitherMateN > rhsEitherMateN);
     }
 
@@ -1639,15 +1699,15 @@ bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
 
 std::vector<Node*> SelfPlayWorker::CollectBestMoves(Node* parent, float valueDeltaThreshold) const
 {
-    Node* bestChild = parent->bestChild;
+    Node* bestChild = parent->bestChild.load(std::memory_order_relaxed);
     assert(bestChild);
     std::vector<Node*> best = { bestChild };
-    const int bestEitherMateN = bestChild->terminalValue.EitherMateN();
+    const int bestEitherMateN = bestChild->terminalValue.load(std::memory_order_relaxed).EitherMateN();
     const float valueThreshold = (bestChild->Value() - valueDeltaThreshold);
     for (Node& child : *parent)
     {
         // Other candidates must be in the same mate category as the best child.
-        if ((&child == bestChild) || (child.terminalValue.EitherMateN() != bestEitherMateN))
+        if ((&child == bestChild) || (child.terminalValue.load(std::memory_order_relaxed).EitherMateN() != bestEitherMateN))
         {
             continue;
         }
@@ -1670,11 +1730,6 @@ void SelfPlayWorker::DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState*
     if (policiesOut) *policiesOut = &_policies[index];
 }
 
-SearchState& SelfPlayWorker::DebugSearchState()
-{
-    return _searchState;
-}
-
 // Doesn't try to clear or set up games appropriately, just resets allocations.
 void SelfPlayWorker::DebugResetGame(int index)
 {
@@ -1682,103 +1737,92 @@ void SelfPlayWorker::DebugResetGame(int index)
     _scratchGames[index] = SelfPlayGame();
 }
 
-void SelfPlayWorker::Search(std::function<INetwork* ()> networkFactory)
+void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary)
 {
-    // Create the network on the worker thread (slow).
-    std::unique_ptr<INetwork> network(networkFactory());
+    // Warm up the GIL and predictions.
+    WarmUpPredictions(network, networkType, 1);
 
-    // Use the faster student network for UCI predictions.
-    const NetworkType networkType = NetworkType_Student;
-
-    // Warm up the GIL and predictions, and reclaim training memory.
-    WarmUpPredictions(network.get(), networkType, 1);
-
-    // Start with the position "updated" to the starting position in case of a naked "go" command.
+    // Wait until searching is required.
+    while (workCoordinator->WaitForWorkItems())
     {
-        std::unique_lock lock(_searchConfig.mutexUci);
-
-        if (!_searchConfig.positionUpdated)
-        {
-            _searchConfig.positionUpdated = true;
-            _searchConfig.positionFen = Config::StartingPosition;
-            _searchConfig.positionMoves = {};
-        }
-    }
-
-    // Determine config.
-    const int mctsParallelism = std::min(static_cast<int>(_games.size()), Config::Misc.Search_MctsParallelism);
-
-    while (!_searchConfig.quit)
-    {
-        {
-            std::unique_lock lock(_searchConfig.mutexUci);
-
-            // Let UCI know we're ready.
-            if (!_searchConfig.ready)
-            {
-                _searchConfig.ready = true;
-                _searchConfig.signalReady.notify_all();
-            }
-
-            // Wait until told to search, comment or quit.
-            while (!_searchConfig.quit && !_searchConfig.search && !_searchConfig.comment)
-            {
-                _searchConfig.signalUci.wait(lock);
-            }
-
-            // Launch the GUI once searching if we were told to (and not quitting).
-            if (_searchConfig.gui && !_searchState.gui && _searchConfig.search && !_searchConfig.quit)
-            {
-                _searchState.gui = true;
-                network->LaunchGui("push");
-            }
-        }
-
-        // Set the position up in _games[0] ready to search or comment.
-        UpdatePosition();
-
-        // Commenting is one-shot, jump back above to wait.
-        if (_searchConfig.comment.exchange(false))
-        {
-            CommentOnPosition(network.get());
-            continue;
-        }
+        // Initialize the search. Multiple threads will race to make shadows of the reference position,
+        // which is safe because the shallow fields don't mutate. Care just needs to be taken with the
+        // shared Node tree.
+        SearchInitialize(_searchState->position);
 
         // Search until stopped.
-        UpdateSearch();
-        if (_searchState.searching)
+        while (!workCoordinator->AllWorkItemsCompleted())
         {
-            // Initialize the search.
-            SearchInitialize(mctsParallelism);
+            SearchPlay();
+            network->PredictBatch(networkType, Config::Misc.Search_SearchParallelism, _images.data(), _values.data(), _policies.data());
 
-            // Run the search.
-            while (!_searchConfig.quit && !_searchConfig.positionUpdated && _searchState.searching)
+            // Only the primary worker does housekeeping.
+            if (primary)
             {
-                SearchPlay(mctsParallelism);
-                network->PredictBatch(networkType, mctsParallelism, _images.data(), _values.data(), _policies.data());
+                CheckPrincipleVariation();
 
-                CheckPrintInfo();
+                CheckUpdateGui(network, false /* forceUpdate */);
 
-                CheckUpdateGui(network.get(), false /* forceUpdate */);
-
-                // TODO: Only check every N times
-                CheckTimeControl();
-
-                UpdateSearch();
-
-                _searchState.previousNodeCount = _searchState.nodeCount;
+                CheckTimeControl(workCoordinator);
             }
+        }
 
-            CheckUpdateGui(network.get(), true /* forceUpdate */);
+        // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
+        FinishMcts();
 
-            // Don't free nodes here: leave them available for reuse/freeing with the next UpdatePosition(),
-            // and instead prune below, when quitting. However, do fix up node visits/expansions in flight.
-            OnSearchFinished(mctsParallelism);
+        // Only the primary worker does housekeeping.
+        if (primary)
+        {
+            OnSearchFinished();
         }
     }
 
-    // Clean up.
-    _games[0].PruneAll();
+    Finalize();
+}
+
+void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary)
+{
+    // Warm up the GIL and predictions.
+    WarmUpPredictions(network, networkType, 1);
+
+    // Wait until searching is required.
+    while (workCoordinator->WaitForWorkItems())
+    {
+        // Initialize the search. Multiple threads will race to make shadows of the reference position,
+        // which is safe because the shallow fields don't mutate. Care just needs to be taken with the
+        // shared Node tree.
+        SearchInitialize(_searchState->position);
+
+        // Search until stopped.
+        while (!workCoordinator->AllWorkItemsCompleted())
+        {
+            SearchPlay();
+            network->PredictBatch(networkType, Config::Misc.Search_SearchParallelism, _images.data(), _values.data(), _policies.data());
+
+            // Only the primary worker does housekeeping.
+            if (primary)
+            {
+                // Update "lastBestNodes" for strength tests.
+                const bool principleVariationChanged = _searchState->principleVariationChanged.exchange(false, std::memory_order_acquire);
+                if (principleVariationChanged)
+                {
+                    const uint16_t newBest = _games[0].Root()->bestChild.load(std::memory_order_relaxed)->move;
+                    if (newBest != _searchState->lastBestMove)
+                    {
+                        _searchState->lastBestMove = newBest;
+                        _searchState->lastBestNodes = _searchState->nodeCount;
+                    }
+                }
+
+                CheckTimeControl(workCoordinator);
+            }
+        }
+
+        // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
+        FinishMcts();
+    }
+
+    Finalize();
 }
 
 // Predicting a batch will trigger the following:
@@ -1791,141 +1835,85 @@ PredictionStatus SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkTyp
     return network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());
 }
 
-void SelfPlayWorker::UpdatePosition()
+void SelfPlayWorker::SearchUpdatePosition(std::string&& fen, std::vector<Move>&& moves, bool forceNewPosition)
 {
-    assert(!_searchState.searching);
-
-    if (_searchConfig.positionUpdated)
+    // If the new position is the previous position plus some number of moves,
+    // just play out the moves rather than throwing away search results.
+    if (!forceNewPosition &&
+        _games[0].TryHard() &&
+        (fen == _searchState->positionFen) &&
+        (moves.size() >= _searchState->positionMoves.size()) &&
+        (std::equal(_searchState->positionMoves.begin(), _searchState->positionMoves.end(), moves.begin())))
     {
-        std::lock_guard lock(_searchConfig.mutexUci);
-
-        // Lock around both (a) using the position info, and (b) clearing the flag.
-        // If the GUI does two updates very quickly, either (i) we grabbed the second one's
-        // position info and cleared, or (ii) the flag gets set again after we unlock. Either way
-        // we're good.
-
-        // If the new position is the previous position plus some number of moves,
-        // just play out the moves rather than throwing away search results.
-        if (_games[0].TryHard() &&
-            (_searchState.positionFen == _searchConfig.positionFen) &&
-            (_searchConfig.positionMoves.size() >= _searchState.positionMoves.size()) &&
-            (std::equal(_searchState.positionMoves.begin(), _searchState.positionMoves.end(), _searchConfig.positionMoves.begin())))
+        if (_searchState->debug.load(std::memory_order_relaxed))
         {
-            if (_searchConfig.debug)
-            {
-                std::cout << "info string [position] Reusing existing position with "
-                    << (_searchConfig.positionMoves.size() - _searchState.positionMoves.size()) << " additional moves" << std::endl;
-            }
-            SetUpGameExisting(0, _searchConfig.positionMoves, static_cast<int>(_searchState.positionMoves.size()));
+            std::cout << "info string [position] Reusing existing position with "
+                << (moves.size() - _searchState->positionMoves.size()) << " additional moves" << std::endl;
         }
-        else
-        {
-            if (_searchConfig.debug)
-            {
-                std::cout << "info string [position] Creating new position" << std::endl;
-            }
-            _games[0].PruneAll();
-            SetUpGame(0, _searchConfig.positionFen, _searchConfig.positionMoves, true /* tryHard */);
-        }
-
-        _searchState.positionFen = std::move(_searchConfig.positionFen);
-        _searchConfig.positionFen = "";
-
-        _searchState.positionMoves = std::move(_searchConfig.positionMoves);
-        _searchConfig.positionMoves = {};
-
-        _searchConfig.positionUpdated = false;
+        SetUpGameExisting(0, moves, static_cast<int>(_searchState->positionMoves.size()));
     }
+    else
+    {
+        if (_searchState->debug.load(std::memory_order_relaxed))
+        {
+            std::cout << "info string [position] Creating new position" << std::endl;
+        }
+        _games[0].PruneAll();
+        SetUpGame(0, fen, moves, true /* tryHard */);
+    }
+
+    _searchState->position = &_games[0];
+    _searchState->positionFen = std::move(fen);
+    _searchState->positionMoves = std::move(moves);
 }
 
-void SelfPlayWorker::UpdateSearch()
+void SelfPlayWorker::FinishMcts()
 {
-    if (_searchConfig.searchUpdated)
-    {
-        std::lock_guard lock(_searchConfig.mutexUci);
-
-        // Lock around both (a) using the search/time control info, and (b) clearing the flag.
-        // If the GUI does two updates very quickly, either (i) we grabbed the second one's
-        // search/time control info and cleared, or (ii) the flag gets set again after we unlock.
-        // Either way we're good.
-
-        _searchState.searching = _searchConfig.search;
-
-        if (_searchState.searching)
-        {
-            _searchState.searchStart = std::chrono::high_resolution_clock::now();
-            _searchState.lastPrincipleVariationPrint = _searchState.searchStart;
-            _searchState.timeControl = _searchConfig.searchTimeControl;
-            _searchState.nodeCount = 0;
-            _searchState.previousNodeCount = 0;
-            _searchState.failedNodeCount = 0;
-            _searchState.principleVariationChanged = true; // Print out initial PV.
-        }
-
-        // Set the "search" instruction to false now so that when this search finishes
-        // the worker can go back to sleep, unless instructed to search again.
-        // A stop command will still cause the "searchUpdated" flag to call in here and
-        // set the "searching" state to false.
-        _searchConfig.search = false;
-
-        _searchConfig.searchUpdated = false;
-    }
-}
-
-void SelfPlayWorker::OnSearchFinished(int mctsParallelism)
-{
-    // We may have finished via position update or quit, so update our state.
-    _searchState.searching = false;
-
     // We may reuse this search tree on the next UCI search if the position is compatible, and likely have
     // node visits and expansions in flight that we just interrupted, so fix everything up.
-    for (int i = 0; i < mctsParallelism; i++)
+    for (int i = 0; i < Config::Misc.Search_SearchParallelism; i++)
     {
         for (auto [node, weight] : _searchPaths[i])
         {
-            node->visitingCount--;
-            node->expanding = false;
+            node->visitingCount.fetch_sub(1, std::memory_order_relaxed);
+            Expansion expected = Expansion::Expanding;
+            node->expansion.compare_exchange_strong(expected, Expansion::None, std::memory_order_relaxed);
         }
         _searchPaths[i].clear();
     }
-
-    // Print the final PV info and bestmove.
-    const Node* bestMove = SelectMove(_games[0], true /* allowDiversity */);
-    PrintPrincipleVariation();
-    std::cout << "bestmove " << UCI::move(Move(bestMove->move), false /* chess960 */) << std::endl;
-
-    // Lock around (a) checking "searchUpdated" and (b) clearing "search". We want to clear
-    // "search" in order to go back to sleep but only if it's still the existing search.
-    {
-        std::lock_guard lock(_searchConfig.mutexUci);
-
-        if (!_searchConfig.searchUpdated)
-        {
-            _searchConfig.search = false;
-        }
-    }
 }
 
-void SelfPlayWorker::CheckPrintInfo()
+void SelfPlayWorker::OnSearchFinished()
+{
+    // Print the final PV info and bestmove.
+    const Node* bestMove = SelectMove(_games[0], true /* allowDiversity */);
+    PrintPrincipleVariation(true /* searchFinished */);
+    std::cout << "bestmove " << UCI::move(Move(bestMove->move), false /* chess960 */) << std::endl;
+}
+
+void SelfPlayWorker::CheckPrincipleVariation()
 {
     // Print principle variation when it changes, or at least every 5 seconds.
-    if (_searchState.principleVariationChanged ||
-        (std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _searchState.lastPrincipleVariationPrint).count() >= 5.f))
+    // Use acquire-load to synchronize with the release-store of updaters so that side effects - the PV - are visible.
+    const bool principleVariationChanged = _searchState->principleVariationChanged.exchange(false, std::memory_order_acquire);
+    if (principleVariationChanged ||
+        (std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _searchState->lastPrincipleVariationPrint).count() >= 5.f))
     {
-        PrintPrincipleVariation();
-        _searchState.principleVariationChanged = false;
+        PrintPrincipleVariation(false /* searchFinished */);
     }
 }
 
 void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 {
     const int interval = Config::Misc.Search_GuiUpdateIntervalNodes;
-    if (_searchState.gui && (forceUpdate ||
-        ((_searchState.nodeCount / interval) > (_searchState.previousNodeCount / interval))))
+    const int nodeCount = _searchState->nodeCount.load(std::memory_order_relaxed);
+    if (_searchState->gui && (forceUpdate ||
+        ((nodeCount / interval) > (_searchState->previousNodeCount / interval))))
     {
         const SelfPlayGame& game = _games[0];
         const Node* root = game.Root();
-        if (!root->bestChild)
+        const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
+        if (!bestChild)
         {
             return;
         }
@@ -1934,9 +1922,8 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 
         // Value is from the parent's perspective, so that's already correct for the root perspective
         std::stringstream evaluation;
-        const Node* pvFirst = root->bestChild;
-        const int eitherMateN = pvFirst->terminalValue.EitherMateN();
-        const float pvValue = pvFirst->Value();
+        const int eitherMateN = bestChild->terminalValue.load(std::memory_order_relaxed).EitherMateN();
+        const float pvValue = bestChild->Value();
         if (eitherMateN != 0)
         {
             evaluation << std::fixed << std::setprecision(6) << pvValue
@@ -1950,16 +1937,16 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 
         // Compose a SAN principle variation: more expensive but only used for GUI and only every "Search_GuiUpdateIntervalNodes".
         std::stringstream principleVariation;
-        const Node* node = root;
         SelfPlayGame pvGame = game;
-        while (node->bestChild)
+        const Node* pvBestChild = bestChild;
+        while (pvBestChild)
         {
-            const Move move = Move(node->bestChild->move);
+            const Move move = Move(pvBestChild->move);
             const std::string san = Pgn::San(pvGame.GetPosition(), move,
-                (node->bestChild->terminalValue == TerminalValue::MateIn<1>()) /* showCheckmate */);
+                (pvBestChild->terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>()) /* showCheckmate */);
             principleVariation << san << " ";
-            node = node->bestChild;
             pvGame.ApplyMove(move);
+            pvBestChild = pvBestChild->bestChild.load(std::memory_order_relaxed);
         }
 
         std::vector<std::string> sans;
@@ -1975,118 +1962,140 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         for (const Node& child : *game.Root())
         {
             const Move move = Move(child.move);
-            sans.emplace_back(Pgn::San(game.GetPosition(), move, true /* showCheckmate */));
+            sans.emplace_back(Pgn::San(game.GetPosition(), move, (child.terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>()) /* showCheckmate */));
             froms.emplace_back(Game::SquareName[from_sq(move)]);
             tos.emplace_back(Game::SquareName[to_sq(move)]);
             targets.push_back(static_cast<float>(child.visitCount) / game.Root()->visitCount);
             priors.push_back(child.prior);
             values.push_back(child.Value());
             ucb.push_back(CalculatePuctScore<false>(game.Root(), &child).first);
-            visits.push_back(child.visitCount);
-            weights.push_back(static_cast<int>(child.valueWeight));
+            visits.push_back(child.visitCount.load(std::memory_order_relaxed));
+            weights.push_back(child.valueWeight.load(std::memory_order_relaxed));
         }
 
-        network->UpdateGui(fen, _searchState.nodeCount, evaluation.str(), principleVariation.str(),
+        network->UpdateGui(fen, nodeCount, evaluation.str(), principleVariation.str(),
             sans, froms, tos, targets, priors, values, ucb, visits, weights);
     }
+    _searchState->previousNodeCount = nodeCount;
 }
 
-void SelfPlayWorker::CheckTimeControl()
+void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
 {
-    // Always do at least 1-2 simulations so that a "best" move exists.
-    if (!_games[0].Root()->bestChild)
+    // Always try to do at least 1-2 simulations so that a "best" move exists.
+    // Note that this may not be possible because of a hard "stop" or "position" command,
+    // so SelectMove, PrintPrincipleVariation and OnSearchFinished handle the case of no bestMove.
+    const Node* root = _games[0].Root();
+    const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
+    if (!bestChild)
     {
+        // Stop despite any other instructions (e.g. infinite) if the root is terminal.
+        if (_games[0].Root()->terminalValue.load(std::memory_order_relaxed).IsImmediate())
+        {
+            workCoordinator->OnWorkItemCompleted();
+        }
         return;
     }
 
     // Infinite think takes priority: nothing else can stop the search.
-    if (_searchState.timeControl.infinite)
+    if (_searchState->timeControl.infinite)
     {
         return;
     }
 
     // Nodes can stop the search.
-    if ((_searchState.timeControl.nodes > 0) && (_searchState.nodeCount >= _searchState.timeControl.nodes))
+    const int nodeCount = _searchState->nodeCount.load(std::memory_order_relaxed);
+    if ((_searchState->timeControl.nodes > 0) && (nodeCount >= _searchState->timeControl.nodes))
     {
-        _searchState.searching = false;
+        workCoordinator->OnWorkItemCompleted();
         return;
     }
 
     // Mate can stop the search.
-    if (_searchState.timeControl.mate > 0)
+    if (_searchState->timeControl.mate > 0)
     {
-        const int eitherMateN = _games[0].Root()->bestChild->terminalValue.EitherMateN();
-        if ((eitherMateN > 0) && (eitherMateN <= _searchState.timeControl.mate))
+        const int eitherMateN = bestChild->terminalValue.load(std::memory_order_relaxed).EitherMateN();
+        if ((eitherMateN > 0) && (eitherMateN <= _searchState->timeControl.mate))
         {
-            _searchState.searching = false;
+            workCoordinator->OnWorkItemCompleted();
             return;
         }
     }
 
-    const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState.searchStart);
+    const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState->searchStart);
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
 
     // Specified think time can stop the search.
-    if ((_searchState.timeControl.moveTimeMs > 0) && (searchTimeMs >= _searchState.timeControl.moveTimeMs))
+    if ((_searchState->timeControl.moveTimeMs > 0) && (searchTimeMs >= _searchState->timeControl.moveTimeMs))
     {
-        _searchState.searching = false;
+        workCoordinator->OnWorkItemCompleted();
         return;
     }
 
     // Game clock can stop the search. Use a simple strategy like AlphaZero for now.
     const Color toPlay = _games[0].ToPlay();
     const int64_t timeAllowed =
-        (_searchState.timeControl.timeRemainingMs[toPlay] / Config::Misc.TimeControl_FractionOfRemaining)
-        + _searchState.timeControl.incrementMs[toPlay]
+        (_searchState->timeControl.timeRemainingMs[toPlay] / Config::Misc.TimeControl_FractionOfRemaining)
+        + _searchState->timeControl.incrementMs[toPlay]
         - Config::Misc.TimeControl_SafetyBufferMilliseconds;
     if ((timeAllowed > 0) && (searchTimeMs >= timeAllowed))
     {
-        _searchState.searching = false;
+        workCoordinator->OnWorkItemCompleted();
         return;
     }
 
     // No limits set/remaining: make at least the training number of simulations.
-    if ((_searchState.timeControl.nodes <= 0) &&
-        (_searchState.timeControl.mate <= 0) &&
-        (_searchState.timeControl.moveTimeMs <= 0) &&
+    if ((_searchState->timeControl.nodes <= 0) &&
+        (_searchState->timeControl.mate <= 0) &&
+        (_searchState->timeControl.moveTimeMs <= 0) &&
         (timeAllowed <= 0) &&
-        (_searchState.nodeCount >= Config().SelfPlay.NumSimulations))
+        (nodeCount >= Config::Network.SelfPlay.NumSimulations))
     {
-        _searchState.searching = false;
+        workCoordinator->OnWorkItemCompleted();
         return;
     }
 }
 
-void SelfPlayWorker::PrintPrincipleVariation()
+void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
 {
-    Node* node = _games[0].Root();
+    const Node* root = _games[0].Root();
     std::vector<Move> principleVariation;
 
-    if (!node->bestChild)
+    const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
+    if (!bestChild)
     {
+        // No best move was found, so this is either a terminal node (mate or draw-on-the-board)
+        // or not enough nodes have been explored, in which case we take max prior if explored,
+        // or just MOVE_NONE otherwise. Only print for finished searches: don't spam before
+        // finding bestChild normally.
+        if (searchFinished)
+        {
+            const int rootEitherMateN = root->terminalValue.load(std::memory_order_relaxed).EitherMateN();
+            std::cout << "info depth 0" << ((rootEitherMateN != 0) ? " score mate 0" : " score cp 0") << std::endl;
+        }
         return;
     }
 
-    while (node->bestChild)
+    const Node* pvBestChild = bestChild;
+    while (pvBestChild)
     {
-        principleVariation.push_back(Move(node->bestChild->move));
-        node = node->bestChild;
+        principleVariation.push_back(Move(pvBestChild->move));
+        pvBestChild = pvBestChild->bestChild.load(std::memory_order_relaxed);
     }
 
+    const bool debug = _searchState->debug.load(std::memory_order_relaxed);
     auto now = std::chrono::high_resolution_clock::now();
-    const std::chrono::duration sinceSearchStart = (now - _searchState.searchStart);
-    _searchState.lastPrincipleVariationPrint = now;
+    const std::chrono::duration sinceSearchStart = (now - _searchState->searchStart);
+    _searchState->lastPrincipleVariationPrint = now;
 
     // Value is from the parent's perspective, so that's already correct for the root perspective
-    const Node* pvFirst = _games[0].Root()->bestChild;
-    const int eitherMateN = pvFirst->terminalValue.EitherMateN();
-    const float value = pvFirst->Value();
+    const int eitherMateN = bestChild->terminalValue.load(std::memory_order_relaxed).EitherMateN();
+    const float value = bestChild->Value();
     const int depth = static_cast<int>(principleVariation.size());
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
-    const int nodeCount = _searchState.nodeCount;
+    const int nodeCount = _searchState->nodeCount.load(std::memory_order_relaxed);
     const float searchTimeSeconds = std::chrono::duration<float>(sinceSearchStart).count();
     const int nodesPerSecond = static_cast<int>(nodeCount / searchTimeSeconds);
-    const int failedNodesPerSecond = static_cast<int>(_searchState.failedNodeCount / searchTimeSeconds);
+    const int failedNodesPerSecond = static_cast<int>(_searchState->failedNodeCount.load(std::memory_order_relaxed) / searchTimeSeconds);
     const int hashfullPermille = PredictionCache::Instance.PermilleFull();
 
     std::cout << "info depth " << depth;
@@ -2102,12 +2111,12 @@ void SelfPlayWorker::PrintPrincipleVariation()
     }
 
     std::cout << " nodes " << nodeCount << " nps " << nodesPerSecond;
-    if (_searchConfig.debug)
+    if (debug)
     {
         std::cout << " fnps " << failedNodesPerSecond;
     }
     std::cout << " time " << searchTimeMs << " hashfull " << hashfullPermille;
-    if (_searchConfig.debug)
+    if (debug)
     {
         std::cout << " hashhit " << PredictionCache::Instance.PermilleHits()
             << " hashevict " << PredictionCache::Instance.PermilleEvictions();
@@ -2120,95 +2129,21 @@ void SelfPlayWorker::PrintPrincipleVariation()
     std::cout << std::endl;
 }
 
-void SelfPlayWorker::SignalDebug(bool debug)
+void SelfPlayWorker::SearchInitialize(const SelfPlayGame* position)
 {
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    _searchConfig.debug = debug;
-}
-
-void SelfPlayWorker::SignalPosition(std::string&& fen, std::vector<Move>&& moves)
-{
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    _searchConfig.positionUpdated = true;
-    _searchConfig.positionFen = std::move(fen);
-    _searchConfig.positionMoves = std::move(moves);
-}
-
-void SelfPlayWorker::SignalSearchGo(const TimeControl& timeControl)
-{
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    _searchConfig.searchUpdated = true;
-    _searchConfig.search = true;
-    _searchConfig.searchTimeControl = timeControl;
-
-    _searchConfig.signalUci.notify_all();
-}
-
-void SelfPlayWorker::SignalSearchStop()
-{
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    _searchConfig.searchUpdated = true;
-    _searchConfig.search = false;
-}
-
-void SelfPlayWorker::SignalQuit()
-{
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    _searchConfig.quit = true;
-
-    _searchConfig.signalUci.notify_all();
-}
-
-void SelfPlayWorker::SignalComment()
-{
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    _searchConfig.comment = true;
-
-    _searchConfig.signalUci.notify_all();
-}
-
-void SelfPlayWorker::SignalGui()
-{
-    std::lock_guard lock(_searchConfig.mutexUci);
-
-    _searchConfig.gui = true;
-}
-
-void SelfPlayWorker::WaitUntilReady()
-{
-    std::unique_lock lock(_searchConfig.mutexUci);
-
-    while (!_searchConfig.ready)
-    {
-        _searchConfig.signalReady.wait(lock);
-    }
-}
-
-void SelfPlayWorker::SearchInitialize(int mctsParallelism)
-{
-    ClearGame(0);
-
     // Set up parallelism. Make N games share a tree but have their own image/value/policy slots.
-    for (int i = 1; i < mctsParallelism; i++)
+    for (int i = 0; i < Config::Misc.Search_SearchParallelism; i++)
     {
         ClearGame(i);
         _states[i] = _states[0];
         _gameStarts[i] = _gameStarts[0];
-        _games[i] = _games[0].SpawnShadow(&_images[i], &_values[i], &_policies[i]);
+        _games[i] = position->SpawnShadow(&_images[i], &_values[i], &_policies[i]);
     }
-
-    PredictionCache::Instance.ResetProbeMetrics();
 }
 
-void SelfPlayWorker::SearchPlay(int mctsParallelism)
+void SelfPlayWorker::SearchPlay()
 {
-    for (int i = 0; i < mctsParallelism; i++)
+    for (int i = 0; i < Config::Misc.Search_SearchParallelism; i++)
     {
         RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _searchPaths[i], _cacheStores[i]);
     }

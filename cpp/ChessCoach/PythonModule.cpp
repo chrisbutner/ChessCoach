@@ -205,11 +205,10 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
         Config::UpdateParameters(parameters);
 
         // Use the faster student network, matching UCI.
-        assert(Instance().worker);
-        assert(Instance().network);
+        assert(Instance().workerGroup);
         const std::filesystem::path epdPath = (Platform::InstallationDataPath() / "StrengthTests" / Config::Misc.Optimization_Epd);
-        auto [score, total, positions, totalNodesRequired] = Instance().worker->StrengthTestEpd(
-            Instance().network, NetworkType_Student, epdPath, 0 /* moveTimeMs */, Config::Misc.Optimization_Nodes,
+        auto [score, total, positions, totalNodesRequired] = Instance().workerGroup->controllerWorker->StrengthTestEpd(
+            Instance().workerGroup->workCoordinator.get(), epdPath, 0 /* moveTimeMs */, Config::Misc.Optimization_Nodes,
             Config::Misc.Optimization_FailureNodes, Config::Misc.Optimization_PositionLimit, nullptr /* progress */);
 
         evaluationScore = totalNodesRequired;

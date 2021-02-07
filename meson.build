@@ -122,6 +122,7 @@ chesscoach_sources = [
   'cpp/ChessCoach/SelfPlay.cpp',
   'cpp/ChessCoach/Storage.cpp',
   'cpp/ChessCoach/Threading.cpp',
+  'cpp/ChessCoach/WorkerGroup.cpp',
   ]
 
 chesscoach = static_library(

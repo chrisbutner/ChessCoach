@@ -1,7 +1,7 @@
 #include <thread>
 
 #include <ChessCoach/ChessCoach.h>
-#include <ChessCoach/SelfPlay.h>
+#include <ChessCoach/WorkerGroup.h>
 
 class ChessCoachOptimizeParameters : public ChessCoach
 {
@@ -41,10 +41,12 @@ void ChessCoachOptimizeParameters::FinalizeLight()
 
 void ChessCoachOptimizeParameters::Run()
 {
-    // Prepare to run strength tests to evaluate parameters. Use the UCI network.
-    std::unique_ptr<INetwork> network(CreateNetwork(Config::UciNetwork));
-    SelfPlayWorker worker(Config::UciNetwork, nullptr /* storage */);
-    InitializePythonModule(nullptr /* storage */, &worker, network.get());
+    // Prepare to run strength tests to evaluate parameters.
+    // Use the faster student network for strength testing.
+    std::unique_ptr<INetwork> network(CreateNetwork());
+    WorkerGroup workerGroup;
+    workerGroup.Initialize(network.get(), NetworkType_Student, Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
+    InitializePythonModule(nullptr /* storage */, &workerGroup);
 
     // Call in to Python.
     network->OptimizeParameters();

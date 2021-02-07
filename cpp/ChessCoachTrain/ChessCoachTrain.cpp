@@ -6,14 +6,13 @@
 
 #include <ChessCoach/ChessCoach.h>
 #include <ChessCoach/Threading.h>
-#include <ChessCoach/SelfPlay.h>
+#include <ChessCoach/WorkerGroup.h>
 
 struct TrainingState
 {
-    const NetworkConfig* config;
-    const MiscConfig* miscConfig;
     Storage* storage;
     INetwork* network;
+    WorkerGroup* workerGroup;
     int networkCount;
     int networkNumber;
     int stageIndex;
@@ -33,11 +32,11 @@ public:
 
 private:
 
-    void StagePlay(const TrainingState& state, WorkCoordinator& workCoordinator);
-    void StageTrain(TrainingState& stateInOut, SelfPlayWorker& selfPlayWorker);
-    void StageTrainCommentary(const TrainingState& state, SelfPlayWorker& selfPlayWorker);
-    void StageSave(const TrainingState& state, SelfPlayWorker& selfPlayWorker);
-    void StageStrengthTest(const TrainingState& state, SelfPlayWorker& selfPlayWorker);
+    void StagePlay(const TrainingState& state);
+    void StageTrain(TrainingState& stateInOut);
+    void StageTrainCommentary(const TrainingState& state);
+    void StageSave(const TrainingState& state);
+    void StageStrengthTest(const TrainingState& state);
     
     void ValidateSchedule(const TrainingState& state);
     void ResumeTraining(TrainingState& stateInOut);
@@ -62,10 +61,8 @@ int main()
 
 void ChessCoachTrain::TrainChessCoach()
 {
-    const NetworkConfig& config = Config::TrainingNetwork;
-    const MiscConfig& miscConfig = Config::Misc;
-    std::unique_ptr<INetwork> network(CreateNetwork(config));
-    Storage storage(config, miscConfig);
+    std::unique_ptr<INetwork> network(CreateNetwork());
+    Storage storage;
 
     // We need to reach into Python for network info in case it's coming from cloud storage.
     int networkStepCount;
@@ -74,24 +71,18 @@ void ChessCoachTrain::TrainChessCoach()
     // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
     storage.InitializeLocalGamesChunks(network.get());
 
-    // Start self-play worker threads. Also create a self-play worker for this main thread so that
-    // MCTS nodes are always allocated and freed from the correct thread's pool allocator.
-    std::unique_ptr<SelfPlayWorker> mainWorker = std::make_unique<SelfPlayWorker>(config, &storage);
-    std::vector<std::unique_ptr<SelfPlayWorker>> selfPlayWorkers(config.SelfPlay.NumWorkers);
-    std::vector<std::thread> selfPlayThreads;
-
-    WorkCoordinator workCoordinator(config.SelfPlay.NumWorkers);
-    for (int i = 0; i < config.SelfPlay.NumWorkers; i++)
+    // Start self-play worker threads. Use the faster student network for self-play.
+    WorkerGroup workerGroup;
+    workerGroup.Initialize(network.get(), NetworkType_Student,Config::Network.SelfPlay.NumWorkers,
+        Config::Network.SelfPlay.PredictionBatchSize, &SelfPlayWorker::LoopSelfPlay);
+    for (int i = 0; i < Config::Network.SelfPlay.NumWorkers; i++)
     {
-        std::cout << "Starting self-play thread " << (i + 1) << " of " << selfPlayWorkers.size() <<
-            " (" << config.SelfPlay.PredictionBatchSize << " games per thread)" << std::endl;
-
-        selfPlayWorkers[i].reset(new SelfPlayWorker(config, &storage));
-        selfPlayThreads.emplace_back(&SelfPlayWorker::PlayGames, selfPlayWorkers[i].get(), std::ref(workCoordinator), network.get());
+        std::cout << "Starting self-play thread " << (i + 1) << " of " << Config::Network.SelfPlay.NumWorkers <<
+            " (" << Config::Network.SelfPlay.PredictionBatchSize << " games per thread)" << std::endl;
     }
 
     // Wait until all self-play workers are initialized.
-    workCoordinator.WaitForWorkers();
+    workerGroup.workCoordinator->WaitForWorkers();
 
     // Plan full training and resume progress. If the network's step count isn't a multiple of the checkpoint interval, round down.
     // See if there's still work to do in the current/latest network, based on the presence of artifacts in storage.
@@ -100,12 +91,11 @@ void ChessCoachTrain::TrainChessCoach()
     // saved artifact in a set of stages. If not, earlier artifacts will need to be redone. Shouldn't be a problem though: you need
     // a teacher to train a student, and you need a teacher or student to strength test.
     TrainingState state;
-    state.config = &config;
-    state.miscConfig = &miscConfig;
     state.storage = &storage;
     state.network = network.get();
-    state.networkCount = (config.Training.Steps / config.Training.CheckpointInterval);
-    state.networkNumber = (networkStepCount / config.Training.CheckpointInterval);
+    state.workerGroup = &workerGroup;
+    state.networkCount = (Config::Network.Training.Steps / Config::Network.Training.CheckpointInterval);
+    state.networkNumber = (networkStepCount / Config::Network.Training.CheckpointInterval);
     state.stageIndex = 0;
     ValidateSchedule(state);
     ResumeTraining(state);
@@ -114,34 +104,34 @@ void ChessCoachTrain::TrainChessCoach()
     for (; state.networkNumber <= state.networkCount; state.networkNumber++, state.stageIndex = 0)
     {
         // Run through all stages in the checkpoint.
-        for (; state.stageIndex < config.Training.Stages.size(); state.stageIndex++)
+        for (; state.stageIndex < Config::Network.Training.Stages.size(); state.stageIndex++)
         {
             // Run the stage.
             switch (state.Stage().Stage)
             {
             case StageType_Play:
             {
-                StagePlay(state, workCoordinator);
+                StagePlay(state);
                 break;
             }
             case StageType_Train:
             {
-                StageTrain(state, *mainWorker);
+                StageTrain(state);
                 break;
             }
             case StageType_TrainCommentary:
             {
-                StageTrainCommentary(state, *mainWorker);
+                StageTrainCommentary(state);
                 break;
             }
             case StageType_Save:
             {
-                StageSave(state, *mainWorker);
+                StageSave(state);
                 break;
             }
             case StageType_StrengthTest:
             {
-                StageStrengthTest(state, *mainWorker);
+                StageStrengthTest(state);
                 break;
             }
             case StageType_Count:
@@ -152,9 +142,11 @@ void ChessCoachTrain::TrainChessCoach()
             }
         }
     }
+
+    workerGroup.ShutDown();
 }
 
-void ChessCoachTrain::StagePlay(const TrainingState& state, WorkCoordinator& workCoordinator)
+void ChessCoachTrain::StagePlay(const TrainingState& state)
 {
     // Calculate the replay buffer window for position sampling (network training)
     // and play enough games to satisfy it.
@@ -167,7 +159,7 @@ void ChessCoachTrain::StagePlay(const TrainingState& state, WorkCoordinator& wor
             << trainingWindow.TrainingGameMin << " - " << trainingWindow.TrainingGameMax << "]" << std::endl;
         while (!IsStageComplete(state))
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(state.config->Training.WaitMilliseconds));
+            std::this_thread::sleep_for(std::chrono::milliseconds(Config::Network.Training.WaitMilliseconds));
         }
         return;
     }
@@ -182,7 +174,7 @@ void ChessCoachTrain::StagePlay(const TrainingState& state, WorkCoordinator& wor
     while (true)
     {
         // Check every "wait_milliseconds" to see whether other machines have generated enough games/chunks.
-        const bool workersReady = workCoordinator.WaitForWorkers(state.config->Training.WaitMilliseconds);
+        const bool workersReady = state.workerGroup->workCoordinator->WaitForWorkers(Config::Network.Training.WaitMilliseconds);
 
         // We need to reach into Python for network info in case it's coming from cloud storage.
         int trainingChunkCount;
@@ -193,7 +185,7 @@ void ChessCoachTrain::StagePlay(const TrainingState& state, WorkCoordinator& wor
         {
             // Stop workers in case we finished because of other machines, in a distributed scenario.
             std::cout << "Finished playing games" << std::endl;
-            workCoordinator.ResetWorkItemsRemaining(0);
+            state.workerGroup->workCoordinator->ResetWorkItemsRemaining(0);
             break;
         }
 
@@ -203,10 +195,10 @@ void ChessCoachTrain::StagePlay(const TrainingState& state, WorkCoordinator& wor
             std::cout << "Playing " << gamesToPlay << " games..." << std::endl;
 
             // Generate uniform predictions for the first network (rather than use random weights).
-            workCoordinator.GenerateUniformPredictions() = (state.networkNumber == 1);
+            state.workerGroup->workCoordinator->GenerateUniformPredictions() = (state.networkNumber == 1);
 
             // Play the games.
-            workCoordinator.ResetWorkItemsRemaining(gamesToPlay);
+            state.workerGroup->workCoordinator->ResetWorkItemsRemaining(gamesToPlay);
         }
         else
         {
@@ -218,7 +210,7 @@ void ChessCoachTrain::StagePlay(const TrainingState& state, WorkCoordinator& wor
     PredictionCache::Instance.PrintDebugInfo();
 }
 
-void ChessCoachTrain::StageTrain(TrainingState& stateInOut, SelfPlayWorker& selfPlayWorker)
+void ChessCoachTrain::StageTrain(TrainingState& stateInOut)
 {
     const int first = stateInOut.stageIndex;
     std::vector<GameType> gameTypes;
@@ -232,7 +224,7 @@ void ChessCoachTrain::StageTrain(TrainingState& stateInOut, SelfPlayWorker& self
 
     // Coalesce multiple adjacent "training" stages for the same target (e.g. "teacher" or "student")
     // but potentially different types (e.g. "supervised" or "training") into a single rotation.
-    const std::vector<StageConfig>& stages = stateInOut.config->Training.Stages;
+    const std::vector<StageConfig>& stages = Config::Network.Training.Stages;
     while ((stateInOut.stageIndex < stages.size()) &&
         (stateInOut.Stage().Stage == stages[first].Stage) &&
         (stateInOut.Stage().Target == stages[first].Target))
@@ -256,10 +248,10 @@ void ChessCoachTrain::StageTrain(TrainingState& stateInOut, SelfPlayWorker& self
     stateInOut.stageIndex--;
 
     // Train the network.
-    selfPlayWorker.TrainNetwork(stateInOut.network, stages[first].Target, gameTypes, trainingWindows, stateInOut.Step(), stateInOut.Checkpoint());
+    stateInOut.workerGroup->controllerWorker->TrainNetwork(stateInOut.network, stages[first].Target, gameTypes, trainingWindows, stateInOut.Step(), stateInOut.Checkpoint());
 }
 
-void ChessCoachTrain::StageTrainCommentary(const TrainingState& state, SelfPlayWorker& selfPlayWorker)
+void ChessCoachTrain::StageTrainCommentary(const TrainingState& state)
 {
     // If this machine isn't a trainer, skip training commentary.
     if (!state.HasRole(RoleType_Train))
@@ -280,10 +272,10 @@ void ChessCoachTrain::StageTrainCommentary(const TrainingState& state, SelfPlayW
     if (state.Stage().Type != GameType_Supervised) throw std::runtime_error("Only supervised data supported in commentary training");
 
     // Train the main model and commentary decoder.
-    selfPlayWorker.TrainNetworkWithCommentary(state.network, state.Step(), state.Checkpoint());
+    state.workerGroup->controllerWorker->TrainNetworkWithCommentary(state.network, state.Step(), state.Checkpoint());
 }
 
-void ChessCoachTrain::StageSave(const TrainingState& state, SelfPlayWorker& selfPlayWorker)
+void ChessCoachTrain::StageSave(const TrainingState& state)
 {
     // If this machine isn't a trainer, and "wait_for_updated_network" is *true*, wait until we see someone else save this network type + checkpoint.
     // If this machine isn't a trainer, and "wait_for_updated_network" is *false*, return immediately and start playing the next set of games,
@@ -292,12 +284,12 @@ void ChessCoachTrain::StageSave(const TrainingState& state, SelfPlayWorker& self
     const int checkpoint = state.Checkpoint();
     if (!state.HasRole(RoleType_Train))
     {
-        if (state.config->SelfPlay.WaitForUpdatedNetwork || (state.networkNumber == 1))
+        if (Config::Network.SelfPlay.WaitForUpdatedNetwork || (state.networkNumber == 1))
         {
             std::cout << "Waiting: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << checkpoint << "]" << std::endl;
             while (!IsStageComplete(state))
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(state.config->Training.WaitMilliseconds));
+                std::this_thread::sleep_for(std::chrono::milliseconds(Config::Network.Training.WaitMilliseconds));
             }
             return;
         }
@@ -312,10 +304,10 @@ void ChessCoachTrain::StageSave(const TrainingState& state, SelfPlayWorker& self
     std::cout << "Stage: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << checkpoint << "]" << std::endl;
 
     // Save the network. It logs enough internally.
-    selfPlayWorker.SaveNetwork(state.network, state.Stage().Target, checkpoint);
+    state.workerGroup->controllerWorker->SaveNetwork(state.network, state.Stage().Target, checkpoint);
 }
 
-void ChessCoachTrain::StageStrengthTest(const TrainingState& state, SelfPlayWorker& selfPlayWorker)
+void ChessCoachTrain::StageStrengthTest(const TrainingState& state)
 {
     // If this machine isn't a trainer, skip Strength testing.
     if (!state.HasRole(RoleType_Train))
@@ -326,27 +318,41 @@ void ChessCoachTrain::StageStrengthTest(const TrainingState& state, SelfPlayWork
     // Log the stage info in a consistent format.
     std::cout << "Stage: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << state.Checkpoint() << "]" << std::endl;
 
-    // Potentially strength test the network, if the checkpoint is a multiple of the strength test interval.
-    const bool strengthTested = selfPlayWorker.StrengthTestNetwork(state.network, state.Stage().Target, state.Checkpoint());
-    if (strengthTested)
+    // Strength-test the engine every "StrengthTestInterval" steps.
+    assert(Config::Network.Training.StrengthTestInterval >= Config::Network.Training.CheckpointInterval);
+    assert((Config::Network.Training.StrengthTestInterval % Config::Network.Training.CheckpointInterval) == 0);
+    if ((state.Checkpoint() % Config::Network.Training.StrengthTestInterval) != 0)
     {
-        const std::string markerRelativePath = state.StrengthTestMarkerRelativePath();
-        if (!markerRelativePath.empty())
-        {
-            state.network->SaveFile(markerRelativePath, "");
-        }
+        return;
     }
+
+    // Start up a fresh worker group to avoid disturbing paused self-play games.
+    WorkerGroup strengthTestWorkerGroup;
+    strengthTestWorkerGroup.Initialize(state.network, state.Stage().Target,
+        Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
+
+    // Strength-test the network.
+    strengthTestWorkerGroup.controllerWorker->StrengthTestNetwork(
+        strengthTestWorkerGroup.workCoordinator.get(), state.network, state.Stage().Target, state.Checkpoint());
+    const std::string markerRelativePath = state.StrengthTestMarkerRelativePath();
+    if (!markerRelativePath.empty())
+    {
+        state.network->SaveFile(markerRelativePath, "");
+    }
+
+    // Shut down and wait for the strength test worker group.
+    strengthTestWorkerGroup.ShutDown();
 }
 
-void ChessCoachTrain::ValidateSchedule(const TrainingState& state)
+void ChessCoachTrain::ValidateSchedule(const TrainingState& /* state */)
 {
-    for (const StageConfig& stage : state.config->Training.Stages)
+    for (const StageConfig& stage : Config::Network.Training.Stages)
     {
         if (stage.Stage == StageType_Train)
         {
             const int positionsPerGame = 135; // Estimate
             const int totalPositions = (stage.NumGames * positionsPerGame);
-            const int totalSamples = (state.config->Training.Steps * state.config->Training.BatchSize);
+            const int totalSamples = (Config::Network.Training.Steps * Config::Network.Training.BatchSize);
             const float sampleRatio = (static_cast<float>(totalSamples) / totalPositions);
             if (sampleRatio >= 1.f)
             {
@@ -366,7 +372,7 @@ void ChessCoachTrain::ResumeTraining(TrainingState& stateInOut)
     // (1)/(3) present, (2) missing by e.g. loading a student network from a previous checkpoint.
 
     // Iterate backwards and break on the first complete stage seen.
-    for (stateInOut.stageIndex = static_cast<int>(stateInOut.config->Training.Stages.size()) - 1;stateInOut.stageIndex >= 0; stateInOut.stageIndex--)
+    for (stateInOut.stageIndex = static_cast<int>(Config::Network.Training.Stages.size()) - 1;stateInOut.stageIndex >= 0; stateInOut.stageIndex--)
     {
         if (IsStageComplete(stateInOut))
         {
@@ -376,7 +382,7 @@ void ChessCoachTrain::ResumeTraining(TrainingState& stateInOut)
 
     // If no stages were complete then we increment "stageIndexOut" from -1 to 0 and run them all.
     // If all stages were complete then we roll over and move on to the next network.
-    if (++stateInOut.stageIndex >= stateInOut.config->Training.Stages.size())
+    if (++stateInOut.stageIndex >= Config::Network.Training.Stages.size())
     {
         stateInOut.networkNumber++;
         stateInOut.stageIndex = 0;
@@ -467,22 +473,22 @@ Window ChessCoachTrain::CalculateWindow(const TrainingState& state)
 
 const StageConfig& TrainingState::Stage() const
 {
-    return config->Training.Stages[stageIndex];
+    return Config::Network.Training.Stages[stageIndex];
 }
 
 int TrainingState::Checkpoint() const
 {
-    return (networkNumber * config->Training.CheckpointInterval);
+    return (networkNumber * Config::Network.Training.CheckpointInterval);
 }
 
 int TrainingState::Step() const
 {
-    return (((networkNumber - 1) * config->Training.CheckpointInterval) + 1);
+    return (((networkNumber - 1) * Config::Network.Training.CheckpointInterval) + 1);
 }
 
 bool TrainingState::HasRole(RoleType role) const
 {
-    return (config->Role & role);
+    return (Config::Network.Role & role);
 }
 
 std::string TrainingState::StrengthTestMarkerRelativePath() const
@@ -497,7 +503,7 @@ std::string TrainingState::StrengthTestMarkerRelativePath() const
 
     // Always use a forward slash for potential compatibility with gs://
     relativePath += '/';
-    relativePath += miscConfig->Paths_StrengthTestMarkerPrefix;
+    relativePath += Config::Misc.Paths_StrengthTestMarkerPrefix;
     relativePath += NetworkTypeNames[Stage().Target];
 
     return relativePath;

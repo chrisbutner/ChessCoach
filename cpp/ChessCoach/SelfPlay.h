@@ -18,7 +18,8 @@
 #include "PredictionCache.h"
 #include "Epd.h"
 
-class TerminalValue
+// Add "alignas(8)" to side-step ABI back-compability issue on Windows.
+class alignas(8) TerminalValue
 {
 public:
 
@@ -74,6 +75,13 @@ private:
     float _mateTerm;
 };
 
+enum class Expansion : uint8_t
+{
+    None = 0,
+    Expanding,
+    Expanded,
+};
+
 struct Node
 {
 public:
@@ -83,6 +91,8 @@ public:
 
 public:
 
+    Node();
+    Node(const Node& other);
     iterator begin();
     iterator end();
     const_iterator begin() const;
@@ -92,24 +102,25 @@ public:
 
     bool IsExpanded() const;
     float Value() const;
-    float ValueWithVirtualLoss(const NetworkConfig* config) const;
+    float ValueWithVirtualLoss() const;
+    void SampleValue(float movingAverageBuild, float movingAverageCap, float value);
     void AdjustVisitCount(int newVisitCount);
 
     Node* Child(Move match);
 
 public:
 
-    Node* bestChild;
+    std::atomic<Node*> bestChild;
     Node* children;
     int32_t childCount;
-    uint16_t move;
-    bool expanding;
-    uint8_t visitingCount;
     float prior;
-    int visitCount;
-    float valueAverage;
-    float valueWeight;
-    TerminalValue terminalValue;
+    uint16_t move;
+    std::atomic<Expansion> expansion;
+    std::atomic_uint8_t visitingCount;
+    std::atomic_int visitCount;
+    std::atomic<float> valueAverage;
+    std::atomic_int valueWeight;
+    std::atomic<TerminalValue> terminalValue;
 };
 static_assert(sizeof(TerminalValue) == 8);
 static_assert(sizeof(Node) == 48);
@@ -138,42 +149,6 @@ struct TimeControl
     int64_t incrementMs[COLOR_NB];
 };
 
-struct SearchConfig
-{
-    std::mutex mutexUci;
-    std::condition_variable signalUci;
-    std::condition_variable signalReady;
-
-    std::atomic_bool quit;
-    std::atomic_bool debug;
-    bool ready;
-    std::atomic_bool comment;
-    bool gui;
-
-    std::atomic_bool searchUpdated;
-    std::atomic_bool search;
-    TimeControl searchTimeControl;
-
-    std::atomic_bool positionUpdated;
-    std::string positionFen;
-    std::vector<Move> positionMoves;
-};
-
-struct SearchState
-{
-    std::string positionFen;
-    std::vector<Move> positionMoves;
-    bool searching;
-    bool gui;
-    std::chrono::time_point<std::chrono::high_resolution_clock> searchStart;
-    std::chrono::time_point<std::chrono::high_resolution_clock> lastPrincipleVariationPrint;
-    TimeControl timeControl;
-    int nodeCount;
-    int previousNodeCount;
-    int failedNodeCount;
-    bool principleVariationChanged;
-};
-
 class SelfPlayGame : public Game
 {
 public:
@@ -188,7 +163,7 @@ public:
     SelfPlayGame& operator=(SelfPlayGame&& other) noexcept;
     ~SelfPlayGame();
 
-    SelfPlayGame SpawnShadow(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
+    SelfPlayGame SpawnShadow(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy) const;
 
     Node* Root() const;
     float Result() const;
@@ -212,6 +187,7 @@ public:
 
 private:
 
+    bool TakeExpansionOwnership(Node* node);
     void PruneAllInternal(Node* root);
 
 private:
@@ -239,6 +215,29 @@ private:
     std::array<float, MAX_MOVES> _cachedPriors;
 };
 
+struct SearchState
+{
+    void Reset(const TimeControl& setTimeControl);
+
+    // Controller + primary worker
+    bool gui;
+    std::string positionFen;
+    std::vector<Move> positionMoves;
+    std::chrono::time_point<std::chrono::high_resolution_clock> searchStart;
+    std::chrono::time_point<std::chrono::high_resolution_clock> lastPrincipleVariationPrint;
+    uint16_t lastBestMove;
+    int lastBestNodes;
+    TimeControl timeControl;
+    int previousNodeCount;
+
+    // All workers
+    SelfPlayGame* position;
+    std::atomic_bool debug;
+    std::atomic_int nodeCount;
+    std::atomic_int failedNodeCount;
+    std::atomic_bool principleVariationChanged;
+};
+
 class SelfPlayWorker
 {
 private:
@@ -247,15 +246,17 @@ private:
 
 public:
 
-    SelfPlayWorker(const NetworkConfig& networkConfig, Storage* storage);
+    SelfPlayWorker(Storage* storage, SearchState* searchState, int gameCount);
 
     SelfPlayWorker(const SelfPlayWorker& other) = delete;
     SelfPlayWorker& operator=(const SelfPlayWorker& other) = delete;
     SelfPlayWorker(SelfPlayWorker&& other) = delete;
     SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
 
-    const NetworkConfig& Config() const;
-    void PlayGames(WorkCoordinator& workCoordinator, INetwork* network);
+    void LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
+    void LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
+    void LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
+
     void ClearGame(int index);
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
@@ -264,7 +265,7 @@ public:
         std::vector<Window>& trainingWindows, int step, int checkpoint);
     void TrainNetworkWithCommentary(INetwork* network, int step, int checkpoint);
     void SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint);
-    bool StrengthTestNetwork(INetwork* network, NetworkType networkType, int checkpoint);
+    void StrengthTestNetwork(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int checkpoint);
     void Play(int index);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(INetwork* network, int index);
@@ -287,44 +288,35 @@ public:
     bool WorseThan(const Node* lhs, const Node* rhs) const;
     std::vector<Node*> CollectBestMoves(Node* parent, float valueDeltaThreshold) const;
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
-    SearchState& DebugSearchState();
     void DebugResetGame(int index);
 
-    void Search(std::function<INetwork* ()> networkFactory);
+    void SearchUpdatePosition(std::string&& fen, std::vector<Move>&& moves, bool forceNewPosition);
+    void CommentOnPosition(INetwork* network);
     PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
-    void SignalDebug(bool debug);
-    void SignalPosition(std::string&& fen, std::vector<Move>&& moves);
-    void SignalSearchGo(const TimeControl& timeControl);
-    void SignalSearchStop();
-    void SignalQuit();
-    void SignalComment();
-    void SignalGui();
-    void WaitUntilReady();
 
-    void StrengthTest(INetwork* network, NetworkType networkType, int step);
-    std::tuple<int, int, int, int> StrengthTestEpd(INetwork* network, NetworkType networkType, const std::filesystem::path& epdPath,
+    std::tuple<int, int, int, int> StrengthTestEpd(WorkCoordinator* workCoordinator, const std::filesystem::path& epdPath,
         int moveTimeMs, int nodes, int failureNodes, int positionLimit,
         std::function<void(const std::string&, const std::string&, const std::string&, int, int, int)> progress);
 
 private:
 
-    void UpdatePosition();
-    void UpdateSearch();
-    void OnSearchFinished(int mctsParallelism);
-    void CheckPrintInfo();
-    void CheckUpdateGui(INetwork* network, bool forceUpdate);
-    void CheckTimeControl();
-    void PrintPrincipleVariation();
-    void SearchInitialize(int mctsParallelism);
-    void SearchPlay(int mctsParallelism);
-    void CommentOnPosition(INetwork* network);
+    void Finalize();
+    void FailNode(std::vector<WeightedNode>& searchPath);
 
-    std::tuple<Move, int, int> StrengthTestPosition(INetwork* network, NetworkType networkType, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes);
+    void FinishMcts();
+    void OnSearchFinished();
+    void CheckPrincipleVariation();
+    void CheckUpdateGui(INetwork* network, bool forceUpdate);
+    void CheckTimeControl(WorkCoordinator* workCoordinator);
+    void PrintPrincipleVariation(bool searchFinished);
+    void SearchInitialize(const SelfPlayGame* position);
+    void SearchPlay();
+
+    std::tuple<Move, int, int> StrengthTestPosition(WorkCoordinator* workCoordinator, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes);
     std::pair<int, int> JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes);
 
 private:
 
-    const NetworkConfig* _networkConfig;
     Storage* _storage;
 
     std::vector<SelfPlayState> _states;
@@ -339,8 +331,7 @@ private:
     std::vector<std::vector<WeightedNode>> _searchPaths;
     std::vector<PredictionCacheChunk*> _cacheStores;
 
-    SearchConfig _searchConfig;
-    SearchState _searchState;
+    SearchState* _searchState;
 };
 
 #endif // _SELFPLAY_H_

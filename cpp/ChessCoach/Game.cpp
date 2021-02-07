@@ -224,7 +224,7 @@ Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
                 (_position.checkers() ? CHESSCOACH_VALUE_LOSS : CHESSCOACH_VALUE_DRAW) :
                 IsDrawByNoProgressOrThreefoldRepetition() ?
                     CHESSCOACH_VALUE_DRAW :
-                    (Ply() >= Config::TrainingNetwork.SelfPlay.MaxMoves) ?
+                    (Ply() >= Config::Network.SelfPlay.MaxMoves) ?
                         CHESSCOACH_VALUE_DRAW :
                         CHESSCOACH_VALUE_UNINITIALIZED);
         if (moveResult == result)

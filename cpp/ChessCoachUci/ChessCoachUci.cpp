@@ -13,7 +13,7 @@
 #include <Stockfish/uci.h>
 
 #include <ChessCoach/ChessCoach.h>
-#include <ChessCoach/SelfPlay.h>
+#include <ChessCoach/WorkerGroup.h>
 #include <ChessCoach/Pgn.h>
 
 typedef std::function<void(std::stringstream&)> CommandHandler;
@@ -41,7 +41,6 @@ private:
     void HandlePosition(std::stringstream& commands);
     void HandleGo(std::stringstream& commands);
     void HandleStop(std::stringstream& commands);
-    void HandlePonderHit(std::stringstream& commands);
     void HandleQuit(std::stringstream& commands);
 
     // Custom commands
@@ -51,38 +50,17 @@ private:
     // Console
     void HandleConsole(std::stringstream& commands);
 
-    void InitializeSelfPlayWorker();
-
-    template <typename T, typename... Ts>
-    void Reply(T reply, Ts... replies)
-    {
-        DoReply(reply);
-        Reply(replies...);
-    }
-
-    template <typename T>
-    void Reply(T reply)
-    {
-        DoReply(reply);
-        std::cout.flush();
-    }
-
-    template <typename T>
-    void DoReply(T reply)
-    {
-        std::cout << reply << std::endl;
-    }
+    void InitializeWorkers();
+    void StopAndReadyWorkers();
 
 private:
 
     bool _quit = false;
-    bool _debug = false;
-
     std::ofstream _commandLog;
     std::vector<CommandHandlerEntry> _commandHandlers;
 
-    std::unique_ptr<SelfPlayWorker> _selfPlayWorker;
-    std::unique_ptr<std::thread> _selfPlayThread;
+    std::unique_ptr<INetwork> _network;
+    WorkerGroup _workerGroup;
 };
 
 int main()
@@ -108,6 +86,13 @@ void ChessCoachUci::Initialize()
     InitializeStockfish();
     InitializeChessCoach();
 
+    // Validate config.
+    const int totalParallelism = (Config::Misc.Search_SearchThreads * Config::Misc.Search_SearchParallelism);
+    if (totalParallelism < 256)
+    {
+        throw std::invalid_argument("Band width (search_threads * search_parallelism) >= 256 required for sufficient exploration");
+    }
+
     // UCI commands
     _commandHandlers.emplace_back("uci", std::bind(&ChessCoachUci::HandleUci, this, std::placeholders::_1));
     _commandHandlers.emplace_back("debug", std::bind(&ChessCoachUci::HandleDebug, this, std::placeholders::_1));
@@ -118,7 +103,6 @@ void ChessCoachUci::Initialize()
     _commandHandlers.emplace_back("position", std::bind(&ChessCoachUci::HandlePosition, this, std::placeholders::_1));
     _commandHandlers.emplace_back("go", std::bind(&ChessCoachUci::HandleGo, this, std::placeholders::_1));
     _commandHandlers.emplace_back("stop", std::bind(&ChessCoachUci::HandleStop, this, std::placeholders::_1));
-    _commandHandlers.emplace_back("ponderhit", std::bind(&ChessCoachUci::HandlePonderHit, this, std::placeholders::_1));
     _commandHandlers.emplace_back("quit", std::bind(&ChessCoachUci::HandleQuit, this, std::placeholders::_1));
 
     // Custom commands
@@ -136,7 +120,7 @@ void ChessCoachUci::Initialize()
     commandLogFilename << std::put_time(std::localtime(&time), "ChessCoachUci_%Y%m%d_%H%M%S.log");
 #pragma warning(disable:4996) // Internal buffer is immediately consumed and detached.
 
-    const std::filesystem::path commandLogPath = (Storage(Config::UciNetwork, Config::Misc).LocalLogPath() / commandLogFilename.str());
+    const std::filesystem::path commandLogPath = (Storage().LocalLogPath() / commandLogFilename.str());
     _commandLog = std::ofstream(commandLogPath, std::ios::out);
 }
 
@@ -160,6 +144,11 @@ void ChessCoachUci::Work()
             commands >> token;
         } while (!commands.fail() && !HandleCommand(commands, token));
     }
+
+    if (_workerGroup.IsInitialized())
+    {
+        _workerGroup.ShutDown();
+    }
 }
 
 bool ChessCoachUci::HandleCommand(std::stringstream& commands, std::string command)
@@ -178,10 +167,10 @@ bool ChessCoachUci::HandleCommand(std::stringstream& commands, std::string comma
 
 void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
 {
-    Reply("id name ChessCoach",
-        "id author C. Butner",
+    std::cout << "id name ChessCoach\n"
+        "id author C. Butner\n"
         // Options are listed here when they exist.
-        "uciok");
+        "uciok" << std::endl;
 }
 
 void ChessCoachUci::HandleDebug(std::stringstream& commands)
@@ -192,22 +181,26 @@ void ChessCoachUci::HandleDebug(std::stringstream& commands)
 
     if (setting == "on")
     {
-        _debug = true;
+        _workerGroup.searchState.debug = true;
     }
     else if (setting == "off")
     {
-        _debug = false;
+        _workerGroup.searchState.debug = false;
     }
-
-    InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalDebug(_debug);
 }
 
 void ChessCoachUci::HandleIsReady(std::stringstream& /*commands*/)
 {
-    InitializeSelfPlayWorker();
-    _selfPlayWorker->WaitUntilReady();
-    Reply("readyok");
+    InitializeWorkers();
+
+    // "This command must always be answered with "readyok" and can be sent also when the engine is calculating
+    // in which case the engine should also immediately answer with "readyok" without stopping the search."
+    if (!_workerGroup.workCoordinator->CheckWorkItemsExist())
+    {
+        _workerGroup.workCoordinator->WaitForWorkers();
+    }
+
+    std::cout << "readyok" << std::endl;
 }
 
 void ChessCoachUci::HandleSetOption(std::stringstream& /*commands*/)
@@ -220,7 +213,7 @@ void ChessCoachUci::HandleRegister(std::stringstream& /*commands*/)
 
 void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
 {
-    InitializeSelfPlayWorker();
+    InitializeWorkers();
 }
 
 void ChessCoachUci::HandlePosition(std::stringstream& commands)
@@ -261,14 +254,14 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
             break;
         }
 
-        positionStates->emplace_back();
-        position.do_move(move, positionStates->back());
+        position.do_move(move, positionStates->emplace_back());
 
         moves.push_back(move);
     }
 
-    InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalPosition(std::move(fen), std::move(moves));
+    InitializeWorkers();
+    StopAndReadyWorkers();
+    _workerGroup.controllerWorker->SearchUpdatePosition(std::move(fen), std::move(moves), false /* forceNewPosition */);
 }
 
 void ChessCoachUci::HandleGo(std::stringstream& commands)
@@ -315,41 +308,48 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         }
     }
 
-    InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalSearchGo(timeControl);
+    InitializeWorkers();
+    StopAndReadyWorkers();
+
+    // Use the starting position if none ever specified.
+    if (!_workerGroup.searchState.position)
+    {
+        _workerGroup.controllerWorker->SearchUpdatePosition(Config::StartingPosition, {}, false /* forceNewPosition */);
+    }
+
+    _workerGroup.searchState.Reset(timeControl);
+
+    PredictionCache::Instance.ResetProbeMetrics();
+
+    _workerGroup.workCoordinator->ResetWorkItemsRemaining(1);
 }
 
 void ChessCoachUci::HandleStop(std::stringstream& /*commands*/)
 {
-    InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalSearchStop();
-}
-
-void ChessCoachUci::HandlePonderHit(std::stringstream& /*commands*/)
-{
-    // TODO: Do the necessary housekeeping here
+    InitializeWorkers();
+    StopAndReadyWorkers();
 }
 
 void ChessCoachUci::HandleQuit(std::stringstream& /*commands*/)
 {
-    if (_selfPlayWorker)
-    {
-        _selfPlayWorker->SignalQuit();
-        _selfPlayThread->join();
-    }
     _quit = true;
 }
 
 void ChessCoachUci::HandleComment(std::stringstream& /*commands*/)
 {
-    InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalComment();
+    InitializeWorkers();
+    StopAndReadyWorkers();
+    _workerGroup.controllerWorker->CommentOnPosition(_network.get());
 }
 
 void ChessCoachUci::HandleGui(std::stringstream& /*commands*/)
 {
-    InitializeSelfPlayWorker();
-    _selfPlayWorker->SignalGui();
+    InitializeWorkers();
+    if (!_workerGroup.searchState.gui)
+    {
+        _workerGroup.searchState.gui = true;
+        _network->LaunchGui("push");
+    }
 }
 
 void ChessCoachUci::HandleConsole(std::stringstream& commands)
@@ -376,7 +376,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
         }
 
         SelfPlayGame* game;
-        _selfPlayWorker->DebugGame(0, &game, nullptr, nullptr, nullptr);
+        _workerGroup.controllerWorker->DebugGame(0, &game, nullptr, nullptr, nullptr);
         SelfPlayGame ucbGame = *game;
 
         // If "moves" wasn't seen then we already consumed the rest of the line.
@@ -404,7 +404,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << "," << child.prior
                     << "," << child.Value()
-                    << "," << _selfPlayWorker->CalculatePuctScore<false>(root, &child).first
+                    << "," << _workerGroup.controllerWorker->CalculatePuctScore<false>(root, &child).first
                     << "," << child.visitCount
                     << "," << child.valueWeight
                     << std::endl;
@@ -414,7 +414,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << " prior=" << child.prior
                     << " value=" << child.Value()
-                    << " ucb=" << _selfPlayWorker->CalculatePuctScore<false>(root, &child).first
+                    << " ucb=" << _workerGroup.controllerWorker->CalculatePuctScore<false>(root, &child).first
                     << " visits=" << child.visitCount
                     << " weight=" << child.valueWeight
                     << std::endl;
@@ -423,14 +423,20 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
     }
 }
 
-void ChessCoachUci::InitializeSelfPlayWorker()
+void ChessCoachUci::InitializeWorkers()
 {
-    if (_selfPlayWorker)
+    if (_workerGroup.IsInitialized())
     {
         return;
     }
 
-    _selfPlayWorker.reset(new SelfPlayWorker(Config::UciNetwork, nullptr /* storage */));
-    _selfPlayThread.reset(new std::thread(&SelfPlayWorker::Search, _selfPlayWorker.get(),
-        std::bind(&ChessCoach::CreateNetwork, this, Config::UciNetwork)));
+    // Use the faster student network for UCI.
+    _network.reset(CreateNetwork());
+    _workerGroup.Initialize(_network.get(), NetworkType_Student, Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
+}
+
+void ChessCoachUci::StopAndReadyWorkers()
+{
+    _workerGroup.workCoordinator->ResetWorkItemsRemaining(0);
+    _workerGroup.workCoordinator->WaitForWorkers();
 }

@@ -7,15 +7,20 @@ TEST(Config, Basic)
 {
     // Mainly just want Initialize not to crash. Check a couple arbitrary things.
     Config::Initialize();
-    EXPECT_TRUE(!Config::TrainingNetwork.Name.empty());
-    EXPECT_TRUE(!Config::UciNetwork.Name.empty());
+    EXPECT_TRUE(!Config::Network.Name.empty());
 }
 
 TEST(Config, ParameterAssignment)
 {
     Config::Initialize();
 
-    Config::UpdateParameters({ { "batch_size", 512.f } });
+    const int original = Config::Network.Training.PgnInterval;
+    EXPECT_EQ(Config::Network.Training.PgnInterval, original);
 
-    EXPECT_THROW(Config::UpdateParameters({ { "batch_sizez", 512.f } }), std::runtime_error);
+    const int updated = (2 * original);
+    Config::UpdateParameters({ { "pgn_interval", static_cast<float>(updated) } });
+    EXPECT_NE(Config::Network.Training.PgnInterval, original);
+    EXPECT_EQ(Config::Network.Training.PgnInterval, updated);
+
+    EXPECT_THROW(Config::UpdateParameters({ { "pgn_intervalz", static_cast<float>(updated) } }), std::runtime_error);
 }

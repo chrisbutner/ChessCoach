@@ -27,6 +27,7 @@ bool Throttle::TryFire()
 
 WorkCoordinator::WorkCoordinator(int workerCount)
     : _workItemsRemaining(0)
+    , _shutDown(false)
     , _workerCount(workerCount)
     , _workerReadyCount(0)
 {
@@ -55,7 +56,16 @@ void WorkCoordinator::ResetWorkItemsRemaining(int workItemsRemaining)
     }
 }
 
-void WorkCoordinator::WaitForWorkItems()
+void WorkCoordinator::ShutDown()
+{
+    std::lock_guard lock(_mutex);
+
+    _shutDown = true;
+    _workItemsExist.notify_all();
+}
+
+// Returns true if work items found, false to shut down.
+bool WorkCoordinator::WaitForWorkItems()
 {
     std::unique_lock lock(_mutex);
 
@@ -66,12 +76,14 @@ void WorkCoordinator::WaitForWorkItems()
         _workersReady.notify_all();
     }
 
-    while (!CheckWorkItemsExist())
+    while (!CheckWorkItemsExist() && !_shutDown)
     {
         _workItemsExist.wait(lock);
     }
 
     _workerReadyCount--;
+
+    return !_shutDown;
 }
 
 void WorkCoordinator::WaitForWorkers()

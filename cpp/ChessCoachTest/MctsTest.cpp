@@ -28,10 +28,11 @@ SelfPlayGame& PlayGame(SelfPlayWorker& selfPlayWorker, std::function<void (SelfP
         }
 
         // "GPU" work. Pretend to predict for a batch.
-        std::fill(values, values + selfPlayWorker.Config().SelfPlay.PredictionBatchSize, CHESSCOACH_VALUE_DRAW);
+        const int gameCount = 1;
+        std::fill(values, values + gameCount, CHESSCOACH_VALUE_DRAW);
 
         INetwork::PlanesPointerFlat policiesPtr = reinterpret_cast<INetwork::PlanesPointerFlat>(policies);
-        const int policyCount = (selfPlayWorker.Config().SelfPlay.PredictionBatchSize * INetwork::OutputPlanesFloatCount);
+        const int policyCount = (gameCount * INetwork::OutputPlanesFloatCount);
         std::fill(policiesPtr, policiesPtr + policyCount, 0.f);
 
         tickCallback(*game);
@@ -50,7 +51,7 @@ std::vector<Node*> GeneratePrincipleVariation(const SelfPlayWorker& selfPlayWork
             if (child.visitCount > 0)
             {
                 const bool bestIsNotBest = selfPlayWorker.WorseThan(node->bestChild, &child);
-                if (bestIsNotBest) throw std::runtime_error("bestIsNotBest false");
+                if (bestIsNotBest) throw std::runtime_error("bestIsNotBest");
             }
         }
         if (node->bestChild)
@@ -80,48 +81,48 @@ void CheckMateN(Node* node, int n)
 {
     assert(n >= 1);
 
-    EXPECT_EQ(node->terminalValue.IsImmediate(), (n == 1));
-    EXPECT_EQ(node->terminalValue.ImmediateValue(), (n == 1) ? CHESSCOACH_VALUE_WIN : CHESSCOACH_VALUE_DRAW);
-    EXPECT_EQ(node->terminalValue.IsMateInN(), true);
-    EXPECT_EQ(node->terminalValue.IsOpponentMateInN(), false);
-    EXPECT_EQ(node->terminalValue.MateN(), n);
-    EXPECT_EQ(node->terminalValue.OpponentMateN(), 0);
-    EXPECT_EQ(node->terminalValue.EitherMateN(), n);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsImmediate(), (n == 1));
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).ImmediateValue(), (n == 1) ? CHESSCOACH_VALUE_WIN : CHESSCOACH_VALUE_DRAW);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsMateInN(), true);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsOpponentMateInN(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).MateN(), n);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).OpponentMateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).EitherMateN(), n);
 }
 
 void CheckOpponentMateN(Node* node, int n)
 {
     assert(n >= 1);
 
-    EXPECT_EQ(node->terminalValue.IsImmediate(), false);
-    EXPECT_EQ(node->terminalValue.ImmediateValue(), CHESSCOACH_VALUE_DRAW);
-    EXPECT_EQ(node->terminalValue.IsMateInN(), false);
-    EXPECT_EQ(node->terminalValue.IsOpponentMateInN(), true);
-    EXPECT_EQ(node->terminalValue.MateN(), 0);
-    EXPECT_EQ(node->terminalValue.OpponentMateN(), n);
-    EXPECT_EQ(node->terminalValue.EitherMateN(), -n);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsImmediate(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).ImmediateValue(), CHESSCOACH_VALUE_DRAW);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsMateInN(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsOpponentMateInN(), true);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).MateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).OpponentMateN(), n);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).EitherMateN(), -n);
 }
 
 void CheckDraw(Node* node)
 {
-    EXPECT_EQ(node->terminalValue.IsImmediate(), true);
-    EXPECT_EQ(node->terminalValue.ImmediateValue(), CHESSCOACH_VALUE_DRAW);
-    EXPECT_EQ(node->terminalValue.IsMateInN(), false);
-    EXPECT_EQ(node->terminalValue.IsOpponentMateInN(), false);
-    EXPECT_EQ(node->terminalValue.MateN(), 0);
-    EXPECT_EQ(node->terminalValue.OpponentMateN(), 0);
-    EXPECT_EQ(node->terminalValue.EitherMateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsImmediate(), true);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).ImmediateValue(), CHESSCOACH_VALUE_DRAW);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsMateInN(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsOpponentMateInN(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).MateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).OpponentMateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).EitherMateN(), 0);
 }
 
 void CheckNonTerminal(Node* node)
 {
-    EXPECT_EQ(node->terminalValue.IsImmediate(), false);
-    EXPECT_EQ(node->terminalValue.ImmediateValue(), CHESSCOACH_VALUE_DRAW);
-    EXPECT_EQ(node->terminalValue.IsMateInN(), false);
-    EXPECT_EQ(node->terminalValue.IsOpponentMateInN(), false);
-    EXPECT_EQ(node->terminalValue.MateN(), 0);
-    EXPECT_EQ(node->terminalValue.OpponentMateN(), 0);
-    EXPECT_EQ(node->terminalValue.EitherMateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsImmediate(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).ImmediateValue(), CHESSCOACH_VALUE_DRAW);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsMateInN(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).IsOpponentMateInN(), false);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).MateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).OpponentMateN(), 0);
+    EXPECT_EQ(node->terminalValue.load(std::memory_order_relaxed).EitherMateN(), 0);
 }
 
 TEST(Mcts, StateLeaks)
@@ -129,7 +130,8 @@ TEST(Mcts, StateLeaks)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
 
     // Allocations are only tracked with DEBUG.
 #ifdef _DEBUG
@@ -155,22 +157,29 @@ TEST(Mcts, PrincipleVariation)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
-    SearchState& searchState = selfPlayWorker.DebugSearchState();
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
 
+    int latestNodeCount = 0;
     std::vector<Node*> latestPrincipleVariation;
     PlayGame(selfPlayWorker, [&](SelfPlayGame& game)
         {
             std::vector<Node*> principleVariation = GeneratePrincipleVariation(selfPlayWorker, game);
             if (searchState.principleVariationChanged)
             {
-                EXPECT_NE(principleVariation, latestPrincipleVariation);
+                // If multiple nodes run, through terminal nodes or cache hits, the principle variation
+                // may flip back to its previous value and look the same. Just test the single node case.
+                if (searchState.nodeCount == (latestNodeCount + 1))
+                {
+                    EXPECT_NE(principleVariation, latestPrincipleVariation);
+                }
                 searchState.principleVariationChanged = false;
             }
             else
             {
                 EXPECT_EQ(principleVariation, latestPrincipleVariation);
             }
+            latestNodeCount = searchState.nodeCount;
             latestPrincipleVariation = principleVariation;
         });
 }
@@ -180,10 +189,8 @@ TEST(Mcts, MateComparisons)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
-    SelfPlayGame* game;
-    selfPlayWorker.SetUpGame(0);
-    selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
 
     // Set up nodes from expected worst to best.
     const int nodeCount = 7;
@@ -217,7 +224,8 @@ TEST(Mcts, MateProving)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0);
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -295,7 +303,8 @@ TEST(Mcts, TwofoldRepetition)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0);
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -363,7 +372,8 @@ TEST(Mcts, SamplingSelfPlay)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0, Config::StartingPosition, {}, false /* tryHard */); // SamplingSelfPlay means tryHard is false.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -407,7 +417,8 @@ TEST(Mcts, SamplingUci)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    SelfPlayWorker selfPlayWorker(Config::UciNetwork, nullptr /* storage */);
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0, Config::StartingPosition, {}, true /* tryHard */); // SamplingUci means tryHard is true.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -439,10 +450,10 @@ TEST(Mcts, SamplingUci)
         Node* selected = selfPlayWorker.SelectMove(*game, true /* allowDiversity */);
         selected->valueWeight++;
     }
-    EXPECT_NEAR(game->Root()->children[0].valueWeight / sampleCount, 0.2696f, epsilon);
-    EXPECT_NEAR(game->Root()->children[1].valueWeight / sampleCount, 0.2607f, epsilon);
-    EXPECT_NEAR(game->Root()->children[2].valueWeight / sampleCount, 0.2477f, epsilon);
-    EXPECT_NEAR(game->Root()->children[3].valueWeight / sampleCount, 0.2219f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[0].valueWeight) / sampleCount, 0.2696f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[1].valueWeight) / sampleCount, 0.2607f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[2].valueWeight) / sampleCount, 0.2477f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[3].valueWeight) / sampleCount, 0.2219f, epsilon);
 
     game->PruneAll();
 }

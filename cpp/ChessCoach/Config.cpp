@@ -217,7 +217,8 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config)
     misc.TimeControl_SafetyBufferMilliseconds = toml::find<int>(config, "time_control", "safety_buffer_milliseconds");
     misc.TimeControl_FractionOfRemaining = toml::find<int>(config, "time_control", "fraction_remaining");
 
-    misc.Search_MctsParallelism = toml::find<int>(config, "search", "mcts_parallelism");
+    misc.Search_SearchThreads = toml::find<int>(config, "search", "search_threads");
+    misc.Search_SearchParallelism = toml::find<int>(config, "search", "search_parallelism");
     misc.Search_GuiUpdateIntervalNodes = toml::find<int>(config, "search", "gui_update_interval_nodes");
 
     misc.Storage_GamesPerChunk = toml::find<int>(config, "storage", "games_per_chunk");
@@ -236,9 +237,7 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config)
     misc.Optimization_PositionLimit = toml::find<int>(config, "optimization", "position_limit");
 }
 
-NetworkConfig Config::DefaultNetwork;
-NetworkConfig Config::TrainingNetwork;
-NetworkConfig Config::UciNetwork;
+NetworkConfig Config::Network;
 MiscConfig Config::Misc;
 
 void Config::Parse(const std::map<std::string, float>& parameters)
@@ -253,41 +252,25 @@ void Config::Parse(const std::map<std::string, float>& parameters)
     const OverridePolicy overridePolicy{ &parameters, &assigned };
 
     // Parse default values.
-    DefaultNetwork.Role = ParseRole(toml::find<std::string>(config, "network", "role"));
-    ParseTraining(DefaultNetwork.Training, toml::find(config, "training"), defaultPolicy);
-    ParseSelfPlay(DefaultNetwork.SelfPlay, toml::find(config, "self_play"), defaultPolicy);
+    Network.Name = toml::find<std::string>(config, "network", "network_name");
+    Network.Role = ParseRole(toml::find<std::string>(config, "network", "role"));
+    ParseTraining(Network.Training, toml::find(config, "training"), defaultPolicy);
+    ParseSelfPlay(Network.SelfPlay, toml::find(config, "self_play"), defaultPolicy);
 
     // Parse network configs.
-    TrainingNetwork = DefaultNetwork;
-    TrainingNetwork.Name = toml::find<std::string>(config, "network", "training_network_name");
-    UciNetwork = DefaultNetwork;
-    UciNetwork.Name = toml::find<std::string>(config, "network", "uci_network_name");
-    auto networks = { &TrainingNetwork, &UciNetwork };
     const std::vector<TomlValue> configNetworks = toml::find<std::vector<TomlValue>>(config, "networks");
     for (const TomlValue& configNetwork : configNetworks)
     {
         const std::string name = toml::find<std::string>(configNetwork, "name");
-        for (NetworkConfig* network : networks)
+        if (name == Network.Name)
         {
-            if (name == network->Name)
-            {
-                ParseTraining(network->Training, toml::find_or(configNetwork, "training", TomlValue::table_type()), overridePolicy);
-                ParseSelfPlay(network->SelfPlay, toml::find_or(configNetwork, "self_play", TomlValue::table_type()), overridePolicy);
-            }
+            ParseTraining(Network.Training, toml::find_or(configNetwork, "training", TomlValue::table_type()), overridePolicy);
+            ParseSelfPlay(Network.SelfPlay, toml::find_or(configNetwork, "self_play", TomlValue::table_type()), overridePolicy);
         }
     }
 
     // Parse miscellaneous config.
     ParseMisc(Misc, config);
-
-    // Apply debug overrides.
-#ifdef _DEBUG
-    for (NetworkConfig* network : networks)
-    {
-        network->SelfPlay.NumWorkers = 1;
-        network->SelfPlay.PredictionBatchSize = 1;
-    }
-#endif
 
     // Validate parameter assignment.
     for (const auto& [parameter, value] : parameters)

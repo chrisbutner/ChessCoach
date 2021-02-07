@@ -303,6 +303,7 @@
     <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Storage.cpp" />
     <ClCompile Include="Threading.cpp" />
+    <ClCompile Include="WorkerGroup.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\crc32c\crc32c.vcxproj">
@@ -336,6 +337,7 @@
     <ClInclude Include="SelfPlay.h" />
     <ClInclude Include="Storage.h" />
     <ClInclude Include="Threading.h" />
+    <ClInclude Include="WorkerGroup.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

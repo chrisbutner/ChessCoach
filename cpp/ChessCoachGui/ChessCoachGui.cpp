@@ -48,11 +48,11 @@ void ChessCoachGui::FinalizeLight()
 void ChessCoachGui::Run()
 {
     // Ready the PythonModule for incoming requests for position data.
-    Storage storage(Config::TrainingNetwork, Config::Misc);
-    InitializePythonModule(&storage, nullptr /* worker */, nullptr /* network */);
+    Storage storage;
+    InitializePythonModule(&storage, nullptr /* workerGroup */);
 
     // Call in to Python.
-    std::unique_ptr<INetwork> network(CreateNetwork(Config::TrainingNetwork));
+    std::unique_ptr<INetwork> network(CreateNetwork());
     network->LaunchGui("pull");
 
     // Sleep and let Python run its own separate message pump. We may want to handle command-line input here to drive UI in future.

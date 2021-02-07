@@ -3,7 +3,7 @@
 #include <tclap/CmdLine.h>
 
 #include <ChessCoach/ChessCoach.h>
-#include <ChessCoach/SelfPlay.h>
+#include <ChessCoach/WorkerGroup.h>
 
 class ChessCoachStrengthTest : public ChessCoach
 {
@@ -139,15 +139,15 @@ void ChessCoachStrengthTest::StrengthTest()
 {
     std::cout << "Preparing network..." << std::endl;
 
-    // Use the UCI network for standalone strength tests.
-    std::unique_ptr<INetwork> network(CreateNetwork(Config::UciNetwork));
-    SelfPlayWorker worker(Config::UciNetwork, nullptr /* storage */);
+    std::unique_ptr<INetwork> network(CreateNetwork());
+    WorkerGroup workerGroup;
+    workerGroup.Initialize(network.get(), _networkType, Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
 
     std::cout << "Testing " << _epdPath.stem() << "...\n\nPosition, Target, Chosen, Score, Total, Nodes" << std::endl;
 
     const auto start = std::chrono::high_resolution_clock::now();
 
-    const auto [score, total, positions, totalNodesRequired] = worker.StrengthTestEpd(network.get(), _networkType, _epdPath,
+    const auto [score, total, positions, totalNodesRequired] = workerGroup.controllerWorker->StrengthTestEpd(workerGroup.workCoordinator.get(), _epdPath,
         _moveTimeMs, _nodes, _failureNodes, _positionLimit, PrintProgress);
 
     const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();
@@ -162,4 +162,6 @@ void ChessCoachStrengthTest::StrengthTest()
         const int rating = static_cast<int>((_slope * score / positions) + _intercept);
         std::cout << "Rating: " << rating << std::endl;
     }
+
+    workerGroup.ShutDown();
 }

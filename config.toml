@@ -4,8 +4,7 @@
 
 [network]
 
-training_network_name = "selfplay3"
-uci_network_name = "selfplay3"
+network_name = "selfplay3"
 role = "train|play"
 
 [[networks]]
@@ -307,8 +306,9 @@ fraction_remaining = 20
 
 [search]
 
-mcts_parallelism = 64
-gui_update_interval_nodes = 1000
+search_threads = 2
+search_parallelism = 256
+gui_update_interval_nodes = 5000
 
 [storage]
 

@@ -5,7 +5,7 @@
 
 #include "PythonNetwork.h"
 #include "Storage.h"
-#include "SelfPlay.h"
+#include "WorkerGroup.h"
 
 class PythonModule
 {
@@ -26,8 +26,7 @@ private:
 
 public:
 
-    SelfPlayWorker* worker = nullptr;
-    INetwork* network = nullptr;
+    WorkerGroup* workerGroup = nullptr;
     Storage* storage = nullptr;
 
 private:

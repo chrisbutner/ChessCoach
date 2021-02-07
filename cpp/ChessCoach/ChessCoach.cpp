@@ -122,11 +122,10 @@ void ChessCoach::InitializePredictionCache()
     PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
 
-void ChessCoach::InitializePythonModule(Storage* storage, SelfPlayWorker* worker, INetwork* network)
+void ChessCoach::InitializePythonModule(Storage* storage, WorkerGroup* workerGroup)
 {
     PythonModule::Instance().storage = storage;
-    PythonModule::Instance().worker = worker;
-    PythonModule::Instance().network = network;
+    PythonModule::Instance().workerGroup = workerGroup;
 }
 
 void ChessCoach::FinalizePython()
@@ -141,9 +140,9 @@ void ChessCoach::FinalizeStockfish()
     Threads.set(0);
 }
 
-INetwork* ChessCoach::CreateNetwork(const NetworkConfig& networkConfig) const
+INetwork* ChessCoach::CreateNetwork() const
 {
     INetwork* network = new PythonNetwork();
-    network->LoadNetwork(networkConfig.Name.c_str());
+    network->LoadNetwork(Config::Network.Name.c_str());
     return network;
 }

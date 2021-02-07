@@ -27,7 +27,7 @@ class Storage
 {
 public:
 
-    Storage(const NetworkConfig& networkConfig, const MiscConfig& miscConfig);
+    Storage();
     void InitializeLocalGamesChunks(INetwork* network);
     int AddTrainingGame(INetwork* network, SavedGame&& game);
     int TrainingGamesToPlay(int trainingChunkCount, int targetGameCount, bool ignoreLocalGames) const;
