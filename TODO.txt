@@ -1,9 +1,68 @@
-UCI
-- investigate position #3, UCI gets it, strength test doesn't, diverged again (consistently)
-- re-optimize parameters with 2*256 parallelism (+linear start constant)
-- try speculative budgeting in addition to virtual exploration/loss
-	- for N+small delta, which would have UCB > current best
-	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
+Quality (*** before any self-play ***)
+- remove hybrid supervised/self-play infra
+- policy target pruning
+	- do while saving statistics, rather than in-place? - affects PUCT of next position
+	- make sure that policy target pruning is still valid after weight, etc. changes
+- make sure that mate value() changes didn't damage anything, check mate-in-N puzzles back through notes, two main batches
+	- also try no exploration terms for opponent-mate
+- final validation of 800 convergence - check starting position, some selection of others
+	- maybe use 1.03 temperature at root (Wu)
+	- maybe use artificially increased band width (~virtual loss) in self-play games
+
+Criticality training (shelved)
+- add to GUI, look over saved positions, decide whether to drive 800-1600 range
+- either pull in whole change or some of the code cleanup
+	- logging wrong loss to tensorboard in shelved commit, fix
+	- add unit test for criticality training target via decompress API
+
+SE
+- (do more work on self-play only runs before evaluating SE again)
+- read over 2f/2d notes (see below), adapt to selfplay3 (*full training runs*)
+- (old plan)
+	- check 2f training run vs. 2d
+	- add SE to whichever is better (still with commentary)
+	- evaluate, check in L2 and/or SE
+
+Student training
+- test raw student-as-teacher training to make sure distillation is worth it (*full training run*)
+- make student prefer matching teacher for repeatability
+- try low-hanging fruit on self-play network/data, e.g. higher learning rate
+
+Training improvements
+- add domain features (e.g. piece counts, fading king positions)
+- SE (lc0)
+	- try batchnorm/relu before SE since we have v2 residuals
+- SE-ish-as-bias (Wu)
+	- (TODO)
+- playout cap randomization (Wu)
+- pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
+- try 1 vs. 8 vs. 32 value head filters again
+	- lc0/Wu seem to use similar conv filters for policy and value heads?
+	- lc0 was thinking fully connected layer may be needed for policy head when network isn't deep enough to cross board well (may not apply for distillation)
+- try a run with masked policy loss (valid moves only) once there's enough data to compare
+	- could also conceivably blend, like 1.0 for legal moves and 0.15 zero-pressure for others
+- sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
+	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
+- investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
+	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
+	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
+
+Training - later
+- try out "sleeping" in the rotation - train random noise, different distributions
+- Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
+- like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
+- stochastic weight averaging
+- move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
+
+Prediction cache
+- investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
+- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
+	- no gain/loss earlier, try again after more PUCT work that does better for more nodes
+- test speed gain for self-play generation ignoring path dependence, transposition table-style
+- try stockfish-style prefetch asap after hash key update
+- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
+	- while not full hit rate should be higher? add some new metrics
+	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
 
 PUCT - medium confidence
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
@@ -38,34 +97,6 @@ PUCT - finishing
 PUCT - training
 - see if anything helps 800 node range (i.e. optimize parameters with nodes=800), or 1600, etc.
 
-Quality (*** before any self-play ***)
-- policy target pruning - do while saving statistics, rather than in-place? - affects PUCT of next position
-- make sure that policy target pruning is still valid after weight, etc. changes
-- make sure that mate value() changes didn't damage anything, check mate-in-N puzzles back through notes, two main batches
-	- also try no exploration terms for opponent-mate
-- if trained criticality can't help with search, look over extreme examples manually, see if it's worth driving 800-1600 range or something
-- final validation of 800 convergence - check starting position, some selection of others
-	- maybe use 1.03 temperature at root (Wu)
-	- maybe use artificially increased band width (~virtual loss) in self-play games
-
-Prediction cache
-- investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
-- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
-	- no gain/loss earlier, try again after more PUCT work that does better for more nodes
-- test speed gain for self-play generation ignoring path dependence, transposition table-style
-- try stockfish-style prefetch asap after hash key update
-- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
-	- while not full hit rate should be higher? add some new metrics
-	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
-
-Mate term
-- already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
-	- read over notes from initial work there, check for pitfalls
-	- try to make mate-visiting stop wasting time, instantly push up to 2nd best
-		- complicated with multiple levels of visits
-		- complicated if 2nd best is also mate/terminal
-		- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?
-
 PUCT - later
 - try use saturation point of visits/ucb to extend 800 simulations or UCI time control if visits would exceed current best
 	- could this also be used earlier during search, backpropagate up a pending/bounty value via separate field to be replaced
@@ -74,46 +105,6 @@ PUCT - later
 PUCT questions
 - force AZPUCT in search path after first non-AZPUCT choice?
 - accept damaging 800-node distribution and prune aggressively to compensate?
-
-SE
-- (do more work on self-play only runs before evaluating SE again)
-- check 2f training run vs. 2d
-- add SE to whichever is better (still with commentary)
-- evaluate, check in L2 and/or SE
-
-Student training
-- make student prefer matching teacher for repeatability
-- test raw student-as-teacher training to make sure distillation is worth it
-- try low-hanging fruit on self-play network/data, e.g. higher learning rate
-
-Training improvements
-- add domain features (e.g. piece counts, fading king positions)
-- SE (lc0)
-	- try batchnorm/relu before SE since we have v2 residuals
-- SE-ish-as-bias (Wu)
-	- (TODO)
-- playout cap randomization (Wu)
-- pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
-- try 1 vs. 8 vs. 32 value head filters again
-	- lc0/Wu seem to use similar conv filters for policy and value heads?
-	- lc0 was thinking fully connected layer may be needed for policy head when network isn't deep enough to cross board well (may not apply for distillation)
-- try a run with masked policy loss (valid moves only) once there's enough data to compare
-	- could also conceivably blend, like 1.0 for legal moves and 0.15 zero-pressure for others
-- find some positions where engine misses shallow tactics, play with FPU and criticality
-	- try to quantify and train criticality, feed into FPU (or deeper FPU, multi-move decay)
-	- training target needs to be good/consistent even when already good at predicting; e.g. can't base on how wrong we were before searching, oscillate - intrinsic to position
-- sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
-	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
-- investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
-	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
-	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
-
-Training - later
-- try out "sleeping" in the rotation - train random noise, different distributions
-- Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
-- like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
-- stochastic weight averaging
-- move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
 
 GUI
 - invert uci/gui relationship after working out in-proc/out details
@@ -151,9 +142,18 @@ Cluster
 - validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
 UCI (#2)
+- already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
+	- read over notes from initial work there, check for pitfalls
+	- try to make mate-visiting stop wasting time, instantly push up to 2nd best
+		- complicated with multiple levels of visits
+		- complicated if 2nd best is also mate/terminal
+		- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?
 - (still needed?) try out a backtracking implementation of virtual exploration/loss that goes as deep
 	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
 	  choosing better nodes overall and avoiding failed simulations
+- (does this make any sense?) try speculative budgeting in addition to virtual exploration/loss
+	- for N+small delta, which would have UCB > current best
+	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
 - profile CPU again
 - tail Backpropagate into BackpropagateVisitsOnly
 - basic improvements to time control

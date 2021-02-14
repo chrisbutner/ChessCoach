@@ -1453,7 +1453,8 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     // Calculate SBLE-PUCT terms.
     // TODO: Work in progress
     const float linearExplorationRate = Config::Network.SelfPlay.LinearExplorationRate;
-    const float linear = parentVirtualExplorationFloat / (linearExplorationRate * (childVirtualExplorationFloat + 1.f));
+    const float linearExplorationBase = Config::Network.SelfPlay.LinearExplorationBase;
+    const float linear = parentVirtualExplorationFloat / ((linearExplorationRate * childVirtualExplorationFloat) + linearExplorationBase);
 
     const float azPuct = (child->ValueWithVirtualLoss() + priorScore + mateScore);
     const float sblePuct = (azPuct + linear);

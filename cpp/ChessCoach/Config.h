@@ -105,6 +105,7 @@ struct SelfPlayConfig
     float ExplorationRateInit;
 
     float LinearExplorationRate;
+    float LinearExplorationBase;
     float VirtualLossCoefficient;
     float MovingAverageBuild;
     float MovingAverageCap;
