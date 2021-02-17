@@ -3,8 +3,6 @@ Quality (*** before any self-play ***)
 - policy target pruning
 	- do while saving statistics, rather than in-place? - affects PUCT of next position
 	- make sure that policy target pruning is still valid after weight, etc. changes
-- make sure that mate value() changes didn't damage anything, check mate-in-N puzzles back through notes, two main batches
-	- also try no exploration terms for opponent-mate
 - final validation of 800 convergence - check starting position, some selection of others
 	- maybe use 1.03 temperature at root (Wu)
 	- maybe use artificially increased band width (~virtual loss) in self-play games
@@ -144,7 +142,8 @@ Cluster
 UCI (#2)
 - already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
 	- read over notes from initial work there, check for pitfalls
-	- try to make mate-visiting stop wasting time, instantly push up to 2nd best
+	- try no exploration terms for opponent-mate (test position: 6k1/4pppp/3B4/8/8/8/5PPP/R5K1 b - - 0 0)
+	- try to make mate-visiting stop wasting time, instantly push up until an ancestor down to 2nd best
 		- complicated with multiple levels of visits
 		- complicated if 2nd best is also mate/terminal
 		- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?

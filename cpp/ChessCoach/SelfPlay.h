@@ -104,7 +104,6 @@ public:
     float Value() const;
     float ValueWithVirtualLoss() const;
     void SampleValue(float movingAverageBuild, float movingAverageCap, float value);
-    void AdjustVisitCount(int newVisitCount);
 
     Node* Child(Move match);
 
@@ -290,7 +289,7 @@ public:
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
     void DebugResetGame(int index);
 
-    void SearchUpdatePosition(std::string&& fen, std::vector<Move>&& moves, bool forceNewPosition);
+    void SearchUpdatePosition(const std::string& fen, const std::vector<Move>& moves, bool forceNewPosition);
     void CommentOnPosition(INetwork* network);
     PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
 

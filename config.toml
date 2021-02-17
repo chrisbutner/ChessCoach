@@ -309,7 +309,7 @@ fraction_remaining = 20
 
 search_threads = 2
 search_parallelism = 256
-gui_update_interval_nodes = 5000
+gui_update_interval_nodes = 1000
 
 [storage]
 

@@ -239,11 +239,6 @@ void Node::SampleValue(float movingAverageBuild, float movingAverageCap, float v
         std::memory_order_relaxed));
 }
 
-void Node::AdjustVisitCount(int newVisitCount)
-{
-    visitCount.store(newVisitCount, std::memory_order_relaxed);
-}
-
 Node* Node::Child(Move match)
 {
     for (Node& child : *this)
@@ -407,25 +402,6 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
 {
     ApplyMoveWithRoot(move, newRoot);
     _history.push_back(move);
-
-    // Adjust the visit count for the new root so that it matches the sum of child visits from now on.
-    //
-    // Sum child visits and assign. For most nodes we could just decrement because the node was visited
-    // exactly once as a leaf before being expanded. However, 2-repetition draws complicate things because
-    // they could be visited multiple times as a terminal draw, then become non-terminal as the game progresses
-    // past the first occurence of the position and get expanded. Pack the terminal visit count into the Node
-    // to speed this up if required.
-    //
-    // We also need to adjust the value sum down to match the smaller visit count, so that MCTS value
-    // stays accurate and in the [0, 1] range. It would be best to excise the original as-leaf neural
-    // network evaluation, but without adding additional Node fields/tracking that's already mixed in,
-    // so just average down to the new visit count.
-    int newVisitCount = 0;
-    for (const Node& child : *_root)
-    {
-        newVisitCount += child.visitCount.load(std::memory_order_relaxed);
-    }
-    _root->AdjustVisitCount(newVisitCount);
 }
 
 bool SelfPlayGame::TakeExpansionOwnership(Node* node)
@@ -646,14 +622,24 @@ void SelfPlayGame::Softmax(int moveCount, float* distribution) const
 
 float SelfPlayGame::CalculateMctsValue() const
 {
-    // Flip to the side to play's perspective (NOT the parent's perspective, like in the actual MCTS tree).
-    return FlipValue(_root->Value());
+    // MCTS is always from the side to play's perspective, matching the root's children's value perspective.
+    // Using the best child is the most accurate indicator of the value of the following position/game.
+    // Root value underestimates true value because it includes value from poor moves that we don't have to make.
+    // Other children may have higher value than the best child, but we're much more sure about the best child's value,
+    // whereas others are less explored and have higher value error.
+    Node* bestChild = _root->bestChild.load(std::memory_order_relaxed);
+    assert(bestChild);
+    return bestChild->Value();
 }
 
 void SelfPlayGame::StoreSearchStatistics()
 {
     std::map<Move, float>& visits = _childVisits.emplace_back();
-    const float sumChildVisits = static_cast<float>(_root->visitCount.load(std::memory_order_relaxed));
+    float sumChildVisits = 0.f;
+    for (const Node& child : *_root)
+    {
+        sumChildVisits += static_cast<float>(child.visitCount.load(std::memory_order_relaxed));
+    }
     for (const Node& child : *_root)
     {
         visits[Move(child.move)] = static_cast<float>(child.visitCount.load(std::memory_order_relaxed)) / sumChildVisits;
@@ -1246,15 +1232,13 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         ValidatePrincipleVariation(scratchGame.Root());
 
         // Expanding the search root is a special case. It happens at the very start of a game,
-        // and then whenever a previously-unexplored node is reached as a root (like a 2-repetition,
-        // or a child that wasn't visited, but alternatives were getting mated).
-        // We need to fix the root's visitCount so that it equals the sum of its children,
-        // and correspondingly fix valueAverage so that MCTS value (root->Value()) makes sense.
+        // and then whenever a previously-unexpanded node is reached as a root (like a 2-repetition,
+        // or a child that wasn't visited, but alternatives were getting mated). Fix the visitCount to 1
+        // so that exploration incentives are normal, in case the node had a lot of 2-repetition terminal visits.
         if (game.Root() == scratchGame.Root())
         {
-            assert(game.Root()->visitCount == 1);
             assert(searchPath.size() == 1);
-            game.Root()->visitCount.store(0, std::memory_order_relaxed);
+            game.Root()->visitCount.store(1, std::memory_order_relaxed);
             game.Root()->valueAverage.store(0.f, std::memory_order_relaxed);
             game.Root()->valueWeight.store(0, std::memory_order_relaxed);
 
@@ -1499,8 +1483,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
         {
             pruneCount++;
         }
-        child.visitCount.store(originalVisitCount, std::memory_order_relaxed); // Would need to increment to fix final pre-decrement but clobbering anyway.
-        child.AdjustVisitCount(originalVisitCount - pruneCount);
+        child.visitCount.store(originalVisitCount - pruneCount, std::memory_order_relaxed);
         rootPruneCount += pruneCount;
 
         // Note that further descendants aren't having visits pruned here. That's okay because (a) they can eventually pruned here
@@ -1508,7 +1491,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
     }
 
     // Use the root's original visit count for exploration terms while pruning, and delay corresponding adjustments until the end here.
-    root->AdjustVisitCount(root->visitCount - rootPruneCount);
+    root->visitCount.store(root->visitCount - rootPruneCount, std::memory_order_relaxed);
 }
 
 void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value)
@@ -1774,6 +1757,7 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
         // Only the primary worker does housekeeping.
         if (primary)
         {
+            CheckUpdateGui(network, true /* forceUpdate */);
             OnSearchFinished();
         }
     }
@@ -1836,7 +1820,7 @@ PredictionStatus SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkTyp
     return network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());
 }
 
-void SelfPlayWorker::SearchUpdatePosition(std::string&& fen, std::vector<Move>&& moves, bool forceNewPosition)
+void SelfPlayWorker::SearchUpdatePosition(const std::string& fen, const std::vector<Move>& moves, bool forceNewPosition)
 {
     // If the new position is the previous position plus some number of moves,
     // just play out the moves rather than throwing away search results.
@@ -1864,8 +1848,8 @@ void SelfPlayWorker::SearchUpdatePosition(std::string&& fen, std::vector<Move>&&
     }
 
     _searchState->position = &_games[0];
-    _searchState->positionFen = std::move(fen);
-    _searchState->positionMoves = std::move(moves);
+    _searchState->positionFen = fen; // Copy
+    _searchState->positionMoves = moves; // Copy
 }
 
 void SelfPlayWorker::FinishMcts()
@@ -1960,13 +1944,18 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         std::vector<int> visits;
         std::vector<int> weights;
 
+        float sumChildVisits = 0.f;
+        for (const Node& child : *game.Root())
+        {
+            sumChildVisits += static_cast<float>(child.visitCount.load(std::memory_order_relaxed));
+        }
         for (const Node& child : *game.Root())
         {
             const Move move = Move(child.move);
             sans.emplace_back(Pgn::San(game.GetPosition(), move, (child.terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>()) /* showCheckmate */));
             froms.emplace_back(Game::SquareName[from_sq(move)]);
             tos.emplace_back(Game::SquareName[to_sq(move)]);
-            targets.push_back(static_cast<float>(child.visitCount) / game.Root()->visitCount);
+            targets.push_back(static_cast<float>(child.visitCount.load(std::memory_order_relaxed)) / sumChildVisits);
             priors.push_back(child.prior);
             values.push_back(child.Value());
             ucb.push_back(CalculatePuctScore<false>(game.Root(), &child).first);

@@ -56,6 +56,10 @@ private:
 private:
 
     bool _quit = false;
+    bool _guiLaunched = false;
+    bool _positionUpdated = true;
+    std::string _positionFen = Config::StartingPosition;
+    std::vector<Move> _positionMoves = {};
     std::ofstream _commandLog;
     std::vector<CommandHandlerEntry> _commandHandlers;
 
@@ -219,31 +223,33 @@ void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
 void ChessCoachUci::HandlePosition(std::stringstream& commands)
 {
     std::string token;
-    std::string fen;
-    std::vector<Move> moves;
     StateListPtr positionStates(new std::deque<StateInfo>(1));
     Position position;
+
+    _positionUpdated = true;
+    _positionFen.clear();
+    _positionMoves.clear();
 
     commands >> token;
     if (token == "fen")
     {
         // Trust the provided FEN.
-        fen.reserve(128);
+        _positionFen.reserve(128);
         while ((commands >> token) && (token != "moves"))
         {
-            fen += token + " ";
+            _positionFen += token + " ";
         }
     }
     else
     {
         // Instead of "fen" we got "startpos" or something invalid.
-        fen = Config::StartingPosition;
+        _positionFen = Config::StartingPosition;
         while ((commands >> token) && (token != "moves"))
         {
         }
     }
 
-    position.set(fen, false /* isChess960 */, &positionStates->back(), Threads.main());
+    position.set(_positionFen, false /* isChess960 */, &positionStates->back(), Threads.main());
 
     // If "moves" wasn't seen then we already consumed the rest of the line.
     while (commands >> token)
@@ -256,12 +262,13 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
 
         position.do_move(move, positionStates->emplace_back());
 
-        moves.push_back(move);
+        _positionMoves.push_back(move);
     }
 
-    InitializeWorkers();
-    StopAndReadyWorkers();
-    _workerGroup.controllerWorker->SearchUpdatePosition(std::move(fen), std::move(moves), false /* forceNewPosition */);
+    // It's only safe to update the controller worker's game/position while search is stopped,
+    // because it involves pruning the shared Node tree. To keep this thread responsive, only
+    // update _positionFen/_positionMoves here, and propagate to the controller worker on a
+    // "go" command via _positionUpdated.
 }
 
 void ChessCoachUci::HandleGo(std::stringstream& commands)
@@ -311,10 +318,18 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
     InitializeWorkers();
     StopAndReadyWorkers();
 
-    // Use the starting position if none ever specified.
-    if (!_workerGroup.searchState.position)
+    // Launch the GUI if not yet shown.
+    if (_workerGroup.searchState.gui && !_guiLaunched)
     {
-        _workerGroup.controllerWorker->SearchUpdatePosition(Config::StartingPosition, {}, false /* forceNewPosition */);
+        _guiLaunched = true;
+        _network->LaunchGui("push");
+    }
+
+    // Propagate the position if updated.
+    if (_positionUpdated)
+    {
+        _positionUpdated = false;
+        _workerGroup.controllerWorker->SearchUpdatePosition(_positionFen, _positionMoves, false /* forceNewPosition */);
     }
 
     _workerGroup.searchState.Reset(timeControl);
@@ -344,12 +359,7 @@ void ChessCoachUci::HandleComment(std::stringstream& /*commands*/)
 
 void ChessCoachUci::HandleGui(std::stringstream& /*commands*/)
 {
-    InitializeWorkers();
-    if (!_workerGroup.searchState.gui)
-    {
-        _workerGroup.searchState.gui = true;
-        _network->LaunchGui("push");
-    }
+    _workerGroup.searchState.gui = true;
 }
 
 void ChessCoachUci::HandleConsole(std::stringstream& commands)
