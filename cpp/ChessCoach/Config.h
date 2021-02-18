@@ -109,6 +109,7 @@ struct SelfPlayConfig
     float VirtualLossCoefficient;
     float MovingAverageBuild;
     float MovingAverageCap;
+    float BackpropagationPuctThreshold;
 
     float NetworkUpdateCheckIntervalSeconds;
     bool WaitForUpdatedNetwork;

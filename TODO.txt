@@ -1,11 +1,16 @@
-Quality (*** before any self-play ***)
+Training runs
+- run new baseline (selfplay4) to give comparable STS rating after PUCT/UCI changes
+- evaluate SE/pooling (read over 2f/2d notes)
+- run raw student-as-teacher, make sure distillation is worth it
+	- try dense layer in policy head for student network (may not be enough depth for convolutions)
+- run 1 vs. 8 vs. 32 value head filters
+
+Student training
+- make student prefer matching teacher for repeatability
+- try low-hanging fruit on self-play network/data, e.g. higher learning rate
+
+Quality
 - remove hybrid supervised/self-play infra
-- policy target pruning
-	- do while saving statistics, rather than in-place? - affects PUCT of next position
-	- make sure that policy target pruning is still valid after weight, etc. changes
-- final validation of 800 convergence - check starting position, some selection of others
-	- maybe use 1.03 temperature at root (Wu)
-	- maybe use artificially increased band width (~virtual loss) in self-play games
 
 Criticality training (shelved)
 - add to GUI, look over saved positions, decide whether to drive 800-1600 range
@@ -13,18 +18,6 @@ Criticality training (shelved)
 	- logging wrong loss to tensorboard in shelved commit, fix
 	- add unit test for criticality training target via decompress API
 
-SE
-- (do more work on self-play only runs before evaluating SE again)
-- read over 2f/2d notes (see below), adapt to selfplay3 (*full training runs*)
-- (old plan)
-	- check 2f training run vs. 2d
-	- add SE to whichever is better (still with commentary)
-	- evaluate, check in L2 and/or SE
-
-Student training
-- test raw student-as-teacher training to make sure distillation is worth it (*full training run*)
-- make student prefer matching teacher for repeatability
-- try low-hanging fruit on self-play network/data, e.g. higher learning rate
 
 Training improvements
 - add domain features (e.g. piece counts, fading king positions)

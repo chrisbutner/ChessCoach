@@ -1371,7 +1371,7 @@ WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
 {
     float maxAzPuct = -std::numeric_limits<float>::infinity();
     float maxSblePuct = -std::numeric_limits<float>::infinity();
-    Node* maxAz = nullptr;
+    float azOfMaxSble = -std::numeric_limits<float>::infinity();
     Node* maxSble = nullptr;
     for (Node& child : *parent)
     {
@@ -1381,18 +1381,18 @@ WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
             if (azPuct > maxAzPuct)
             {
                 maxAzPuct = azPuct;
-                maxAz = &child;
             }
             if (sblePuct > maxSblePuct)
             {
                 maxSblePuct = sblePuct;
+                azOfMaxSble = azPuct;
                 maxSble = &child;
             }
         }
     }
 
-    // Select child using max(SBLE-PUCT), but only backpropagate value if it matches max(AZ-PUCT).
-    const float weight = (maxAz == maxSble) ? 1.f : 0.f;
+    // Select child using max(SBLE-PUCT), but only backpropagate value if its AZ-PUCT is within range of max(AZ-PUCT).
+    const float weight = ((maxAzPuct - azOfMaxSble) <= Config::Network.SelfPlay.BackpropagationPuctThreshold) ? 1.f : 0.f;
     return { maxSble, weight };
 }
 template WeightedNode SelfPlayWorker::SelectChild<true>(Node* parent) const;
@@ -1479,7 +1479,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
         int pruneCount = 0;
         const int originalVisitCount = child.visitCount.load(std::memory_order_relaxed);
         const float fixedValue = child.Value();
-        while ((child.visitCount.fetch_sub(1, std::memory_order_relaxed) >= 0) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
+        while ((child.visitCount.fetch_sub(1, std::memory_order_relaxed) >= 1) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
         {
             pruneCount++;
         }

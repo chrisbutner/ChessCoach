@@ -94,7 +94,7 @@ void ChessCoachUci::Initialize()
     const int totalParallelism = (Config::Misc.Search_SearchThreads * Config::Misc.Search_SearchParallelism);
     if (totalParallelism < 256)
     {
-        throw std::invalid_argument("Band width (search_threads * search_parallelism) >= 256 required for sufficient exploration");
+        std::cerr << "Warning: Band width (search_threads * search_parallelism) >= 256 required for sufficient exploration" << std::endl;
     }
 
     // UCI commands

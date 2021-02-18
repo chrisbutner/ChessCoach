@@ -18,7 +18,7 @@
 #include "PredictionCache.h"
 #include "Epd.h"
 
-// Add "alignas(8)" to side-step ABI back-compability issue on Windows.
+// Add "alignas(8)" to side-step ABI back-compatibility issue on Windows.
 class alignas(8) TerminalValue
 {
 public:

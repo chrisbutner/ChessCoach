@@ -204,6 +204,7 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.VirtualLossCoefficient, config, "virtual_loss_coefficient");
     policy.template Parse<float>(selfPlay.MovingAverageBuild, config, "moving_average_build");
     policy.template Parse<float>(selfPlay.MovingAverageCap, config, "moving_average_cap");
+    policy.template Parse<float>(selfPlay.BackpropagationPuctThreshold, config, "backpropagation_puct_threshold");
 
     policy.template Parse<float>(selfPlay.NetworkUpdateCheckIntervalSeconds, config, "network_update_check_interval_seconds");
     policy.template Parse<bool>(selfPlay.WaitForUpdatedNetwork, config, "wait_for_updated_network");
