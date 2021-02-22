@@ -4,7 +4,7 @@
 
 [network]
 
-network_name = "selfplay3"
+network_name = "selfplay4"
 role = "train|play"
 
 [[networks]]
@@ -53,7 +53,7 @@ role = "train|play"
 
 [[networks]]
 
-    name = "selfplay3"
+    name = "selfplay4"
 
     [networks.training]
 
@@ -288,7 +288,6 @@ moving_average_build = 0.95
 moving_average_cap = 1500.0
 backpropagation_puct_threshold = 0.025
 
-network_update_check_interval_seconds = 300.0
 wait_for_updated_network = false
 
 ###############################################################################
@@ -319,8 +318,8 @@ games_per_chunk = 2000
 [paths]
 
 # With the below config, a network may be saved to "gs://chesscoach/ChessCoach/Networks/network_000001000".
-gcloud_bucket = "chesscoach"
-gcloud_prefix = "ChessCoach"
+tpu_data_root = "gs://chesscoach/ChessCoach"
+
 
 networks = "Networks"
 tensorboard = "TensorBoard"

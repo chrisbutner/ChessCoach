@@ -442,7 +442,8 @@ void ChessCoachUci::InitializeWorkers()
 
     // Use the faster student network for UCI.
     _network.reset(CreateNetwork());
-    _workerGroup.Initialize(_network.get(), NetworkType_Student, Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
+    _workerGroup.Initialize(_network.get(), nullptr /* storage */, NetworkType_Student,
+        Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
 }
 
 void ChessCoachUci::StopAndReadyWorkers()

@@ -63,10 +63,7 @@ class Config:
 
   def determine_data_root(self):
     if self.is_tpu:
-      bucket = self.misc["paths"]["gcloud_bucket"]
-      prefix = self.misc["paths"]["gcloud_prefix"]
-      self.gcloud_preamble = f"gs://{bucket}/"
-      return f"{self.gcloud_preamble}{prefix}"
+      return self.misc["paths"]["tpu_data_root"]
     else:
       return self.determine_local_data_root()
 

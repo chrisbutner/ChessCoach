@@ -14,14 +14,14 @@ public:
     void ShutDown();
 
     template <typename Function>
-    void Initialize(INetwork* network, NetworkType networkType, int workerCount, int workerParallelism, Function workerLoop)
+    void Initialize(INetwork* network, Storage* storage, NetworkType networkType, int workerCount, int workerParallelism, Function workerLoop)
     {
         workCoordinator.reset(new WorkCoordinator(workerCount));
-        controllerWorker.reset(new SelfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */));
+        controllerWorker.reset(new SelfPlayWorker(storage, &searchState, 1 /* gameCount */));
         for (int i = 0; i < workerCount; i++)
         {
             const bool primary = (i == 0);
-            selfPlayWorkers.emplace_back(new SelfPlayWorker(nullptr /* storage */, &searchState, workerParallelism));
+            selfPlayWorkers.emplace_back(new SelfPlayWorker(storage, &searchState, workerParallelism));
             selfPlayThreads.emplace_back(workerLoop, selfPlayWorkers[i].get(), workCoordinator.get(), network, networkType, primary);
         }
     }

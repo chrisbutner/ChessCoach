@@ -111,7 +111,6 @@ struct SelfPlayConfig
     float MovingAverageCap;
     float BackpropagationPuctThreshold;
 
-    float NetworkUpdateCheckIntervalSeconds;
     bool WaitForUpdatedNetwork;
 };
 
@@ -143,8 +142,6 @@ struct MiscConfig
     int Storage_GamesPerChunk;
     
     // Paths
-    std::string Gcloud_Bucket;
-    std::string Gcloud_Prefix;
     std::string Paths_Networks;
     std::string Paths_TensorBoard;
     std::string Paths_Logs;

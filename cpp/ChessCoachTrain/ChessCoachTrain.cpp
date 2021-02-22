@@ -73,7 +73,7 @@ void ChessCoachTrain::TrainChessCoach()
 
     // Start self-play worker threads. Use the faster student network for self-play.
     WorkerGroup workerGroup;
-    workerGroup.Initialize(network.get(), NetworkType_Student,Config::Network.SelfPlay.NumWorkers,
+    workerGroup.Initialize(network.get(), &storage, NetworkType_Student,Config::Network.SelfPlay.NumWorkers,
         Config::Network.SelfPlay.PredictionBatchSize, &SelfPlayWorker::LoopSelfPlay);
     for (int i = 0; i < Config::Network.SelfPlay.NumWorkers; i++)
     {
@@ -328,7 +328,7 @@ void ChessCoachTrain::StageStrengthTest(const TrainingState& state)
 
     // Start up a fresh worker group to avoid disturbing paused self-play games.
     WorkerGroup strengthTestWorkerGroup;
-    strengthTestWorkerGroup.Initialize(state.network, state.Stage().Target,
+    strengthTestWorkerGroup.Initialize(state.network, state.storage, state.Stage().Target,
         Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
 
     // Strength-test the network.

@@ -255,6 +255,9 @@ bool PredictionCache::TryAllocate(int tableSizeBytes, int tableCount, int chunks
         return false;
     }
 
+    _chunksPerTable = chunksPerTable;
+    _entryCapacity = (static_cast<uint64_t>(tableCount) * chunksPerTable * PredictionCacheChunk::EntryCount);
+
 #ifdef CHESSCOACH_WINDOWS
     // Memory is already zero-filled by VirtualAlloc on Windows, so no need to clear chunks.
 #else
@@ -263,8 +266,6 @@ bool PredictionCache::TryAllocate(int tableSizeBytes, int tableCount, int chunks
     Clear();
 #endif
 
-    _chunksPerTable = chunksPerTable;
-    _entryCapacity = (static_cast<uint64_t>(tableCount) * chunksPerTable * PredictionCacheChunk::EntryCount);
     return true;
 }
 

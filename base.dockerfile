@@ -20,3 +20,5 @@ RUN pip3 install --upgrade pip && \
 COPY . /chesscoach
 RUN /chesscoach/build.sh release install && \
   rm -r /chesscoach/build
+
+ENV PYTHONUNBUFFERED=1

@@ -141,7 +141,8 @@ void ChessCoachStrengthTest::StrengthTest()
 
     std::unique_ptr<INetwork> network(CreateNetwork());
     WorkerGroup workerGroup;
-    workerGroup.Initialize(network.get(), _networkType, Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
+    workerGroup.Initialize(network.get(), nullptr /* storage */, _networkType,
+        Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
 
     std::cout << "Testing " << _epdPath.stem() << "...\n\nPosition, Target, Chosen, Score, Total, Nodes" << std::endl;
 

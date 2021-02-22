@@ -206,7 +206,6 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.MovingAverageCap, config, "moving_average_cap");
     policy.template Parse<float>(selfPlay.BackpropagationPuctThreshold, config, "backpropagation_puct_threshold");
 
-    policy.template Parse<float>(selfPlay.NetworkUpdateCheckIntervalSeconds, config, "network_update_check_interval_seconds");
     policy.template Parse<bool>(selfPlay.WaitForUpdatedNetwork, config, "wait_for_updated_network");
 }
 
@@ -225,8 +224,6 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config)
 
     misc.Storage_GamesPerChunk = toml::find<int>(config, "storage", "games_per_chunk");
 
-    misc.Gcloud_Bucket = toml::find<std::string>(config, "paths", "gcloud_bucket");
-    misc.Gcloud_Prefix = toml::find<std::string>(config, "paths", "gcloud_prefix");
     misc.Paths_Networks = toml::find<std::string>(config, "paths", "networks");
     misc.Paths_TensorBoard = toml::find<std::string>(config, "paths", "tensorboard");
     misc.Paths_Logs = toml::find<std::string>(config, "paths", "logs");

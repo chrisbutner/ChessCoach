@@ -45,7 +45,8 @@ void ChessCoachOptimizeParameters::Run()
     // Use the faster student network for strength testing.
     std::unique_ptr<INetwork> network(CreateNetwork());
     WorkerGroup workerGroup;
-    workerGroup.Initialize(network.get(), NetworkType_Student, Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
+    workerGroup.Initialize(network.get(), nullptr /* storage */, NetworkType_Student,
+        Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
     InitializePythonModule(nullptr /* storage */, &workerGroup);
 
     // Call in to Python.

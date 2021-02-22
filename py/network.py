@@ -9,8 +9,8 @@ if silent:
 
 # Work around https://github.com/tensorflow/tensorflow/issues/45994
 import sys
-if not sys.argv:
-  sys.argv.append("(C++)")
+if not hasattr(sys, "argv") or not sys.argv:
+  sys.argv = [""]
 
 def log(*args):
   if not silent:
@@ -20,15 +20,35 @@ import tensorflow as tf
 
 # --- TPU/GPU initialization ---
 
+class LocalTPUClusterResolver(
+    tf.distribute.cluster_resolver.TPUClusterResolver):
+  """LocalTPUClusterResolver."""
+
+  def __init__(self):
+    self._tpu = ""
+    self.task_type = "worker"
+    self.task_id = 0
+
+  def master(self, task_type=None, task_id=None, rpc_layer=None):
+    return None
+
+  def cluster_spec(self):
+    return tf.train.ClusterSpec({})
+
+  def get_tpu_system_metadata(self):
+    return tf.tpu.experimental.TPUSystemMetadata(
+        num_cores=8,
+        num_hosts=1,
+        num_of_cores_per_host=8,
+        topology=None,
+        devices=tf.config.list_logical_devices())
+
+  def num_accelerators(self, task_type=None, task_id=None, config_proto=None):
+    return {"TPU": 8}
+
 tpu_strategy = None
 try:
-  # Passing zone-qualified cluster-injected TPU_NAME to the resolver fails, need to leave it blank.
-  tpu_name = os.environ.get("TPU_NAME") or socket.gethostname()
-  if "/" in tpu_name:
-    tpu_name = None
-  log("TPU name for cluster resolution:", tpu_name, "" if tpu_name else "(auto)")
-  resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_name)
-  tf.config.experimental_connect_to_cluster(resolver)
+  resolver = LocalTPUClusterResolver()
   tf.tpu.experimental.initialize_tpu_system(resolver)
   tpu_strategy = tf.distribute.TPUStrategy(resolver)
   log("Found TPU")
@@ -172,7 +192,7 @@ class Network:
       return full, model_full_path
 
   def maybe_check_update_full(self, device_index):
-    interval_seconds = self.config.self_play["network_update_check_interval_seconds"]
+    interval_seconds = self.config.training["wait_milliseconds"] / 1000.0
     models = self.models_predict[device_index]
     now = time.time()
     if (now - models.full_weights_last_check) > interval_seconds:
