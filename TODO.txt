@@ -133,6 +133,7 @@ Cluster
 - validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
 UCI (#2)
+- manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
 - already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
 	- read over notes from initial work there, check for pitfalls
 	- try no exploration terms for opponent-mate (test position: 6k1/4pppp/3B4/8/8/8/5PPP/R5K1 b - - 0 0)

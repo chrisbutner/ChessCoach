@@ -819,11 +819,11 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
             // GPU work
             if (uniform)
             {
-                PredictBatchUniform(Config::Network.SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+                PredictBatchUniform(static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
             }
             else
             {
-                const PredictionStatus status = network->PredictBatch(networkType, Config::Network.SelfPlay.PredictionBatchSize, _images.data(), _values.data(), _policies.data());
+                const PredictionStatus status = network->PredictBatch(networkType, static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
                 if ((status & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
                 {
                     // This thread has permission to clear the prediction cache after seeing an updated network.
@@ -1738,7 +1738,7 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
         while (!workCoordinator->AllWorkItemsCompleted())
         {
             SearchPlay();
-            network->PredictBatch(networkType, Config::Misc.Search_SearchParallelism, _images.data(), _values.data(), _policies.data());
+            network->PredictBatch(networkType, static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
 
             // Only the primary worker does housekeeping.
             if (primary)
@@ -1782,7 +1782,7 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
         while (!workCoordinator->AllWorkItemsCompleted())
         {
             SearchPlay();
-            network->PredictBatch(networkType, Config::Misc.Search_SearchParallelism, _images.data(), _values.data(), _policies.data());
+            network->PredictBatch(networkType, static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
 
             // Only the primary worker does housekeeping.
             if (primary)
@@ -1856,7 +1856,7 @@ void SelfPlayWorker::FinishMcts()
 {
     // We may reuse this search tree on the next UCI search if the position is compatible, and likely have
     // node visits and expansions in flight that we just interrupted, so fix everything up.
-    for (int i = 0; i < Config::Misc.Search_SearchParallelism; i++)
+    for (int i = 0; i < _searchPaths.size(); i++)
     {
         for (auto [node, weight] : _searchPaths[i])
         {
@@ -2122,7 +2122,7 @@ void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
 void SelfPlayWorker::SearchInitialize(const SelfPlayGame* position)
 {
     // Set up parallelism. Make N games share a tree but have their own image/value/policy slots.
-    for (int i = 0; i < Config::Misc.Search_SearchParallelism; i++)
+    for (int i = 0; i < _games.size(); i++)
     {
         ClearGame(i);
         _states[i] = _states[0];
@@ -2133,7 +2133,7 @@ void SelfPlayWorker::SearchInitialize(const SelfPlayGame* position)
 
 void SelfPlayWorker::SearchPlay()
 {
-    for (int i = 0; i < Config::Misc.Search_SearchParallelism; i++)
+    for (int i = 0; i < _games.size(); i++)
     {
         RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _searchPaths[i], _cacheStores[i]);
     }

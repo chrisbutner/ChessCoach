@@ -320,7 +320,6 @@ games_per_chunk = 2000
 # With the below config, a network may be saved to "gs://chesscoach/ChessCoach/Networks/network_000001000".
 tpu_data_root = "gs://chesscoach/ChessCoach"
 
-
 networks = "Networks"
 tensorboard = "TensorBoard"
 logs = "Logs"
