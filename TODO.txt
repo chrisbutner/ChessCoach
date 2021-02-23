@@ -11,6 +11,7 @@ Student training
 
 Quality
 - remove hybrid supervised/self-play infra
+- factor out bucket name from docker scripts
 
 Criticality training (shelved)
 - add to GUI, look over saved positions, decide whether to drive 800-1600 range

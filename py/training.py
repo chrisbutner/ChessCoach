@@ -209,6 +209,7 @@ class Trainer:
       tf.summary.experimental.set_step(step)
       for name, value in zip(names, values):
         tf.summary.scalar(name.decode("utf-8"), value)
+      writer.flush()
 
 class StudentModel(tf.keras.Model):
 

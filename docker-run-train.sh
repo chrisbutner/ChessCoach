@@ -13,4 +13,7 @@ FULL_TAG="${NETWORK}_${VERSION}"
 
 TRAIN=gcr.io/$PROJECT_ID/chesscoach-train:$FULL_TAG
 
-docker run -it --rm -h=$HOSTNAME $TRAIN
+docker run -it --rm --privileged \
+  --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu,readonly \
+  --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so,readonly \
+  $TRAIN
