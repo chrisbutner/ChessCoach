@@ -14,7 +14,7 @@
 // E.g. assume that pawn capture squares are fully specified.
 //
 // Note that this means SAN input like "ex" will cause overflows. Don't feed in untrusted input.
-void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler)
+void Pgn::ParsePgn(std::istream& content, bool allowNoResult, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler)
 {
     while (true)
     {
@@ -39,6 +39,7 @@ void Pgn::ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedC
         {
             break;
         }
+        CheckResult(position, result, allowNoResult);
         if (std::isnan(result))
         {
             // This can be the end of the file, or a really bad PGN/game with no result in either headers or after the move list.
@@ -523,6 +524,50 @@ void Pgn::EncounterResult(float encountered, float& resultInOut)
     else
     {
         resultInOut = encountered;
+    }
+}
+
+void Pgn::CheckResult(const Position& position, float& resultInOut, bool allowNoResult)
+{
+    // We may not find a game result.
+    float result = std::numeric_limits<float>::quiet_NaN();
+
+    if (MoveList<LEGAL>(position).size() == 0)
+    {
+        result = Game::FlipValue(position.side_to_move(), position.checkers() ? CHESSCOACH_VALUE_LOSS : CHESSCOACH_VALUE_DRAW);
+    }
+    else
+    {
+        const StateInfo* stateInfo = position.state_info();
+        if (
+            // Omit "and not checkmate" from Position::is_draw.
+            (stateInfo->rule50 > 99) ||
+            // Stockfish encodes 3-repetition as negative.
+            (stateInfo->repetition < 0))
+        {
+            result = CHESSCOACH_VALUE_DRAW;
+        }
+    }
+
+    // If the header/footer specified a result, and the game reached one, make sure that they agree.
+    // "EncounterResult" already checked for agreement between header and footer.
+    if (!std::isnan(resultInOut) && !std::isnan(result))
+    {
+        assert(result == resultInOut);
+    }
+
+    // If the game reached a result, this overrules anything else.
+    if (!std::isnan(result))
+    {
+        resultInOut = result;
+    }
+
+    // If the header/footer didn't specify a result (not even a resignation/indeterminate), and the game
+    // had at least one halfmove, but didn't reach a result, then it's up to the caller whether this is
+    // okay or not. If it is, set a draw result, which the caller can ignore.
+    if (std::isnan(resultInOut) && std::isnan(result) && (position.game_ply() > 0) && allowNoResult)
+    {
+        resultInOut = CHESSCOACH_VALUE_DRAW;
     }
 }
 

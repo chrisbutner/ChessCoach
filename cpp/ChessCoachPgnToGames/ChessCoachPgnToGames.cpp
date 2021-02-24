@@ -202,6 +202,7 @@ void ChessCoachPgnToGames::ConvertPgns()
     const Storage storage;
     std::vector<SavedGame> games;
     std::vector<SavedCommentary> gameCommentary;
+    const bool allowNoResult = _commentary;
 
     Vocabulary& vocabulary = [&]() -> decltype(auto)
     {
@@ -235,7 +236,7 @@ void ChessCoachPgnToGames::ConvertPgns()
         }
 
         std::ifstream pgnFile = std::ifstream(pgnPath, std::ios::in);
-        Pgn::ParsePgn(pgnFile, [&](SavedGame&& game, SavedCommentary&& commentary)
+        Pgn::ParsePgn(pgnFile, allowNoResult, [&](SavedGame&& game, SavedCommentary&& commentary)
             {
                 games.emplace_back(std::move(game));
                 gameCommentary.emplace_back(std::move(commentary));

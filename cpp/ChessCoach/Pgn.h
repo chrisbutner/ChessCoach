@@ -13,7 +13,7 @@ class Pgn
 {
 public:
 
-    static void ParsePgn(std::istream& content, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler);
+    static void ParsePgn(std::istream& content, bool allowNoResult, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler);
     static Move ParseSan(const Position& position, const std::string& san);
 
     static void GeneratePgn(std::ostream& content, const SavedGame& game);
@@ -39,6 +39,7 @@ private:
     static bool Expect(std::istream& content, char expected);
     static bool Expect(std::istream& content, const std::string& expected);
     static void EncounterResult(float encountered, float& resultInOut);
+    static void CheckResult(const Position& position, float& resultInOut, bool allowNoResult);
     static void SkipGame(std::istream& content);
 
     static void ApplyMove(StateListPtr& positionStates, Position& position, Move move);

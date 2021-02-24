@@ -1,3 +1,7 @@
+# From scrape.py
+html_cache/
+pgn_cache/
+
 # VSCode
 .vscode/
 
