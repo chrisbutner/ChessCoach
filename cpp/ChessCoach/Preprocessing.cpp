@@ -200,7 +200,7 @@ void Preprocessor::StripStartingNoise(std::string& comment) const
         // checking a few ranges in both ASCII and UTF-8, which is better done via a library,
         // so additional complexity for almost no gain based on data I'm seeing.
         //
-        // It also be better to allow for some less common punctuation like "100%" but that
+        // It would also be better to allow for some less common punctuation like "100%" but that
         // allows in too much junk while not keeping much useful extra.
         const std::string az = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
         const std::string digitsSan = "0123456789+#=";

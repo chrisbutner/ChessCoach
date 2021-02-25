@@ -26,16 +26,17 @@ pgn_header = """[Event ""]
 # including appropriate JS rendering, ad blocking and rate limiting.
 def do_scrape(url):
   params = dict(api_key=api_key, url=url, block_ads="true")
-  print("ScrapingBee:", url)
   while True:
+    print("ScrapingBee:", url)
     response = requests.get(endpoint, params=params)
+    content = response.content.decode("utf-8")
     if response.status_code == 200:
-      return response.content.decode("utf-8")
+      return content
     elif response.status_code == 500:
-      print(f"Retrying {url} after {sleep_seconds} seconds ({response.status_code})")
+      print(f"Retrying {url} after {sleep_seconds} seconds ({response.status_code}): {content}")
       time.sleep(sleep_seconds)
     else:
-      raise Exception(f"Failed to scrape {url} ({response.status_code})")
+      raise Exception(f"Failed to scrape {url} ({response.status_code}): {content}")
 
 def scrape(url):
   os.makedirs(html_cache, exist_ok=True)
@@ -127,8 +128,6 @@ class GameKnot:
       games, next_url = self.parse_list(scrape(next_url))
       for game_url in games:
         self.scrape_parse_game(game_url)
-      # TEMP: Page one only for now
-      next_url = None
 
 # --- chessgames.com ---
 
@@ -178,8 +177,6 @@ class ChessGamesDotCom:
       games, next_url = self.parse_list(scrape(next_url))
       for game_url in games:
         self.scrape_parse_game(game_url)
-      # TEMP: Page one only for now
-      next_url = None
 
 # --- Run ---
 

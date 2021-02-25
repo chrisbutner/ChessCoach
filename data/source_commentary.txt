@@ -11,10 +11,14 @@ https://pgnchessbook.org/pgn/
 	Annotated game collections
 http://www.chesszone.org/bases/tourn/tourn.html
 	Can't use, all in Russian
-https://www.chessgames.com/perl/ezsearch.pl?search=annotated
-	TODO - requires crawling
-https://gameknot.com/
-	TODO - requires crawling
+https://www.chessgames.com/perl/chess.pl?annotated=1
+	Crawled
+https://gameknot.com/list_annotated.pl?u=all&c=0&sb=0&rm=0&rn=0&rx=9999&sr=0&p=0
+	Crawled
+https://www.pathtochessmastery.com/
+	Two "ChessAdmin" collections
+http://web.inter.nl.net/hcc/rekius/index.htm
+	Art Science Chess: match games and super tournaments
 Other databases
 	Manually filtered, according to annotator, for English commentary
 ---
