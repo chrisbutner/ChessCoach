@@ -142,7 +142,5 @@ void ChessCoach::FinalizeStockfish()
 
 INetwork* ChessCoach::CreateNetwork() const
 {
-    INetwork* network = new PythonNetwork();
-    network->LoadNetwork(Config::Network.Name.c_str());
-    return network;
+    return new PythonNetwork();
 }

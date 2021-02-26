@@ -65,7 +65,6 @@ PythonNetwork::PythonNetwork()
     _trainCommentaryFunction = LoadFunction(module, "train_commentary");
     _logScalarsFunction[NetworkType_Teacher] = LoadFunction(module, "log_scalars_teacher");
     _logScalarsFunction[NetworkType_Student] = LoadFunction(module, "log_scalars_student");
-    _loadNetworkFunction = LoadFunction(module, "load_network");
     _saveNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_network_teacher");
     _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
     _getNetworkInfoFunction[NetworkType_Teacher] = LoadFunction(module, "get_network_info_teacher");
@@ -97,7 +96,6 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Teacher]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Teacher]);
-    Py_XDECREF(_loadNetworkFunction);
     Py_XDECREF(_logScalarsFunction[NetworkType_Student]);
     Py_XDECREF(_logScalarsFunction[NetworkType_Teacher]);
     Py_XDECREF(_trainCommentaryFunction);
@@ -260,20 +258,6 @@ void PythonNetwork::LogScalars(NetworkType networkType, int step, const std::vec
     Py_DECREF(pythonValues);
     Py_DECREF(pythonNames);
     Py_DECREF(pythonStep);
-}
-
-void PythonNetwork::LoadNetwork(const std::string& networkName)
-{
-    PythonContext context;
-
-    PyObject* pythonNetworkName = PyUnicode_FromStringAndSize(networkName.c_str(), networkName.size());
-    PyAssert(pythonNetworkName);
-
-    PyObject* result = PyObject_CallFunctionObjArgs(_loadNetworkFunction, pythonNetworkName, nullptr);
-    PyAssert(result);
-
-    Py_DECREF(result);
-    Py_DECREF(pythonNetworkName);
 }
 
 void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)

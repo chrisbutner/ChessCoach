@@ -63,7 +63,8 @@ class Config:
 
   def determine_data_root(self):
     if self.is_tpu:
-      return self.misc["paths"]["tpu_data_root"]
+      # Replace tilde with the user's home directory, if present.
+      return os.path.expanduser(self.misc["paths"]["tpu_data_root"])
     else:
       return self.determine_local_data_root()
 
@@ -87,13 +88,13 @@ class Config:
     # These need to be backslashes on Windows for TensorFlow's recursive creation code (tf.summary.create_file_writer).
     if not self.is_tpu and (platform.system() == "Windows"):
       path = path.replace("/", "\\")
+
+    # Just in case this specific path is special-cased as absolute rather than relative, starting with tilde.
+    path = os.path.expanduser(path)
     
     # Root any relative paths at the data root.
     if not os.path.isabs(path):
       path = self.join(self.data_root, path)
-
-    # Replace tilde with the user's home directory, if present.
-    path = os.path.expanduser(path)
 
     return path
 

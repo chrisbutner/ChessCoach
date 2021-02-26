@@ -90,7 +90,6 @@ struct INetwork
         std::vector<Window>& trainingWindows, int step, int checkpoint) = 0;
     virtual void TrainCommentary(int step, int checkpoint) = 0;
     virtual void LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values) = 0;
-    virtual void LoadNetwork(const std::string& networkName) = 0;
     virtual void SaveNetwork(NetworkType networkType, int checkpoint) = 0;
     virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut) = 0;
     virtual void SaveFile(const std::string& relativePath, const std::string& data) = 0;

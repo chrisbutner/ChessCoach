@@ -60,7 +60,6 @@ public:
         std::vector<Window>& trainingWindows, int step, int checkpoint);
     virtual void TrainCommentary(int step, int checkpoint);
     virtual void LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values);
-    virtual void LoadNetwork(const std::string& networkName);
     virtual void SaveNetwork(NetworkType networkType, int checkpoint);
     virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut);
     virtual void SaveFile(const std::string& relativePath, const std::string& data);
@@ -86,7 +85,6 @@ private:
     PyObject* _trainFunction[NetworkType_Count];
     PyObject* _trainCommentaryFunction;
     PyObject* _logScalarsFunction[NetworkType_Count];
-    PyObject* _loadNetworkFunction;
     PyObject* _saveNetworkFunction[NetworkType_Count];
     PyObject* _getNetworkInfoFunction[NetworkType_Count];
     PyObject* _saveFileFunction;

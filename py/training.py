@@ -62,20 +62,11 @@ class Trainer:
     self.per_replica_batch_size_commentary = self.config.training["commentary_batch_size"]
     self.global_batch_size_commentary = self.per_replica_batch_size_commentary * self.device_count
 
-    self.log("Devices:", self.device_count)
-    self.log("Per-replica batch size:", self.per_replica_batch_size)
-    self.log("Global batch size:", self.global_batch_size)
-    self.log("Per-replica batch size (commentary):", self.per_replica_batch_size_commentary)
-    self.log("Global batch size (commentary):", self.global_batch_size_commentary)
-
     if tpu_strategy:
-      self.log("Strategy: TPU")
       self.strategy = tpu_strategy
     elif self.device_count > 1:
-      self.log("Strategy: Mirrored")
       self.strategy = tf.distribute.MirroredStrategy()
     else:
-      self.log("Strategy: Default")
       self.strategy = tf.distribute.get_strategy()
 
   def get_learning_rate(self, schedule):

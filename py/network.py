@@ -51,16 +51,13 @@ try:
   resolver = LocalTPUClusterResolver()
   tf.tpu.experimental.initialize_tpu_system(resolver)
   tpu_strategy = tf.distribute.TPUStrategy(resolver)
-  log("Found TPU")
 except:
-  log("No TPU or error resolving")
+  pass
 
 tpus = tf.config.experimental.list_logical_devices("TPU")
 gpus = tf.config.experimental.list_logical_devices("GPU")
 devices = tpus + gpus
 thread_ident_to_index = {}
-log(f"TPU devices: {[t.name for t in tpus]}")
-log(f"GPU devices: {[g.name for g in gpus]}")
 
 # --- Now it's safe for further imports ---
 
@@ -95,23 +92,11 @@ class TrainingModels:
 
 class Network:
 
-  def __init__(self, config, network_type, model_builder, name):
+  def __init__(self, config, network_type, model_builder):
     self.config = config
     self.network_type = network_type
     self.model_builder = model_builder
     self.training_compiler = None
-    self._name = name
-    self.initialize()
-
-  @property
-  def name(self):
-    return self._name
-
-  @name.setter
-  def name(self, value):
-    self._name = value
-
-    # Clear out any loaded models, ready to lazy-load using the new name.
     self.initialize()
 
   def initialize(self):
@@ -245,7 +230,7 @@ class Network:
     self.training_compiler(self.models_train.train)
 
     # Set up TensorBoard.
-    tensorboard_network_path = self.config.join(self.config.misc["paths"]["tensorboard"], self._name, self.network_type)
+    tensorboard_network_path = self.config.join(self.config.misc["paths"]["tensorboard"], self.config.network_name, self.network_type)
     self.tensorboard_writer_training = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "training"))
     self.tensorboard_writer_validation = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "validation"))
 
@@ -325,11 +310,11 @@ class Network:
     return os.path.basename(os.path.normpath(network_path))
 
   def latest_network_path(self):
-    return self.config.latest_network_path_for_type(self.name, self.network_type)
+    return self.config.latest_network_path_for_type(self.config.network_name, self.network_type)
 
   def make_network_path(self, step):
     parent_path = self.config.misc["paths"]["networks"]
-    directory_name = f"{self.name}_{str(step).zfill(9)}"
+    directory_name = f"{self.config.network_name}_{str(step).zfill(9)}"
     return self.config.join(parent_path, directory_name)
 
   def model_full_path(self, network_path):
@@ -345,27 +330,14 @@ class Network:
 
 class Networks:
 
-  def __init__(self, config, name="network"):
+  def __init__(self, config):
     self.config = config
 
-    # Set by C++ via load_network depending on use-case.
-    self._name = name
-
     # The teacher network uses the full 19*256 model.
-    self.teacher = Network(config, "teacher", lambda: ModelBuilder().build(config), self._name)
+    self.teacher = Network(config, "teacher", lambda: ModelBuilder().build(config))
 
     # The student network uses the smaller 8*64 model.
-    self.student = Network(config, "student", lambda: ModelBuilder().build_student(config, StudentModel), self._name)
-
-  @property
-  def name(self):
-    return self._name
-
-  @name.setter
-  def name(self, value):
-    self._name = value
-    self.teacher.name = self._name
-    self.student.name = self._name
+    self.student = Network(config, "student", lambda: ModelBuilder().build_student(config, StudentModel))
 
   def log(self, *args):
     log(*args)
@@ -426,10 +398,6 @@ def log_scalars_teacher(step, names, values):
 def log_scalars_student(step, names, values):
   trainer.log_scalars(networks.student, step, names, values)
 
-def load_network(network_name):
-  log("Network:", network_name)
-  networks.name = network_name
-
 def get_network_info_teacher():
   return networks.teacher.info
 
@@ -482,3 +450,24 @@ config = Config(bool(tpu_strategy))
 networks = Networks(config)
 datasets = DatasetBuilder(config)
 trainer = Trainer(networks, tpu_strategy, devices, datasets)
+
+# Log some configuration.
+log("################################################################################")
+log("Network:", config.network_name)
+log("Data root:", config.data_root)
+log("Local data root:", config.determine_local_data_root())
+log("Using TPU:", config.is_tpu)
+log(f"TPU devices: {[t.name for t in tpus]}")
+log(f"GPU devices: {[g.name for g in gpus]}")
+log("Training devices:", trainer.device_count)
+log("Per-replica batch size:", trainer.per_replica_batch_size)
+log("Global batch size:", trainer.global_batch_size)
+log("Per-replica batch size (commentary):", trainer.per_replica_batch_size_commentary)
+log("Global batch size (commentary):", trainer.global_batch_size_commentary)
+if isinstance(trainer.strategy, tf.distribute.TPUStrategy):
+  log("Training strategy: TPU")
+elif isinstance(trainer.strategy, tf.distribute.MirroredStrategy):
+  log("Training strategy: Mirrored")
+else:
+  log("Training strategy: Default")
+log("################################################################################")
