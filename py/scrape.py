@@ -40,8 +40,7 @@ def do_scrape(url):
 
 def scrape(url):
   os.makedirs(html_cache, exist_ok=True)
-  cache_filename = base64.b32encode(url.encode("utf-8")).decode("utf-8") + ".html"
-  cache_path = os.path.join(html_cache, cache_filename)
+  cache_path = get_cache_path(html_cache, url) + ".html"
   try:
     with open(cache_path, "r", encoding="utf-8") as f: 
       content = f.read()
@@ -52,6 +51,12 @@ def scrape(url):
 
 def normalize(s):
   return unicodedata.normalize("NFKC", s)
+
+def get_cache_path(directory, url):
+  path = os.path.join(directory, base64.b32encode(url.encode("utf-8")).decode("utf-8"))
+  path = os.path.abspath(path)
+  path = path[:240]
+  return path
 
 def write_file(path, content):
   temporary_path = path + ".part"
@@ -108,8 +113,7 @@ class GameKnot:
   def scrape_parse_game(self, url):
     print("Game:", url)
     os.makedirs(pgn_cache, exist_ok=True)
-    cache_filename = base64.b32encode(url.encode("utf-8")).decode("utf-8") + ".pgn"
-    cache_path = os.path.join(pgn_cache, cache_filename)
+    cache_path = get_cache_path(pgn_cache, url) + ".pgn"
     try:
       with open(cache_path, "r", encoding="utf-8") as f: 
         pgn = f.read()
@@ -159,8 +163,7 @@ class ChessGamesDotCom:
   def scrape_parse_game(self, url):
     print("Game:", url)
     os.makedirs(pgn_cache, exist_ok=True)
-    cache_filename = base64.b32encode(url.encode("utf-8")).decode("utf-8") + ".pgn"
-    cache_path = os.path.join(pgn_cache, cache_filename)
+    cache_path = get_cache_path(pgn_cache, url) + ".pgn"
     try:
       with open(cache_path, "r", encoding="utf-8") as f: 
         pgn = f.read()
