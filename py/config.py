@@ -76,9 +76,11 @@ class Config:
 
   def make_dir_path(self, path):
     path = self.make_path(path)
-    # Create directories (unless they're on gcloud storage).
-    if not self.is_tpu:
+    # Try to create directories. This may fail for gs:// paths.
+    try:
       os.makedirs(path, exist_ok=True)
+    except:
+      pass
     return path
   
   def make_path(self, path):
@@ -86,9 +88,12 @@ class Config:
     if not self.is_tpu and (platform.system() == "Windows"):
       path = path.replace("/", "\\")
     
-    # Root any relative paths at ChessCoach's appdata directory.
+    # Root any relative paths at the data root.
     if not os.path.isabs(path):
       path = self.join(self.data_root, path)
+
+    # Replace tilde with the user's home directory, if present.
+    path = os.path.expanduser(path)
 
     return path
 

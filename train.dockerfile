@@ -14,9 +14,7 @@ RUN sed -i -e "s/training_network_name.*=.*\".*\"/training_network_name = \"${NE
   rm -r /chesscoach/build
 
 # Google Cloud TPU VM Alpha: need custom TensorFlow wheel at runtime.
-# Also, gs:// paths are currently bugged, so set up gcsfuse as a workaround.
 # CMD ["ChessCoachTrain"]
 CMD pip3 install wheel && \
   pip3 install /usr/share/tpu/tf_nightly*.whl && \
-  gcsfuse --implicit-dirs chesscoach /tmp/gcs/chesscoach && \
   ChessCoachTrain
