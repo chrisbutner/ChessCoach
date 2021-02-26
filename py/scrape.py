@@ -22,10 +22,10 @@ pgn_header = """[Event ""]
 [Result "?"]
 """
 
-# If you'd like to use something other than ScrapingBee, just replace "do_scrape(url)" with your own implementation,
+# If you'd like to use something other than ScrapingBee, just replace "do_scrape()" with your own implementation,
 # including appropriate JS rendering, ad blocking and rate limiting.
-def do_scrape(url):
-  params = dict(api_key=api_key, url=url, block_ads="true")
+def do_scrape(url, render_js):
+  params = dict(api_key=api_key, url=url, render_js=render_js, block_ads="true")
   while True:
     print("ScrapingBee:", url)
     response = requests.get(endpoint, params=params)
@@ -38,15 +38,17 @@ def do_scrape(url):
     else:
       raise Exception(f"Failed to scrape {url} ({response.status_code}): {content}")
 
-def scrape(url):
-  os.makedirs(html_cache, exist_ok=True)
-  cache_path = get_cache_path(html_cache, url) + ".html"
-  try:
-    with open(cache_path, "r", encoding="utf-8") as f: 
-      content = f.read()
-  except:
-    content = do_scrape(url)
-    write_file(cache_path, content)
+def scrape(url, render_js=False, cache=True):
+  if cache:
+    cache_path = get_cache_path(html_cache, url) + ".html"
+    try:
+      with open(cache_path, "r", encoding="utf-8") as f: 
+        content = f.read()
+    except:
+      content = do_scrape(url, render_js)
+      write_file(cache_path, content)
+  else:
+    content = do_scrape(url, render_js)
   return content
 
 def normalize(s):
@@ -75,12 +77,13 @@ class GameKnot:
     next_url = soup.select("table.paginator a[title='next page']")
     return requests.compat.urljoin(self.url_base, next_url[0]["href"]) if next_url else None
     
-  def parse_game_segment(self, content):
+  def scrape_parse_game_segment(self, url):
+    content = scrape(url)
     soup = BeautifulSoup(content, 'html.parser')
     pgn = ""
 
     # Parse this page and produce a .pgn segment.
-    cells = soup.select(".dialog > tbody > tr > td")
+    cells = soup.select("table.dialog > tr > td")
     expect_moves = True
     for cell in cells:
       if not "vertical-align: top" in cell.get("style", ""):
@@ -96,7 +99,8 @@ class GameKnot:
     next_url = self.find_next_url(soup)
     return pgn, next_url
 
-  def parse_list(self, content):
+  def scrape_parse_list(self, url):
+    content = scrape(url)
     soup = BeautifulSoup(content, 'html.parser')
     games = []
 
@@ -112,7 +116,6 @@ class GameKnot:
 
   def scrape_parse_game(self, url):
     print("Game:", url)
-    os.makedirs(pgn_cache, exist_ok=True)
     cache_path = get_cache_path(pgn_cache, url) + ".pgn"
     try:
       with open(cache_path, "r", encoding="utf-8") as f: 
@@ -121,7 +124,7 @@ class GameKnot:
       next_url = url
       pgn = pgn_header
       while next_url:
-        pgn_segment, next_url = self.parse_game_segment(scrape(next_url))
+        pgn_segment, next_url = self.scrape_parse_game_segment(next_url)
         pgn += pgn_segment
       write_file(cache_path, pgn)
     return pgn
@@ -129,7 +132,7 @@ class GameKnot:
   def scrape_parse_all_games(self):
     next_url = self.url_root
     while next_url:
-      games, next_url = self.parse_list(scrape(next_url))
+      games, next_url = self.scrape_parse_list(next_url)
       for game_url in games:
         self.scrape_parse_game(game_url)
 
@@ -144,7 +147,8 @@ class ChessGamesDotCom:
     next_url = soup.select("img[src='/chessimages/next.gif']")
     return requests.compat.urljoin(self.url_base, next_url[0].parent["href"]) if next_url else None
   
-  def parse_list(self, content):
+  def scrape_parse_list(self, url):
+    content = scrape(url)
     soup = BeautifulSoup(content, 'html.parser')
     games = []
 
@@ -162,7 +166,6 @@ class ChessGamesDotCom:
 
   def scrape_parse_game(self, url):
     print("Game:", url)
-    os.makedirs(pgn_cache, exist_ok=True)
     cache_path = get_cache_path(pgn_cache, url) + ".pgn"
     try:
       with open(cache_path, "r", encoding="utf-8") as f: 
@@ -177,12 +180,74 @@ class ChessGamesDotCom:
   def scrape_parse_all_games(self):
     next_url = self.url_root
     while next_url:
-      games, next_url = self.parse_list(scrape(next_url))
+      games, next_url = self.scrape_parse_list(next_url)
       for game_url in games:
         self.scrape_parse_game(game_url)
+
+# --- chess.com ---
+
+class ChessDotCom:
+
+  url_base = "https://www.chess.com/"
+  url_root = "https://www.chess.com/news"
+
+  def has_comments(self, pgn):
+    # Ignore games with almost no comments, or with only clock times.
+    return (pgn.count("{") - pgn.count("{[") - pgn.count("{ [")) >= 3
+
+  def find_next_url(self, soup):
+    next_url = soup.select("a.pagination-next")
+    return requests.compat.urljoin(self.url_base, next_url[0]["href"]) if next_url else None
+
+  def scrape_parse_list(self, url):
+    # Can't cache news, it's most-recent-first.
+    content = scrape(url, cache=False)
+    soup = BeautifulSoup(content, 'html.parser')
+
+    # Parse this page and produce a list of article URLs, each of which may contain multiple games.
+    articles = [requests.compat.urljoin(self.url_base, link["href"]) for link in soup.select("a.post-preview-title")]
+
+    # Check for a next page.
+    next_url = self.find_next_url(soup)
+    return articles, next_url
+
+  def scrape_parse_game(self, synthetic_url, pgn):
+    print("Game:", synthetic_url)
+    cache_path = get_cache_path(pgn_cache, synthetic_url) + ".pgn"
+    try:
+      with open(cache_path, "r", encoding="utf-8"): 
+        pass
+    except:
+      write_file(cache_path, pgn)
+    return pgn
+
+  def scrape_parse_article(self, url):
+    print("Article:", url)
+    content = scrape(url)
+    soup = BeautifulSoup(content, 'html.parser')
+    games = soup.select(".chessDiagramDiv")
+    for i, game in enumerate(games):
+      pgn_start = game.string.find("[Event")
+      if pgn_start < 0:
+        continue
+      pgn = game.string[pgn_start:]
+      if not self.has_comments(pgn):
+        continue
+      synthetic_url = f"{url}#game{i}"
+      self.scrape_parse_game(synthetic_url, pgn)
+
+  def scrape_parse_all_games(self):
+    next_url = self.url_root
+    while next_url:
+      articles, next_url = self.scrape_parse_list(next_url)
+      for article_url in articles:
+        self.scrape_parse_article(article_url)
 
 # --- Run ---
 
 print("Working directory:", os.getcwd())
+os.makedirs(html_cache, exist_ok=True)
+os.makedirs(pgn_cache, exist_ok=True)
 #GameKnot().scrape_parse_all_games()
 #ChessGamesDotCom().scrape_parse_all_games()
+#ChessDotCom().scrape_parse_all_games()
