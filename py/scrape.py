@@ -20,6 +20,7 @@ pgn_header = """[Event ""]
 [White ""]
 [Black ""]
 [Result "?"]
+
 """
 
 # If you'd like to use something other than ScrapingBee, just replace "do_scrape()" with your own implementation,
@@ -82,8 +83,8 @@ class GameKnot:
     soup = BeautifulSoup(content, 'html.parser')
     pgn = ""
 
-    # Parse this page and produce a .pgn segment.
-    cells = soup.select("table.dialog > tr > td")
+    # Parse this page and produce a .pgn segment (need tbody if JS-rendered in cache).
+    cells = soup.select("table.dialog > tr > td") or soup.select("table.dialog > tbody > tr > td")
     expect_moves = True
     for cell in cells:
       if not "vertical-align: top" in cell.get("style", ""):
@@ -193,7 +194,7 @@ class ChessDotCom:
 
   def has_comments(self, pgn):
     # Ignore games with almost no comments, or with only clock times.
-    return (pgn.count("{") - pgn.count("{[") - pgn.count("{ [")) >= 3
+    return (pgn.count("{") - len(re.findall("{\s*\\[", pgn))) >= 3
 
   def find_next_url(self, soup):
     next_url = soup.select("a.pagination-next")
@@ -225,16 +226,26 @@ class ChessDotCom:
     print("Article:", url)
     content = scrape(url)
     soup = BeautifulSoup(content, 'html.parser')
-    games = soup.select(".chessDiagramDiv")
-    for i, game in enumerate(games):
-      pgn_start = game.string.find("[Event")
-      if pgn_start < 0:
+    diagrams = soup.select(".chessDiagramDiv")
+    saved_headers = set()
+    game_number = 0
+    for diagram in diagrams:
+      if not diagram.string:
+        print("Broken diagram:", url)
         continue
-      pgn = game.string[pgn_start:]
-      if not self.has_comments(pgn):
-        continue
-      synthetic_url = f"{url}#game{i}"
-      self.scrape_parse_game(synthetic_url, pgn)
+      games = re.findall("(\\[Event.*?)(\\&-|$)", diagram.string, re.DOTALL)
+      for game in games:
+        game_number += 1
+        synthetic_url = f"{url}#game{game_number}"
+        pgn = game[0]
+        if not self.has_comments(pgn):
+          continue
+        headers = re.search("\\[.*\"\\]", pgn, re.DOTALL).group(0)
+        if headers in saved_headers:
+          print("Duplicate:", synthetic_url)
+          continue
+        saved_headers.add(headers)
+        self.scrape_parse_game(synthetic_url, pgn)
 
   def scrape_parse_all_games(self):
     next_url = self.url_root
@@ -242,6 +253,32 @@ class ChessDotCom:
       articles, next_url = self.scrape_parse_list(next_url)
       for article_url in articles:
         self.scrape_parse_article(article_url)
+
+# --- Utilities ---
+
+# Really rough, final split is shorter. Intended to operate over one-game-per (or equal-per) pgn files.
+def combine_split(dir_in, dir_out, split_count):
+  os.makedirs(dir_out, exist_ok=True)
+  count_in = len(os.listdir(dir_in))
+  per_split = (count_in + split_count - 1) // split_count
+  count_split = 0
+  count_out = 0
+  content_out = ""
+  for filename_in in os.listdir(dir_in):
+    path_in = os.path.join(dir_in, filename_in)
+    with open(path_in, "r", encoding="utf-8") as f:
+      content_in = f.read()
+    content_out += content_in + ("\n" if content_in[-1] == "\n" else "\n\n")
+    count_split += 1
+    if count_split >= per_split or count_split >= count_in:
+      count_in -= count_split
+      count_split = 0
+      count_out += 1 
+      path_out = os.path.join(dir_out, f"split{count_out}.pgn")
+      content_out = content_out[:-1]
+      with open(path_out, "w", encoding="utf-8") as f:
+        f.write(content_out)
+      content_out = ""
 
 # --- Run ---
 
@@ -251,3 +288,9 @@ os.makedirs(pgn_cache, exist_ok=True)
 #GameKnot().scrape_parse_all_games()
 #ChessGamesDotCom().scrape_parse_all_games()
 #ChessDotCom().scrape_parse_all_games()
+
+# --- Usage ---
+
+# - Make sure that the working directory is short to avoid any collisions due to MAX_PATH issues with Base32 filenames.
+# - Run "combine_split" before copying the resulting PGNs to longer directories to again avoid any MAX_PATH issues.
+# - Use a "split_count" that is a multiple of 8 to allow ChessCoachPgnToGames to thread efficiently for large datasets.

@@ -10,22 +10,47 @@
 #include "Game.h"
 #include "Preprocessing.h"
 
-// Parsing is quite minimal and brittle, intended to parse very-well-formed PGNs with minimal dev time and improved only as needed.
+#ifdef NDEBUG
+#define CHECK(x) (void)0
+#define CHECK_FAIL_MOVE(x) { if (!(x)) { return MOVE_NONE; } }
+#else
+#define CHECK(x) { if (!(x)) { ::__debugbreak(); } }
+#define CHECK_FAIL_MOVE(x) { if (!(x)) { ::__debugbreak(); return MOVE_NONE; } }
+#endif
+
+// Parsing here is quite minimal and brittle, intended to parse very-well-formed PGNs with minimal dev time and improved only as needed.
 // E.g. assume that pawn capture squares are fully specified.
 //
-// Note that this means SAN input like "ex" will cause overflows. Don't feed in untrusted input.
-void Pgn::ParsePgn(std::istream& content, bool allowNoResult, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler)
+// This means that SAN input like "ex" may cause overflows. Don't feed in untrusted input.
+//
+// Good parsers will also fix up [{( problems, work out move problems or ambiguities by checking legal moves,
+// trying out multiple whole games, etc. This parser does none of that.
+//
+// Returns the total game count seen (successfully parsed and not) as well as counts for multiple failure categories.
+std::tuple<int, int, int, int> Pgn::ParsePgn(std::istream& content, bool allowNoResult, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler)
 {
+    int gamesSeen = 0;
+    int fenGameCount = 0;
+    int badMovesCount = 0;
+    int badResultCount = 0;
+
     while (true)
     {
         // Try to get the result from headers and validate against the one after the move list,
         // but be forgiving and allow the one after the move list to fill in.
         bool fenGame = false;
-        float result = ParseHeaders(content, fenGame);
+        float result = std::numeric_limits<float>::quiet_NaN();
+        if (!ParseHeaders(content, fenGame, result))
+        {
+            // EOF or problem reading file.
+            break;
+        }
+        gamesSeen++;
 
         // FEN games aren't supported, so skip.
         if (fenGame)
         {
+            fenGameCount++;
             SkipGame(content);
             continue;
         }
@@ -37,17 +62,24 @@ void Pgn::ParsePgn(std::istream& content, bool allowNoResult, std::function<void
         SavedCommentary commentary;
         if (!ParseMoves(content, positionStates, position, moves, commentary, result, false /* inVariation */))
         {
-            break;
+            // Bad PGN or some problem parsing (e.g. no FEN/SetUp but starts at move 51).
+            badMovesCount++;
+            SkipGame(content);
+            continue;
         }
         CheckResult(position, result, allowNoResult);
         if (std::isnan(result))
         {
-            // This can be the end of the file, or a really bad PGN/game with no result in either headers or after the move list.
-            break;
+            // Argument "allowNoResult" is false, but no result found (either by header, footer or definitive result via moves).
+            badResultCount++;
+            SkipGame(content);
+            continue;
         }
 
         gameHandler(SavedGame(result, std::move(moves), GenerateMctsValues(moves, result), GenerateChildVisits(moves)), std::move(commentary));
     }
+
+    return { gamesSeen, fenGameCount, badMovesCount, badResultCount };
 }
 
 std::vector<float> Pgn::GenerateMctsValues(const std::vector<uint16_t>& moves, float result)
@@ -78,27 +110,35 @@ std::vector<std::map<Move, float>> Pgn::GenerateChildVisits(const std::vector<ui
     return childVisits;
 }
 
-float Pgn::ParseHeaders(std::istream& content, bool& fenGameInOut)
+bool Pgn::ParseHeaders(std::istream& content, bool& fenGameInOut, float& resultOut)
 {
-    float result = std::numeric_limits<float>::quiet_NaN();
+    bool haveSeenHeader = false;
 
     char c;
     while (content >> c)
     {
         if (c == '[')
         {
-            ParseHeader(content, fenGameInOut, result);
+            haveSeenHeader = true;
+            ParseHeader(content, fenGameInOut, resultOut);
         }
         else if (c == '1')
         {
+            // Expect at least one header (e.g. if we ended up parsing a game inside of a comment
+            // then return to the real world, it's not safe to parse a new game starting with move 17).
+            if (!haveSeenHeader)
+            {
+                continue;
+            }
+
             // Found the first move, so headers are finished.
             content.unget();
-            break;
+            return true;
         }
         else if (c == '{')
         {
             // Found a comment before the first move, just throw it away.
-            ParseUntil(content, '}');
+            ParseCommentInner(content);
         }
         else if ((c == 'ï') || (c == '»') || (c == '¿'))
         {
@@ -106,13 +146,21 @@ float Pgn::ParseHeaders(std::istream& content, bool& fenGameInOut)
         }
         else
         {
+            // Expect at least one header (e.g. if we ended up parsing a game inside of a comment
+            // then return to the real world, it's not safe to parse a new game starting with move 17).
+            if (!haveSeenHeader)
+            {
+                continue;
+            }
+
             // Let the move parser handle the rest.
             content.unget();
-            break;
+            return true;
         }
     }
 
-    return result;
+    // EOF or problem reading file.
+    return false;
 }
 
 void Pgn::ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOut)
@@ -127,7 +175,7 @@ void Pgn::ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOu
     const std::string undetermined = "*";
     const std::string loss = "0";
 
-    // Grab the rest of the line. It would be nice to ParseUntil the closing square brace
+    // Grab the rest of the line. It would be nice to parse until the next closing square brace
     // but some PGNs like to nest square braces within headers like Event or Annotator.
     std::string header;
     std::getline(content, header);
@@ -220,10 +268,14 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
                     const Move move = ParseSan(position, str);
                     if (move == MOVE_NONE)
                     {
-                        assert(!"Unexpected zero in PGN, not 0-1 or 0-0 or 0-0-0");
+                        CHECK(!"Unexpected zero in PGN, not 0-1 or 0-0 or 0-0-0");
                         return false;
                     }
-                    ApplyMove(positionStates, position, move);
+                    if (!ApplyMove(positionStates, position, move))
+                    {
+                        CHECK(!"Illegal move");
+                        return false;
+                    }
                     moves.push_back(static_cast<uint16_t>(move));
                 }
             }
@@ -257,19 +309,19 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
                     }
                     else
                     {
-                        assert(!"Unexpected 1/ in PGN, not 1/2-1/2 or 1/2");
+                        CHECK(!"Unexpected 1/ in PGN, not 1/2-1/2 or 1/2");
                         return false;
                     }
                 }
                 else
                 {
-                    assert(!"Unexpected move number in PGN");
+                    CHECK(!"Unexpected move number in PGN");
                     return false;
                 }
             }
             else
             {
-                assert(!"Unexpected move number in PGN");
+                CHECK(!"Unexpected move number in PGN");
                 return false;
             }
         }
@@ -295,20 +347,31 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
             const Move move = ParseSan(position, str);
             if (move == MOVE_NONE)
             {
-                assert(!"Failed to parse move SAN in PGN");
-                return false;
+                // If the move glyph started with "-" but wasn't "--" then treat it as a
+                // Numeric Annotation Glyph (NAG) like "-+" and keep parsing.
+                // Also accept "N" as a NAG, representing "novelty", and "e.p." for en passant.
+                // In other cases, fail.
+                const std::string enPassantNag = "e.p.";
+                if ((c != '-') && (str != "N") && (str.compare(0, enPassantNag.size(), enPassantNag) != 0))
+                {
+                    CHECK(!"Failed to parse move SAN in PGN");
+                    return false;
+                }
             }
-            ApplyMove(positionStates, position, move);
-            moves.push_back(static_cast<uint16_t>(move));
+            else
+            {
+                if (!ApplyMove(positionStates, position, move))
+                {
+                    CHECK(!"Illegal move");
+                    return false;
+                }
+                moves.push_back(static_cast<uint16_t>(move));
+            }
         }
-        else if (c == '$')
+        else if ((c == '$') || (c == '!') || (c == '?') || (c == '=') || (c == '+'))
         {
             // Ignore the rest of the Numeric Annotation Glyph (NAG).
             ParseMoveGlyph(content, str);
-        }
-        else if ((c == '!') || (c == '?'))
-        {
-            // Ignore isolated unencoded NAGs.
         }
         else if (c == '{')
         {
@@ -325,7 +388,8 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
         {
             if (!inVariation)
             {
-                assert(!"Unexpected ) outside of a variation");
+                // I've only seen this when someone put the smiley "}8-)" inside their comment (genius of our time).
+                CHECK(!"Unexpected ) outside of a variation");
                 return false;
             }
 
@@ -338,7 +402,7 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
             // Try to fill in a result then move on to the next game.
             if (inVariation)
             {
-                assert(!"Unexpected [ inside a variation");
+                CHECK(!"Unexpected [ inside a variation");
                 return false;
             }
 
@@ -361,8 +425,9 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
         }
         else
         {
-            assert(!"Unexpected character in PGN");
-            return false;
+            // Completely unexpected character: try to consume the rest of the move glyph and keep parsing.
+            CHECK(!"Unexpected character in PGN");
+            ParseMoveGlyph(content, str);
         }
     }
 
@@ -372,7 +437,7 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
 void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves, SavedCommentary& commentary)
 {
     // Grab the full comment string between curly braces, including spaces.
-    std::string comment = ParseUntil(content, '}');
+    std::string comment = ParseCommentInner(content);
 
     // Store the trimmed comment if not empty.
     Preprocessor::Trim(comment);
@@ -382,19 +447,45 @@ void Pgn::ParseComment(std::istream& content, const std::vector<uint16_t>& moves
     }
 }
 
-std::string Pgn::ParseUntil(std::istream& content, char delimiter)
+std::string Pgn::ParseCommentInner(std::istream& content)
 {
-    // Grab the full string including spaces, and consume the delimiter.
+    // Grab the full string including spaces, and consume but don't include the final closing curly brace.
+    int openCurlyCount = 1;
     std::string text;
     char c;
 
     content >> std::noskipws;
-    while ((content >> c) && (c != delimiter))
+    while (content >> c)
     {
+        if (c == '{')
+        {
+            openCurlyCount++;
+        }
+        else if (c == '}')
+        {
+            if (--openCurlyCount == 0)
+            {
+                break;
+            }
+        }
         text += c;
+
+        // If we see "[Event<...>]", assume that someone didn't close their comment, and bail out.
+        // However, wait until at least 500 bytes, in case someone pastes an entire PGN into the comment.
+        // This isn't foolproof: sometimes people paste multiple back-to-back.
+        //
+        // Hopefully stopping after ] lets us see the next [ as a new game and rescue the upcoming one,
+        // although if we were in a variation, probably not.
+        //
+        // Clear the comment, since it will be full of actual moves, etc.
+        if ((c == ']') && (text.size() >= 500) && (text.find("[Event") != std::string::npos))
+        {
+            CHECK(!"Comment without closing } found");
+            text = "";
+            break;
+        }
     }
     content >> std::skipws;
-
     return text;
 }
 
@@ -487,13 +578,13 @@ bool Pgn::Expect(std::istream& content, char expected)
     char c;
     if (!(content >> c))
     {
-        assert(!"Unexpected end-of-stream");
+        CHECK(!"Unexpected end-of-stream");
         return false;
     }
 
     if (c != expected)
     {
-        assert(!"Unexpected char found");
+        CHECK(!"Unexpected char found");
         return false;
     }
 
@@ -519,7 +610,7 @@ void Pgn::EncounterResult(float encountered, float& resultInOut)
     // Be forgiving and let the result after the move list fill it in.
     if (!std::isnan(resultInOut))
     {
-        assert(encountered == resultInOut);
+        CHECK(encountered == resultInOut);
     }
     else
     {
@@ -553,7 +644,7 @@ void Pgn::CheckResult(const Position& position, float& resultInOut, bool allowNo
     // "EncounterResult" already checked for agreement between header and footer.
     if (!std::isnan(resultInOut) && !std::isnan(result))
     {
-        assert(result == resultInOut);
+        CHECK(result == resultInOut);
     }
 
     // If the game reached a result, this overrules anything else.
@@ -573,29 +664,20 @@ void Pgn::CheckResult(const Position& position, float& resultInOut, bool allowNo
 
 void Pgn::SkipGame(std::istream& content)
 {
-    // We want to ParseUntil the start of the next header ('[') but sometimes
-    // square brackets are used inside comments, so ignore them there. Don't
-    // try to handle nested comments, since that would be very destructive
-    // elsewhere anyway. It's fine to skip whitespace in this case.
-    bool inComment = false;
+    // We want to parse until the start of the next header ('[') but sometimes
+    // square brackets are used inside comments, so ignore them there.
+    // It's fine to skip whitespace in this case.
     char c;
     while (content >> c)
     {
         if (c == '{')
         {
-            inComment = true;
-        }
-        else if (c == '}')
-        {
-            inComment = false;
+            ParseCommentInner(content);
         }
         else if (c == '[')
         {
-            if (!inComment)
-            {
-                content.unget();
-                break;
-            }
+            content.unget();
+            break;
         }
     }
 }
@@ -617,16 +699,24 @@ Move Pgn::ParseSan(const Position& position, const std::string& san)
     }
 
     const PieceType fromPieceType = ParsePieceType(san, 0);
+    CHECK_FAIL_MOVE(fromPieceType != NO_PIECE_TYPE);
     switch (fromPieceType)
     {
-    case NO_PIECE_TYPE:
+    case KING:
         if (san.compare(0, queenside.size(), queenside) == 0)
         {
             return make<CASTLING>(position.square<KING>(toPlay), position.castling_rook_square(toPlay & QUEEN_SIDE));
         }
-        return make<CASTLING>(position.square<KING>(toPlay), position.castling_rook_square(toPlay & KING_SIDE));
-    case KING:
-        return make_move(position.square<KING>(toPlay), (san[1] == 'x') ? ParseSquare(san, 2) : ParseSquare(san, 1));
+        else if (san[0] == 'O')
+        {
+            return make<CASTLING>(position.square<KING>(toPlay), position.castling_rook_square(toPlay & KING_SIDE));
+        }
+        else
+        {
+            const Square targetSquare = ((san[1] == 'x') ? ParseSquare(san, 2) : ParseSquare(san, 1));
+            CHECK_FAIL_MOVE(is_ok(targetSquare));
+            return make_move(position.square<KING>(toPlay), targetSquare);
+        }
     case PAWN:
         return ParsePawnSan(position, san);
     default:
@@ -834,8 +924,15 @@ std::string Pgn::SanPiece(const Position& position, Move move, Piece piece)
     return san;
 }
 
-void Pgn::ApplyMove(StateListPtr& positionStates, Position& position, Move move)
+bool Pgn::ApplyMove(StateListPtr& positionStates, Position& position, Move move)
 {
+    // Check whether the first move of the game is legal, in case the position was set up
+    // without the headers declaring so.
+    if ((position.game_ply() == 0) && (!position.pseudo_legal(move) || !position.legal(move)))
+    {
+        return false;
+    }
+
     positionStates->emplace_back();
     if (move != MOVE_NULL)
     {
@@ -845,6 +942,7 @@ void Pgn::ApplyMove(StateListPtr& positionStates, Position& position, Move move)
     {
         position.do_null_move(positionStates->back());
     }
+    return true;
 }
 
 // Intended for branched variations, so doesn't update the StateInfo list. 
@@ -863,6 +961,7 @@ void Pgn::UndoMoveInVariation(Position& position, Move move)
 #pragma warning(disable:4706) // Intentionally assigning, not comparing
 Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceType fromPieceType)
 {
+    CHECK_FAIL_MOVE(san.size() >= 3);
     const size_t capture = san.find('x', 1);
     Square targetSquare;
     bool hasPartialDisambiguation = false;
@@ -880,18 +979,12 @@ Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceT
         if ((maybeRank >= RANK_1) && (maybeRank <= RANK_8))
         {
             // Check for full disambiguation.
-            if ((san.size() >= 5) &&
-                (maybeRank = ParseRank(san, 4)) && // Intentionally assigning, not comparing
-                (maybeRank >= RANK_1) &&
-                (maybeRank <= RANK_8))
+            if (san.size() >= 5)
             {
-                targetSquare = ParseSquare(san, 3);
-                hasFullDisambiguation = true;
+                maybeRank = ParseRank(san, 4);
+                hasFullDisambiguation = ((maybeRank >= RANK_1) && (maybeRank <= RANK_8));
             }
-            else
-            {
-                targetSquare = ParseSquare(san, 1);
-            }
+            targetSquare = (hasFullDisambiguation ? ParseSquare(san, 3) : ParseSquare(san, 1));
         }
         else
         {
@@ -899,21 +992,23 @@ Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceT
             hasPartialDisambiguation = true;
         }
     }
+    CHECK_FAIL_MOVE(is_ok(targetSquare));
 
     Bitboard fromPieces = Attacks(position, fromPieceType, targetSquare);
-    assert(fromPieces);
+    CHECK_FAIL_MOVE(fromPieces);
     
     if (more_than_one(fromPieces))
     {
         if (hasFullDisambiguation)
         {
-            Square disambiguationSquare = ParseSquare(san, 1);
+            const Square disambiguationSquare = ParseSquare(san, 1);
+            CHECK_FAIL_MOVE(is_ok(disambiguationSquare));
             fromPieces &= square_bb(disambiguationSquare);
         }
         else if (hasPartialDisambiguation)
         {
             // E.g. "Nfd7"
-            File disambiguationFile = ParseFile(san, 1);
+            const File disambiguationFile = ParseFile(san, 1);
             if ((disambiguationFile >= FILE_A) && (disambiguationFile <= FILE_H))
             {
                 fromPieces &= file_bb(disambiguationFile);
@@ -921,8 +1016,8 @@ Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceT
             // E.g. "R6h2"
             else
             {
-                Rank disambiguationRank = ParseRank(san, 1);
-                assert((disambiguationRank >= RANK_1) && (disambiguationRank <= RANK_8));
+                const Rank disambiguationRank = ParseRank(san, 1);
+                CHECK_FAIL_MOVE((disambiguationRank >= RANK_1) && (disambiguationRank <= RANK_8));
 
                 fromPieces &= rank_bb(disambiguationRank);
             }
@@ -937,7 +1032,7 @@ Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceT
                 Move candidate = make_move(pop_lsb(&fromPieces), targetSquare);
                 if (position.legal(candidate))
                 {
-                    assert(legal == MOVE_NONE);
+                    CHECK_FAIL_MOVE(legal == MOVE_NONE);
                     legal = candidate;
                 }
             }
@@ -951,8 +1046,8 @@ Move Pgn::ParsePieceSan(const Position& position, const std::string& san, PieceT
             std::cout << san << std::endl;
         }
 #endif
-        assert(fromPieces);
-        assert(!more_than_one(fromPieces));
+        CHECK_FAIL_MOVE(fromPieces);
+        CHECK_FAIL_MOVE(!more_than_one(fromPieces));
     }
 
     return make_move(lsb(fromPieces), targetSquare);
@@ -964,7 +1059,15 @@ Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
 {
     const Color toPlay = position.side_to_move();
 
+    // Handle "e.p." only as a Numeric Annotation Glyph (NAG).
+    const std::string enPassantSan = "e.p.";
+    if (san.compare(0, enPassantSan.size(), enPassantSan) == 0)
+    {
+        return MOVE_NONE;
+    }
+
     // Handle e.g. "gf6<...>" or "g5f6<...>" as "gxf6<...>".
+    CHECK_FAIL_MOVE(san.size() >= 2);
     size_t capture = san.find('x', 1);
     if (capture == std::string::npos)
     {
@@ -986,7 +1089,11 @@ Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
         }
     }
 
-    const Square targetSquare = ParseSquare(san, (capture != std::string::npos) ? (static_cast<int>(capture) + 1) : 0);
+    // If someone over-closes a comment then a written word may reach here. Handle cases like "do" or "due".
+    const int target = ((capture != std::string::npos) ? (static_cast<int>(capture) + 1) : 0);
+    CHECK_FAIL_MOVE(san.size() >= (target + 2));
+    const Square targetSquare = ParseSquare(san, target);
+    CHECK_FAIL_MOVE(is_ok(targetSquare));
     const Direction advance = ((toPlay == WHITE) ? NORTH : SOUTH);
     Square fromSquare = (targetSquare - advance);
     const size_t promotion = san.find('=', 2);
@@ -1003,6 +1110,7 @@ Move Pgn::ParsePawnSan(const Position& position, const std::string& san)
     if (promotion != std::string::npos)
     {
         PieceType promotionType = ParsePieceType(san, static_cast<int>(promotion) + 1);
+        CHECK_FAIL_MOVE((promotionType >= KNIGHT) && (promotionType <= QUEEN));
 
         return make<PROMOTION>(fromSquare, targetSquare, promotionType);
     }
@@ -1030,7 +1138,7 @@ Rank Pgn::ParseRank(const std::string& text, int offset)
     return Rank(text[offset] - '1');
 }
 
-// Returns NO_PIECE_TYPE for castling.
+// Returns KING for castling.
 PieceType Pgn::ParsePieceType(const std::string& text, int offset)
 {
     switch (text[offset])
@@ -1040,10 +1148,16 @@ PieceType Pgn::ParsePieceType(const std::string& text, int offset)
     case 'R': return ROOK;
     case 'Q': return QUEEN;
     case 'K': return KING;
-    case 'O': return NO_PIECE_TYPE;
+    case 'O': return KING;
     default:
-        assert((text[offset] >= 'a') && (text[offset] <= 'h'));
-        return PAWN;
+        if ((text[offset] >= 'a') && (text[offset] <= 'h'))
+        {
+            return PAWN;
+        }
+        else
+        {
+            return NO_PIECE_TYPE;
+        }
     }
 }
 

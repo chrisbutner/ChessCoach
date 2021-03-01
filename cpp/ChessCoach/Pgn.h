@@ -13,7 +13,7 @@ class Pgn
 {
 public:
 
-    static void ParsePgn(std::istream& content, bool allowNoResult, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler);
+    static std::tuple<int, int, int, int> ParsePgn(std::istream& content, bool allowNoResult, std::function<void(SavedGame&&, SavedCommentary&&)> gameHandler);
     static Move ParseSan(const Position& position, const std::string& san);
 
     static void GeneratePgn(std::ostream& content, const SavedGame& game);
@@ -29,11 +29,11 @@ private:
     static std::vector<float> GenerateMctsValues(const std::vector<uint16_t>& moves, float result);
     static std::vector<std::map<Move, float>> GenerateChildVisits(const std::vector<uint16_t>& moves);
 
-    static float ParseHeaders(std::istream& content, bool& fenGameInOut);
+    static bool ParseHeaders(std::istream& content, bool& fenGameInOut, float& resultOut);
     static void ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOut);
     static bool ParseMoves(std::istream& content, StateListPtr& positionStates, Position& position, std::vector<uint16_t>& moves, SavedCommentary& commentary, float& resultInOut, bool inVariation);
     static void ParseComment(std::istream& content, const std::vector<uint16_t>& moves, SavedCommentary& commentary);
-    static std::string ParseUntil(std::istream& content, char delimiter);
+    static std::string ParseCommentInner(std::istream& content);
     static void ParseMoveGlyph(std::istream& content, std::string& target);
     static bool ParseVariation(std::istream& content, const Position& mainLine, const std::vector<uint16_t>& mainLineMoves, SavedCommentary& commentary, float& resultInOut);
     static bool Expect(std::istream& content, char expected);
@@ -42,7 +42,7 @@ private:
     static void CheckResult(const Position& position, float& resultInOut, bool allowNoResult);
     static void SkipGame(std::istream& content);
 
-    static void ApplyMove(StateListPtr& positionStates, Position& position, Move move);
+    static bool ApplyMove(StateListPtr& positionStates, Position& position, Move move);
     static void UndoMoveInVariation(Position& position, Move move);
     static Move ParsePieceSan(const Position& position, const std::string& san, PieceType fromPieceType);
     static Move ParsePawnSan(const Position& position, const std::string& san);

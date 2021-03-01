@@ -236,7 +236,8 @@ void ChessCoachPgnToGames::ConvertPgns()
         }
 
         std::ifstream pgnFile = std::ifstream(pgnPath, std::ios::in);
-        Pgn::ParsePgn(pgnFile, allowNoResult, [&](SavedGame&& game, SavedCommentary&& commentary)
+        const auto [gamesSeen, fenGameCount, badMovesCount, badResultCount] =
+            Pgn::ParsePgn(pgnFile, allowNoResult, [&](SavedGame&& game, SavedCommentary&& commentary)
             {
                 games.emplace_back(std::move(game));
                 gameCommentary.emplace_back(std::move(commentary));
@@ -252,7 +253,10 @@ void ChessCoachPgnToGames::ConvertPgns()
             std::lock_guard lock(_coutMutex);
 
             _totalGameCount += pgnGamesConverted;
-            std::cout << "Converted " << pgnPath.filename() << ": " << pgnGamesConverted << " games" << std::endl;
+            std::cout << "Converted \"" << pgnPath.parent_path().filename().string() << "/" << pgnPath.filename().string()
+                << "\": " << pgnGamesConverted << " of " << gamesSeen << " games ("
+                << fenGameCount << " set up games, " << badMovesCount << " move problems, " << badResultCount << " result problems)"
+                << std::endl;
         }
     }
 
