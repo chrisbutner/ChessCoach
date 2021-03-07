@@ -777,7 +777,7 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
             std::cout << "Generating uniform network predictions until trained" << std::endl;
         }
 
-        // Warm up the GIL and predictions, and reclaim training memory.
+        // Warm up the GIL and predictions.
         const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, 1);
         if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
         {
@@ -1814,7 +1814,6 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
 // - initializing Python thread state
 // - creating models and loading weights on this thread's assigned TPU/GPU device
 // - tracing tf.functions on this thread's assigned TPU/GPU device
-// - clearing any cached training data to free up memory for self-play or strength testing (may be extremely slow at the moment)
 PredictionStatus SelfPlayWorker::WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize)
 {
     return network->PredictBatch(networkType, batchSize, _images.data(), _values.data(), _policies.data());

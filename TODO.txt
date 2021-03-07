@@ -1,9 +1,44 @@
-Training runs
-- run new baseline (selfplay4) to give comparable STS rating after PUCT/UCI changes
+Commentary #2
+- TPU training/inference
+- test out C++ training, solo and interleaved
+- make sure that partial-save resuming works for interleaved
+
+Commentary #3
+- build small manual test set for commentary inference
+- may need to increase maximum sequence length, with sub-word tokenization
+- maybe backprop into encoder (sometimes? always?)
+- compare interleaving with main model training vs. "at the end"
+- compare adam and sgd-momentum for commentary
+	- try varying warmup steps
+	- try flip to pre-LN, get rid of warmup everywhere: https://openreview.net/pdf?id=B1x8anVFPr
+- review/tune commentary quality
+- compare beam and top-k
+	- look back through my notes, was pretty pessimistic about beam based on articles a few months back
+
+Commentary #4
+- try pre or post-processing with GPT-2
+- try data augmentation using BERT: https://www.researchgate.net/publication/343958685_Text_Augmentation_Using_BERT_for_Image_Captioning
+- maybe shrink model if still not enough data
+
+Commentary #5
+- for interleaving regular/commentary training - read up on "learning without forgetting"
+- basic - does the encoder need an extra dense+relu layer after the tower/reshape?
+	- basically 256->512 embedding rather than categorical->512 embedding
+- try encode before-and-after positions (no flip?) - comment on the move, not the position
+	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
+
+WAITING
+- gs:// fix checked in, not yet deployed to TPU VMs
+- once stable, need info on perf/mxu util, higher quota potentially
+
+Training runs (*** once gs:// is fixed ***)
+- window experiments (original 1m-all)
+- re-run 4b/4c once it's stable
 - evaluate SE/pooling (read over 2f/2d notes)
 - run raw student-as-teacher, make sure distillation is worth it
 	- try dense layer in policy head for student network (may not be enough depth for convolutions)
 - run 1 vs. 8 vs. 32 value head filters
+- try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
 
 Student training
 - make student prefer matching teacher for repeatability
@@ -18,7 +53,6 @@ Criticality training (shelved)
 - either pull in whole change or some of the code cleanup
 	- logging wrong loss to tensorboard in shelved commit, fix
 	- add unit test for criticality training target via decompress API
-
 
 Training improvements
 - add domain features (e.g. piece counts, fading king positions)
@@ -44,7 +78,6 @@ Training - later
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 - like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
 - stochastic weight averaging
-- move to ~100MB-sized chunks as recommended (but make sure self-play can still viably train)
 
 Prediction cache
 - investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
@@ -55,6 +88,10 @@ Prediction cache
 - any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 	- while not full hit rate should be higher? add some new metrics
 	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
+
+Strength/parameter evaluation
+- switch to/add mini-tournaments, rather than just STS/Arasan?
+- try fully-Bayesian again if using mini-tournaments?
 
 PUCT - medium confidence
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
@@ -111,30 +148,13 @@ GUI
 
 Quality
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
-- print config summary when starting a run
-
-Commentary
-- try tf.text, see if 2.4.0 is supported on Windows or 2.4.1 needed (sub-word tokenization)
-- read up on "learning without forgetting"
-- try BERT/GPT-2, check out huggingface
-- better prediction code, top-k or w/e rather than greedy (not beam search, has issues)
-- bring back network.js cleanup from stashed fit() port
-- clean away transformer.js and any other danging .js (tensor2tensor?)
-- try time and special-case speed-up prediction for batchsize=1
-- basic - does the encoder need an extra dense+relu layer after the tower/reshape?
-- think about 1D vs. 2D again: https://arxiv.org/pdf/1502.03044.pdf
-- read about "Performer" architecture
-- read about PET: https://arxiv.org/pdf/2001.07676.pdf
-- find more training data
-- build deterministic train/validate split (e.g. in Pgn tool that reads/dumps)
-- try encode before-and-after positions (no flip?) - comment on the move, not the position
-	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
 
 Cluster
 - validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
 UCI (#2)
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
+	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
 - already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
 	- read over notes from initial work there, check for pitfalls
 	- try no exploration terms for opponent-mate (test position: 6k1/4pppp/3B4/8/8/8/5PPP/R5K1 b - - 0 0)
@@ -222,3 +242,7 @@ Won't do
 - endgame tablebases (e.g. leveraging Stockfish probing code)
 	- UCI: not interesting enough, others can add if going for pure strength
 	- Training: complicated, scope too large - self-play needs to make mistakes to learn imbalances
+- contempt (self-play or UCI)
+- ~100MB-sized chunks
+	- complicated by supervised vs. self-play size, and time between networks for small self-play clusters
+	- BigTable is an alternative if training needs to scale up to pods

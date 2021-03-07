@@ -10,6 +10,12 @@ class DatasetOptions:
     self.keep_position_proportion = keep_position_proportion
     self.cycle_length = cycle_length
 
+class CommentaryDatasetOptions:
+
+  def __init__(self, global_batch_size, maximum_sequence_length):
+    self.global_batch_size = global_batch_size
+    self.maximum_sequence_length = maximum_sequence_length
+
 class DatasetBuilder:
 
   # Input and output plane details, duplicated from "Network.h"
@@ -232,58 +238,60 @@ class DatasetBuilder:
     sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
     return self.build_dataset(sources, options)
 
-  def parse_commentary_raw(self, serialized):
-    # Parse raw features from the tf.train.Example representing the commentary chunk.
-    example = tf.io.parse_single_example(serialized, self.commentary_feature_map)
+  def parse_commentary_record(self, record, tokenizer, options):
+    # Parse raw features from the tf.train.Examples representing the games.
+    example = tf.io.parse_single_example(record, self.commentary_feature_map)
     images = example["images"]
     comments = example["comments"]
-    return images, comments
 
-  def parse_sequences(self, comments, tokenizer):
-    comments = [f'{ModelBuilder.token_start} {c.decode("utf-8", errors="ignore")} {ModelBuilder.token_end}' for c in comments]
-    sequences = tokenizer.texts_to_sequences(comments)
-    sequences = tf.keras.preprocessing.sequence.pad_sequences(sequences, maxlen=ModelBuilder.transformer_max_length, padding="post")
-    return sequences
+    # Tokenize all comments and pad here so that we can batch across chunks.
+    comments = tokenizer.tokenize(comments)
+    comments = comments.to_tensor(default_value=0, shape=(comments.bounding_shape(axis=0), options.maximum_sequence_length))
 
-  def parse_commentary(self, dataset, tokenizer):
-    for images, comments in dataset:
-      comments = self.parse_sequences(comments, tokenizer)
-      yield tf.data.Dataset.from_tensor_slices((images, comments))
+    # Transformers need the targets during Model.call(), and loss needs them via fit(), so nest appropriately.
+    dataset = tf.data.Dataset.from_tensor_slices((dict(inputs=images, targets=comments), comments))
+    return dataset
 
-  # We run into a combination of problems here:
-  #
-  # (1) Once we start using tf.data.Dataset we have to stay in graph mode, since py_function
-  #     isn't allowed when working with TPUs.
-  # (2) Keras and third-party tokenizers don't work in graph mode.
-  # (3) TF.Text isn't supported on Windows and is allegedly planned for 2.4.
-  #
-  # Luckily, the entire dataset fits in memory for now, so parse, exit Dataset-land,
-  # tokenize, then re-enter.
-  def build_commentary_dataset(self, glob, global_batch_size, tokenizer, strategy):
+  def parse_commentary(self, filename, tokenizer, options):
+    # Parse commentary from the chunk, stored as tf.train.Examples in TFRecords (see Storage.cpp).
+    dataset = tf.data.TFRecordDataset(filename, compression_type=self.compression_type,
+      buffer_size=self.chunk_read_buffer_size)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    # Parse and tokenize comments. For commentary, each chunk holds 1 tf.train.Example with N images/comments.
+    #
+    # As long as the shuffle buffer is large enough to hold at least one cycle's positions, after throw-aways, there's no point
+    # intentionally shuffling here.
+    dataset = dataset.flat_map(lambda x: self.parse_commentary_record(x, tokenizer, options))
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
+
+  def build_commentary_dataset(self, glob, tokenizer, global_batch_size, maximum_sequence_length):
+    options = CommentaryDatasetOptions(global_batch_size, maximum_sequence_length)
+
     # Grab chunk filenames.
     filenames = tf.io.gfile.glob(glob)
 
-    # Parse images/comments then read back.
-    commentary_raw = tf.data.TFRecordDataset(filenames, compression_type=self.compression_type,
-      buffer_size=self.chunk_read_buffer_size, num_parallel_reads=tf.data.experimental.AUTOTUNE)
-    commentary_raw = commentary_raw.map(self.parse_commentary_raw)
-    commentary_raw = commentary_raw.as_numpy_iterator()
+    # Pick chunk order randomly over the full span of the window.
+    dataset = tf.data.Dataset.from_tensor_slices(filenames)
+    dataset = dataset.shuffle(len(filenames), reshuffle_each_iteration=True)
 
-    # Tokenize comments offline.
-    datasets = list(self.parse_commentary(commentary_raw, tokenizer))
-    dataset = tf.data.Dataset.from_tensor_slices(datasets)
-    dataset = dataset.flat_map(lambda x: x)
-
-    # Shuffle images/comments. Roughly 500k right now, just shuffle them all.
-    dataset = dataset.shuffle(2**19, reshuffle_each_iteration=True)
-
-    # Repeat and batch to the global size.
+    # Repeat chunk loading.
     dataset = dataset.repeat()
-    dataset = dataset.batch(global_batch_size)
+
+    # Parse commentary in parallel, cycling through all chunks (~40).
+    # Autotune isn't sufficient to keep the GPU/TPU loaded via disk/storage: experimentally 4/8 seem best.
+    cycle_length = len(filenames)
+    num_parallel_calls = min(8 if self.config.is_tpu else 4, cycle_length)
+    dataset = dataset.interleave(lambda x: self.parse_commentary(x, tokenizer, options), cycle_length=cycle_length,
+     num_parallel_calls=num_parallel_calls, deterministic=False)
+
+    # Shuffle images/comments. Roughly ~1m right now, just shuffle all/most.
+    dataset = dataset.shuffle(2**20, reshuffle_each_iteration=True)
+
+    # Batch to the global size.
+    dataset = dataset.batch(options.global_batch_size)
 
     # Prefetch batches.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
-
-    # Distribute for custom training.
-    dataset = strategy.experimental_distribute_dataset(dataset)
     return dataset

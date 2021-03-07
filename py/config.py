@@ -104,10 +104,10 @@ class Config:
   def make_local_path(self, path):
     return self.join(self.determine_local_data_root(), self.unmake_path(path))
 
-  def latest_network_path_for_type(self, network_name, network_type):
-    glob = self.join(self.misc["paths"]["networks"], network_name + "_*", network_type)
+  def latest_network_path_for_type_and_model(self, network_name, network_type, model):
+    glob = self.join(self.misc["paths"]["networks"], network_name + "_*", network_type, model)
     results = tf.io.gfile.glob(glob)
-    return os.path.dirname(max(results)) if results else None
+    return os.path.dirname(os.path.dirname(max(results))) if results else None
 
   def count_training_chunks(self):
     glob = self.join(self.training["games_path_training"], "*.chunk")

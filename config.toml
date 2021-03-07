@@ -234,7 +234,7 @@ role = "train|play"
 
 architecture = "conv2d"
 batch_size = 512
-commentary_batch_size = 256
+commentary_batch_size = 64
 steps = 480_000
 warmup_steps = 1000
 pgn_interval = 1000

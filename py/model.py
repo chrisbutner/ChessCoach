@@ -2,7 +2,8 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 K.set_image_data_format("channels_first")
 from attention import MultiHeadSelfAttention2D
-from transformer import Transformer
+import transformer
+from official.nlp.modeling import models
 from layers import Residual
 import os
 
@@ -17,13 +18,13 @@ class ModelBuilder:
   dense_count = 256
   weight_decay = 1e-4
 
-  transformer_layers = 4 # 6
-  transformer_filters = 128 # 512
+  transformer_layers = 6
+  transformer_filters = 512
   transformer_heads = 8
-  transformer_feedforward = 512 # 2048
+  transformer_feedforward = 2048
   transformer_dropout_rate = 0.1
-  transformer_num_words = 5000 # Arbitrary for now
-  transformer_max_length = 128 # Arbitrary for now
+  transformer_vocabulary_size = 8000
+  transformer_max_length = 128
 
   no_progress_saturation_count = 99.0
 
@@ -170,23 +171,30 @@ class ModelBuilder:
   def subset_commentary_encoder(self, model):
     return type(model)(model.input, model.outputs[3:])
 
-  def build_commentary_decoder(self, config):
-    vocab_size = self.transformer_num_words + 1
-    max_length = self.transformer_max_length
+  def build_commentary(self, config, tokenizer, model_full):
+    eos_id = tokenizer.tokenize("").numpy().item()
+    commentary_encoder = self.subset_commentary_encoder(model_full)
+    decoder_layer = models.TransformerDecoder(
+      num_layers=self.transformer_layers,
+      num_attention_heads=self.transformer_heads,
+      intermediate_size=self.transformer_feedforward,
+      dropout_rate=self.transformer_dropout_rate,
+      attention_dropout_rate=self.transformer_dropout_rate,
+      intermediate_dropout=self.transformer_dropout_rate,
+      )
+    commentary_decoder = transformer.CommentaryDecoder(
+      vocab_size=self.transformer_vocabulary_size,
+      decoder_layer=decoder_layer,
+      eos_id=eos_id,
+      decode_max_length=self.transformer_max_length,
+      embedding_width=self.transformer_filters,
+      dropout_rate=self.transformer_dropout_rate,
+    )
+    commentary_model = transformer.CommentaryModel(commentary_encoder, commentary_decoder)
 
-    transformer = Transformer(self.transformer_layers, self.transformer_filters, self.transformer_heads,
-      self.transformer_feedforward, vocab_size, max_length, self.transformer_dropout_rate)
+    # Call once to prepare the model for loading weights.
+    commentary_model(dict(
+      inputs=tf.ones((config.training["commentary_batch_size"], self.input_planes_count), tf.int64),
+      targets=tf.ones((config.training["commentary_batch_size"], self.transformer_max_length), tf.int32)))
 
-    return transformer
-
-  def build_tokenizer(self, config):
-    vocabulary_path = config.join(config.training["commentary_path_supervised"], config.training["vocabulary_filename"])
-    comments = tf.io.gfile.GFile(vocabulary_path, 'rb').readlines()
-    comments = [f'{self.token_start} {c.decode("utf-8", errors="ignore")} {self.token_end}' for c in comments]
-
-    tokenizer = tf.keras.preprocessing.text.Tokenizer(num_words=self.transformer_num_words, oov_token=self.token_unk, filters='!"#$%&()*+.,-/:;=?@[\\]^_`{|}~ ')
-    tokenizer.fit_on_texts(comments)
-    tokenizer.word_index[self.token_pad] = 0
-    tokenizer.index_word[0] = self.token_pad
-    return tokenizer
-    
+    return commentary_model

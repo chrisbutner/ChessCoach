@@ -69,6 +69,7 @@ import numpy as np
 
 from config import Config, PredictionStatus
 from model import ModelBuilder
+import tokenization
 import transformer
 from training import Trainer, StudentModel
 from dataset import DatasetBuilder
@@ -86,9 +87,8 @@ class TrainingModels:
   def __init__(self):
     self.full = None
     self.train = None
-    self.commentary_encoder = None
-    self.commentary_decoder = None
-    self.commentary_tokenizer = None
+    self.tokenizer = None
+    self.commentary = None
 
 class Network:
 
@@ -115,40 +115,28 @@ class Network:
 
   @tf.function
   def tf_predict(self, device_index, images):
-      return self.models_predict[device_index].predict(images, training=False)
+    return self.models_predict[device_index].predict(images, training=False)
 
   @tf.function
   def tf_predict_for_training(self, images):
-      return self.models_train.train(images, training=False)
+    return self.models_train.train(images, training=False)
+  
+  @tf.function
+  def tf_predict_commentary(self, images):
+    inputs = dict(inputs=images)
+    outputs = self.models_train.commentary(inputs)
+    sequences = outputs["outputs"]
+    comments = self.models_train.tokenizer.detokenize(sequences)
+    return comments
 
   def predict_batch(self, device_index, images):
     status = self.ensure_prediction(device_index)
     return (status, *self.tf_predict(device_index, images))
 
   def predict_commentary_batch(self, images):
-    networks.teacher.ensure_commentary()
-
-    encoder = self.models_train.commentary_encoder
-    decoder = self.models_train.commentary_decoder
-    tokenizer = self.models_train.commentary_tokenizer
-
-    start_token = tokenizer.word_index[ModelBuilder.token_start]
-    end_token = tokenizer.word_index[ModelBuilder.token_end]
-    max_length = ModelBuilder.transformer_max_length
-
-    sequences = transformer.predict_greedy(encoder, decoder,
-      start_token, end_token, max_length, images)
-
-    def trim_start_end_tokens(sequence):
-      for i, token in enumerate(sequence):
-        if (token == end_token):
-          return sequence[1:i]
-      return sequence[1:]
-
-    sequences = [trim_start_end_tokens(s) for s in np.array(memoryview(sequences))]
-    comments = tokenizer.sequences_to_texts(sequences)
-    comments = np.array([c.encode("utf-8") for c in comments])
-    return comments
+    self.ensure_commentary()
+    comments = self.tf_predict_commentary(images)
+    return np.array(memoryview(comments)) # C++ expects bytes
 
   def ensure_full(self, device_index):
     with ensure_locks[device_index]:
@@ -236,36 +224,42 @@ class Network:
 
     return self.models_train.train
 
+  def ensure_tokenizer(self):
+    # The tokenizer may already exist.
+    if self.models_train.tokenizer:
+      return self.models_train.tokenizer
+    
+    # Either load the SentencePiece model from disk, or train a new one.
+    self.models_train.tokenizer = tokenization.ensure_tokenizer(config, ModelBuilder.transformer_vocabulary_size)
+    return self.models_train.tokenizer
+
   def ensure_commentary(self):
-    # The encoder, decoder and tokenizer may already exist.
-    if self.models_train.commentary_encoder:
-      return
+    # The commentary model may already exist.
+    if self.models_train.commentary:
+      return self.models_train.commentary
 
-    # Take the encoder subset from the full training model.
+    # The commentary model requires the tokenizer, and the full training model as an encoder.
+    self.ensure_tokenizer()
     self.ensure_training()
-    self.models_train.commentary_encoder = ModelBuilder().subset_commentary_encoder(self.models_train.full)
 
-    # Either load decoder and tokenizer from disk, or create new.
+    # Either load from disk, or create new.
     with model_creation_lock:
       log_device_context = "training"
-      network_path = self.latest_network_path()
+      network_path = self.latest_network_path_commentary()
       if network_path:
         log_name = self.get_log_name(network_path)
         log(f"Loading model ({log_device_context}/{self.network_type}/commentary): {log_name}")
-
-        # Load the decoder.
-        self.models_train.commentary_decoder = ModelBuilder().build_commentary_decoder(self.config)
-        model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
-        self.load_weights(self.models_train.commentary_decoder, model_commentary_decoder_path)
-
-        # Load the tokenizer.
-        commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
-        tokenizer_json = tf.io.gfile.GFile(commentary_tokenizer_path, 'r').read()
-        self.models_train.commentary_tokenizer = tf.keras.preprocessing.text.tokenizer_from_json(tokenizer_json)
+        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full)
+        model_commentary_path = self.model_commentary_path(network_path)
+        self.load_weights(self.models_train.commentary, model_commentary_path)
       else:
         log(f"Creating new model ({log_device_context}/{self.network_type}/commentary)")
-        self.models_train.commentary_decoder = ModelBuilder().build_commentary_decoder(self.config)
-        self.models_train.commentary_tokenizer = ModelBuilder().build_tokenizer(self.config)
+        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full)
+
+    # Compile the commentary model for training.
+    self.commentary_training_compiler(self.models_train.commentary)
+
+    return self.models_train.commentary
 
   # Storage may be slow, e.g. Google Cloud Storage, so retry.
   # For now, sleep for 1 second, up to 10 retry attempts (11 total).
@@ -293,24 +287,20 @@ class Network:
     model_full_path = self.model_full_path(network_path)
     self.models_train.full.save_weights(model_full_path, save_format="tf")
 
-    # Save the commentary decoder and tokenizer if they exist.
-    if self.models_train.commentary_decoder and self.models_train.commentary_tokenizer:
+    # Save the commentary moddel if it exists.
+    if self.models_train.commentary:
       log(f"Saving model ({log_device_context}/{self.network_type}/commentary): {log_name}")
-
-      # Save the commentary decoder.
-      model_commentary_decoder_path = self.model_commentary_decoder_path(network_path)
-      self.models_train.commentary_decoder.save_weights(model_commentary_decoder_path, save_format="tf")
-
-      # Save the tokenizer.
-      commentary_tokenizer_path = self.commentary_tokenizer_path(network_path)
-      tokenizer_json = self.models_train.commentary_tokenizer.to_json()
-      tf.io.gfile.GFile(commentary_tokenizer_path, "w").write(tokenizer_json)
+      model_commentary_path = self.model_commentary_path(network_path)
+      self.models_train.commentary.save_weights(model_commentary_path, save_format="tf")
 
   def get_log_name(self, network_path):
     return os.path.basename(os.path.normpath(network_path))
 
   def latest_network_path(self):
-    return self.config.latest_network_path_for_type(self.config.network_name, self.network_type)
+    return self.config.latest_network_path_for_type_and_model(self.config.network_name, self.network_type, "model")
+  
+  def latest_network_path_commentary(self):
+    return self.config.latest_network_path_for_type_and_model(self.config.network_name, self.network_type, "commentary")
 
   def make_network_path(self, step):
     parent_path = self.config.misc["paths"]["networks"]
@@ -320,11 +310,8 @@ class Network:
   def model_full_path(self, network_path):
     return self.config.join(network_path, self.network_type, "model", "weights")
 
-  def model_commentary_decoder_path(self, network_path):
-    return self.config.join(network_path, self.network_type, "commentary_decoder", "weights")
-
-  def commentary_tokenizer_path(self, network_path):
-    return self.config.join(network_path, self.network_type, "commentary_tokenizer.json")
+  def model_commentary_path(self, network_path):
+    return self.config.join(network_path, self.network_type, "commentary", "weights")
 
 # --- Networks ---
 
@@ -365,14 +352,12 @@ def device(device_index):
 # --- C++ API ---
 
 def predict_batch_teacher(images):
-  trainer.clear_data() # Free up training memory for use in self-play or strength testing.
   device_index = choose_device_index()
   with device(device_index):
     status, value, policy = networks.teacher.predict_batch(device_index, images)
     return status, np.array(memoryview(value)), np.array(memoryview(policy))
 
 def predict_batch_student(images):
-  trainer.clear_data() # Free up training memory for use in self-play or strength testing.
   device_index = choose_device_index()
   with device(device_index):
     status, value, policy = networks.student.predict_batch(device_index, images)

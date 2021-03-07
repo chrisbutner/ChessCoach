@@ -7,6 +7,8 @@ from model import ModelBuilder
 knowledge_distillation_temperature = 2.0
 knowledge_distillation_teacher_weight = 0.7
 
+transformer_label_smoothing = 0.1
+
 # This fixes an issue with categorical_crossentropy calculating incorrectly
 # over our 73*8*8 output planes - loss ends up way too small.
 def flat_categorical_crossentropy_from_logits(y_true, y_pred):
@@ -32,6 +34,12 @@ def student_policy_accuracy(y_true, y_pred):
   # See "Trainer.stack_teacher_targets" for stacking details.
   return flat_categorical_accuracy(y_true[1], y_pred)
 
+def make_transformer_loss():
+  vocabulary_size = ModelBuilder.transformer_vocabulary_size
+  def transformer_loss(y_true, y_pred):
+    return transformer.padded_cross_entropy_loss(y_pred, y_true, transformer_label_smoothing, vocabulary_size)
+  return transformer_loss
+
 class Trainer:
 
   def __init__(self, networks, tpu_strategy, devices, datasets):
@@ -39,13 +47,13 @@ class Trainer:
     self.log = networks.log
     self.networks.teacher.training_compiler = self.compile_teacher
     self.networks.student.training_compiler = self.compile_student
+    self.networks.teacher.commentary_training_compiler = self.compile_commentary
     self.config = networks.config
     self.tpu_strategy = tpu_strategy
     self.device_count = len(devices)
     self.commentary_optimizer = None
 
     self.datasets = datasets
-    self.data_commentary_training = None
     self.data_globs = {
       # GameType_Supervised (Config.h)
       0: self.config.join(self.config.training["games_path_supervised"], "*.chunk"),
@@ -93,12 +101,12 @@ class Trainer:
     metrics = [[], [], [student_policy_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics, steps_per_execution=self.config.training["steps_per_execution"])
 
-  # Explicitly reclaim dataset memory before active self-play or strength testing.
-  # Relying on working set eviction doesn't seem to be enough to avoid OOM kills, Kubernetes evictions, etc.
-  def clear_data(self):
-    if self.data_commentary_training:
-      self.log("Clearing datasets")
-    self.data_commentary_training = None
+  def compile_commentary(self, model):
+    optimizer = tf.keras.optimizers.SGD(
+      learning_rate=self.get_learning_rate(self.config.training["commentary_learning_rate_schedule"]),
+      momentum=self.config.training["momentum"])
+    loss = make_transformer_loss()
+    model.compile(optimizer=optimizer, loss=loss, steps_per_execution=self.config.training["steps_per_execution"])
 
   def train(self, network, teacher_network, game_types, training_windows, starting_step, checkpoint):
     # Create models on the distribution strategy scope, including the teacher for knowledge distillation inference.
@@ -139,59 +147,31 @@ class Trainer:
       steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
 
   def train_commentary(self, network, starting_step, checkpoint):
+    # Create models on the distribution strategy scope
     with self.strategy.scope():
-      network.ensure_commentary()
+      model = network.ensure_commentary()
 
-      # Set up the commentary optimizer in strategy scope, for use with GradientTape in transformer.py.
-      if not self.commentary_optimizer:
-        self.commentary_optimizer = tf.keras.optimizers.SGD(
-          learning_rate=self.get_learning_rate(self.config.training["commentary_learning_rate_schedule"]),
-          momentum=self.config.training["momentum"])
+    # Set up data pipelines.
+    tokenizer = network.ensure_tokenizer()
+    data_commentary_training = self.datasets.build_commentary_dataset(
+      self.data_glob_commentary, tokenizer, self.global_batch_size_commentary, ModelBuilder.transformer_max_length)
 
-      # Set up the commentary metrics in strategy scope.
-      transformer.create_metrics()
+    # Work out steps and intervals. Use the validation interval as an epoch to match fit()'s model.
+    validation_interval = self.config.training["validation_interval"]
+    checkpoint_interval = (checkpoint - starting_step + 1)
+    assert checkpoint_interval % validation_interval == 0, f"Checkpoint interval ({checkpoint_interval}) must be a multiple of the validation interval ({validation_interval})"
+    assert validation_interval % self.device_count == 0, f"Validation interval ({validation_interval}) must be a multiple of the device count ({self.device_count})"
+    actual_validation_interval = validation_interval // self.device_count
+    steps_per_execution = self.config.training["steps_per_execution"]
+    assert actual_validation_interval % steps_per_execution == 0, f"Validation interval / device count ({actual_validation_interval}) must be a multiple of steps_per_execution ({steps_per_execution})"
+    steps_per_epoch = actual_validation_interval
+    initial_epoch = (starting_step - 1) // validation_interval
+    epochs = checkpoint // validation_interval
 
-    # Set up data pipelines, or re-use existing if not cleared by self-play.
-    if not self.data_commentary_training:
-      tokenizer = network.models_train.commentary_tokenizer
-      self.data_commentary_training = self.datasets.build_commentary_dataset(
-        self.data_glob_commentary, self.global_batch_size_commentary, tokenizer, self.strategy)
-
-    # Set up the training step tf.function.
-    optimizer = self.commentary_optimizer
-    encoder = network.models_train.commentary_encoder
-    decoder = network.models_train.commentary_decoder
-
-    @tf.function
-    def train_step(images, comments):
-      return transformer.train_step(optimizer, encoder, decoder, images, comments, num_replicas=self.device_count)
-
-    # Iterate over all steps in the checkpoint, striding by the device count.
-    # E.g. on a GPU, 1 device, 1-1000 steps, range(1, 1001, 1), 1000 iterations
-    # E.g. on a TPU, 8 devices, 1-1000 steps, range(1, 1001, 8), 125 iterations, 125*8=1000 effective iterations
-    for step in range(starting_step, checkpoint + 1, self.device_count):
-      # Set the learning rate.
-      K.set_value(optimizer.lr, self.get_commentary_learning_rate(step))
-
-      # Train.
-      batch_training = next(self.data_commentary_training)
-      self.train_commentary_batch(network, decoder, train_step, step, images=batch_training[0], comments=batch_training[1])
-
-  def train_commentary_batch(self, network, decoder, train_step, step, images, comments):
-    # Prepare TensorBoard logging.
-    do_log_training = self.is_validation_step(step)
-    if do_log_training:
-      self.log_training_prepare(step)
-
-    losses = self.strategy.run(train_step, args=(images, comments))
-    losses = (
-      self.strategy.reduce(tf.distribute.ReduceOp.SUM, losses[0], axis=None),  # Sum loss over replicas.
-      self.strategy.reduce(tf.distribute.ReduceOp.MEAN, losses[1], axis=None), # Average accuracy over replicas.
-    )
-
-    # Do Tensorboard logging.
-    if do_log_training:
-      self.log_training_commentary("training", network.tensorboard_writer_training, step, losses, decoder)
+    # Train.
+    log_callback = CommentaryLogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)
+    model.fit(data_commentary_training, verbose=0, callbacks=[log_callback],
+      steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
 
   def log_scalars(self, network, step, names, values):
     network.ensure_training()
@@ -313,14 +293,6 @@ class LogCallback(tf.keras.callbacks.Callback):
       self.log_weights(self.model)
       writer.flush()
 
-  def log_training_commentary(self, type, writer, step, losses, model):
-    self.log(f"Loss: {losses[0]:.4f}, Accuracy: {losses[1]:.4f} ({type})")
-    with writer.as_default():
-      tf.summary.experimental.set_step(step)
-      self.log_loss_accuracy_commentary(losses)
-      self.log_weights(model)
-      writer.flush()
-
   def log_loss_accuracy(self, losses):
     # Fix losses: only total includes loss weighting.
     with tf.name_scope("loss"):
@@ -335,11 +307,43 @@ class LogCallback(tf.keras.callbacks.Callback):
     with tf.name_scope("accuracy"):
       tf.summary.scalar("policy accuracy", losses[4])
 
-  def log_loss_accuracy_commentary(self, losses):
+  def log_weights(self, model):
+    for layer in model.layers:
+      for weight in layer.weights:
+        weight_name = weight.name.replace(':', '_')
+        tf.summary.histogram(weight_name, weight)
+
+class CommentaryLogCallback(tf.keras.callbacks.Callback):
+
+  def __init__(self, config, log, training_writer, validation_writer, model, validation_interval):
+    self.config = config
+    self.log = log
+    self.training_writer = training_writer
+    self.validation_writer = validation_writer
+    self.model = model
+    self.validation_interval = validation_interval
+
+  def on_epoch_end(self, epoch, logs=None):
+    effective_step = (epoch + 1) * self.validation_interval
+    training_losses = self.map_losses(logs, "")
+    self.log_training_commentary("training", self.training_writer, effective_step, training_losses)
+
+  def map_losses(self, logs, prefix):
+    return [
+      logs[prefix + "loss"],
+    ]
+
+  def log_training_commentary(self, type, writer, step, losses):
+    self.log(f"Loss: {losses[0]:.4f}")
+    with writer.as_default():
+      tf.summary.experimental.set_step(step)
+      self.log_loss_commentary(losses)
+      self.log_weights(self.model)
+      writer.flush()
+
+  def log_loss_commentary(self, losses):
     with tf.name_scope("loss"):
       tf.summary.scalar("commentary loss", losses[0])
-    with tf.name_scope("accuracy"):
-      tf.summary.scalar("commentary accuracy", losses[1])
 
   def log_weights(self, model):
     for layer in model.layers:

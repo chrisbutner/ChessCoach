@@ -1,10 +1,10 @@
-# Copyright 2019 The TensorFlow Authors.
+# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# https://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,305 +14,366 @@
 #
 ##############################################################################
 #
-# Modifications by Chris Butner, 2020.
+# Modifications by Chris Butner, 2021.
 #
-# Based on https://www.tensorflow.org/tutorials/text/transformer
+# Based on tensorflow/models/official/nlp/modeling/models/seq2seq_transformer.py
+# and tensorflow/models/official/nlp/tasks/translation.py.
 #
+# Cuts out the transformer encoder, replaces it with a plugin encoder,
+# and structures everything so that weights can be saved and loaded
+# excluding the encoder plugin.
+#
+# Original code looked pluggable, but assumed that the raw input was already
+# in the form of a sequence before encoding (e.g. in constructing cross-attention
+# masks), so heavier changes were needed inside call().
+#
+
+import math
 
 import tensorflow as tf
-import numpy as np
+from tensorflow.python.keras import backend as K
+from official.modeling import tf_utils
+from official.nlp import keras_nlp
+from official.nlp.modeling import layers
+from official.nlp.modeling.ops import beam_search
+from official.nlp.transformer import model_utils
 
-class MultiHeadAttention(tf.keras.layers.Layer):
-  def __init__(self, d_model, num_heads):
-    super(MultiHeadAttention, self).__init__()
-    self.num_heads = num_heads
-    self.d_model = d_model
-    
-    assert d_model % self.num_heads == 0
-    
-    self.depth = d_model // self.num_heads
-    
-    self.wq = tf.keras.layers.Dense(d_model)
-    self.wk = tf.keras.layers.Dense(d_model)
-    self.wv = tf.keras.layers.Dense(d_model)
-    
-    self.dense = tf.keras.layers.Dense(d_model)
-        
-  def split_heads(self, x, batch_size):
-    """Split the last dimension into (num_heads, depth).
-    Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
-    """
-    x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
-    return tf.transpose(x, perm=[0, 2, 1, 3])
+class CommentaryModel(tf.keras.Model):
 
-  def scaled_dot_product_attention(self, q, k, v, mask):
-    """Calculate the attention weights.
-    q, k, v must have matching leading dimensions.
-    k, v must have matching penultimate dimension, i.e.: seq_len_k = seq_len_v.
-    The mask has different shapes depending on its type(padding or look ahead) 
-    but it must be broadcastable for addition.
-    
+  def __init__(self, encoder, decoder, **kwargs):
+    super().__init__(**kwargs)
+    self.encoder = encoder
+    self.decoder = decoder
+
+  def call(self, inputs):
+    inputs["inputs"] = self.encoder(inputs["inputs"])
+    return self.decoder(inputs)
+
+  def save_weights(self, filepath, overwrite=True, save_format=None, options=None):
+    self.decoder.save_weights(filepath, overwrite, save_format, options)
+
+  def load_weights(self, filepath, by_name=False, skip_mismatch=False, options=None):
+    return self.decoder.load_weights(filepath, by_name, skip_mismatch, options)
+
+class CommentaryDecoder(tf.keras.Model):
+  """Transformer model with Keras.
+
+  Implemented as described in: https://arxiv.org/pdf/1706.03762.pdf
+
+  The Transformer model consists of an encoder and decoder. The input is an int
+  sequence (or a batch of sequences). The encoder produces a continuous
+  representation, and the decoder uses the encoder output to generate
+  probabilities for the output sequence.
+  """
+
+  def __init__(self,
+               vocab_size,
+               decoder_layer,
+               eos_id,
+               decode_max_length,
+               embedding_width,
+               dropout_rate,
+               padded_decode=False,
+               extra_decode_length=0,
+               beam_size=4,
+               alpha=0.6,
+               dtype=tf.float32,
+               **kwargs):
+    """Initialize layers to build Transformer model.
+
     Args:
-      q: query shape == (..., seq_len_q, depth)
-      k: key shape == (..., seq_len_k, depth)
-      v: value shape == (..., seq_len_v, depth_v)
-      mask: Float tensor with shape broadcastable 
-            to (..., seq_len_q, seq_len_k). Defaults to None.
-      
-    Returns:
-      output, attention_weights
+      vocab_size: Size of vocabulary.
+      embedding_width: Size of hidden layer for embedding.
+      dropout_rate: Dropout probability.
+      padded_decode: Whether to max_sequence_length padding is used. If set
+        False, max_sequence_length padding is not used.
+      decode_max_length: maximum number of steps to decode a sequence.
+      extra_decode_length: Beam search will run extra steps to decode.
+      beam_size: Number of beams for beam search
+      alpha: The strength of length normalization for beam search.
+      decoder_layer: An initialized decoder layer.
+      dtype: float dtype.
+      eos_id: Id of end of sentence token.
+      **kwargs: other keyword arguments.
     """
+    super().__init__(**kwargs)
+    self._vocab_size = vocab_size
+    self._embedding_width = embedding_width
+    self._dropout_rate = dropout_rate
+    self._padded_decode = padded_decode
+    self._decode_max_length = decode_max_length
+    self._extra_decode_length = extra_decode_length
+    self._beam_size = beam_size
+    self._alpha = alpha
+    self._dtype = dtype
+    self._eos_id = eos_id
+    self.embedding_lookup = keras_nlp.layers.OnDeviceEmbedding(
+        vocab_size=self._vocab_size,
+        embedding_width=self._embedding_width,
+        initializer=tf.random_normal_initializer(
+            mean=0., stddev=self._embedding_width**-0.5),
+        scale_factor=self._embedding_width**0.5)
+    self.decoder_layer = decoder_layer
+    self.position_embedding = layers.RelativePositionEmbedding(
+        hidden_size=self._embedding_width)
+    self.decoder_dropout = tf.keras.layers.Dropout(rate=self._dropout_rate)
 
-    matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., seq_len_q, seq_len_k)
-    
-    # scale matmul_qk
-    dk = tf.cast(tf.shape(k)[-1], tf.float32)
-    scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
+  def _embedding_linear(self, embedding_matrix, x):
+    """Uses embeddings as linear transformation weights."""
+    batch_size = tf.shape(x)[0]
+    length = tf.shape(x)[1]
+    hidden_size = tf.shape(x)[2]
+    vocab_size = tf.shape(embedding_matrix)[0]
 
-    # add the mask to the scaled tensor.
-    if mask is not None:
-      scaled_attention_logits += (mask * -1e9)  
+    x = tf.reshape(x, [-1, hidden_size])
+    logits = tf.matmul(
+        tf.cast(x, dtype=self._dtype),
+        tf.cast(embedding_matrix, self._dtype),
+        transpose_b=True)
 
-    # softmax is normalized on the last axis (seq_len_k) so that the scores
-    # add up to 1.
-    attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., seq_len_q, seq_len_k)
+    return tf.reshape(logits, [batch_size, length, vocab_size])
 
-    output = tf.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
+  def call(self, inputs):
+    """Calculate target logits or inferred target sequences.
 
-    return output, attention_weights
-    
-  def call(self, v, k, q, mask):
-    batch_size = tf.shape(q)[0]
-    
-    q = self.wq(q)  # (batch_size, seq_len, d_model)
-    k = self.wk(k)  # (batch_size, seq_len, d_model)
-    v = self.wv(v)  # (batch_size, seq_len, d_model)
-    
-    q = self.split_heads(q, batch_size)  # (batch_size, num_heads, seq_len_q, depth)
-    k = self.split_heads(k, batch_size)  # (batch_size, num_heads, seq_len_k, depth)
-    v = self.split_heads(v, batch_size)  # (batch_size, num_heads, seq_len_v, depth)
-    
-    # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
-    # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-    scaled_attention, attention_weights = self.scaled_dot_product_attention(
-        q, k, v, mask)
-    
-    scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
+    Args:
+      inputs: a dictionary of tensors.
+        Feature `inputs`: int tensor with shape [batch_size, input_length].
+        Feature `targets` (optional): None or int tensor with shape
+          [batch_size, target_length].
 
-    concat_attention = tf.reshape(scaled_attention, 
-                                  (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
+    Returns:
+      If targets is defined, then return logits for each word in the target
+      sequence. float tensor with shape [batch_size, target_length, vocab_size]
+      If target is none, then generate output sequence one token at a time.
+        returns a dictionary {
+          outputs: [batch_size, decoded length]
+          scores: [batch_size, float]}
+      Even when float16 is used, the output tensor(s) are always float32.
 
-    output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
-        
-    return output, attention_weights
+    Raises:
+      NotImplementedError: If try to use padded decode method on CPU/GPUs.
+    """
+    sources = inputs["inputs"]
+    targets = inputs.get("targets", None)
 
-class DecoderLayer(tf.keras.layers.Layer):
-  def __init__(self, d_model, num_heads, dff, dropout_rate):
-    super(DecoderLayer, self).__init__()
+    # cbutner: Encoder output is provided directly and fixed length, so no need for
+    # embedding, positional encoding, attention masking or dropout at this stage.
+    # The attention bias tensor is just zeros, with shape compatible with "get_padding_bias".
+    encoder_outputs = sources
+    encoder_outputs = tf.stop_gradient(encoder_outputs) # TEMP
+    attention_bias = tf.zeros((tf.shape(encoder_outputs)[0], 1, 1, 1), dtype=self._dtype)
 
-    self.mha1 = MultiHeadAttention(d_model, num_heads)
-    self.mha2 = MultiHeadAttention(d_model, num_heads)
+    if targets is None:
+      encoder_decoder_attention_bias = attention_bias
+      encoder_outputs = tf.cast(encoder_outputs, self._dtype)
+      if self._padded_decode:
+        max_decode_length = self._decode_max_length
+      else:
+        max_decode_length = self._decode_max_length or (
+            tf.shape(encoder_outputs)[1] + self._extra_decode_length)
+      encoder_decoder_attention_bias = tf.cast(encoder_decoder_attention_bias,
+                                               self._dtype)
+      symbols_to_logits_fn = self._get_symbols_to_logits_fn(max_decode_length)
 
-    self.ffn = self.point_wise_feed_forward_network(d_model, dff)
- 
-    self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-    
-    self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
-    self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
-    self.dropout3 = tf.keras.layers.Dropout(dropout_rate)
+      batch_size = tf.shape(encoder_outputs)[0]
+      # Create initial set of IDs that will be passed to symbols_to_logits_fn.
+      initial_ids = tf.zeros([batch_size], dtype=tf.int32)
 
-  def point_wise_feed_forward_network(self, d_model, dff):
-    return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
-    ])
+      # Create cache storing decoder attention values for each layer.
+      # pylint: disable=g-complex-comprehension
+      init_decode_length = (max_decode_length if self._padded_decode else 0)
+      num_heads = self.decoder_layer.num_attention_heads
+      dim_per_head = self._embedding_width // num_heads
 
-  def call(self, x, enc_output, training, look_ahead_mask):
-    # enc_output.shape == (batch_size, input_seq_len, d_model)
-    # All of the encoder output is always relevant, so no padding masks for it.
+      cache = {
+          str(layer): {
+              "key":
+                  tf.zeros(
+                      [batch_size, init_decode_length, num_heads, dim_per_head],
+                      dtype=self._dtype),
+              "value":
+                  tf.zeros(
+                      [batch_size, init_decode_length, num_heads, dim_per_head],
+                      dtype=self._dtype)
+          } for layer in range(self.decoder_layer.num_layers)
+      }
 
-    attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
-    attn1 = self.dropout1(attn1, training=training)
-    out1 = self.layernorm1(attn1 + x)
-    
-    attn2, attn_weights_block2 = self.mha2(
-        enc_output, enc_output, out1, None)  # (batch_size, target_seq_len, d_model)
-    attn2 = self.dropout2(attn2, training=training)
-    out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
-    
-    ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
-    ffn_output = self.dropout3(ffn_output, training=training)
-    out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
-    
-    return out3, attn_weights_block1, attn_weights_block2
+      # pylint: enable=g-complex-comprehension
+      # Add encoder output and attention bias to the cache.
+      cache["encoder_outputs"] = encoder_outputs
+      cache["encoder_decoder_attention_bias"] = encoder_decoder_attention_bias
 
-class Decoder(tf.keras.layers.Layer):
-  def __init__(self, num_layers, d_model, num_heads, dff, target_vocab_size,
-               maximum_position_encoding, dropout_rate):
-    super(Decoder, self).__init__()
+      # Use beam search to find the top beam_size sequences and scores.
+      decoded_ids, scores = beam_search.sequence_beam_search(
+          symbols_to_logits_fn=symbols_to_logits_fn,
+          initial_ids=initial_ids,
+          initial_cache=cache,
+          vocab_size=self._vocab_size,
+          beam_size=self._beam_size,
+          alpha=self._alpha,
+          max_decode_length=max_decode_length,
+          eos_id=self._eos_id,
+          padded_decode=self._padded_decode,
+          dtype=self._dtype)
 
-    self.d_model = d_model
-    self.num_layers = num_layers
-    
-    self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
-    self.pos_encoding = self.positional_encoding(maximum_position_encoding, d_model)
-    
-    self.dec_layers = [DecoderLayer(d_model, num_heads, dff, dropout_rate) 
-                       for _ in range(num_layers)]
-    self.dropout = tf.keras.layers.Dropout(dropout_rate)
+      # Get the top sequence for each batch element
+      top_decoded_ids = decoded_ids[:, 0, 1:]
+      top_scores = scores[:, 0]
 
-  def positional_encoding(self, position, d_model):
-    angle_rads = self.get_angles(np.arange(position)[:, np.newaxis],
-                            np.arange(d_model)[np.newaxis, :],
-                            d_model)
-    
-    # apply sin to even indices in the array; 2i
-    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
-    
-    # apply cos to odd indices in the array; 2i+1
-    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
-      
-    pos_encoding = angle_rads[np.newaxis, ...]
-      
-    return tf.cast(pos_encoding, dtype=tf.float32)
+      return {"outputs": top_decoded_ids, "scores": top_scores}
 
-  def get_angles(self, pos, i, d_model):
-    angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model))
-    return pos * angle_rates
-    
-  def call(self, x, enc_output, training, look_ahead_mask):
-    seq_len = tf.shape(x)[1]
-    attention_weights = {}
-    
-    x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
-    x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-    x += self.pos_encoding[:, :seq_len, :]
-    
-    x = self.dropout(x, training=training)
+    decoder_inputs = self.embedding_lookup(targets)
+    embedding_mask = tf.cast(
+        tf.not_equal(targets, 0), self.embedding_lookup.embeddings.dtype)
+    decoder_inputs = tf.cast(decoder_inputs, self._dtype)
+    decoder_inputs *= tf.expand_dims(embedding_mask, -1)
+    # Shift targets to the right, and remove the last element
+    decoder_inputs = tf.pad(decoder_inputs, [[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+    length = tf.shape(decoder_inputs)[1]
+    pos_encoding = self.position_embedding(decoder_inputs)
+    pos_encoding = tf.cast(pos_encoding, self._dtype)
+    decoder_inputs += pos_encoding
 
-    for i in range(self.num_layers):
-      x, block1, block2 = self.dec_layers[i](x, enc_output, training, look_ahead_mask)
-      
-      attention_weights['decoder_layer{}_block1'.format(i+1)] = block1
-      attention_weights['decoder_layer{}_block2'.format(i+1)] = block2
-    
-    # x.shape == (batch_size, target_seq_len, d_model)
-    return x, attention_weights
+    decoder_inputs = self.decoder_dropout(decoder_inputs)
 
-class Transformer(tf.keras.Model):
-  def __init__(self, num_layers, d_model, num_heads, dff, 
-               target_vocab_size, max_length, dropout_rate):
-    super(Transformer, self).__init__()
+    decoder_shape = tf_utils.get_shape_list(decoder_inputs, expected_rank=3)
+    batch_size = decoder_shape[0]
+    decoder_length = decoder_shape[1]
 
-    self.decoder = Decoder(num_layers, d_model, num_heads, dff, 
-                           target_vocab_size, max_length, dropout_rate)
+    self_attention_mask = tf.linalg.band_part(
+        tf.ones([length, length], dtype=tf.float32), -1, 0)
+    self_attention_mask = tf.reshape(self_attention_mask, [1, length, length])
+    self_attention_mask = tf.tile(self_attention_mask, [batch_size, 1, 1])
 
-    self.final_layer = tf.keras.layers.Dense(target_vocab_size)
-    
-  def call(self, tar, enc_output, training, look_ahead_mask):
-    # enc_output is (batch_size, inp_seq_len, d_model)
-    # All of the encoder output is always relevant, so no padding masks for it.
-    
-    # dec_output.shape == (batch_size, tar_seq_len, d_model)
-    dec_output, attention_weights = self.decoder(
-        tar, enc_output, training, look_ahead_mask)
-    
-    final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
-    
-    return final_output, attention_weights
+    # cbutner: Encoder output is calculated directly and fixed length, so "attention_mask"
+    # is all ones, and needs to look at "encoder_output" shape and not "source".
+    attention_mask = tf.ones((batch_size, decoder_length, tf.shape(encoder_outputs)[1]), dtype=encoder_outputs.dtype)
 
+    outputs = self.decoder_layer(
+        decoder_inputs,
+        encoder_outputs,
+        memory_mask=self_attention_mask,
+        target_mask=attention_mask)
+    logits = self._embedding_linear(self.embedding_lookup.embeddings, outputs)
+    logits = tf.cast(logits, tf.float32)
+    return logits
 
-# --- Training ---
+  def _get_symbols_to_logits_fn(self, max_decode_length):
+    """Returns a decoding function that calculates logits of the next tokens."""
+    timing_signal = self.position_embedding(
+        inputs=None, length=max_decode_length + 1)
+    timing_signal = tf.cast(timing_signal, self._dtype)
+    decoder_self_attention_bias = model_utils.get_decoder_self_attention_bias(
+        max_decode_length, dtype=self._dtype)
 
-def create_look_ahead_mask(size):
-  mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
-  return mask  # (seq_len, seq_len)
+    def symbols_to_logits_fn(ids, i, cache):
+      """Generate logits for next potential IDs.
 
-loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
-    from_logits=True, reduction='none')
+      Args:
+        ids: Current decoded sequences. int tensor with shape [batch_size *
+          beam_size, i + 1].
+        i: Loop index.
+        cache: dictionary of values storing the encoder output, encoder-decoder
+          attention bias, and previous decoder attention values.
 
-def loss_function(real, pred, num_replicas):
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
-  loss_ = loss_object(real, pred)
+      Returns:
+        Tuple of
+          (logits with shape [batch_size * beam_size, vocab_size],
+           updated cache values)
+      """
+      # Set decoder input to the last generated IDs
+      decoder_input = ids[:, -1:]
 
-  mask = tf.cast(mask, dtype=loss_.dtype)
-  loss_ *= mask
-  
-  # The mask has shape (batch, sequence length), so reducing over it
-  # includes the per-replica batch size but not the global. Make up
-  # the difference, since losses will be summed across replicas.
-  return tf.reduce_sum(loss_) / tf.reduce_sum(mask) / num_replicas
+      # Preprocess decoder input by getting embeddings and adding timing signal.
+      # decoder_input = self.embedding_softmax_layer(decoder_input)
+      source_decoder_input = decoder_input
+      decoder_input = self.embedding_lookup(decoder_input)
+      embedding_mask = tf.cast(
+          tf.not_equal(source_decoder_input, 0),
+          self.embedding_lookup.embeddings.dtype)
+      decoder_input *= tf.expand_dims(embedding_mask, -1)
+      decoder_input += timing_signal[i]
+      if self._padded_decode:
+        bias_shape = decoder_self_attention_bias.shape.as_list()
+        self_attention_bias = tf.slice(
+            decoder_self_attention_bias, [0, 0, i, 0],
+            [bias_shape[0], bias_shape[1], 1, bias_shape[3]])
+      else:
+        self_attention_bias = decoder_self_attention_bias[:, :, i:i + 1, :i + 1]
+      decoder_shape = tf_utils.get_shape_list(decoder_input, expected_rank=3)
+      batch_size = decoder_shape[0]
+      decoder_length = decoder_shape[1]
 
-train_loss = None
-train_accuracy = None
+      attention_bias = cache.get("encoder_decoder_attention_bias")
+      attention_bias = tf.where(attention_bias < 0,
+                                tf.zeros_like(attention_bias),
+                                tf.ones_like(attention_bias))
+      attention_bias = tf.squeeze(attention_bias, axis=[1])
+      attention_mask = tf.tile(attention_bias, [1, decoder_length, 1])
 
-# TODO: Clean this all up later
-def create_metrics():
-  global train_loss
-  global train_accuracy
-  train_loss = tf.keras.metrics.Mean(name='train_loss')
-  train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-      name='train_accuracy')
+      self_attention_bias = tf.where(self_attention_bias < 0,
+                                     tf.zeros_like(self_attention_bias),
+                                     tf.ones_like(self_attention_bias))
+      self_attention_bias = tf.squeeze(self_attention_bias, axis=[1])
+      self_attention_mask = tf.tile(self_attention_bias, [batch_size, 1, 1])
 
-# Avoid nested tf.function.
-def train_step(optimizer, encoder, decoder, inp, tar, num_replicas):
-  train_loss.reset_states()
-  train_accuracy.reset_states()
+      decoder_outputs = self.decoder_layer(
+          decoder_input,
+          cache.get("encoder_outputs"),
+          memory_mask=self_attention_mask,
+          target_mask=attention_mask,
+          cache=cache,
+          decode_loop_step=i if self._padded_decode else None)
 
-  tar_inp = tar[:, :-1]
-  tar_real = tar[:, 1:]
-  
-  look_ahead_mask = create_look_ahead_mask(tf.shape(tar_inp)[1])
+      logits = self._embedding_linear(self.embedding_lookup.embeddings,
+                                      decoder_outputs)
+      logits = tf.squeeze(logits, axis=[1])
+      return logits, cache
 
-  with tf.GradientTape() as tape:
-    enc_output = encoder(inp)
-    predictions, _ = decoder(tar_inp, enc_output,
-                                 True, look_ahead_mask)
-    loss = loss_function(tar_real, predictions, num_replicas)
+    return symbols_to_logits_fn
 
-  trainable_variables = encoder.trainable_variables + decoder.trainable_variables
-  gradients = tape.gradient(loss, trainable_variables)    
-  optimizer.apply_gradients(zip(gradients, trainable_variables))
-  
-  train_loss(loss)
-  train_accuracy(tar_real, predictions)
+def _pad_tensors_to_same_length(x, y):
+  """Pad x and y so that the results have the same length (second dimension)."""
+  x_length = tf.shape(x)[1]
+  y_length = tf.shape(y)[1]
 
-  return [train_loss.result(), train_accuracy.result()]
+  max_length = tf.maximum(x_length, y_length)
 
-# --- Prediction ---
+  x = tf.pad(x, [[0, 0], [0, max_length - x_length], [0, 0]])
+  y = tf.pad(y, [[0, 0], [0, max_length - y_length]])
+  return x, y
 
-def predict_greedy(encoder, decoder, start_token, end_token, max_length, inp):
-  
-  enc_output = encoder(inp)
-  
-  # as the target is english, the first word to the transformer should be the
-  # english start token.
-  batch_size = enc_output.shape[0]
-  output = tf.expand_dims([start_token] * batch_size, 1)
-  end = tf.expand_dims([end_token] * batch_size, 1)
-  finished = tf.expand_dims([False] * batch_size, 1)
-    
-  for i in range(max_length):
-    look_ahead_mask = create_look_ahead_mask(tf.shape(output)[1])
-  
-    # predictions.shape == (batch_size, seq_len, vocab_size)
-    predictions, _ = decoder(output, enc_output, False, look_ahead_mask)
-    
-    # select the last word from the seq_len dimension
-    predictions = predictions[: ,-1:, :]  # (batch_size, 1, vocab_size)
+def padded_cross_entropy_loss(logits, labels, smoothing, vocab_size):
+  """Calculate cross entropy loss while ignoring padding.
+  Args:
+    logits: Tensor of size [batch_size, length_logits, vocab_size]
+    labels: Tensor of size [batch_size, length_labels]
+    smoothing: Label smoothing constant, used to determine the on and off values
+    vocab_size: int size of the vocabulary
+  Returns:
+    Returns the cross entropy loss and weight tensors: float32 tensors with
+      shape [batch_size, max(length_logits, length_labels)]
+  """
+  logits, labels = _pad_tensors_to_same_length(logits, labels)
 
-    predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
-    
-    # return the result if the predicted_id is equal to the end token
-    is_end = tf.math.equal(end, predicted_id)
-    finished = tf.math.logical_or(finished, is_end)
-    if tf.math.reduce_all(finished):
-      break
-    
-    # concatentate the predicted_id to the output which is given to the decoder
-    # as its input.
-    output = tf.concat([output, predicted_id], axis=-1)
+  # Calculate smoothing cross entropy
+  confidence = 1.0 - smoothing
+  low_confidence = (1.0 - confidence) / tf.cast(vocab_size - 1, tf.float32)
+  soft_targets = tf.one_hot(
+      tf.cast(labels, tf.int32),
+      depth=vocab_size,
+      on_value=confidence,
+      off_value=low_confidence)
+  xentropy = tf.nn.softmax_cross_entropy_with_logits(
+      logits=logits, labels=soft_targets)
 
-  return output
+  # Calculate the best (lowest) possible value of cross entropy, and
+  # subtract from the cross entropy loss.
+  normalizing_constant = -(
+      confidence * tf.math.log(confidence) + tf.cast(vocab_size - 1, tf.float32)
+      * low_confidence * tf.math.log(low_confidence + 1e-20))
+  xentropy -= normalizing_constant
+
+  weights = tf.cast(tf.not_equal(labels, 0), tf.float32)
+  return xentropy * weights, weights
