@@ -318,9 +318,7 @@ games_per_chunk = 2000
 [paths]
 
 # With the below config, a network may be saved to "gs://chesscoach/ChessCoach/Networks/network_000001000".
-# Google Cloud TPU VM Alpha has a bug with gs:// paths currently, and gcsfuse causes hangs, so run locally for now.
-#tpu_data_root = "gs://chesscoach/ChessCoach"
-tpu_data_root = "~/.local/share/ChessCoach"
+tpu_data_root = "gs://chesscoach/ChessCoach"
 
 networks = "Networks"
 tensorboard = "TensorBoard"

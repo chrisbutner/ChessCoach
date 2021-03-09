@@ -48,11 +48,23 @@ class LocalTPUClusterResolver(
 
 tpu_strategy = None
 try:
+  # Alpha TPU VMs
   resolver = LocalTPUClusterResolver()
   tf.tpu.experimental.initialize_tpu_system(resolver)
   tpu_strategy = tf.distribute.TPUStrategy(resolver)
 except:
-  pass
+  try:
+    # Separated TPUs
+    # Passing zone-qualified cluster-injected TPU_NAME to the resolver fails, need to leave it blank.
+    tpu_name = os.environ.get("TPU_NAME") or socket.gethostname()
+    if "/" in tpu_name:
+      tpu_name = None
+    resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_name)
+    tf.config.experimental_connect_to_cluster(resolver)
+    tf.tpu.experimental.initialize_tpu_system(resolver)
+    tpu_strategy = tf.distribute.TPUStrategy(resolver)
+  except:
+    pass
 
 tpus = tf.config.experimental.list_logical_devices("TPU")
 gpus = tf.config.experimental.list_logical_devices("GPU")
