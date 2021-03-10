@@ -94,6 +94,8 @@ class PredictionModels:
     self.full_weights_path = None
     self.full_weights_last_check = None
     self.predict = None
+    self.tokenizer = None
+    self.commentary = None
 
 class TrainingModels:
   def __init__(self):
@@ -134,21 +136,20 @@ class Network:
     return self.models_train.train(images, training=False)
   
   @tf.function
-  def tf_predict_commentary(self, images):
+  def tf_predict_commentary(self, device_index, images):
     inputs = dict(inputs=images)
-    outputs = self.models_train.commentary(inputs)
+    outputs = self.models_predict[device_index].commentary(inputs)
     sequences = outputs["outputs"]
-    comments = self.models_train.tokenizer.detokenize(sequences)
-    return comments
+    # Can't detokenize here because of https://github.com/tensorflow/tensorflow/issues/47683
+    return sequences
 
   def predict_batch(self, device_index, images):
     status = self.ensure_prediction(device_index)
     return (status, *self.tf_predict(device_index, images))
 
-  def predict_commentary_batch(self, images):
-    self.ensure_commentary()
-    comments = self.tf_predict_commentary(images)
-    return np.array(memoryview(comments)) # C++ expects bytes
+  def predict_commentary_batch(self, device_index, images):
+    self.ensure_commentary_prediction(device_index)
+    return self.tf_predict_commentary(device_index, images)
 
   def ensure_full(self, device_index):
     with ensure_locks[device_index]:
@@ -236,22 +237,49 @@ class Network:
 
     return self.models_train.train
 
-  def ensure_tokenizer(self):
+  def ensure_tokenizer(self, models):
     # The tokenizer may already exist.
-    if self.models_train.tokenizer:
-      return self.models_train.tokenizer
+    if models.tokenizer:
+      return models.tokenizer
     
     # Either load the SentencePiece model from disk, or train a new one.
-    self.models_train.tokenizer = tokenization.ensure_tokenizer(config, ModelBuilder.transformer_vocabulary_size)
-    return self.models_train.tokenizer
+    models.tokenizer = tokenization.ensure_tokenizer(config, ModelBuilder.transformer_vocabulary_size)
+    return models.tokenizer
 
-  def ensure_commentary(self):
+  def ensure_commentary_prediction(self, device_index):
+    with ensure_locks[device_index]:
+      models = self.models_predict[device_index]
+      # The commentary model may already exist.
+      # Never look for updated full model or commentary model weights for commentary prediction.
+      if models.commentary:
+        return models.commentary
+
+      # The commentary model requires the tokenizer, and the full model as an encoder.
+      self.ensure_tokenizer(models)
+      self.ensure_full(device_index)
+
+      # Either load from disk, or create new.
+      with model_creation_lock:
+        network_path = self.latest_network_path_commentary()
+        if network_path:
+          log_name = self.get_log_name(network_path)
+          log(f"Loading model ({device_index}/{self.network_type}/commentary): {log_name}")
+          models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, strategy=None)
+          model_commentary_path = self.model_commentary_path(network_path)
+          self.load_weights(models.commentary, model_commentary_path)
+        else:
+          log(f"Creating new model ({device_index}/{self.network_type}/commentary)")
+          models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, strategy=None)
+
+      return self.models_train.commentary
+
+  def ensure_commentary_training(self):
     # The commentary model may already exist.
     if self.models_train.commentary:
       return self.models_train.commentary
 
     # The commentary model requires the tokenizer, and the full training model as an encoder.
-    self.ensure_tokenizer()
+    self.ensure_tokenizer(self.models_train)
     self.ensure_training()
 
     # Either load from disk, or create new.
@@ -261,12 +289,12 @@ class Network:
       if network_path:
         log_name = self.get_log_name(network_path)
         log(f"Loading model ({log_device_context}/{self.network_type}/commentary): {log_name}")
-        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full)
+        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full, trainer.strategy)
         model_commentary_path = self.model_commentary_path(network_path)
         self.load_weights(self.models_train.commentary, model_commentary_path)
       else:
         log(f"Creating new model ({log_device_context}/{self.network_type}/commentary)")
-        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full)
+        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full, trainer.strategy)
 
     # Compile the commentary model for training.
     self.commentary_training_compiler(self.models_train.commentary)
@@ -299,7 +327,7 @@ class Network:
     model_full_path = self.model_full_path(network_path)
     self.models_train.full.save_weights(model_full_path, save_format="tf")
 
-    # Save the commentary moddel if it exists.
+    # Save the commentary model if it exists.
     if self.models_train.commentary:
       log(f"Saving model ({log_device_context}/{self.network_type}/commentary): {log_name}")
       model_commentary_path = self.model_commentary_path(network_path)
@@ -377,7 +405,12 @@ def predict_batch_student(images):
 
 def predict_commentary_batch(images):
   # Always use the teacher network for commentary.
-  return networks.teacher.predict_commentary_batch(images)
+  device_index = choose_device_index()
+  with device(device_index):
+    sequences = networks.teacher.predict_commentary_batch(device_index, images)
+  # Have to detokenize here because of https://github.com/tensorflow/tensorflow/issues/47683
+  comments = networks.teacher.models_predict[device_index].tokenizer.detokenize(sequences)
+  return np.array(memoryview(comments)) # C++ expects bytes
 
 def train_teacher(game_types, training_windows, step, checkpoint):
   trainer.train(networks.teacher, None, game_types, training_windows, step, checkpoint)

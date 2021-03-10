@@ -171,7 +171,7 @@ class ModelBuilder:
   def subset_commentary_encoder(self, model):
     return type(model)(model.input, model.outputs[3:])
 
-  def build_commentary(self, config, tokenizer, model_full):
+  def build_commentary(self, config, tokenizer, model_full, strategy):
     eos_id = tokenizer.tokenize("").numpy().item()
     commentary_encoder = self.subset_commentary_encoder(model_full)
     decoder_layer = models.TransformerDecoder(
@@ -189,12 +189,21 @@ class ModelBuilder:
       decode_max_length=self.transformer_max_length,
       embedding_width=self.transformer_filters,
       dropout_rate=self.transformer_dropout_rate,
+      padded_decode=config.is_tpu,
     )
     commentary_model = transformer.CommentaryModel(commentary_encoder, commentary_decoder)
 
     # Call once to prepare the model for loading weights.
-    commentary_model(dict(
+    # For training, prepare for input distribution. For prediction, prepare for inference on a single device.
+    @tf.function
+    def prime(inputs):
+      commentary_model(inputs)
+    inputs = dict(
       inputs=tf.ones((config.training["commentary_batch_size"], self.input_planes_count), tf.int64),
-      targets=tf.ones((config.training["commentary_batch_size"], self.transformer_max_length), tf.int32)))
+      targets=tf.ones((config.training["commentary_batch_size"], self.transformer_max_length), tf.int32))
+    if strategy:
+      strategy.run(prime, args=(inputs,))
+    else:
+      prime(inputs)
 
     return commentary_model

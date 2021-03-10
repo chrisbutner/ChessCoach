@@ -46,7 +46,7 @@ class CommentaryModel(tf.keras.Model):
     self.decoder = decoder
 
   def call(self, inputs):
-    inputs["inputs"] = self.encoder(inputs["inputs"])
+    inputs = {**inputs, "inputs": self.encoder(inputs["inputs"])}
     return self.decoder(inputs)
 
   def save_weights(self, filepath, overwrite=True, save_format=None, options=None):

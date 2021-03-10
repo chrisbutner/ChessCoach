@@ -149,10 +149,10 @@ class Trainer:
   def train_commentary(self, network, starting_step, checkpoint):
     # Create models on the distribution strategy scope
     with self.strategy.scope():
-      model = network.ensure_commentary()
+      model = network.ensure_commentary_training()
 
     # Set up data pipelines.
-    tokenizer = network.ensure_tokenizer()
+    tokenizer = network.ensure_tokenizer(network.models_train)
     data_commentary_training = self.datasets.build_commentary_dataset(
       self.data_glob_commentary, tokenizer, self.global_batch_size_commentary, ModelBuilder.transformer_max_length)
 

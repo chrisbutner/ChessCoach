@@ -1,5 +1,4 @@
 Commentary #2
-- TPU training/inference
 - test out C++ training, solo and interleaved
 - make sure that partial-save resuming works for interleaved
 
@@ -32,6 +31,7 @@ WAITING
 - once stable, need info on perf/mxu util, higher quota potentially
 
 Training runs (*** once gs:// is fixed ***)
+- need to use new bucket in europe4 for further training to minimize storage costs
 - window experiments (original 1m-all)
 - re-run 4b/4c once it's stable
 - evaluate SE/pooling (read over 2f/2d notes)

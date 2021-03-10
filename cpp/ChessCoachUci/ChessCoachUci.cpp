@@ -354,6 +354,14 @@ void ChessCoachUci::HandleComment(std::stringstream& /*commands*/)
 {
     InitializeWorkers();
     StopAndReadyWorkers();
+
+    // Propagate the position if updated.
+    if (_positionUpdated)
+    {
+        _positionUpdated = false;
+        _workerGroup.controllerWorker->SearchUpdatePosition(_positionFen, _positionMoves, false /* forceNewPosition */);
+    }
+
     _workerGroup.controllerWorker->CommentOnPosition(_network.get());
 }
 
