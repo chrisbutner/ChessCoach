@@ -5,12 +5,14 @@ import sentencepiece
 english_character_coverage = 1.0
 
 def ensure_tokenizer(config, vocabulary_size):
-  model_prefix = config.join(config.training["commentary_path_supervised"], "tokenizer")
-  model_path = model_prefix + ".model"
+  model_path = config.join(config.training["commentary_path_supervised"], "tokenizer.model")
   try:
     return tf_text.SentencepieceTokenizer(model=tf.io.gfile.GFile(model_path, "rb").read(), add_eos=True)
   except:
     print(f"Training SentencePiece tokenizer: {model_path}")
     vocabulary_path = config.join(config.training["commentary_path_supervised"], config.training["vocabulary_filename"])
-    sentencepiece.SentencePieceTrainer.Train(input=vocabulary_path, model_prefix=model_prefix, vocab_size=vocabulary_size, character_coverage=english_character_coverage)
+    vocabulary_iterator = iter(tf.io.gfile.GFile(vocabulary_path, "rb").readlines())
+    with tf.io.gfile.GFile(model_path, "wb") as model_writer:
+      sentencepiece.SentencePieceTrainer.Train(sentence_iterator=vocabulary_iterator, model_writer=model_writer, pad_id=0, unk_id=3,
+        vocab_size=vocabulary_size, character_coverage=english_character_coverage)
     return tf_text.SentencepieceTokenizer(model=tf.io.gfile.GFile(model_path, "rb").read(), add_eos=True)

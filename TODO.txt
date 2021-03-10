@@ -1,7 +1,3 @@
-Commentary #2
-- test out C++ training, solo and interleaved
-- make sure that partial-save resuming works for interleaved
-
 Commentary #3
 - build small manual test set for commentary inference
 - may need to increase maximum sequence length, with sub-word tokenization
