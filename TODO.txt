@@ -1,3 +1,10 @@
+Cluster
+- try out pods
+- try out profiling - no mxu counter yet, but trace viewer works
+
+Commentary
+- investigate inference problems locally
+
 Commentary #3
 - build small manual test set for commentary inference
 - may need to increase maximum sequence length, with sub-word tokenization
@@ -22,13 +29,9 @@ Commentary #5
 - try encode before-and-after positions (no flip?) - comment on the move, not the position
 	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
 
-WAITING
-- gs:// fix checked in, not yet deployed to TPU VMs
-- once stable, need info on perf/mxu util, higher quota potentially
-
 Training runs (*** once gs:// is fixed ***)
-- need to use new bucket in europe4 for further training to minimize storage costs
 - window experiments (original 1m-all)
+	- 1m window will need shuffle buffer changes, need to spreadsheet it again
 - re-run 4b/4c once it's stable
 - evaluate SE/pooling (read over 2f/2d notes)
 - run raw student-as-teacher, make sure distillation is worth it
@@ -42,7 +45,6 @@ Student training
 
 Quality
 - remove hybrid supervised/self-play infra
-- factor out bucket name from docker scripts
 
 Criticality training (shelved)
 - add to GUI, look over saved positions, decide whether to drive 800-1600 range
@@ -74,6 +76,9 @@ Training - later
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 - like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
 - stochastic weight averaging
+
+End-to-end training
+- ask about quota when prepped for full self-play + training runs
 
 Prediction cache
 - investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
@@ -229,7 +234,7 @@ Bugs
 
 Low priority
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
-- save fewer networks to cloud storage or cull old ones in between strength tests or something - 100 MB per save
+- save fewer networks to cloud storage or cull old ones in between strength tests or something - ~250 MB per save with teacher/student/commentary
 - structured binding, check all pairs
 
 Won't do

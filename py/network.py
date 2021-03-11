@@ -484,6 +484,7 @@ trainer = Trainer(networks, tpu_strategy, devices, datasets)
 # Log some configuration.
 log("################################################################################")
 log("Network:", config.network_name)
+log("Role:", config.role)
 log("Data root:", config.data_root)
 log("Local data root:", config.determine_local_data_root())
 log("Using TPU:", config.is_tpu)

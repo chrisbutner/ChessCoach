@@ -25,13 +25,14 @@ class Config:
       except:
         config = toml.load("/usr/local/share/ChessCoach/config.toml")
 
-    network_name = config["network"]["network_name"]
-    assert network_name
+    self.network_name = config["network"]["network_name"]
+    assert self.network_name
+    self.role = config["network"]["role"]
+    assert self.role
     
     # Make sure that the network named is in the list of networks, and expose the name.
-    network_config = next(c for c in config["networks"] if c["name"] == network_name)
+    network_config = next(c for c in config["networks"] if c["name"] == self.network_name)
     assert(network_config)
-    self.network_name = network_name
     
     # Promote "training" and "self_play" to attributes and merge defaults and overrides.
     training_overrides = network_config.get("training", {})
