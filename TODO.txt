@@ -16,7 +16,7 @@ Cluster
 - pods don't have gs:// fix yet - early next week
 	- also, on worker 0, `export TPU_LOAD_LIBRARY=0 ` to prevent the coordinator taking a lock on the TPU device
 - profiler - capture a trace locally - may be issues with networking/firewall
-
+- need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
 
 Quality
 - remove hybrid supervised/self-play infra

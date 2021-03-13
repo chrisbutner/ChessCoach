@@ -51,8 +51,7 @@ void ParseStages(std::vector<StageConfig>& stages, const TomlValue& config)
         // Optional (find_or)
         stages[i].Target = NetworkTypeLookup.at(toml::find_or<std::string>(configStages[i], "target", ""));
         stages[i].Type = GameTypeLookup.at(toml::find_or<std::string>(configStages[i], "type", ""));
-        stages[i].WindowSizeStart = toml::find_or<int>(configStages[i], "window_size_start", 0);
-        stages[i].WindowSizeFinish = toml::find_or<int>(configStages[i], "window_size_finish", 0);
+        stages[i].WindowSize = toml::find_or<int>(configStages[i], "window_size", 0);
         stages[i].NumGames = toml::find_or<int>(configStages[i], "num_games", 0);
     }
 }

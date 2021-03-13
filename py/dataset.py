@@ -3,7 +3,7 @@ from model import ModelBuilder
 
 class DatasetOptions:
 
-  def __init__(self, global_batch_size, position_shuffle_size=2**17, keep_game_proportion=0.2, keep_position_proportion=0.1, cycle_length=16):
+  def __init__(self, global_batch_size, position_shuffle_size=2**18, keep_game_proportion=0.2, keep_position_proportion=0.1, cycle_length=32):
     self.global_batch_size = global_batch_size
     self.position_shuffle_size = position_shuffle_size
     self.keep_game_proportion = keep_game_proportion
@@ -231,10 +231,13 @@ class DatasetBuilder:
     return self.build_dataset(sources, options)
 
   def build_validation_dataset(self, globs, global_batch_size):
+    # Shuffle buffer 64 times as small, 2**18/2**12
+    validation_shuffle_size = 2**12
+    validation_keep_ratio = DatasetOptions(global_batch_size).position_shuffle_size / validation_shuffle_size
     options = DatasetOptions(
       global_batch_size=global_batch_size,
-      position_shuffle_size=2**12,
-      keep_game_proportion=0.2 / 32) # Shuffle buffer 32 times as small, 2**17/2**12
+      position_shuffle_size=validation_shuffle_size,
+      keep_game_proportion=DatasetOptions(global_batch_size).keep_game_proportion / validation_keep_ratio) 
     sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
     return self.build_dataset(sources, options)
 

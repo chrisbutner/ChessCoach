@@ -1,7 +1,6 @@
 import time
 import tensorflow as tf
 from tensorflow.keras import backend as K
-import transformer
 from model import ModelBuilder
 
 knowledge_distillation_temperature = 2.0
@@ -35,6 +34,7 @@ def student_policy_accuracy(y_true, y_pred):
   return flat_categorical_accuracy(y_true[1], y_pred)
 
 def make_transformer_loss():
+  import transformer
   vocabulary_size = ModelBuilder.transformer_vocabulary_size
   def transformer_loss(y_true, y_pred):
     return transformer.padded_cross_entropy_loss(y_pred, y_true, transformer_label_smoothing, vocabulary_size)

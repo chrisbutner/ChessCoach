@@ -2,8 +2,6 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 K.set_image_data_format("channels_first")
 from attention import MultiHeadSelfAttention2D
-import transformer
-from official.nlp.modeling import models
 from layers import Residual
 import os
 
@@ -172,6 +170,8 @@ class ModelBuilder:
     return type(model)(model.input, model.outputs[3:])
 
   def build_commentary(self, config, tokenizer, model_full, strategy):
+    import transformer
+    from official.nlp.modeling import models
     eos_id = tokenizer.tokenize("").numpy().item()
     commentary_encoder = self.subset_commentary_encoder(model_full)
     decoder_layer = models.TransformerDecoder(

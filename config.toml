@@ -15,17 +15,17 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 12_000, window_size_finish = 200_000, num_games = 1_440_000 },
+        { stage = "play", window_size = 1_000_000, num_games = 1_440_000 },
 
         # Train commentary, supervised and self-play, teacher
         { stage = "train_commentary", target = "teacher", type = "supervised" },
-        { stage = "train", target = "teacher", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000, num_games = 2_000_000 },
-        { stage = "train", target = "teacher", type = "training", window_size_start = 12_000, window_size_finish = 200_000, num_games = 1_440_000 },
+        { stage = "train", target = "teacher", type = "supervised", window_size = 1_000_000, num_games = 2_000_000 },
+        { stage = "train", target = "teacher", type = "training", window_size = 1_000_000, num_games = 1_440_000 },
         { stage = "save", target = "teacher" },
 
         # Distill supervised and self-play to student
-        { stage = "train", target = "student", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000, num_games = 2_000_000 },
-        { stage = "train", target = "student", type = "training", window_size_start = 12_000, window_size_finish = 200_000, num_games = 1_440_000 },
+        { stage = "train", target = "student", type = "supervised", window_size = 1_000_000, num_games = 2_000_000 },
+        { stage = "train", target = "student", type = "training", window_size = 1_000_000, num_games = 1_440_000 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -44,7 +44,7 @@ role = "train|play"
 
     stages = [
         # Train supervised, teacher
-        { stage = "train", target = "teacher", type = "supervised", window_size_start = 2_000_000, window_size_finish = 2_000_000, num_games = 2_000_000 },
+        { stage = "train", target = "teacher", type = "supervised", window_size = 1_000_000, num_games = 2_000_000 },
         { stage = "save", target = "teacher" },
 
         # Strength test (STS rating, etc.)
@@ -59,12 +59,12 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 24_000, window_size_finish = 400_000, num_games = 5_760_000 },
+        { stage = "play", window_size = 1_000_000, num_games = 5_760_000 },
 
         # Train self-play, teacher then distill
-        { stage = "train", target = "teacher", type = "training", window_size_start = 24_000, window_size_finish = 400_000, num_games = 5_760_000 },
+        { stage = "train", target = "teacher", type = "training", window_size = 1_000_000, num_games = 5_760_000 },
         { stage = "save", target = "teacher" },
-        { stage = "train", target = "student", type = "training", window_size_start = 24_000, window_size_finish = 400_000, num_games = 5_760_000 },
+        { stage = "train", target = "student", type = "training", window_size = 1_000_000, num_games = 5_760_000 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -106,17 +106,17 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 50, window_size_finish = 100, num_games = 100 },
+        { stage = "play", window_size = 100, num_games = 100 },
 
         # Train commentary, supervised and self-play, teacher
         { stage = "train_commentary", target = "teacher", type = "supervised" },
-        { stage = "train", target = "teacher", type = "supervised", window_size_start = 100, window_size_finish = 100, num_games = 100 },
-        { stage = "train", target = "teacher", type = "training", window_size_start = 50, window_size_finish = 100, num_games = 100 },
+        { stage = "train", target = "teacher", type = "supervised", window_size = 100, num_games = 100 },
+        { stage = "train", target = "teacher", type = "training", window_size = 100, num_games = 100 },
         { stage = "save", target = "teacher" },
 
         # Distill supervised and self-play to student
-        { stage = "train", target = "student", type = "supervised", window_size_start = 100, window_size_finish = 100, num_games = 100 },
-        { stage = "train", target = "student", type = "training", window_size_start = 50, window_size_finish = 100, num_games = 100 },
+        { stage = "train", target = "student", type = "supervised", window_size = 100, num_games = 100 },
+        { stage = "train", target = "student", type = "training", window_size = 100, num_games = 100 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -147,7 +147,7 @@ role = "train|play"
 
     stages = [
         # Train supervised, teacher
-        { stage = "train", target = "teacher", type = "supervised", window_size_start = 100, window_size_finish = 100, num_games = 100 },
+        { stage = "train", target = "teacher", type = "supervised", window_size = 100, num_games = 100 },
         { stage = "save", target = "teacher" },
 
         # Strength test (STS rating, etc.)
@@ -169,12 +169,12 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 50, window_size_finish = 100, num_games = 100 },
+        { stage = "play", window_size = 100, num_games = 100 },
 
         # Train self-play, teacher then distill
-        { stage = "train", target = "teacher", type = "training", window_size_start = 50, window_size_finish = 100, num_games = 100 },
+        { stage = "train", target = "teacher", type = "training", window_size = 100, num_games = 100 },
         { stage = "save", target = "teacher" },
-        { stage = "train", target = "student", type = "training", window_size_start = 50, window_size_finish = 100, num_games = 100 },
+        { stage = "train", target = "student", type = "training", window_size = 100, num_games = 100 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -219,7 +219,7 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size_start = 1_440_000, window_size_finish = 1_440_000, num_games = 1_440_000 },
+        { stage = "play", window_size = 1_000_000, num_games = 1_440_000 },
     ]
 
     games_path_training = "Games/Benchmark"
@@ -317,8 +317,8 @@ games_per_chunk = 2000
 
 [paths]
 
-# With the below config, a network may be saved to "gs://chesscoach/ChessCoach/Networks/network_000001000".
-tpu_data_root = "gs://chesscoach/ChessCoach"
+# With the below config, a network may be saved to "gs://chesscoach-eu/ChessCoach/Networks/network_000001000".
+tpu_data_root = "gs://chesscoach-eu/ChessCoach"
 
 networks = "Networks"
 tensorboard = "TensorBoard"

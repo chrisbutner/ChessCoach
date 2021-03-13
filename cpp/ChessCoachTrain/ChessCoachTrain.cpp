@@ -453,23 +453,9 @@ bool ChessCoachTrain::IsStageComplete(const TrainingState& state)
 
 Window ChessCoachTrain::CalculateWindow(const TrainingState& state)
 {
-    // The starting window (subscript 0) mins at zero.
-    // The finishing window (subscript 1) maxes at totalGamesCount.
-    // Lerping the window min and max also lerps the window size correctly.
-    const int numGames = state.Stage().NumGames;
-    const int windowSizeStart = std::min(numGames, state.Stage().WindowSizeStart);
-    const int windowSizeFinish = std::min(numGames, state.Stage().WindowSizeFinish);
-    const int windowMin0 = 0;
-    const int windowMin1 = (state.Stage().NumGames - windowSizeFinish);
-    const int windowMax0 = windowSizeStart;
-    const int windowMax1 = numGames;
-
-    const float t = (state.networkCount > 1) ? 
-        (static_cast<float>(state.networkNumber - 1) / (state.networkCount - 1)) :
-        0.f;
-
-    const int windowMin = windowMin0 + static_cast<int>(t * (windowMin1 - windowMin0));
-    const int windowMax = windowMax0 + static_cast<int>(t * (windowMax1 - windowMax0));
+    // The window will grow until reaching the desired size, then slide.
+    const int windowMax = (state.networkNumber * (state.Stage().NumGames / state.networkCount));
+    const int windowMin = std::max(0, windowMax - state.Stage().WindowSize);
 
     // Min is inclusive, max is exclusive, both 0-based.
     return { windowMin, windowMax };

@@ -81,8 +81,6 @@ import numpy as np
 
 from config import Config, PredictionStatus
 from model import ModelBuilder
-import tokenization
-import transformer
 from training import Trainer, StudentModel
 from dataset import DatasetBuilder
 
@@ -238,6 +236,8 @@ class Network:
     return self.models_train.train
 
   def ensure_tokenizer(self, models):
+    import tokenization
+
     # The tokenizer may already exist.
     if models.tokenizer:
       return models.tokenizer

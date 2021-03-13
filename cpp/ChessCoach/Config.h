@@ -63,8 +63,7 @@ struct StageConfig
     StageType Stage;
     NetworkType Target;
     GameType Type;
-    int WindowSizeStart;
-    int WindowSizeFinish;
+    int WindowSize;
     int NumGames;
 };
 
