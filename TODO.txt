@@ -1,47 +1,22 @@
-Cluster
-- try out pods
-- try out profiling - no mxu counter yet, but trace viewer works
-
-Commentary
-- investigate inference problems locally
-
-Commentary #3
-- build small manual test set for commentary inference
-- may need to increase maximum sequence length, with sub-word tokenization
-- maybe backprop into encoder (sometimes? always?)
-- compare interleaving with main model training vs. "at the end"
-- compare adam and sgd-momentum for commentary
-	- try varying warmup steps
-	- try flip to pre-LN, get rid of warmup everywhere: https://openreview.net/pdf?id=B1x8anVFPr
-- review/tune commentary quality
-- compare beam and top-k
-	- look back through my notes, was pretty pessimistic about beam based on articles a few months back
-
-Commentary #4
-- try pre or post-processing with GPT-2
-- try data augmentation using BERT: https://www.researchgate.net/publication/343958685_Text_Augmentation_Using_BERT_for_Image_Captioning
-- maybe shrink model if still not enough data
-
-Commentary #5
-- for interleaving regular/commentary training - read up on "learning without forgetting"
-- basic - does the encoder need an extra dense+relu layer after the tower/reshape?
-	- basically 256->512 embedding rather than categorical->512 embedding
-- try encode before-and-after positions (no flip?) - comment on the move, not the position
-	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
-
-Training runs (*** once gs:// is fixed ***)
+Training runs
 - window experiments (original 1m-all)
 	- 1m window will need shuffle buffer changes, need to spreadsheet it again
-- re-run 4b/4c once it's stable
+- re-run 4a/4b/4c once it's stable
 - evaluate SE/pooling (read over 2f/2d notes)
-- run raw student-as-teacher, make sure distillation is worth it
+- (4a) run raw student-as-teacher, make sure distillation is worth it
 	- try dense layer in policy head for student network (may not be enough depth for convolutions)
-- run 1 vs. 8 vs. 32 value head filters
+- run 1 vs. (4b) 8 vs. (4c) 32 value head filters
 - try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
 
 Student training
 - make student prefer matching teacher for repeatability
 - try low-hanging fruit on self-play network/data, e.g. higher learning rate
+
+Cluster
+- pods don't have gs:// fix yet - early next week
+	- also, on worker 0, `export TPU_LOAD_LIBRARY=0 ` to prevent the coordinator taking a lock on the TPU device
+- profiler - capture a trace locally - may be issues with networking/firewall
+
 
 Quality
 - remove hybrid supervised/self-play infra
@@ -79,6 +54,31 @@ Training - later
 
 End-to-end training
 - ask about quota when prepped for full self-play + training runs
+
+Commentary #3
+- investigate inference problems locally
+- build small manual test set for commentary inference
+- may need to increase maximum sequence length, with sub-word tokenization
+- maybe backprop into encoder (sometimes? always?)
+- compare interleaving with main model training vs. "at the end"
+- compare adam and sgd-momentum for commentary
+	- try varying warmup steps
+	- try flip to pre-LN, get rid of warmup everywhere: https://openreview.net/pdf?id=B1x8anVFPr
+- review/tune commentary quality
+- compare beam and top-k
+	- look back through my notes, was pretty pessimistic about beam based on articles a few months back
+
+Commentary #4
+- try pre or post-processing with GPT-2
+- try data augmentation using BERT: https://www.researchgate.net/publication/343958685_Text_Augmentation_Using_BERT_for_Image_Captioning
+- maybe shrink model if still not enough data
+
+Commentary #5
+- for interleaving regular/commentary training - read up on "learning without forgetting"
+- basic - does the encoder need an extra dense+relu layer after the tower/reshape?
+	- basically 256->512 embedding rather than categorical->512 embedding
+- try encode before-and-after positions (no flip?) - comment on the move, not the position
+	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
 
 Prediction cache
 - investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
