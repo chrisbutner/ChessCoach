@@ -59,12 +59,12 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size = 1_000_000, num_games = 5_760_000 },
+        { stage = "play", window_size = 1_000_000, num_games = 11_520_000 },
 
         # Train self-play, teacher then distill
-        { stage = "train", target = "teacher", type = "training", window_size = 1_000_000, num_games = 5_760_000 },
+        { stage = "train", target = "teacher", type = "training", window_size = 1_000_000, num_games = 11_520_000 },
         { stage = "save", target = "teacher" },
-        { stage = "train", target = "student", type = "training", window_size = 1_000_000, num_games = 5_760_000 },
+        { stage = "train", target = "student", type = "training", window_size = 1_000_000, num_games = 11_520_000 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -235,7 +235,7 @@ role = "train|play"
 architecture = "conv2d"
 batch_size = 512
 commentary_batch_size = 64
-steps = 960_000
+steps = 1_920_000
 warmup_steps = 1000
 pgn_interval = 1000
 validation_interval = 800
