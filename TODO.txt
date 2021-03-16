@@ -1,25 +1,34 @@
-Training runs
-- window experiments (original 1m-all)
-	- 1m window will need shuffle buffer changes, need to spreadsheet it again
-- re-run 4a/4b/4c once it's stable
-- evaluate SE/pooling (read over 2f/2d notes)
-- (4a) run raw student-as-teacher, make sure distillation is worth it
-	- try dense layer in policy head for student network (may not be enough depth for convolutions)
-- run 1 vs. (4b) 8 vs. (4c) 32 value head filters
-- try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
-
 Student training
 - make student prefer matching teacher for repeatability
 - try low-hanging fruit on self-play network/data, e.g. higher learning rate
+- try dense layer in policy head for student network (may not be enough depth for convolutions) (may not apply for distillation)
+- try deeper student network, keeping channels lower - measure perf loss for self-play games/hour and UCI nodes/sec on TPU and GPU
 
-Cluster
-- pods don't have gs:// fix yet - early next week
+Short-term
+- write a utility to trim down networks on gs:// 
+- try out profiling
+	- capture a trace locally - may be issues with networking/firewall
+- try pods again, gs:// fix deployed
+	- need to add alpha manager support, e.g. pod-1#0 to pod-1#3
 	- also, on worker 0, `export TPU_LOAD_LIBRARY=0 ` to prevent the coordinator taking a lock on the TPU device
-- profiler - capture a trace locally - may be issues with networking/firewall
+- update alpha manager
+	- allow for some roles to be broken/unassigned rather than crashing
+	- prioritize trainer over players, cannibalize
+	- try delays rather than broken marker for tpus in case of temporary failures, throttling
+	- maybe throttle overall calls
+
+Training runs
+- evaluate SE/pooling (read over 2f/2d notes)
+	- actual SE, as-bias (Wu), hybrid
+	- try batchnorm/relu before SE since we have v2 residuals
+- try stochastic weight averaging
+- try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
+
+Cluster	
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
 
 Quality
-- remove hybrid supervised/self-play infra
+- remove hybrid supervised/self-play infra - choose cutoff (keep in dataset.py?)
 
 Criticality training (shelved)
 - add to GUI, look over saved positions, decide whether to drive 800-1600 range
@@ -27,36 +36,22 @@ Criticality training (shelved)
 	- logging wrong loss to tensorboard in shelved commit, fix
 	- add unit test for criticality training target via decompress API
 
-Training improvements
-- add domain features (e.g. piece counts, fading king positions)
-- SE (lc0)
-	- try batchnorm/relu before SE since we have v2 residuals
-- SE-ish-as-bias (Wu)
-	- (TODO)
-- playout cap randomization (Wu)
+Training improvements (low confidence)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
-- try 1 vs. 8 vs. 32 value head filters again
-	- lc0/Wu seem to use similar conv filters for policy and value heads?
-	- lc0 was thinking fully connected layer may be needed for policy head when network isn't deep enough to cross board well (may not apply for distillation)
-- try a run with masked policy loss (valid moves only) once there's enough data to compare
-	- could also conceivably blend, like 1.0 for legal moves and 0.15 zero-pressure for others
 - sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
 	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
 - investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
 	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
 	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
-
-Training - later
 - try out "sleeping" in the rotation - train random noise, different distributions
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
-- like Wu/lc0/SAI, think about finish-fast utility score added to win score - way later though, only useful if it plays well but dithers
-- stochastic weight averaging
 
 End-to-end training
-- ask about quota when prepped for full self-play + training runs
+- depending on convergence/strength, work out learning rate schedule
+- run a clean end-to-end benchmark
 
 Commentary #3
-- investigate inference problems locally
+- investigate inference problems locally (initial code is stashed)
 - build small manual test set for commentary inference
 - may need to increase maximum sequence length, with sub-word tokenization
 - maybe backprop into encoder (sometimes? always?)
@@ -212,9 +207,6 @@ UCI (#3)
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
 
-Finalizing training
-- work out learning rate schedule to fine-tune with final self-play budget known
-
 Deployment
 - installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
@@ -247,3 +239,7 @@ Won't do
 - ~100MB-sized chunks
 	- complicated by supervised vs. self-play size, and time between networks for small self-play clusters
 	- BigTable is an alternative if training needs to scale up to pods
+- playout cap randomization (Wu)
+	- great concept but greatly complicates training data compression, code, prefer simplicity in this trade-off
+- finish-fast utility score added to win score a la SAI/Wu/lc0
+	- useful to help with dithering, especially late-game, but not meeting the bar

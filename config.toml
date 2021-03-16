@@ -325,6 +325,7 @@ tensorboard = "TensorBoard"
 logs = "Logs"
 pgns = "Pgns"
 optimization = "Optimization"
+alpha_manager = "AlphaManager"
 
 strength_test_marker_prefix = "StrengthTestComplete"
 
