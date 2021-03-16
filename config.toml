@@ -59,12 +59,12 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size = 1_000_000, num_games = 11_520_000 },
+        { stage = "play", window_size = 1_000_000, num_games = 44_000_000 },
 
         # Train self-play, teacher then distill
-        { stage = "train", target = "teacher", type = "training", window_size = 1_000_000, num_games = 11_520_000 },
+        { stage = "train", target = "teacher", type = "training", window_size = 1_000_000, num_games = 44_000_000 },
         { stage = "save", target = "teacher" },
-        { stage = "train", target = "student", type = "training", window_size = 1_000_000, num_games = 11_520_000 },
+        { stage = "train", target = "student", type = "training", window_size = 1_000_000, num_games = 44_000_000 },
         { stage = "save", target = "student" },
 
         # Strength test (STS rating, etc.)
@@ -235,12 +235,12 @@ role = "train|play"
 architecture = "conv2d"
 batch_size = 512
 commentary_batch_size = 64
-steps = 1_920_000
-warmup_steps = 1000
-pgn_interval = 1000
-validation_interval = 800
-checkpoint_interval = 4000
-strength_test_interval = 20000
+steps = 5_600_000 # Equivalent to 700,000 steps of batch size 4096
+warmup_steps = 0
+pgn_interval = 10000
+validation_interval = 4000
+checkpoint_interval = 20000
+strength_test_interval = 40000
 steps_per_execution = 100
 value_loss_weight = 1.0
 mcts_value_loss_weight = 0.15
