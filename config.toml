@@ -258,8 +258,8 @@ stages = []
 
 [training.learning_rate_schedule]
 
-steps = [0] #[0, 60_000, 120_000, 180_000]
-rates = [2.5e-2] #[2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5]
+steps = [0, 800_000, 2_400_000, 4_000_000] # Equivalent to 100,000, 300,000, 500,000 with batch size 4096
+rates = [2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5] # Multiplied by (device_count ^ 0.67)
 
 [training.commentary_learning_rate_schedule]
 
