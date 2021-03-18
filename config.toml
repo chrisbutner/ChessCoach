@@ -76,6 +76,23 @@ role = "train|play"
 
 [[networks]]
 
+    name = "student1"
+
+    [networks.training]
+
+    stages = [
+        # Train self-play, distill
+        { stage = "train", target = "student", type = "training", window_size = 1_000_000, num_games = 44_000_000 },
+        { stage = "save", target = "student" },
+
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "student" },
+    ]
+
+    games_path_training = "Games/Striped"
+
+[[networks]]
+
     name = "commentary1"
     
     [networks.training]
@@ -246,6 +263,7 @@ value_loss_weight = 1.0
 mcts_value_loss_weight = 0.15
 policy_loss_weight = 1.0
 momentum = 0.9
+teacher_network_name = "" # Usually not set, defaults to using own teacher network
 vocabulary_filename = "vocabulary.txt"
 games_path_supervised = "Games/Supervised"
 games_path_training = "Games/Training"

@@ -113,7 +113,11 @@ class Trainer:
     with self.strategy.scope():
       model = network.ensure_training()
       if teacher_network:
-        teacher_network.ensure_training()
+        # Handle student training with a named teacher.
+        network_path = None
+        if self.config.training["teacher_network_name"]:
+          network_path = teacher_network.make_network_path_for_network(self.config.training["teacher_network_name"], checkpoint)
+        teacher_network.ensure_training(network_path)
 
     # Set up data pipelines.
     globs_training = [self.data_globs[t] for t in game_types]

@@ -159,10 +159,11 @@ class Network:
       models.full, models.full_weights_path = self.build_full(device_index)
       models.full_weights_last_check = time.time()
   
-  def build_full(self, log_device_context):
+  def build_full(self, log_device_context, network_path=None):
     # Either load it from disk, or create a new one.
     with model_creation_lock:
-      network_path = self.latest_network_path()
+      if not network_path:
+        network_path = self.latest_network_path()
       if network_path:
         log_name = self.get_log_name(network_path)
         log(f"Loading model ({log_device_context}/{self.network_type}/full): {log_name}")
@@ -214,13 +215,13 @@ class Network:
       self.models_predict[device_index].predict = ModelBuilder().subset_predict(self.models_predict[device_index].full)
       return PredictionStatus.Nothing
   
-  def ensure_training(self):
+  def ensure_training(self, network_path=None):
     # The training subset may already exist.
     if self.models_train.train:
       return self.models_train.train
 
     # Build a full model.
-    self.models_train.full, _ = self.build_full("training")
+    self.models_train.full, _ = self.build_full("training", network_path)
 
     # Take the training subset from the full model.
     self.models_train.train = ModelBuilder().subset_train(self.models_train.full)
@@ -343,8 +344,11 @@ class Network:
     return self.config.latest_network_path_for_type_and_model(self.config.network_name, self.network_type, "commentary")
 
   def make_network_path(self, step):
+    return make_network_path_for_network(self.config.network_name, step)
+
+  def make_network_path_for_network(self, network_name, step):
     parent_path = self.config.misc["paths"]["networks"]
-    directory_name = f"{self.config.network_name}_{str(step).zfill(9)}"
+    directory_name = f"{network_name}_{str(step).zfill(9)}"
     return self.config.join(parent_path, directory_name)
 
   def model_full_path(self, network_path):

@@ -1,5 +1,4 @@
 Student training
-- make student prefer matching teacher for repeatability
 - try low-hanging fruit on self-play network/data, e.g. higher learning rate
 - try dense layer in policy head for student network (may not be enough depth for convolutions) (may not apply for distillation)
 - try deeper student network, keeping channels lower - measure perf loss for self-play games/hour and UCI nodes/sec on TPU and GPU
@@ -24,8 +23,10 @@ Training runs
 - try stochastic weight averaging
 - try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
 
-Cluster	
+Cluster
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
+- need fix for 10x total retries on non-zero return-code SSH --commands
+- docker containers outliving SSH sessions despite --rm is annoying vs. regular compute VMs
 
 Quality
 - remove hybrid supervised/self-play infra - choose cutoff (keep in dataset.py?)
