@@ -65,8 +65,11 @@ void ChessCoachTrain::TrainChessCoach()
     Storage storage;
 
     // We need to reach into Python for network info in case it's coming from cloud storage.
-    int networkStepCount;
-    network->GetNetworkInfo(NetworkType_Teacher, &networkStepCount, nullptr, nullptr);
+    int networkStepCountTeacher;
+    int networkStepCountStudent;
+    network->GetNetworkInfo(NetworkType_Teacher, &networkStepCountTeacher, nullptr, nullptr);
+    network->GetNetworkInfo(NetworkType_Student, &networkStepCountStudent, nullptr, nullptr);
+    const int networkStepCount = std::max(networkStepCountTeacher, networkStepCountStudent);
 
     // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
     storage.InitializeLocalGamesChunks(network.get());

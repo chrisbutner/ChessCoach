@@ -17,6 +17,7 @@ spec:
         app: chesscoach-play
     spec:
       restartPolicy: Always
+      hostNetwork: true
       tolerations:
       - key: dedicated
         operator: Equal

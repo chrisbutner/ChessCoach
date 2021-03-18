@@ -14,7 +14,9 @@ if not hasattr(sys, "argv") or not sys.argv:
 
 def log(*args):
   if not silent:
-    print(*args)
+    # Flush is required with no tty attached; e.g. docker.
+    # PYTHONUNBUFFERED/-u is an alternative, but wasn't working on latest alpha TPU VM build.
+    print(*args, flush=True)
 
 import tensorflow as tf
 
@@ -244,7 +246,7 @@ class Network:
       return models.tokenizer
     
     # Either load the SentencePiece model from disk, or train a new one.
-    models.tokenizer = tokenization.ensure_tokenizer(config, ModelBuilder.transformer_vocabulary_size)
+    models.tokenizer = tokenization.ensure_tokenizer(config, ModelBuilder.transformer_vocabulary_size, log)
     return models.tokenizer
 
   def ensure_commentary_prediction(self, device_index):
@@ -344,7 +346,7 @@ class Network:
     return self.config.latest_network_path_for_type_and_model(self.config.network_name, self.network_type, "commentary")
 
   def make_network_path(self, step):
-    return make_network_path_for_network(self.config.network_name, step)
+    return self.make_network_path_for_network(self.config.network_name, step)
 
   def make_network_path_for_network(self, network_name, step):
     parent_path = self.config.misc["paths"]["networks"]

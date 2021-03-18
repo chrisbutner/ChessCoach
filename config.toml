@@ -91,6 +91,8 @@ role = "train|play"
 
     games_path_training = "Games/Striped"
 
+    teacher_network_name = "selfplay4z"
+
 [[networks]]
 
     name = "commentary1"
