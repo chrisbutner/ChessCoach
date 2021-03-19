@@ -220,6 +220,12 @@ class Network:
   def ensure_training(self, network_path=None):
     # The training subset may already exist.
     if self.models_train.train:
+      # Always load weights when a network path is provided.
+      if network_path:
+        model_full_path = self.model_full_path(network_path)
+        log_name = self.get_log_name(network_path)
+        log(f"Updating model (training/{self.network_type}/full): {log_name}")
+        self.load_weights(self.models_train.full, model_full_path)
       return self.models_train.train
 
     # Build a full model.

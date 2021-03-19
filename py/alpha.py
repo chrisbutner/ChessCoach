@@ -43,17 +43,53 @@ deployment_configs = {
         "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-play:selfplay4_v37",
         "on_error": "dmesg",
       },
-    }
+    },
   },
   "student1": {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1_v37",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1_v39",
         "on_error": "dmesg",
       },
-    }
-  }
+    },
+  },
+  "student1a": {
+    "roles": {
+      "train": {
+        "count": 1,
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1a_v40",
+        "on_error": "dmesg",
+      },
+    },
+  },
+  "student1b": {
+    "roles": {
+      "train": {
+        "count": 1,
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1b_v41",
+        "on_error": "dmesg",
+      },
+    },
+  },
+  "student1c": {
+    "roles": {
+      "train": {
+        "count": 1,
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1c_v42",
+        "on_error": "dmesg",
+      },
+    },
+  },
+  "student1d": {
+    "roles": {
+      "train": {
+        "count": 1,
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1d_v43",
+        "on_error": "dmesg",
+      },
+    },
+  },
 }
 
 IMAGE_PREFIX = "gcr.io/chesscoach/"
@@ -231,9 +267,13 @@ class AlphaManager:
       self.deployments.append(deployment)
       for role_name, role_config in deployment_config["roles"].items():
         count = role_config["count"]
-        print(f"Role: {role_name} x{count}")
+        command = role_config["command"]
+        on_error = role_config.get("on_error", None)
+        print(f"  Role: {role_name} x{count}")
+        print(f"    command: {command}")
+        print(f"    on_error: {on_error}")
         for _ in range(count):
-          deployment.roles.append(Role(role_name, role_config["command"], role_config.get("on_error", None)))
+          deployment.roles.append(Role(role_name, command, on_error))
 
   def assign(self, deployment, role):
     with self.assign_lock:

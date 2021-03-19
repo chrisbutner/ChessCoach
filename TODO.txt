@@ -1,10 +1,9 @@
 Student training
-- try low-hanging fruit on self-play network/data, e.g. higher learning rate
 - try dense layer in policy head for student network (may not be enough depth for convolutions) (may not apply for distillation)
 - try deeper student network, keeping channels lower - measure perf loss for self-play games/hour and UCI nodes/sec on TPU and GPU
 
 Short-term
-- write a utility to trim down networks on gs:// 
+- write a utility to trim down networks on gs:// and images on gcr.io
 - try out profiling
 	- capture a trace locally - may be issues with networking/firewall
 - try pods again, gs:// fix deployed
