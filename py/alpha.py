@@ -6,14 +6,13 @@ import threading
 import time
 import argparse
 import re
+import contextlib
 import tensorflow as tf
-
-# TODO: Handle pods
 
 alpha_config = {
   "quota": {
     "tpu": 25,
-    # "pod": 2,
+    "pod": 2,
   },
 }
 
@@ -21,13 +20,15 @@ tpu_configs = {
   "tpu": {
     "accelerator_type": "v3-8",
     "version": "v2-alpha",
-    "name": "alpha-{i+1}",
+    "name": "alpha-{i + 1}",
+    "worker_count": 1,
   },
-  # "pod": {
-  #   "accelerator_type": "v3-32",
-  #   "version": "v2-alpha-pod",
-  #   "name": "pod-{i+1}",
-  # },
+  "pod": {
+    "accelerator_type": "v3-32",
+    "version": "v2-alpha-pod",
+    "name": "pod-{i + 1}",
+    "worker_count": 4,
+  },
 }
 
 deployment_configs = {
@@ -49,43 +50,52 @@ deployment_configs = {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1_v39",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1_v44",
         "on_error": "dmesg",
       },
     },
   },
-  "student1a": {
+  "student1e": {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1a_v40",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1e_v45",
         "on_error": "dmesg",
       },
     },
   },
-  "student1b": {
+  "student1f": {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1b_v41",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1f_v46",
         "on_error": "dmesg",
       },
     },
   },
-  "student1c": {
+  "student1g": {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1c_v42",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1g_v47",
         "on_error": "dmesg",
       },
     },
   },
-  "student1d": {
+  "student1h": {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1d_v43",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1h_v48",
+        "on_error": "dmesg",
+      },
+    },
+  },
+  "selfplay4_pods": {
+    "roles": {
+      "play": {
+        "count": 8,
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-play:selfplay4_v37",
         "on_error": "dmesg",
       },
     },
@@ -110,20 +120,25 @@ class Assignment(enum.Enum):
 
 class Tpu:
 
-  def __init__(self, name, log_path, state=State.DELETED, assignment=Assignment.UNASSIGNED):
+  def __init__(self, tpu_type, name, worker_name, worker_index, log_path, state=State.DELETED, assignment=Assignment.UNASSIGNED):
     assert " " not in name
+    self.tpu_type = tpu_type
     self.name = name
+    self.worker_name = worker_name
+    self.worker_index = worker_index
     self.state = state
     self.assignment = assignment
     self.log_path = log_path
     self.log_file = None
+    self.coordinator = None
+    self.coordinator_ssh_lock = None
 
   def update_state(self, state, reason):
-    print(f"[{self.name}] {self.state.name} -> {state.name}: {reason}")
+    print(f"[{self.worker_name}] {self.state.name} -> {state.name}: {reason}")
     self.state = state
 
   def update_assignment(self, assignment, reason):
-    print(f"[{self.name}] {self.assignment.name} -> {assignment.name}: {reason}")
+    print(f"[{self.worker_name}] {self.assignment.name} -> {assignment.name}: {reason}")
     self.assignment = assignment
 
   def log(self, content):
@@ -174,10 +189,15 @@ class AlphaManager:
 
   # Take care: will retry 10 times total if the return code is non-zero.
   def run_ssh(self, tpu, ssh_command, run_async=False):
-    ssh_command = ssh_command.replace("\"", "\\\"")
-    command = f"gcloud alpha compute tpus tpu-vm ssh {tpu.name} --quiet --command \"{ssh_command}\""
-    tpu.logline("$ " + ssh_command)
-    return self.run(command, run_async)
+    # Google Cloud doesn't like initiating SSH connections to multiple workers within a pod simultaneously,
+    # returning "unable to queue the operation", so lock around the synchronous portion, but still let multiple
+    # async commands run in parallel.
+    with tpu.coordinator_ssh_lock or contextlib.nullcontext():
+      ssh_command = ssh_command.replace("\"", "\\\"")
+      worker_option = f" --worker {tpu.worker_index}" if tpu.coordinator else ""
+      command = f"gcloud alpha compute tpus tpu-vm ssh {tpu.name}{worker_option} --quiet --command \"{ssh_command}\""
+      tpu.logline("$ " + ssh_command)
+      return self.run(command, run_async)
 
   # Take care: will retry 10 times total if the return code is non-zero.
   def run_ssh_and_log_sync(self, tpu, ssh_command):
@@ -206,8 +226,21 @@ class AlphaManager:
   def ignore(self, process):
     return True
 
-  def create(self, tpu_config, name):
-    return self.check(self.run(f"gcloud alpha compute tpus tpu-vm create {name} --accelerator-type {tpu_config['accelerator_type']} --version {tpu_config['version']}  --quiet"))
+  def wait_for_state(self, tpu, states):
+    while True:
+      coordinator_state = tpu.coordinator.state
+      if coordinator_state in states:
+        return coordinator_state
+      time.sleep(1.0)
+
+  def create(self, tpu):
+    if tpu.worker_index != 0:
+      # Workers 1+ need to rely on their coordinator to create.
+      # The coordinator may also have jumped past CREATED, or reached a BROKEN state.
+      state = self.wait_for_state(tpu, [State.CREATED, State.INITIALIZED, State.WORKING, State.BROKEN])
+      return state != State.BROKEN
+    tpu_config = tpu_configs[tpu.tpu_type]
+    return self.check(self.run(f"gcloud alpha compute tpus tpu-vm create {tpu.name} --accelerator-type {tpu_config['accelerator_type']} --version {tpu_config['version']}  --quiet"))
 
   def initialize(self, tpu):
     return (
@@ -222,28 +255,61 @@ class AlphaManager:
       )
 
   # Returns True if not found or successfully deleted; False otherwise.
-  def delete(self, name):
-    return_code, stdout = self.run(f"gcloud alpha compute tpus tpu-vm delete {name} --quiet")
+  def delete(self, tpu):
+    if tpu.worker_index != 0:
+      # Workers 1+ need to rely on their coordinator to create.
+      # The coordinator may also have reached a BROKEN state.
+      state = self.wait_for_state(tpu, [State.DELETED, State.BROKEN])
+      return state != State.BROKEN
+    return_code, stdout = self.run(f"gcloud alpha compute tpus tpu-vm delete {tpu.name} --quiet")
     return (return_code == 0) or ("NOT_FOUND" in stdout)
 
-  def exists(self, name):
-    return self.check(self.run(f"gcloud alpha compute tpus tpu-vm describe {name} --quiet"))
+  def exists(self, tpu):
+    return self.check(self.run(f"gcloud alpha compute tpus tpu-vm describe {tpu.name} --quiet"))
 
   def slice_tpu_range(self, all_tpus, range):
     range_start, range_finish = self.tpu_range
     if range_start is not None:
       range_start -= 1
-    return all_tpus[slice(range_start, range_finish)]    
+    return all_tpus[slice(range_start, range_finish)]
+
+  def describe_tpus(self, tpus):
+    segments = []
+    current_segment = []
+    def push_segment():
+      segments.append(current_segment.copy())
+      current_segment.clear()
+    for tpu in tpus:
+      if current_segment and (tpu.tpu_type != current_segment[-1].tpu_type):
+        push_segment()
+      current_segment.append(tpu)
+    if current_segment:
+      push_segment()
+    return ", ".join(f"{segment[0].worker_name} to {segment[-1].worker_name}" for segment in segments) + f" ({len(tpus)})"
 
   def set_up_tpus(self):
     all_tpus = []
-    for i in range(alpha_config["quota"]["tpu"]): # pylint: disable=unused-variable
-      name = eval(f'f\"{tpu_configs["tpu"]["name"]}\"')
-      log_path = self.config.join(self.log_prefix, name + ".log")
-      all_tpus.append(Tpu(name, log_path))
-    print(f"All TPUs: {all_tpus[0].name} to {all_tpus[-1].name}")
+    for tpu_type, quota in alpha_config["quota"].items():
+      for i in range(quota): # pylint: disable=unused-variable
+        name = eval(f'f\"{tpu_configs[tpu_type]["name"]}\"')
+        worker_count = tpu_configs[tpu_type]["worker_count"]
+        coordinator = None
+        coordinator_ssh_lock = None
+        for worker_index in range(worker_count):
+          worker_name = (name if (worker_count == 1) else f"{name}-{worker_index + 1}")
+          log_path = self.config.join(self.log_prefix, worker_name + ".log")
+          tpu = Tpu(tpu_type, name, worker_name, worker_index, log_path)
+          all_tpus.append(tpu)
+          # For pods, workers 1+ need to rely on worker 0, the coordinator, to create/delete.
+          # The coordinator will also see itself as the coordinator.
+          if (worker_count > 1) and (worker_index == 0):
+            coordinator = tpu
+            coordinator_ssh_lock = threading.Lock()
+          tpu.coordinator = coordinator
+          tpu.coordinator_ssh_lock = coordinator_ssh_lock
+    print(f"All TPUs: {self.describe_tpus(all_tpus)}")
     self.tpus = self.slice_tpu_range(all_tpus, self.tpu_range)
-    print(f"Operating on: {self.tpus[0].name} to {self.tpus[-1].name}")
+    print(f"Operating on: {self.describe_tpus(self.tpus)}")
     listing_error, listing = self.run("gcloud alpha compute tpus tpu-vm list --quiet")
     if listing_error == 0:
       for tpu in self.tpus:
@@ -251,13 +317,13 @@ class AlphaManager:
           tpu.update_state(State.CREATED, "TPU listing")
 
   def set_up_deployments(self):
-    print(f"All deployments: {', '.join(deployment_configs.keys())}")
+    print(f"All deployments: {', '.join(deployment_configs.keys())} ({len(deployment_configs)})")
     if self.deployment_names:
       for name in self.deployment_names:
         if not name in deployment_configs:
           raise ValueError(f"Deployment not in config: {name}")
     managing = list(self.deployment_names if self.deployment_names else deployment_configs.keys())
-    print(f"Managing deployments: {', '.join(managing)}")
+    print(f"Managing deployments: {', '.join(managing)} ({len(managing)})")
     self.deployments = []
     for name, deployment_config in deployment_configs.items():
       if name not in managing:
@@ -285,7 +351,7 @@ class AlphaManager:
 
   def discard(self, tpu, reason):
     # Make a final attempt to delete.
-    self.delete(tpu.name)
+    self.delete(tpu)
     with self.assign_lock:
       tpu.update_assignment(Assignment.UNASSIGNED, reason)
       tpu.update_state(State.BROKEN, reason)
@@ -295,12 +361,12 @@ class AlphaManager:
       if role.tpu is None:
         role.tpu = self.assign(deployment, role)
       if role.tpu.state == State.DELETED:
-        if self.exists(role.tpu.name):
-          if not self.delete(role.tpu.name):
+        if self.exists(role.tpu):
+          if not self.delete(role.tpu):
             self.discard(role.tpu, "Failed to delete")
             role.tpu = None
             continue
-        if not self.create(tpu_configs["tpu"], role.tpu.name):
+        if not self.create(role.tpu):
           self.discard(role.tpu, "Failed to create")
           role.tpu = None
           continue
@@ -323,7 +389,7 @@ class AlphaManager:
           if return_code == 0:
             raise NotImplementedError("Unable to handle deployments finishing successfully")
           # Treat the TPU as being in a bad but not broken state - e.g. /dev/accel0 problem - and recreate it.
-          if not self.delete(role.tpu.name):
+          if not self.delete(role.tpu):
             self.discard(role.tpu, "Failed to delete")
             role.tpu = None
             continue
@@ -360,12 +426,14 @@ class AlphaManager:
     print("Command: up")
     threads = []
     def command_up_impl(tpu):
-      if not self.exists(tpu.name) and not self.create(tpu_configs["tpu"], tpu.name):
-        print(f"[{tpu.name}] Failed to create")
+      if not self.exists(tpu) and not self.create(tpu):
+        print(f"[{tpu.worker_name}] Failed to create")
         return
+      tpu.update_state(State.CREATED, "Exists or created during \"up\" command")
       if not self.initialize(tpu):
-        print(f"[{tpu.name}] Failed to initialize")
+        print(f"[{tpu.worker_name}] Failed to initialize")
         return
+      tpu.update_state(State.INITIALIZED, "Initialized during \"up\" command")
     for tpu in self.tpus:
       thread = threading.Thread(target=command_up_impl, args=(tpu,))
       thread.start()
@@ -381,9 +449,10 @@ class AlphaManager:
     print("Command: down")
     threads = []
     def command_down_impl(tpu):
-      if not self.delete(tpu.name):
-        print(f"[{tpu.name}] Failed to delete")
+      if not self.delete(tpu):
+        print(f"[{tpu.worker_name}] Failed to delete")
         return
+      tpu.update_state(State.DELETED, "Deleting during \"down\" command")
     for tpu in self.tpus:
       thread = threading.Thread(target=command_down_impl, args=(tpu,))
       thread.start()

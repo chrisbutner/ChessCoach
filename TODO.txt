@@ -6,14 +6,10 @@ Short-term
 - write a utility to trim down networks on gs:// and images on gcr.io
 - try out profiling
 	- capture a trace locally - may be issues with networking/firewall
-- try pods again, gs:// fix deployed
-	- need to add alpha manager support, e.g. pod-1#0 to pod-1#3
-	- also, on worker 0, `export TPU_LOAD_LIBRARY=0 ` to prevent the coordinator taking a lock on the TPU device
 - update alpha manager
 	- allow for some roles to be broken/unassigned rather than crashing
 	- prioritize trainer over players, cannibalize
 	- try delays rather than broken marker for tpus in case of temporary failures, throttling
-	- maybe throttle overall calls
 
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)
@@ -23,6 +19,7 @@ Training runs
 - try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
 
 Cluster
+- `export TPU_LOAD_LIBRARY=0` doesn't seem necessary, wait on info
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
 - need fix for 10x total retries on non-zero return-code SSH --commands
 - docker containers outliving SSH sessions despite --rm is annoying vs. regular compute VMs
@@ -175,7 +172,6 @@ CPU+GPU integration performance:
 - try vectorize/GPU softmax/UCT calcs
 - break down MCTS timing details just in case anything's off (instrumented, already did some sampling measurements/optimization)
 - image key for prediction cache can be incrementally updated if it helps enough
-- for Nodes can point last sibling at root and unrecurse deletion (sacrificing breadth-at-once)
 
 Code quality
 - either remove dataset/training mixing (C++/Python) or fix "ValidateSchedule" to handle division factor
@@ -226,8 +222,6 @@ Bugs
 
 Low priority
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
-- save fewer networks to cloud storage or cull old ones in between strength tests or something - ~250 MB per save with teacher/student/commentary
-- structured binding, check all pairs
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
