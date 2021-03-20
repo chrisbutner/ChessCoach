@@ -12,9 +12,9 @@ VERSION=$2
 BASE_TAG=$VERSION
 FULL_TAG="${NETWORK}_${VERSION}"
 
-BASE=gcr.io/$PROJECT_ID/chesscoach-base:$BASE_TAG
-TRAIN=gcr.io/$PROJECT_ID/chesscoach-train:$FULL_TAG
-PLAY=gcr.io/$PROJECT_ID/chesscoach-play:$FULL_TAG
+BASE=eu.gcr.io/$PROJECT_ID/chesscoach-base:$BASE_TAG
+TRAIN=eu.gcr.io/$PROJECT_ID/chesscoach-train:$FULL_TAG
+PLAY=eu.gcr.io/$PROJECT_ID/chesscoach-play:$FULL_TAG
 
 BUILD_ARGS="--build-arg PROJECT_ID=${PROJECT_ID} --build-arg BASE_TAG=${BASE_TAG} --build-arg NETWORK=${NETWORK} --build-arg BUILDKIT_INLINE_CACHE=1"
 

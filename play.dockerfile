@@ -1,6 +1,6 @@
 ARG PROJECT_ID
 ARG BASE_TAG
-FROM gcr.io/${PROJECT_ID}/chesscoach-base:${BASE_TAG}
+FROM eu.gcr.io/${PROJECT_ID}/chesscoach-base:${BASE_TAG}
 ARG NETWORK
 
 # Playing machine should only "play".

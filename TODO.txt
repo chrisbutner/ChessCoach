@@ -1,12 +1,12 @@
 Student training
-- try more blended ratio/temperature?
-- try 8->16 layers + 128->256 dense?
 - try stochastic weight averaging (just run over existing students and strength-test)
+- try no-KD run for comparison
 
 Short-term
-- add gcr.io cleaning to gsclean utility
+- put profiler server behind config to avoid firewall prompts e.g. in UCI
 - try out profiling
 	- capture a trace locally - may be issues with networking/firewall
+- implement mini-tournaments to better judge strength for training and parameter optimization
 
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)
@@ -44,6 +44,7 @@ End-to-end training
 - run a clean end-to-end benchmark
 
 Commentary #3
+- remove dropout for now - can slowly add back decoder-only - may need to avoid it for highly discrete board squares in the encoder sequence
 - investigate inference problems locally (initial code is stashed)
 - build small manual test set for commentary inference
 - may need to increase maximum sequence length, with sub-word tokenization

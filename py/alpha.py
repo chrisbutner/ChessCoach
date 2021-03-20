@@ -36,57 +36,12 @@ deployment_configs = {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:selfplay4_v37",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-train:selfplay4_v1",
         "on_error": "dmesg",
       },
       "play": {
         "count": 19,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-play:selfplay4_v37",
-        "on_error": "dmesg",
-      },
-    },
-  },
-  "student1": {
-    "roles": {
-      "train": {
-        "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1_v44",
-        "on_error": "dmesg",
-      },
-    },
-  },
-  "student1e": {
-    "roles": {
-      "train": {
-        "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1e_v45",
-        "on_error": "dmesg",
-      },
-    },
-  },
-  "student1f": {
-    "roles": {
-      "train": {
-        "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1f_v46",
-        "on_error": "dmesg",
-      },
-    },
-  },
-  "student1g": {
-    "roles": {
-      "train": {
-        "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1g_v47",
-        "on_error": "dmesg",
-      },
-    },
-  },
-  "student1h": {
-    "roles": {
-      "train": {
-        "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-train:student1h_v48",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay4_v1",
         "on_error": "dmesg",
       },
     },
@@ -95,14 +50,14 @@ deployment_configs = {
     "roles": {
       "play": {
         "count": 8,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so gcr.io/chesscoach/chesscoach-play:selfplay4_v37",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay4_v1",
         "on_error": "dmesg",
       },
     },
   },
 }
 
-IMAGE_PREFIX = "gcr.io/chesscoach/"
+IMAGE_PREFIX = "eu.gcr.io/chesscoach/"
 KEY_PATH = "gs://chesscoach-eu/key.json"
 KEY_FILENAME = os.path.basename(os.path.normpath(KEY_PATH))
 
@@ -246,7 +201,7 @@ class AlphaManager:
     return (
       # Allow the SSH user to launch containers as non-root via the docker daemon (requires a logout).
       self.check(self.run_ssh_and_log_sync(tpu, "sudo usermod -a -G docker ${USER}")) and
-      # Use a key file to authenticate to gcr.io and bridge the credentials to docker.
+      # Use a key file to authenticate to eu.gcr.io and bridge the credentials to docker.
       self.check(self.run_ssh_and_log_sync(tpu, f"gsutil cp {KEY_PATH} . && gcloud auth activate-service-account --key-file={KEY_FILENAME} && gcloud auth configure-docker --quiet")) and
       # Kill any of our containers already running (they currently outlive SSH sessions on alpha TPU VMs).
       # Return code is 1 if none running, so just don't check.

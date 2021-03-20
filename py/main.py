@@ -57,6 +57,21 @@ print("Starting Python-ChessCoach")
 #test_train(teacher=True)
 #test_train(teacher=False)
 #test_train_commentary()
-test_predict(teacher=True)
+#test_predict(teacher=True)
 #test_predict_commentary()
 #create_save_training_network(teacher=True)
+
+# import network
+# import tensorflow as tf
+# from model import ModelBuilder
+
+# batch_size = 512
+# images = tf.ones((batch_size, ModelBuilder.input_planes_count), dtype=tf.int64)
+# for _ in range(5):
+#   result = network.predict_batch_student(images)
+
+# #tf.profiler.experimental.start(r"C:\Users\crith\AppData\Local\ChessCoach\TensorBoard\selfplay4")
+# tf.profiler.experimental.server.start(6009)
+# while True:
+#   result = network.predict_batch_student(images)
+# #tf.profiler.experimental.stop()
