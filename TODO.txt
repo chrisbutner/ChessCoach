@@ -1,21 +1,17 @@
 Student training
-- try dense layer in policy head for student network (may not be enough depth for convolutions) (may not apply for distillation)
-- try deeper student network, keeping channels lower - measure perf loss for self-play games/hour and UCI nodes/sec on TPU and GPU
+- try more blended ratio/temperature?
+- try 8->16 layers + 128->256 dense?
+- try stochastic weight averaging (just run over existing students and strength-test)
 
 Short-term
-- write a utility to trim down networks on gs:// and images on gcr.io
+- add gcr.io cleaning to gsclean utility
 - try out profiling
 	- capture a trace locally - may be issues with networking/firewall
-- update alpha manager
-	- allow for some roles to be broken/unassigned rather than crashing
-	- prioritize trainer over players, cannibalize
-	- try delays rather than broken marker for tpus in case of temporary failures, throttling
 
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)
 	- actual SE, as-bias (Wu), hybrid
 	- try batchnorm/relu before SE since we have v2 residuals
-- try stochastic weight averaging
 - try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
 
 Cluster
@@ -225,6 +221,7 @@ Low priority
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
+- Mixed precision (depends on specific hardware, complicates code)
 - Richer UCI features like multiPV or ponder
 - endgame tablebases (e.g. leveraging Stockfish probing code)
 	- UCI: not interesting enough, others can add if going for pure strength
@@ -237,3 +234,7 @@ Won't do
 	- great concept but greatly complicates training data compression, code, prefer simplicity in this trade-off
 - finish-fast utility score added to win score a la SAI/Wu/lc0
 	- useful to help with dithering, especially late-game, but not meeting the bar
+- alpha manager improvements
+	- allow for some roles to be broken/unassigned rather than bailing out
+	- prioritize trainer over players, cannibalize
+	- try delays rather than broken marker for tpus in case of temporary failures, throttling
