@@ -124,9 +124,9 @@ class Deployment:
 # Until GKE is supported for alpha TPU VMs, use this utility to manage 10-100 v3-8s.
 class AlphaManager:
 
-  def __init__(self, config, tpu_range=(None, None), deployment_names=None, whatif_mode=True):
+  def __init__(self, config, tpu_ranges=[(None, None)], deployment_names=None, whatif_mode=True):
     self.config = config
-    self.tpu_range = tpu_range
+    self.tpu_ranges = tpu_ranges
     self.deployment_names = deployment_names
     self.whatif_mode = whatif_mode
     self.assign_lock = threading.Lock()
@@ -222,11 +222,14 @@ class AlphaManager:
   def exists(self, tpu):
     return self.check(self.run(f"gcloud alpha compute tpus tpu-vm describe {tpu.name} --quiet"))
 
-  def slice_tpu_range(self, all_tpus, range):
-    range_start, range_finish = self.tpu_range
-    if range_start is not None:
-      range_start -= 1
-    return all_tpus[slice(range_start, range_finish)]
+  def slice_tpu_ranges(self, all_tpus, tpu_ranges):
+    union = set()
+    for tpu_range in tpu_ranges:
+      range_start, range_finish = tpu_range
+      if range_start is not None:
+        range_start -= 1
+      union.update(all_tpus[slice(range_start, range_finish)])
+    return [tpu for tpu in all_tpus if tpu in union]
 
   def describe_tpus(self, tpus):
     segments = []
@@ -263,12 +266,12 @@ class AlphaManager:
           tpu.coordinator = coordinator
           tpu.coordinator_ssh_lock = coordinator_ssh_lock
     print(f"All TPUs: {self.describe_tpus(all_tpus)}")
-    self.tpus = self.slice_tpu_range(all_tpus, self.tpu_range)
+    self.tpus = self.slice_tpu_ranges(all_tpus, self.tpu_ranges)
     print(f"Operating on: {self.describe_tpus(self.tpus)}")
     listing_error, listing = self.run("gcloud alpha compute tpus tpu-vm list --quiet")
     if listing_error == 0:
       for tpu in self.tpus:
-        if re.search(f"^{tpu.name}", listing, re.MULTILINE):
+        if re.search(f"^{tpu.name}\\s", listing, re.MULTILINE):
           tpu.update_state(State.CREATED, "TPU listing")
 
   def set_up_deployments(self):
@@ -445,13 +448,13 @@ def parse_range(arg):
     
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Manage Google Cloud alpha TPU VMs")
-  parser.add_argument("-n", "--numbers", help="TPU numbers to operate on, base-1, e.g. 5, 5-10, 5-, -10, *", default="*", type=parse_range)
-  parser.add_argument("-d", "--deployments", help="Deployments to manage", nargs="*")
+  parser.add_argument("-n", "--numbers", help="TPU numbers to operate on, base-1, e.g. 5 5-10 5- -10 *", nargs="+", default=[parse_range("*")], type=parse_range)
+  parser.add_argument("-d", "--deployments", help="Deployments to manage", nargs="+")
   parser.add_argument("--confirm", help="Actually run (inverse of what-if mode)", action="store_true")
   parser.add_argument("command", help="Top-level command to run", choices=["manage", "up", "down"])
   args = parser.parse_args()
 
-  tpu_range = args.numbers
+  tpu_ranges = args.numbers
 
   deployment_names = args.deployments or None
   if deployment_names and (list(deployment_names) == ["*"]):
@@ -460,7 +463,7 @@ if __name__ == "__main__":
   whatif_mode = not args.confirm
 
   import network
-  alpha_manager = AlphaManager(network.config, tpu_range, deployment_names, whatif_mode)
+  alpha_manager = AlphaManager(network.config, tpu_ranges, deployment_names, whatif_mode)
 
   if args.command == "manage":
     alpha_manager.command_manage()
