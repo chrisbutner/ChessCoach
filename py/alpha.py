@@ -75,10 +75,12 @@ class Assignment(enum.Enum):
 
 class Tpu:
 
-  def __init__(self, tpu_type, name, worker_name, worker_index, log_path, state=State.DELETED, assignment=Assignment.UNASSIGNED):
+  def __init__(self, tpu_type, tpu_type_worker_count, name, instance_index, worker_name, worker_index, log_path, state=State.DELETED, assignment=Assignment.UNASSIGNED):
     assert " " not in name
     self.tpu_type = tpu_type
+    self.tpu_type_worker_count = tpu_type_worker_count
     self.name = name
+    self.instance_index = instance_index
     self.worker_name = worker_name
     self.worker_index = worker_index
     self.state = state
@@ -104,6 +106,9 @@ class Tpu:
 
   def logline(self, content):
     self.log(content + "\n")
+
+  def sequence_numer(self):
+    return ((self.tpu_type_worker_count * self.instance_index) + self.worker_index)
 
 class Role:
 
@@ -135,7 +140,7 @@ class AlphaManager:
     os.makedirs(self.log_prefix)
 
   def run(self, command, run_async=False):
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    process = subprocess.Popen(command, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
     if run_async:
       return process
     else:
@@ -238,7 +243,9 @@ class AlphaManager:
       segments.append(current_segment.copy())
       current_segment.clear()
     for tpu in tpus:
-      if current_segment and (tpu.tpu_type != current_segment[-1].tpu_type):
+      if current_segment and (
+          (tpu.tpu_type != current_segment[-1].tpu_type) or
+          (tpu.sequence_numer() != current_segment[-1].sequence_numer() + 1)):
         push_segment()
       current_segment.append(tpu)
     if current_segment:
@@ -256,7 +263,7 @@ class AlphaManager:
         for worker_index in range(worker_count):
           worker_name = (name if (worker_count == 1) else f"{name}-{worker_index + 1}")
           log_path = self.config.join(self.log_prefix, worker_name + ".log")
-          tpu = Tpu(tpu_type, name, worker_name, worker_index, log_path)
+          tpu = Tpu(tpu_type, worker_count, name, i, worker_name, worker_index, log_path)
           all_tpus.append(tpu)
           # For pods, workers 1+ need to rely on worker 0, the coordinator, to create/delete.
           # The coordinator will also see itself as the coordinator.
