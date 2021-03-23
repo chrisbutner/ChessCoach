@@ -3,8 +3,8 @@ import tensorflow as tf
 from tensorflow.keras import backend as K
 from model import ModelBuilder
 
-knowledge_distillation_temperature = 2.0
-knowledge_distillation_teacher_weight = 0.7
+knowledge_distillation_temperature = 5.0
+knowledge_distillation_teacher_weight = 0.6
 
 transformer_label_smoothing = 0.1
 
