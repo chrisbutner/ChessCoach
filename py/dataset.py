@@ -3,7 +3,7 @@ from model import ModelBuilder
 
 class DatasetOptions:
 
-  def __init__(self, global_batch_size, position_shuffle_size=2**18, keep_game_proportion=0.2, keep_position_proportion=0.1, cycle_length=32):
+  def __init__(self, global_batch_size, position_shuffle_size, keep_game_proportion, keep_position_proportion, cycle_length):
     self.global_batch_size = global_batch_size
     self.position_shuffle_size = position_shuffle_size
     self.keep_game_proportion = keep_game_proportion
@@ -190,12 +190,6 @@ class DatasetBuilder:
     return dataset
 
   def build_dataset(self, sources, options):
-    # Validate options.
-    kept_positions_per_chunk = self.games_per_chunk * self.positions_per_game * options.keep_game_proportion * options.keep_position_proportion
-    cycles_per_shuffle_buffer = options.position_shuffle_size / (options.cycle_length * kept_positions_per_chunk)
-    assert (cycles_per_shuffle_buffer >= 1.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect >= 1.0"
-    assert (cycles_per_shuffle_buffer < 2.0), f"cycles_per_shuffle_buffer={cycles_per_shuffle_buffer}, expect < 2.0"
-
     # Dataset sources repeat internally, so interleaving them should give an equal number of positions
     # from each, even if the sources are differently sized.
     dataset = tf.data.Dataset.from_tensor_slices(sources)
@@ -224,22 +218,6 @@ class DatasetBuilder:
     # Prefetch batches.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
-  
-  def build_training_dataset(self, globs, windows, global_batch_size):
-    options = DatasetOptions(global_batch_size=global_batch_size)
-    sources = [self.build_dataset_source(glob, window, options) for glob, window in zip(globs, windows)]
-    return self.build_dataset(sources, options)
-
-  def build_validation_dataset(self, globs, global_batch_size):
-    # Shuffle buffer 64 times as small, 2**18/2**12
-    validation_shuffle_size = 2**12
-    validation_keep_ratio = DatasetOptions(global_batch_size).position_shuffle_size / validation_shuffle_size
-    options = DatasetOptions(
-      global_batch_size=global_batch_size,
-      position_shuffle_size=validation_shuffle_size,
-      keep_game_proportion=DatasetOptions(global_batch_size).keep_game_proportion / validation_keep_ratio) 
-    sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
-    return self.build_dataset(sources, options)
 
   def parse_commentary_record(self, record, tokenizer, options):
     # Parse raw features from the tf.train.Examples representing the games.
@@ -268,6 +246,32 @@ class DatasetBuilder:
     dataset = dataset.flat_map(lambda x: self.parse_commentary_record(x, tokenizer, options))
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
+  
+  def build_training_dataset(self, globs, windows, global_batch_size):
+    options = DatasetOptions(
+      global_batch_size=global_batch_size,
+      position_shuffle_size=self.config.training["dataset_shuffle_positions_training"],
+      keep_game_proportion=self.config.training["dataset_keep_game_proportion"],
+      keep_position_proportion=self.config.training["dataset_keep_position_proportion"],
+      cycle_length=self.config.training["dataset_parallel_reads"],
+      )
+    sources = [self.build_dataset_source(glob, window, options) for glob, window in zip(globs, windows)]
+    return self.build_dataset(sources, options)
+
+  def build_validation_dataset(self, globs, global_batch_size):
+    # Shuffle buffer much smaller, so keep much fewer games.
+    training_shuffle_size = self.config.training["dataset_shuffle_positions_training"]
+    validation_shuffle_size = self.config.training["dataset_shuffle_positions_validation"]
+    validation_keep_game_proportion = self.config.training["dataset_keep_game_proportion"] * validation_shuffle_size / training_shuffle_size
+    options = DatasetOptions(
+      global_batch_size=global_batch_size,
+      position_shuffle_size=validation_shuffle_size,
+      keep_game_proportion=validation_keep_game_proportion,
+      keep_position_proportion=self.config.training["dataset_keep_position_proportion"],
+      cycle_length=self.config.training["dataset_parallel_reads"],
+      )
+    sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
+    return self.build_dataset(sources, options)
 
   def build_commentary_dataset(self, glob, tokenizer, global_batch_size, maximum_sequence_length):
     options = CommentaryDatasetOptions(global_batch_size, maximum_sequence_length)
