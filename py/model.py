@@ -14,6 +14,7 @@ class ModelBuilder:
   filter_count = 256
   attention_heads = 8
   dense_count = 256
+  value_filter_count = 8 # vs. 1 for AZ - ensures value convergence for full-sized teacher network on self-play-only data
   weight_decay = 1e-4
 
   transformer_layers = 6
@@ -90,9 +91,8 @@ class ModelBuilder:
     return x
 
   def value_head(self, x, name, output_name):
-    value_filter_count = 1
-    x = tf.keras.layers.Conv2D(filters=value_filter_count, kernel_size=(1,1), strides=1, data_format="channels_first",
-      name=f"{name}/conv2d_{value_filter_count}",
+    x = tf.keras.layers.Conv2D(filters=self.value_filter_count, kernel_size=(1,1), strides=1, data_format="channels_first",
+      name=f"{name}/conv2d_{self.value_filter_count}",
       use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(x)
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"{name}/batchnorm")(x)
     x = tf.keras.layers.ReLU(name=f"{name}/relu")(x)
