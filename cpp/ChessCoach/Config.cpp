@@ -14,9 +14,10 @@ const std::map<std::string, StageType> StageTypeLookup = {
     { "train", StageType_Train },
     { "train_commentary", StageType_TrainCommentary },
     { "save", StageType_Save },
+    { "save_swa", StageType_SaveSwa },
     { "strength_test", StageType_StrengthTest },
 };
-static_assert(StageType_Count == 5);
+static_assert(StageType_Count == 6);
 
 const std::map<std::string, NetworkType> NetworkTypeLookup = {
     { "teacher", NetworkType_Teacher },
@@ -24,14 +25,6 @@ const std::map<std::string, NetworkType> NetworkTypeLookup = {
     { "", NetworkType_Count },
 };
 static_assert(NetworkType_Count == 2);
-
-const std::map<std::string, GameType> GameTypeLookup = {
-    { "supervised", GameType_Supervised },
-    { "training", GameType_Training },
-    { "validation", GameType_Validation },
-    { "", GameType_Count },
-};
-static_assert(GameType_Count == 3);
 
 const std::map<std::string, RoleType> RoleTypeLookup = {
     { "train", RoleType_Train },
@@ -50,18 +43,12 @@ void ParseStages(std::vector<StageConfig>& stages, const TomlValue& config)
 
         // Optional (find_or)
         stages[i].Target = NetworkTypeLookup.at(toml::find_or<std::string>(configStages[i], "target", ""));
-        stages[i].Type = GameTypeLookup.at(toml::find_or<std::string>(configStages[i], "type", ""));
-        stages[i].WindowSize = toml::find_or<int>(configStages[i], "window_size", 0);
-        stages[i].NumGames = toml::find_or<int>(configStages[i], "num_games", 0);
     }
 }
 
 template <typename T>
-bool AssignParameter(T& value, const std::map<std::string, float>& parameters, const std::string& name)
+bool AssignParameter(T&/* value*/, const std::map<std::string, float>&/* parameters*/, const std::string&/* name*/)
 {
-    (void)value;
-    (void)parameters;
-    (void)name;
     return false;
 }
 
@@ -161,6 +148,8 @@ RoleType ParseRole(const std::string& raw)
 template <typename Policy>
 void ParseTraining(TrainingConfig& training, const TomlValue& config, const Policy& policy)
 {
+    policy.template Parse<int>(training.NumGames, config, "num_games");
+    policy.template Parse<int>(training.WindowSize, config, "window_size");
     policy.template Parse<int>(training.BatchSize, config, "batch_size");
     policy.template Parse<int>(training.CommentaryBatchSize, config, "commentary_batch_size");
     policy.template Parse<int>(training.Steps, config, "steps");
@@ -174,10 +163,8 @@ void ParseTraining(TrainingConfig& training, const TomlValue& config, const Poli
     policy.template Parse<std::vector<StageConfig>>(training.Stages, config, "stages");
 
     policy.template Parse<std::string>(training.VocabularyFilename, config, "vocabulary_filename");
-    policy.template Parse<std::string>(training.GamesPathSupervised, config, "games_path_supervised");
     policy.template Parse<std::string>(training.GamesPathTraining, config, "games_path_training");
     policy.template Parse<std::string>(training.GamesPathValidation, config, "games_path_validation");
-    policy.template Parse<std::string>(training.CommentaryPathSupervised, config, "commentary_path_supervised");
     policy.template Parse<std::string>(training.CommentaryPathTraining, config, "commentary_path_training");
     policy.template Parse<std::string>(training.CommentaryPathValidation, config, "commentary_path_validation");
 }

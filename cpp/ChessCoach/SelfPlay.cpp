@@ -906,13 +906,12 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
     game.UpdateSearchRootPly();
 }
 
-void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, std::vector<GameType>& gameTypes,
-    std::vector<Window>& trainingWindows, int step, int checkpoint)
+void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, int step, int checkpoint)
 {
     // Delegate to Python.
     std::cout << "Training steps " << step << "-" << checkpoint << "..." << std::endl;
     auto startTrain = std::chrono::high_resolution_clock::now();
-    network->Train(networkType, gameTypes, trainingWindows, step, checkpoint);
+    network->Train(networkType, step, checkpoint);
     const float trainTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTrain).count();
     const int stepCount = (checkpoint - step + 1);
     const float trainTimePerStep = (trainTime / stepCount);
@@ -935,6 +934,12 @@ void SelfPlayWorker::SaveNetwork(INetwork* network, NetworkType networkType, int
 {
     // Save the network to (a) allow stopping and resuming, and (b) give the prediction network the latest weights.
     network->SaveNetwork(networkType, checkpoint);
+}
+
+void SelfPlayWorker::SaveSwaNetwork(INetwork* network, NetworkType networkType, int checkpoint)
+{
+    // Save the network to (a) allow stopping and resuming, and (b) give the prediction network the latest weights.
+    network->SaveSwaNetwork(networkType, checkpoint);
 }
 
 void SelfPlayWorker::StrengthTestNetwork(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int checkpoint)

@@ -56,12 +56,12 @@ public:
 
     virtual PredictionStatus PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies);
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images);
-    virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
-        std::vector<Window>& trainingWindows, int step, int checkpoint);
+    virtual void Train(NetworkType networkType, int step, int checkpoint);
     virtual void TrainCommentary(int step, int checkpoint);
     virtual void LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values);
     virtual void SaveNetwork(NetworkType networkType, int checkpoint);
-    virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut);
+    virtual void SaveSwaNetwork(NetworkType networkType, int checkpoint);
+    virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* swaStepCountOut, int* trainingChunkCountOut, std::string* relativePathOut);
     virtual void SaveFile(const std::string& relativePath, const std::string& data);
     virtual std::string LoadFile(const std::string& relativePath);
     virtual bool FileExists(const std::string& relativePath);
@@ -86,6 +86,7 @@ private:
     PyObject* _trainCommentaryFunction;
     PyObject* _logScalarsFunction[NetworkType_Count];
     PyObject* _saveNetworkFunction[NetworkType_Count];
+    PyObject* _saveSwaNetworkFunction[NetworkType_Count];
     PyObject* _getNetworkInfoFunction[NetworkType_Count];
     PyObject* _saveFileFunction;
     PyObject* _loadFileFunction;

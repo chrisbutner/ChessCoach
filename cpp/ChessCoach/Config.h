@@ -11,12 +11,13 @@ enum StageType
     StageType_Train,
     StageType_TrainCommentary,
     StageType_Save,
+    StageType_SaveSwa,
     StageType_StrengthTest,
 
     StageType_Count,
 };
-constexpr const char* StageTypeNames[StageType_Count] = { "Play", "Train", "TrainCommentary", "Save", "StrengthTest" };
-static_assert(StageType_Count == 5);
+constexpr const char* StageTypeNames[StageType_Count] = { "Play", "Train", "TrainCommentary", "Save", "SaveSwa", "StrengthTest" };
+static_assert(StageType_Count == 6);
 
 enum NetworkType
 {
@@ -27,17 +28,6 @@ enum NetworkType
 };
 constexpr const char* NetworkTypeNames[NetworkType_Count] = { "Teacher", "Student" };
 static_assert(NetworkType_Count == 2);
-
-enum GameType
-{
-    GameType_Supervised = 0, // Hard-coded in training.py
-    GameType_Training = 1, // Hard-coded in training.py
-    GameType_Validation,
-
-    GameType_Count,
-};
-constexpr const char* GameTypeNames[GameType_Count] = { "Supervised", "Training", "Validation" };
-static_assert(GameType_Count == 3);
 
 enum RoleType {
     RoleType_None = 0,
@@ -62,13 +52,12 @@ struct StageConfig
 {
     StageType Stage;
     NetworkType Target;
-    GameType Type;
-    int WindowSize;
-    int NumGames;
 };
 
 struct TrainingConfig
 {
+    int NumGames;
+    int WindowSize;
     int BatchSize;
     int CommentaryBatchSize;
     int Steps;
@@ -80,10 +69,8 @@ struct TrainingConfig
     int WaitMilliseconds;
     std::vector<StageConfig> Stages;
     std::string VocabularyFilename;
-    std::string GamesPathSupervised;
     std::string GamesPathTraining;
     std::string GamesPathValidation;
-    std::string CommentaryPathSupervised;
     std::string CommentaryPathTraining;
     std::string CommentaryPathValidation;
 };

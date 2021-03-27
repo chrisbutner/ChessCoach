@@ -52,10 +52,8 @@ class Config:
 
     # Root all paths.
     self.data_root = self.determine_data_root()
-    self.training["games_path_supervised"] = self.make_dir_path(self.training["games_path_supervised"])
     self.training["games_path_training"] = self.make_dir_path(self.training["games_path_training"])
     self.training["games_path_validation"] = self.make_dir_path(self.training["games_path_validation"])
-    self.training["commentary_path_supervised"] = self.make_dir_path(self.training["commentary_path_supervised"])
     self.training["commentary_path_training"] = self.make_dir_path(self.training["commentary_path_training"])
     self.training["commentary_path_validation"] = self.make_dir_path(self.training["commentary_path_validation"])
     for key, value in self.misc["paths"].items():
@@ -65,7 +63,7 @@ class Config:
   def determine_data_root(self):
     if self.is_tpu:
       # Replace tilde with the user's home directory, if present.
-      return os.path.expanduser(self.misc["paths"]["tpu_data_root"])
+      return self.path.expanduser(self.misc["paths"]["tpu_data_root"])
     else:
       return self.determine_local_data_root()
 
@@ -91,10 +89,10 @@ class Config:
       path = path.replace("/", "\\")
 
     # Just in case this specific path is special-cased as absolute rather than relative, starting with tilde.
-    path = os.path.expanduser(path)
+    path = self.path.expanduser(path)
     
     # Root any relative paths at the data root.
-    if not os.path.isabs(path):
+    if not self.path.isabs(path):
       path = self.join(self.data_root, path)
 
     return path
@@ -105,10 +103,13 @@ class Config:
   def make_local_path(self, path):
     return self.join(self.determine_local_data_root(), self.unmake_path(path))
 
-  def latest_network_path_for_type_and_model(self, network_name, network_type, model):
-    glob = self.join(self.misc["paths"]["networks"], network_name + "_*", network_type, model)
-    results = tf.io.gfile.glob(glob)
-    return os.path.dirname(os.path.dirname(max(results))) if results else None
+  def latest_model_paths_for_type_and_model(self, network_type, model_type):
+    glob = self.join(self.misc["paths"]["networks"], self.network_name + "_*", network_type, model_type)
+    results = [self.join(result, "weights") for result in tf.io.gfile.glob(glob)]
+    return results
+
+  def make_model_path(self, network_type, model_type, checkpoint):
+    return self.join(self.misc["paths"]["networks"], f"{self.network_name}_{str(checkpoint).zfill(9)}", network_type, model_type, "weights")
 
   def count_training_chunks(self):
     glob = self.join(self.training["games_path_training"], "*.chunk")

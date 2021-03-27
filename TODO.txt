@@ -1,18 +1,30 @@
-Student training
-- try stochastic weight averaging (just run over existing students and strength-test)
-- try no-KD run for comparison
-
-Short-term
-- put profiler server behind config to avoid firewall prompts e.g. in UCI
-- try out profiling
-	- capture a trace locally - may be issues with networking/firewall
-- implement mini-tournaments to better judge strength for training and parameter optimization
+Next fresh run
+- selfplay6, Fresh2
+- selfplay6a, try full LR rather than ^0.67
+- selfplay6b, try full LR and 8->1 value head filters
 
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)
 	- actual SE, as-bias (Wu), hybrid
 	- try batchnorm/relu before SE since we have v2 residuals
-- try out super-convergence: https://arxiv.org/pdf/1708.07120.pdf
+- try without mcts value auxiliary again (esp. at high end of steps)
+- try early-stopping teacher or weaning off teacher
+- try switching to teacher-only after X steps, e.g. 800k
+
+Tournaments
+- implement mini-tournaments to better judge strength for training and parameter optimization
+	- could run games every strength test interval, and bayeselo every 100k or so?
+	- need to work out how to show data in tensorboard if older networks change elo during the run
+		- multiple points, same X? multiple series, one per bayeselo?
+
+Next fresh run
+- (require SE, mini-tournaments)
+- selfplay7, Fresh3
+
+Profiling
+- put profiler server behind config to avoid firewall prompts e.g. in UCI
+- try out profiling
+	- capture a trace locally - may be issues with networking/firewall
 
 Cluster
 - `export TPU_LOAD_LIBRARY=0` doesn't seem necessary, wait on info
@@ -20,14 +32,14 @@ Cluster
 - need fix for 10x total retries on non-zero return-code SSH --commands
 - docker containers outliving SSH sessions despite --rm is annoying vs. regular compute VMs
 
-Quality
-- remove hybrid supervised/self-play infra - choose cutoff (keep in dataset.py?)
-
 Criticality training (shelved)
 - add to GUI, look over saved positions, decide whether to drive 800-1600 range
 - either pull in whole change or some of the code cleanup
 	- logging wrong loss to tensorboard in shelved commit, fix
 	- add unit test for criticality training target via decompress API
+
+Next fresh run
+- (requires criticality)
 
 Training improvements (low confidence)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
@@ -38,10 +50,6 @@ Training improvements (low confidence)
 	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
 - try out "sleeping" in the rotation - train random noise, different distributions
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
-
-End-to-end training
-- depending on convergence/strength, work out learning rate schedule
-- run a clean end-to-end benchmark
 
 Commentary #3
 - remove dropout for now - can slowly add back decoder-only - may need to avoid it for highly discrete board squares in the encoder sequence
@@ -171,7 +179,6 @@ CPU+GPU integration performance:
 - image key for prediction cache can be incrementally updated if it helps enough
 
 Code quality
-- either remove dataset/training mixing (C++/Python) or fix "ValidateSchedule" to handle division factor
 - try multistage docker build, debian only for building chesscoach, copy over to tensorflow base
 - inject config.toml into cluster volume, take out of image tags, make sure it takes priority over installed
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
@@ -201,6 +208,7 @@ UCI (#3)
 - implement proper time controls/search options, ponder
 
 Deployment
+- re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
 - installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
 - add windows command line build script, binplace somewhere cleanly
@@ -239,3 +247,4 @@ Won't do
 	- allow for some roles to be broken/unassigned rather than bailing out
 	- prioritize trainer over players, cannibalize
 	- try delays rather than broken marker for tpus in case of temporary failures, throttling
+- cyclic learning rate and/or fast-SWA (too much complexity too late)

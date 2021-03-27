@@ -59,7 +59,7 @@ deployment_configs = {
 
 IMAGE_PREFIX = "eu.gcr.io/chesscoach/"
 KEY_PATH = "gs://chesscoach-eu/key.json"
-KEY_FILENAME = os.path.basename(os.path.normpath(KEY_PATH))
+KEY_FILENAME = os.path.basename(KEY_PATH)
 
 # Assume that TPU VMs will never be stopped.
 class State(enum.Enum):

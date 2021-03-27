@@ -86,12 +86,12 @@ struct INetwork
 
     virtual PredictionStatus PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
     virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images) = 0;
-    virtual void Train(NetworkType networkType, std::vector<GameType>& gameTypes,
-        std::vector<Window>& trainingWindows, int step, int checkpoint) = 0;
+    virtual void Train(NetworkType networkType, int step, int checkpoint) = 0;
     virtual void TrainCommentary(int step, int checkpoint) = 0;
     virtual void LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values) = 0;
     virtual void SaveNetwork(NetworkType networkType, int checkpoint) = 0;
-    virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut) = 0;
+    virtual void SaveSwaNetwork(NetworkType networkType, int checkpoint) = 0;
+    virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* swaStepCountOut, int* trainingChunkCountOut, std::string* relativePathOut) = 0;
     virtual void SaveFile(const std::string& relativePath, const std::string& data) = 0;
     virtual std::string LoadFile(const std::string& relativePath) = 0;
     virtual bool FileExists(const std::string& relativePath) = 0;

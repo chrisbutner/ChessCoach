@@ -67,6 +67,8 @@ PythonNetwork::PythonNetwork()
     _logScalarsFunction[NetworkType_Student] = LoadFunction(module, "log_scalars_student");
     _saveNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_network_teacher");
     _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
+    _saveSwaNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_swa_network_teacher");
+    _saveSwaNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_swa_network_student");
     _getNetworkInfoFunction[NetworkType_Teacher] = LoadFunction(module, "get_network_info_teacher");
     _getNetworkInfoFunction[NetworkType_Student] = LoadFunction(module, "get_network_info_student");
     _saveFileFunction = LoadFunction(module, "save_file");
@@ -94,6 +96,8 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_saveFileFunction);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Student]);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Teacher]);
+    Py_XDECREF(_saveSwaNetworkFunction[NetworkType_Student]);
+    Py_XDECREF(_saveSwaNetworkFunction[NetworkType_Teacher]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Teacher]);
     Py_XDECREF(_logScalarsFunction[NetworkType_Student]);
@@ -186,21 +190,9 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     return comments;
 }
 
-void PythonNetwork::Train(NetworkType networkType, std::vector<GameType>& gameTypes,
-    std::vector<Window>& trainingWindows, int step, int checkpoint)
+void PythonNetwork::Train(NetworkType networkType, int step, int checkpoint)
 {
     PythonContext context;
-
-    npy_intp gameTypesDims[1]{ static_cast<int>(gameTypes.size()) };
-    PyObject* pythonGameTypes = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(gameTypesDims), gameTypesDims, NPY_INT32, gameTypes.data());
-    PyAssert(pythonGameTypes);
-
-    const int windowClassIntFieldCount = 2;
-    npy_intp trainingWindowsDims[2]{ static_cast<int>(trainingWindows.size()), windowClassIntFieldCount };
-    PyObject* pythonTrainingWindows = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(trainingWindowsDims), trainingWindowsDims, NPY_INT32, trainingWindows.data());
-    PyAssert(pythonTrainingWindows);
 
     PyObject* pythonStep = PyLong_FromLong(step);
     PyAssert(pythonStep);
@@ -208,15 +200,12 @@ void PythonNetwork::Train(NetworkType networkType, std::vector<GameType>& gameTy
     PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
     PyAssert(pythonCheckpoint);
 
-    PyObject* result = PyObject_CallFunctionObjArgs(_trainFunction[networkType], pythonGameTypes, pythonTrainingWindows,
-        pythonStep, pythonCheckpoint, nullptr);
+    PyObject* result = PyObject_CallFunctionObjArgs(_trainFunction[networkType], pythonStep, pythonCheckpoint, nullptr);
     PyAssert(result);
 
     Py_DECREF(result);
     Py_DECREF(pythonCheckpoint);
     Py_DECREF(pythonStep);
-    Py_DECREF(pythonTrainingWindows);
-    Py_DECREF(pythonGameTypes);
 }
 
 void PythonNetwork::TrainCommentary(int step, int checkpoint)
@@ -274,7 +263,21 @@ void PythonNetwork::SaveNetwork(NetworkType networkType, int checkpoint)
     Py_DECREF(pythonCheckpoint);
 }
 
-void PythonNetwork::GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* trainingChunkCountOut, std::string* relativePathOut)
+void PythonNetwork::SaveSwaNetwork(NetworkType networkType, int checkpoint)
+{
+    PythonContext context;
+
+    PyObject* pythonCheckpoint = PyLong_FromLong(checkpoint);
+    PyAssert(pythonCheckpoint);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_saveSwaNetworkFunction[networkType], pythonCheckpoint, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonCheckpoint);
+}
+
+void PythonNetwork::GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* swaStepCountOut, int* trainingChunkCountOut, std::string* relativePathOut)
 {
     PythonContext context;
 
@@ -287,17 +290,25 @@ void PythonNetwork::GetNetworkInfo(NetworkType networkType, int* stepCountOut, i
     PyAssert(pythonStepCount);
     PyAssert(PyLong_Check(pythonStepCount));
 
-    PyObject* pythonTrainingChunkCount = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
+    PyObject* pythonSwaStepCount = PyTuple_GetItem(tupleResult, 1); // PyTuple_GetItem does not INCREF
+    PyAssert(pythonSwaStepCount);
+    PyAssert(PyLong_Check(pythonSwaStepCount));
+
+    PyObject* pythonTrainingChunkCount = PyTuple_GetItem(tupleResult, 2); // PyTuple_GetItem does not INCREF
     PyAssert(pythonTrainingChunkCount);
     PyAssert(PyLong_Check(pythonTrainingChunkCount));
 
-    PyObject* pythonRelativePath = PyTuple_GetItem(tupleResult, 2); // PyTuple_GetItem does not INCREF
+    PyObject* pythonRelativePath = PyTuple_GetItem(tupleResult, 3); // PyTuple_GetItem does not INCREF
     PyAssert(pythonRelativePath);
     PyAssert(PyBytes_Check(pythonRelativePath));
 
     if (stepCountOut)
     {
         *stepCountOut = PyLong_AsLong(pythonStepCount);
+    }
+    if (swaStepCountOut)
+    {
+        *swaStepCountOut = PyLong_AsLong(pythonSwaStepCount);
     }
     if (trainingChunkCountOut)
     {

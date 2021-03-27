@@ -210,7 +210,8 @@ class DatasetBuilder:
     #
     # If e.g. 2 cycles could fit in the shuffle buffer then we could have doubled the cycle length with similar results,
     # allowing for greater I/O and CPU parallelism, so aim for cycles per shuffle buffer in [1, 2).
-    dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
+    if options.position_shuffle_size:
+      dataset = dataset.shuffle(options.position_shuffle_size, reshuffle_each_iteration=True)
 
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
@@ -262,7 +263,9 @@ class DatasetBuilder:
     # Shuffle buffer much smaller, so keep much fewer games.
     training_shuffle_size = self.config.training["dataset_shuffle_positions_training"]
     validation_shuffle_size = self.config.training["dataset_shuffle_positions_validation"]
-    validation_keep_game_proportion = self.config.training["dataset_keep_game_proportion"] * validation_shuffle_size / training_shuffle_size
+    validation_keep_game_proportion = self.config.training["dataset_keep_game_proportion"]
+    if validation_shuffle_size and training_shuffle_size:
+      validation_keep_game_proportion *= (validation_shuffle_size / training_shuffle_size)
     options = DatasetOptions(
       global_batch_size=global_batch_size,
       position_shuffle_size=validation_shuffle_size,

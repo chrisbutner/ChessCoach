@@ -54,15 +54,9 @@ class Trainer:
     self.commentary_optimizer = None
 
     self.datasets = datasets
-    self.data_globs = {
-      # GameType_Supervised (Config.h)
-      0: self.config.join(self.config.training["games_path_supervised"], "*.chunk"),
-      # GameType_Training (Config.h)
-      1: self.config.join(self.config.training["games_path_training"], "*.chunk"),
-    }
+    self.data_glob_training = self.config.join(self.config.training["games_path_training"], "*.chunk")
     self.data_glob_validation = self.config.join(self.config.training["games_path_validation"], "*.chunk")
-    # Commentary is supervised-only for now.
-    self.data_glob_commentary = self.config.join(self.config.training["commentary_path_supervised"], "*.chunk")
+    self.data_glob_commentary = self.config.join(self.config.training["commentary_path_training"], "*.chunk")
 
     self.per_replica_batch_size = self.config.training["batch_size"]
     self.global_batch_size = self.per_replica_batch_size * self.device_count
@@ -81,24 +75,23 @@ class Trainer:
     return Schedule(schedule["steps"], schedule["rates"], self.config.training["warmup_steps"], self.device_count)
 
   # The teacher network trains directly on supervised labels.
-  def compile_teacher(self, model):
-    optimizer = tf.keras.optimizers.SGD(
-      learning_rate=self.get_learning_rate(self.config.training["learning_rate_schedule"]),
-      momentum=self.config.training["momentum"])
-    losses = ["mean_squared_error", "mean_squared_error", flat_categorical_crossentropy_from_logits]
-    loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"], self.config.training["policy_loss_weight"]]
-    metrics = [[], [], [flat_categorical_accuracy]]
-    model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics, steps_per_execution=self.config.training["steps_per_execution"])
+  def compile_teacher(self, model, learning_rate=None):
+    self.compile(model, flat_categorical_crossentropy_from_logits, flat_categorical_accuracy, learning_rate)
 
   # The student network trains on a combination of soft teacher labels and hard supervised labels.
   # Policy accuracy is still measured against the supervised labels.
-  def compile_student(self, model):
+  def compile_student(self, model, learning_rate=None):
+    self.compile(model, student_policy_loss, student_policy_accuracy, learning_rate)
+
+  def compile(self, model, policy_loss, policy_accuracy, learning_rate=None):
+    if learning_rate is None:
+      learning_rate = self.get_learning_rate(self.config.training["learning_rate_schedule"])
     optimizer = tf.keras.optimizers.SGD(
-      learning_rate=self.get_learning_rate(self.config.training["learning_rate_schedule"]),
+      learning_rate=learning_rate,
       momentum=self.config.training["momentum"])
-    losses = ["mean_squared_error", "mean_squared_error", student_policy_loss]
+    losses = ["mean_squared_error", "mean_squared_error", policy_loss]
     loss_weights = [self.config.training["value_loss_weight"], self.config.training["mcts_value_loss_weight"], self.config.training["policy_loss_weight"]]
-    metrics = [[], [], [student_policy_accuracy]]
+    metrics = [[], [], [policy_accuracy]]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics, steps_per_execution=self.config.training["steps_per_execution"])
 
   def compile_commentary(self, model):
@@ -108,19 +101,24 @@ class Trainer:
     loss = make_transformer_loss()
     model.compile(optimizer=optimizer, loss=loss, steps_per_execution=self.config.training["steps_per_execution"])
 
-  def train(self, network, teacher_network, game_types, training_windows, starting_step, checkpoint):
+  def calculate_training_window(self, checkpoint):
+    # The window will grow until reaching the desired size, then slide.
+    window_max = checkpoint * self.config.training["num_games"] // self.config.training["steps"]
+    window_min = max(0, window_max - self.config.training["window_size"])
+
+    # Min is inclusive, max is exclusive, both 0-based.
+    return (window_min, window_max)
+
+  def train(self, network, teacher_network, starting_step, checkpoint, log=True):
     # Create models on the distribution strategy scope, including the teacher for knowledge distillation inference.
     with self.strategy.scope():
       model = network.ensure_training()
       if teacher_network:
-        # Handle student training with a named teacher.
-        network_path = None
-        if self.config.training["teacher_network_name"]:
-          network_path = teacher_network.make_network_path_for_network(self.config.training["teacher_network_name"], checkpoint)
-        teacher_network.ensure_training(network_path)
+        teacher_network.ensure_training()        
 
     # Set up data pipelines.
-    globs_training = [self.data_globs[t] for t in game_types]
+    training_windows = [self.calculate_training_window(checkpoint)]
+    globs_training = [self.data_glob_training]
     globs_validation = [self.data_glob_validation]
     data_training = self.datasets.build_training_dataset(globs_training, training_windows, self.global_batch_size)
     data_validation = self.datasets.build_validation_dataset(globs_validation, self.global_batch_size)
@@ -145,8 +143,8 @@ class Trainer:
       model.init(teacher_network)
 
     # Train.
-    log_callback = LogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)
-    model.fit(data_training, verbose=0, callbacks=[log_callback],
+    callbacks = [LogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)] if log else []
+    model.fit(data_training, verbose=0, callbacks=callbacks,
       validation_data=data_validation, validation_steps=1, validation_freq=1,
       steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
 
