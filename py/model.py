@@ -14,7 +14,7 @@ class ModelBuilder:
   filter_count = 256
   attention_heads = 8
   dense_count = 256
-  value_filter_count = 8 # vs. 1 for AZ - ensures value convergence for full-sized teacher network on self-play-only data
+  value_filter_count = 1
   weight_decay = 1e-4
 
   transformer_layers = 6
