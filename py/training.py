@@ -225,7 +225,9 @@ class StudentModel(tf.keras.Model):
 class Schedule(tf.keras.optimizers.schedules.PiecewiseConstantDecay):
 
   def __init__(self, steps, rates, warmup_steps, device_count):
-    boundaries = steps.copy()[1:]
+    # Keras sees step numbers for global batches in Model.fit() (e.g. steps_per_epoch has a divide-by-device_count),
+    # not the per-replica batches our config is based on, so adjust the boundaries here correspondingly.
+    boundaries = [(boundary / device_count) for boundary in steps[1:]]
     values = rates.copy()
     if not boundaries:
       boundaries.append(0)
