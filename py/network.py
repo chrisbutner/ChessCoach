@@ -272,6 +272,12 @@ class Network:
       self.models_predict[device_index].predict = ModelBuilder().subset_predict(self.models_predict[device_index].full)
       # Ensure that the prediction cache is clear after initial uniform predictions.
       return PredictionStatus.UpdatedNetwork
+
+  def ensure_tensorboard(self):
+    if not self.tensorboard_writer_training:
+      tensorboard_network_path = self.config.join(self.config.misc["paths"]["tensorboard"], self.config.network_name, self.network_type)
+      self.tensorboard_writer_training = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "training"))
+      self.tensorboard_writer_validation = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "validation"))
   
   def ensure_training(self):
     # The training subset may already exist.
@@ -288,9 +294,7 @@ class Network:
     self.training_compiler(self.models_train.train)
 
     # Set up TensorBoard.
-    tensorboard_network_path = self.config.join(self.config.misc["paths"]["tensorboard"], self.config.network_name, self.network_type)
-    self.tensorboard_writer_training = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "training"))
-    self.tensorboard_writer_validation = tf.summary.create_file_writer(self.config.join(tensorboard_network_path, "validation"))
+    self.ensure_tensorboard()
 
     return self.models_train.train
 

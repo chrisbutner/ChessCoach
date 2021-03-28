@@ -176,7 +176,7 @@ class Trainer:
       steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
 
   def log_scalars(self, network, step, names, values):
-    network.ensure_training()
+    network.ensure_tensorboard()
     writer = network.tensorboard_writer_validation
     with writer.as_default():
       tf.summary.experimental.set_step(step)
