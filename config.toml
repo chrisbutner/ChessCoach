@@ -4,8 +4,32 @@
 
 [network]
 
-network_name = "selfplay5"
+network_name = "selfplay6"
 role = "train|play"
+
+[[networks]]
+
+    name = "selfplay6"
+
+    [networks.training]
+
+    stages = [
+        # Self-play
+        { stage = "play" },
+
+        # Train self-play, teacher then distill
+        { stage = "train", target = "teacher" },
+        { stage = "save", target = "teacher" },
+        { stage = "train", target = "student" },
+        { stage = "save", target = "student" },
+        { stage = "save_swa", target = "student" },
+
+        # Strength test (STS rating, etc.)
+        { stage = "strength_test", target = "teacher" },
+        { stage = "strength_test", target = "student" },
+    ]
+
+    games_path_training = "Games/Fresh2"
 
 [[networks]]
 
@@ -54,30 +78,6 @@ role = "train|play"
     ]
 
     games_path_training = "Games/Supervised"
-
-[[networks]]
-
-    name = "selfplay5"
-
-    [networks.training]
-
-    stages = [
-        # Self-play
-        { stage = "play" },
-
-        # Train self-play, teacher then distill
-        { stage = "train", target = "teacher" },
-        { stage = "save", target = "teacher" },
-        { stage = "train", target = "student" },
-        { stage = "save", target = "student" },
-        { stage = "save_swa", target = "student" },
-
-        # Strength test (STS rating, etc.)
-        { stage = "strength_test", target = "teacher" },
-        { stage = "strength_test", target = "student" },
-    ]
-
-    games_path_training = "Games/Fresh1"
 
 [[networks]]
 

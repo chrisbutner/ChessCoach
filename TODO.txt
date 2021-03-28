@@ -1,9 +1,5 @@
-Next fresh run
-- selfplay6, Fresh2
-- selfplay6a, try full LR rather than ^0.67
-- selfplay6b, try full LR and 8->1 value head filters
-
 Training runs
+- try full LR rather than ^0.67
 - evaluate SE/pooling (read over 2f/2d notes)
 	- actual SE, as-bias (Wu), hybrid
 	- try batchnorm/relu before SE since we have v2 residuals
@@ -26,12 +22,6 @@ Profiling
 - try out profiling
 	- capture a trace locally - may be issues with networking/firewall
 
-Cluster
-- `export TPU_LOAD_LIBRARY=0` doesn't seem necessary, wait on info
-- need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
-- need fix for 10x total retries on non-zero return-code SSH --commands
-- docker containers outliving SSH sessions despite --rm is annoying vs. regular compute VMs
-
 Criticality training (shelved)
 - add to GUI, look over saved positions, decide whether to drive 800-1600 range
 - either pull in whole change or some of the code cleanup
@@ -52,6 +42,7 @@ Training improvements (low confidence)
 - Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 
 Commentary #3
+- need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
 - remove dropout for now - can slowly add back decoder-only - may need to avoid it for highly discrete board squares in the encoder sequence
 - investigate inference problems locally (initial code is stashed)
 - build small manual test set for commentary inference
@@ -129,10 +120,6 @@ PUCT - later
 	- could this also be used earlier during search, backpropagate up a pending/bounty value via separate field to be replaced
 	  by actual backprops - set it up when saturation point would take from below 1st to 1st in visits
 
-PUCT questions
-- force AZPUCT in search path after first non-AZPUCT choice?
-- accept damaging 800-node distribution and prune aggressively to compensate?
-
 GUI
 - invert uci/gui relationship after working out in-proc/out details
 	- switch between database/UCI modes
@@ -146,9 +133,6 @@ GUI
 
 Quality
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
-
-Cluster
-- validation log still 11-12s after training log on cluster, try prefetch harder or debug
 
 UCI (#2)
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
@@ -179,8 +163,6 @@ CPU+GPU integration performance:
 - image key for prediction cache can be incrementally updated if it helps enough
 
 Code quality
-- try multistage docker build, debian only for building chesscoach, copy over to tensorflow base
-- inject config.toml into cluster volume, take out of image tags, make sure it takes priority over installed
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - switch to vcpkg for windows dependencies
 - fix _ in network names - split on final _
@@ -190,8 +172,6 @@ Code quality
 - try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
 - add Python type info everywhere - look up best practices for linting etc.
 - check for any unnecessary move constructors
-- add further architecture configuration to toml config (residuals*filters, etc.)
-- switch to sample ratio, rather than specifying games + steps (complicated, ties in to "curriculum schedule" in config maybe)
 - StrengthTestNetwork (naming)
 
 UCI (#3)
@@ -248,3 +228,5 @@ Won't do
 	- prioritize trainer over players, cannibalize
 	- try delays rather than broken marker for tpus in case of temporary failures, throttling
 - cyclic learning rate and/or fast-SWA (too much complexity too late)
+- performance
+	- validation log still 11-12s after training log on cluster, try prefetch harder or debug
