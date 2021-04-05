@@ -239,7 +239,9 @@ class Schedule(tf.keras.optimizers.schedules.PiecewiseConstantDecay):
 
   def __call__(self, step):
     value = super().__call__(step)
-    value *= (self.device_count ** .67)
+    # Theory says scale with sqrt(global batch size); practice says scale linearly with global batch size.
+    # Configuration values are tuned to the local batch size for a single device.
+    value *= self.device_count
     if self.warmup_steps:
       value *= tf.clip_by_value(step / self.warmup_steps, 0.0, 1.0)
     return value

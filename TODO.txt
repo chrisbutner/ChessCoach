@@ -1,17 +1,19 @@
 Training runs
-- try full LR rather than ^0.67
 - evaluate SE/pooling (read over 2f/2d notes)
 	- actual SE, as-bias (Wu), hybrid
 	- try batchnorm/relu before SE since we have v2 residuals
-- try without mcts value auxiliary again (esp. at high end of steps)
-- try early-stopping teacher or weaning off teacher
-- try switching to teacher-only after X steps, e.g. 800k
 
 Tournaments
 - implement mini-tournaments to better judge strength for training and parameter optimization
 	- could run games every strength test interval, and bayeselo every 100k or so?
 	- need to work out how to show data in tensorboard if older networks change elo during the run
 		- multiple points, same X? multiple series, one per bayeselo?
+- test with/without SBLE-PUCT, worried about sufficient backprop for losing positions (even deeper within trees, avoiding traps)
+
+Training runs, post-800k, post-2.4m
+- try without mcts value auxiliary again
+- try weaning off teacher or hard-cutoff
+- try switching to teacher-only prediction (SWA? stage predicates in config?)
 
 Next fresh run
 - (require SE, mini-tournaments)
@@ -198,12 +200,11 @@ Publishing
 - website - game-in-10, one at a time, people can watch, comments shown for each move
 
 Bugs
+- "quit" without "stop" hangs UCI
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - Rare ephemeral storage issue on cluster, might be core dumps
-- Tiny configs with self-play don't work now with minimum 2000 chunking
-- Tests need to set CHESSCOACH_SILENT before initializing python somehow (mostly for NetworkTest.cpp)
 
 Low priority
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
