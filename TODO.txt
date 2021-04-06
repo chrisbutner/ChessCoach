@@ -1,14 +1,24 @@
+Tournaments
+- plumb UCI options
+- set up manual tournaments between, say, selfplay6a 200k, 400k, 600k, 800k, 1m, stockfish
+- set up Bayeselo
+- linux support
+- set up automatic tournaments during training, plumb tensorboard
+	- could run games every strength test interval, and bayeselo every 100k or so?
+	- need to work out how to show data in tensorboard if older networks change elo during the run
+		- multiple points, same X? multiple series, one per bayeselo?
+- set up tournament-based parameter optimization
+
+Optimization
+- work out better threads/parallelism for UCI for 1s moves and 30s moves (optimize virtual loss coefficient in parallel)
+- test with/without SBLE-PUCT, worried about sufficient backprop for losing positions (even deeper within trees, avoiding traps)
+	- implement categorical parameters? or just manually? not sure if skopt can do it - that FB one used bandits to handle it
+- full parameter optimization with Arasan21 and tournaments, after deciding on threads/parallelism
+
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)
 	- actual SE, as-bias (Wu), hybrid
 	- try batchnorm/relu before SE since we have v2 residuals
-
-Tournaments
-- implement mini-tournaments to better judge strength for training and parameter optimization
-	- could run games every strength test interval, and bayeselo every 100k or so?
-	- need to work out how to show data in tensorboard if older networks change elo during the run
-		- multiple points, same X? multiple series, one per bayeselo?
-- test with/without SBLE-PUCT, worried about sufficient backprop for losing positions (even deeper within trees, avoiding traps)
 
 Training runs, post-800k, post-2.4m
 - try without mcts value auxiliary again
@@ -35,13 +45,11 @@ Next fresh run
 
 Training improvements (low confidence)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
-- sketch out "value trust curve", especially with volatile game, multiple mistakes both sides
-	- work out static eval vs. search on stockfish side for inflection/control points, see what's viable
 - investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
 	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
 	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
 - try out "sleeping" in the rotation - train random noise, different distributions
-- Try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
+- try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 
 Commentary #3
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now

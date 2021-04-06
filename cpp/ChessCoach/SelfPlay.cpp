@@ -2019,7 +2019,8 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
 
     // Specified think time can stop the search.
-    if ((_searchState->timeControl.moveTimeMs > 0) && (searchTimeMs >= _searchState->timeControl.moveTimeMs))
+    if ((_searchState->timeControl.moveTimeMs > 0) &&
+        (searchTimeMs >= (_searchState->timeControl.moveTimeMs - Config::Misc.TimeControl_SafetyBufferMilliseconds)))
     {
         workCoordinator->OnWorkItemCompleted();
         return;
