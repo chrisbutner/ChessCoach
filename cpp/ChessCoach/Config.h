@@ -77,6 +77,8 @@ struct TrainingConfig
 
 struct SelfPlayConfig
 {
+    std::string NetworkWeights;
+
     int NumWorkers;
     int PredictionBatchSize;
 
@@ -155,11 +157,9 @@ public:
 public:
 
     static void Initialize();
-    static void UpdateParameters(const std::map<std::string, float>& parameters);
+    static void Update(const std::map<std::string, float>& floatUpdates, const std::map<std::string, std::string>& stringUpdates);
+    static void LookUp(std::map<std::string, int>& intLookups, std::map<std::string, std::string>& stringLookups);
 
-private:
-
-    static void Parse(const std::map<std::string, float>& parameters);
 };
 
 #endif // _CONFIG_H_
