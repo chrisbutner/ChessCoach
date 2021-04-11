@@ -91,6 +91,7 @@ struct INetwork
     virtual void LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values) = 0;
     virtual void SaveNetwork(NetworkType networkType, int checkpoint) = 0;
     virtual void SaveSwaNetwork(NetworkType networkType, int checkpoint) = 0;
+    virtual void UpdateNetworkWeights(const std::string& networkWeights) = 0;
     virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* swaStepCountOut, int* trainingChunkCountOut, std::string* relativePathOut) = 0;
     virtual void SaveFile(const std::string& relativePath, const std::string& data) = 0;
     virtual std::string LoadFile(const std::string& relativePath) = 0;

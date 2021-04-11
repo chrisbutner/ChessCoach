@@ -103,8 +103,8 @@ class Config:
   def make_local_path(self, path):
     return self.join(self.determine_local_data_root(), self.unmake_path(path))
 
-  def latest_model_paths_for_type_and_model(self, network_type, model_type):
-    glob = self.join(self.misc["paths"]["networks"], self.network_name + "_*", network_type, model_type)
+  def latest_model_paths_for_pattern_type_model(self, network_pattern, network_type, model_type):
+    glob = self.join(self.misc["paths"]["networks"], network_pattern, network_type, model_type)
     results = [self.join(result, "weights") for result in tf.io.gfile.glob(glob)]
     return results
 

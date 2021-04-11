@@ -16,8 +16,11 @@
 #include <ChessCoach/WorkerGroup.h>
 #include <ChessCoach/Pgn.h>
 
-typedef std::function<void(std::stringstream&)> CommandHandler;
-typedef std::pair<std::string, CommandHandler> CommandHandlerEntry;
+using CommandHandler = std::function<void(std::stringstream&)>;
+using CommandHandlerEntry = std::pair<std::string, CommandHandler>;
+
+static constexpr const char OptionTypeSpin[] = "spin";
+static constexpr const char OptionTypeString[] = "string";
 
 class ChessCoachUci : public ChessCoach
 {
@@ -50,13 +53,16 @@ private:
     // Console
     void HandleConsole(std::stringstream& commands);
 
+    void InitializeNetwork();
     void InitializeWorkers();
     void StopAndReadyWorkers();
+    void PropagatePosition();
 
 private:
 
     bool _quit = false;
     bool _guiLaunched = false;
+    bool _isNewGame = true;
     bool _positionUpdated = true;
     std::string _positionFen = Config::StartingPosition;
     std::vector<Move> _positionMoves = {};
@@ -171,10 +177,40 @@ bool ChessCoachUci::HandleCommand(std::stringstream& commands, std::string comma
 
 void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
 {
+    // Look up default option values.
+    std::map<std::string, int> intOptions;
+    std::map<std::string, std::string> stringOptions;
+    for (const auto& [name, type] : Config::Misc.UciOptions)
+    {
+        // TODO: Need to handle min/max for spin types
+        if (type == OptionTypeSpin)
+        {
+            intOptions[name] = 0;
+        }
+        else if (type == OptionTypeString)
+        {
+            stringOptions[name] = "";
+        }
+        else
+        {
+            throw std::runtime_error("Unsupported UCI option type: " + type + " (" + name + ")");
+        }
+    }
+    Config::LookUp(intOptions, stringOptions);
+
+    // Reply.
     std::cout << "id name ChessCoach\n"
-        "id author C. Butner\n"
-        // Options are listed here when they exist.
-        "uciok" << std::endl;
+        "id author C. Butner\n";
+    for (const auto& [name, value] : intOptions)
+    {
+        std::cout << "option name " << name << " type spin default " << value << "\n";
+    }
+    for (const auto& [name, value] : stringOptions)
+    {
+        const std::string& stringValue = (value.empty() ? "none" : value);
+        std::cout << "option name " << name << " type string default " << stringValue << "\n";
+    }
+    std::cout << "uciok" << std::endl;
 }
 
 void ChessCoachUci::HandleDebug(std::stringstream& commands)
@@ -202,13 +238,95 @@ void ChessCoachUci::HandleIsReady(std::stringstream& /*commands*/)
     if (!_workerGroup.workCoordinator->CheckWorkItemsExist())
     {
         _workerGroup.workCoordinator->WaitForWorkers();
+
+        // Propagate the position if updated.
+        PropagatePosition();
     }
 
     std::cout << "readyok" << std::endl;
 }
 
-void ChessCoachUci::HandleSetOption(std::stringstream& /*commands*/)
+void ChessCoachUci::HandleSetOption(std::stringstream& commands)
 {
+    // This parsing uses built-in whitespace tokenization, which makes looking for "name"/"value" easy,
+    // but collapses whitespace into a single space - should be fine usually.
+
+    if (_workerGroup.IsInitialized() && _workerGroup.workCoordinator->CheckWorkItemsExist())
+    {
+        std::cout << "info string Cannot set options while searching" << std::endl;
+        return;
+    }
+
+    // Ignore tokens before "name".
+    std::string token;
+    while (commands >> token)
+    {
+        if (token == "name")
+        {
+            break;
+        }
+    }
+
+    // Collect the name.
+    std::string name;
+    while (commands >> token)
+    {
+        if (token == "value")
+        {
+            break;
+        }
+        if (!name.empty())
+        {
+            name += " ";
+        }
+        name += token;
+    }
+
+    // Collect the value and update.
+    const auto match = Config::Misc.UciOptions.find(name);
+    if (match == Config::Misc.UciOptions.end())
+    {
+        std::cout << "info string Unknown option name" << std::endl;
+        return;
+    }
+    if (match->second == OptionTypeSpin)
+    {
+        int intValue = 0;
+        if (!(commands >> intValue))
+        {
+            std::cout << "info string Invalid spin value" << std::endl;
+            return;
+        }
+        Config::Update({ { name, static_cast<float>(intValue) } }, {});
+    }
+    else if (match->second == OptionTypeString)
+    {
+        std::string stringValue;
+        while (commands >> token)
+        {
+            if (!stringValue.empty())
+            {
+                stringValue += " ";
+            }
+            stringValue += token;
+        }
+        if (stringValue == "none")
+        {
+            stringValue = "";
+        }
+        Config::Update({}, { { name, stringValue } });
+    }
+    else
+    {
+        throw std::runtime_error("Unsupported UCI option type: " + match->second + " (" + name + ")");
+    }
+
+    // Handle custom updates.
+    if (name == "network_weights")
+    {
+        InitializeNetwork();
+        _network->UpdateNetworkWeights(Config::Network.SelfPlay.NetworkWeights);
+    }
 }
 
 void ChessCoachUci::HandleRegister(std::stringstream& /*commands*/)
@@ -217,7 +335,11 @@ void ChessCoachUci::HandleRegister(std::stringstream& /*commands*/)
 
 void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
 {
-    InitializeWorkers();
+    // Use this as a signal not to reuse the current MCTS tree, even for a compatible position.
+    _isNewGame = true;
+    _positionUpdated = true;
+    _positionFen = Config::StartingPosition;
+    _positionMoves.clear();
 }
 
 void ChessCoachUci::HandlePosition(std::stringstream& commands)
@@ -326,11 +448,7 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
     }
 
     // Propagate the position if updated.
-    if (_positionUpdated)
-    {
-        _positionUpdated = false;
-        _workerGroup.controllerWorker->SearchUpdatePosition(_positionFen, _positionMoves, false /* forceNewPosition */);
-    }
+    PropagatePosition();
 
     _workerGroup.searchState.Reset(timeControl);
 
@@ -356,11 +474,7 @@ void ChessCoachUci::HandleComment(std::stringstream& /*commands*/)
     StopAndReadyWorkers();
 
     // Propagate the position if updated.
-    if (_positionUpdated)
-    {
-        _positionUpdated = false;
-        _workerGroup.controllerWorker->SearchUpdatePosition(_positionFen, _positionMoves, false /* forceNewPosition */);
-    }
+    PropagatePosition();
 
     _workerGroup.controllerWorker->CommentOnPosition(_network.get());
 }
@@ -441,6 +555,14 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
     }
 }
 
+void ChessCoachUci::InitializeNetwork()
+{
+    if (!_network)
+    {
+        _network.reset(CreateNetwork());
+    }
+}
+
 void ChessCoachUci::InitializeWorkers()
 {
     if (_workerGroup.IsInitialized())
@@ -449,7 +571,7 @@ void ChessCoachUci::InitializeWorkers()
     }
 
     // Use the faster student network for UCI.
-    _network.reset(CreateNetwork());
+    InitializeNetwork();
     _workerGroup.Initialize(_network.get(), nullptr /* storage */, NetworkType_Student,
         Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
 }
@@ -458,4 +580,15 @@ void ChessCoachUci::StopAndReadyWorkers()
 {
     _workerGroup.workCoordinator->ResetWorkItemsRemaining(0);
     _workerGroup.workCoordinator->WaitForWorkers();
+}
+
+void ChessCoachUci::PropagatePosition()
+{
+    // Propagate the position if updated.
+    if (_positionUpdated)
+    {
+        _workerGroup.controllerWorker->SearchUpdatePosition(_positionFen, _positionMoves, _isNewGame /* forceNewPosition */);
+        _isNewGame = false;
+        _positionUpdated = false;
+    }
 }

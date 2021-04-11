@@ -284,6 +284,9 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     policy.template Parse<int>(misc.Optimization_Nodes, optimization, "nodes");
     policy.template Parse<int>(misc.Optimization_FailureNodes, optimization, "failure_nodes");
     policy.template Parse<int>(misc.Optimization_PositionLimit, optimization, "position_limit");
+
+    // Using https://github.com/ToruNiina/toml11#converting-a-table
+    policy.template Parse<std::map<std::string, std::string>>(misc.UciOptions, config, "uci_options");
 }
 
 NetworkConfig Config::Network;

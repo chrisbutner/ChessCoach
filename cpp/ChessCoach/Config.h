@@ -141,6 +141,9 @@ struct MiscConfig
     int Optimization_Nodes;
     int Optimization_FailureNodes;
     int Optimization_PositionLimit;
+
+    // UCI options
+    std::map<std::string, std::string> UciOptions;
 };
 
 class Config

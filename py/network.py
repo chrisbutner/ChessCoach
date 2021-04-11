@@ -22,6 +22,11 @@ import tensorflow as tf
 
 # --- TPU/GPU initialization ---
 
+# Let multiple UCIs run at once in tournaments.
+physical_gpus = tf.config.experimental.list_physical_devices("GPU")
+if physical_gpus:
+  tf.config.experimental.set_memory_growth(physical_gpus[0], True)
+
 class LocalTPUClusterResolver(
     tf.distribute.cluster_resolver.TPUClusterResolver):
   """LocalTPUClusterResolver."""
@@ -138,7 +143,7 @@ class ModelPath:
   def __eq__(self, other):
     return self.path == other.path
 
-  # Required for sort()
+  # Required for sort(), max()
   def __lt__(self, other):
     # Check for equality first (e.g. when looking for updated weights).
     if self == other:
@@ -172,6 +177,18 @@ class Network:
     self.network_type = network_type
     self.model_builder = model_builder
     self.training_compiler = None
+    self._network_weights = config.self_play["network_weights"]
+    self.initialize()
+
+  @property
+  def network_weights(self):
+    return self._network_weights
+
+  @network_weights.setter
+  def network_weights(self, value):
+    self._network_weights = value
+
+    # Clear out any loaded models, ready to lazy-load using the new weights path.
     self.initialize()
 
   def initialize(self):
@@ -459,7 +476,8 @@ class Network:
   def find_filter_model_paths(self, model_types):
     single_model_type = isinstance(model_types, str)
     model_type_glob = model_types if single_model_type else "*"
-    results = self.config.latest_model_paths_for_type_and_model(self.network_type, model_type_glob)
+    network_pattern = self.network_weights if self.network_weights else (self.config.network_name + "_*")
+    results = self.config.latest_model_paths_for_pattern_type_model(network_pattern, self.network_type, model_type_glob)
     model_paths = [ModelPath(result) for result in results]
     if not single_model_type:
       model_paths = [m for m in model_paths if m.model_type() in model_types]
@@ -536,9 +554,13 @@ def predict_commentary_batch(images):
   return np.array(memoryview(comments)) # C++ expects bytes
 
 def train_teacher(step, checkpoint):
+  if networks.teacher.network_weights or networks.student.network_weights:
+    raise ValueError("Cannot train with network_weights set")
   trainer.train(networks.teacher, None, step, checkpoint)
 
 def train_student(step, checkpoint):
+  if networks.teacher.network_weights or networks.student.network_weights:
+    raise ValueError("Cannot train with network_weights set")
   trainer.train(networks.student, networks.teacher, step, checkpoint)
 
 def train_commentary(step, checkpoint):
@@ -550,6 +572,10 @@ def log_scalars_teacher(step, names, values):
 
 def log_scalars_student(step, names, values):
   trainer.log_scalars(networks.student, step, names, values)
+
+def update_network_weights(network_weights):
+  networks.teacher.network_weights = network_weights
+  networks.student.network_weights = network_weights
 
 def get_network_info_teacher():
   return networks.teacher.info

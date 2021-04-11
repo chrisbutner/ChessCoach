@@ -69,6 +69,7 @@ PythonNetwork::PythonNetwork()
     _saveNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_network_student");
     _saveSwaNetworkFunction[NetworkType_Teacher] = LoadFunction(module, "save_swa_network_teacher");
     _saveSwaNetworkFunction[NetworkType_Student] = LoadFunction(module, "save_swa_network_student");
+    _updateNetworkWeightsFunction = LoadFunction(module, "update_network_weights");
     _getNetworkInfoFunction[NetworkType_Teacher] = LoadFunction(module, "get_network_info_teacher");
     _getNetworkInfoFunction[NetworkType_Student] = LoadFunction(module, "get_network_info_student");
     _saveFileFunction = LoadFunction(module, "save_file");
@@ -96,6 +97,7 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_saveFileFunction);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Student]);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Teacher]);
+    Py_XDECREF(_updateNetworkWeightsFunction);
     Py_XDECREF(_saveSwaNetworkFunction[NetworkType_Student]);
     Py_XDECREF(_saveSwaNetworkFunction[NetworkType_Teacher]);
     Py_XDECREF(_saveNetworkFunction[NetworkType_Student]);
@@ -275,6 +277,20 @@ void PythonNetwork::SaveSwaNetwork(NetworkType networkType, int checkpoint)
 
     Py_DECREF(result);
     Py_DECREF(pythonCheckpoint);
+}
+
+void PythonNetwork::UpdateNetworkWeights(const std::string& networkWeights)
+{
+    PythonContext context;
+
+    PyObject* pythonNetworkWeights = PyUnicode_FromStringAndSize(networkWeights.data(), networkWeights.size());
+    PyAssert(pythonNetworkWeights);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_updateNetworkWeightsFunction, pythonNetworkWeights, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonNetworkWeights);
 }
 
 void PythonNetwork::GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* swaStepCountOut, int* trainingChunkCountOut, std::string* relativePathOut)
