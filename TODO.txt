@@ -1,13 +1,8 @@
 Tournaments
-- plumb UCI options
-- set up manual tournaments between, say, selfplay6a 200k, 400k, 600k, 800k, 1m, stockfish
-- set up Bayeselo
-- linux support
-- set up automatic tournaments during training, plumb tensorboard
-	- could run games every strength test interval, and bayeselo every 100k or so?
-	- need to work out how to show data in tensorboard if older networks change elo during the run
-		- multiple points, same X? multiple series, one per bayeselo?
-- set up tournament-based parameter optimization
+- test teacher prediction
+- set up mini-tournament-based parameter optimization
+	- linux support
+	- play vs. a reference stockfish with X elo to avoid multi-TF-on-TPU problem
 
 Optimization
 - work out better threads/parallelism for UCI for 1s moves and 30s moves (optimize virtual loss coefficient in parallel)
@@ -26,7 +21,7 @@ Training runs, post-800k, post-2.4m
 - try switching to teacher-only prediction (SWA? stage predicates in config?)
 
 Next fresh run
-- (require SE, mini-tournaments)
+- (require SE)
 - selfplay7, Fresh3
 
 Profiling

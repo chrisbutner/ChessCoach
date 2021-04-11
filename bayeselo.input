@@ -1,0 +1,8 @@
+readpgn tournament.pgn
+elo
+mm
+exactdist
+offset 3551 Stockfish_13
+ratings > tournament.ratings
+x
+x
