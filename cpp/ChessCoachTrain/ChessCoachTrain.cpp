@@ -75,9 +75,9 @@ void ChessCoachTrain::TrainChessCoach()
     // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
     storage.InitializeLocalGamesChunks(network.get());
 
-    // Start self-play worker threads. Use the faster student network for self-play.
+    // Start self-play worker threads.
     WorkerGroup workerGroup;
-    workerGroup.Initialize(network.get(), &storage, NetworkType_Student,Config::Network.SelfPlay.NumWorkers,
+    workerGroup.Initialize(network.get(), &storage, Config::Network.SelfPlay.NetworkType, Config::Network.SelfPlay.NumWorkers,
         Config::Network.SelfPlay.PredictionBatchSize, &SelfPlayWorker::LoopSelfPlay);
     for (int i = 0; i < Config::Network.SelfPlay.NumWorkers; i++)
     {

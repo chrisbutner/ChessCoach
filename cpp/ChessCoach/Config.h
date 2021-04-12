@@ -26,6 +26,7 @@ enum NetworkType
 
     NetworkType_Count,
 };
+constexpr const char* NetworkTypeKeys[NetworkType_Count] = { "teacher", "student" };
 constexpr const char* NetworkTypeNames[NetworkType_Count] = { "Teacher", "Student" };
 static_assert(NetworkType_Count == 2);
 
@@ -77,6 +78,7 @@ struct TrainingConfig
 
 struct SelfPlayConfig
 {
+    NetworkType NetworkType;
     std::string NetworkWeights;
 
     int NumWorkers;

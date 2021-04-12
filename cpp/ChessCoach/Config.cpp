@@ -37,19 +37,57 @@ const std::map<std::string, RoleType> RoleTypeLookup = {
     { "play", RoleType_Play },
 };
 
-void ParseStages(std::vector<StageConfig>& stages, const TomlValue& config)
+// https://github.com/ToruNiina/toml11#conversion-between-toml-value-and-arbitrary-types
+namespace toml
 {
-    std::vector<TomlValue> configStages = config.as_array();
-    stages.resize(configStages.size());
-
-    for (int i = 0; i < configStages.size(); i++)
+template<>
+struct from<StageType>
+{
+    static StageType from_toml(const TomlValue& config)
     {
+        return StageTypeLookup.at(toml::get<std::string>(config));
+    }
+};
+template<>
+struct from<NetworkType>
+{
+    static NetworkType from_toml(const TomlValue& config)
+    {
+        return NetworkTypeLookup.at(toml::get<std::string>(config));
+    }
+};
+template<>
+struct from<RoleType>
+{
+    static RoleType from_toml(const TomlValue& config)
+    {
+        int role = RoleType_None;
+        std::stringstream tokenizer(get<std::string>(config));
+        std::string token;
+        while (std::getline(tokenizer, token, '|'))
+        {
+            role |= RoleTypeLookup.at(token);
+        }
+        return static_cast<RoleType>(role);
+    }
+};
+
+template<>
+struct from<StageConfig>
+{
+    static StageConfig from_toml(const TomlValue& config)
+    {
+        StageConfig stageConfig;
+
         // Required (find)
-        stages[i].Stage = StageTypeLookup.at(toml::find<std::string>(configStages[i], "stage"));
+        stageConfig.Stage = toml::find<StageType>(config, "stage");
 
         // Optional (find_or)
-        stages[i].Target = NetworkTypeLookup.at(toml::find_or<std::string>(configStages[i], "target", ""));
+        stageConfig.Target = toml::find_or<NetworkType>(config, "target", NetworkType_Count);
+
+        return stageConfig;
     }
+};
 }
 
 struct DefaultPolicy
@@ -61,12 +99,6 @@ struct DefaultPolicy
     }
 };
 
-template <>
-void DefaultPolicy::Parse(std::vector<StageConfig>& value, const TomlValue& config, const toml::key& key) const
-{
-    ParseStages(value, config.at(key));
-}
-
 struct OverridePolicy
 {
     template <typename T>
@@ -76,18 +108,6 @@ struct OverridePolicy
     }
 };
 
-template <>
-void OverridePolicy::Parse(std::vector<StageConfig>& value, const TomlValue& config, const toml::key& key) const
-{
-    const auto& table = config.as_table();
-    if (table.count(key) == 0)
-    {
-        return;
-    }
-
-    ParseStages(value, config.at(key));
-}
-
 struct UpdatePolicy
 {
     template <typename T>
@@ -95,28 +115,18 @@ struct UpdatePolicy
     {
     }
 
-    bool TryGet(const std::string& name, TomlValue& value) const
-    {
-        const auto match = updates->find(name);
-        if (match != updates->end())
-        {
-            value = match->second;
-            return true;
-        }
-        return false;
-    }
-
-    std::map<std::string, TomlValue>* updates;
+    const std::map<std::string, float>* floatUpdates;
+    const std::map<std::string, std::string>* stringUpdates;
     std::set<std::string>* assigned;
 };
 
 template <>
-void UpdatePolicy::Parse(std::string& value, const TomlValue&/* config*/, const toml::key& key) const
+void UpdatePolicy::Parse(float& value, const TomlValue&/* config*/, const toml::key& key) const
 {
-    TomlValue tomlValue;
-    if (TryGet(key, tomlValue))
+    const auto match = floatUpdates->find(key);
+    if (match != floatUpdates->end())
     {
-        value = tomlValue.as_string();
+        value = match->second;
         assigned->insert(key);
     }
 }
@@ -124,22 +134,33 @@ void UpdatePolicy::Parse(std::string& value, const TomlValue&/* config*/, const 
 template <>
 void UpdatePolicy::Parse(int& value, const TomlValue&/* config*/, const toml::key& key) const
 {
-    TomlValue tomlValue;
-    if (TryGet(key, tomlValue))
+    const auto match = floatUpdates->find(key);
+    if (match != floatUpdates->end())
     {
         // Integer updates are passed in as float to simplify Python-to-C++ plumbing, so just cast.
-        value = static_cast<int>(tomlValue.as_floating());
+        value = static_cast<int>(match->second);
         assigned->insert(key);
     }
 }
 
 template <>
-void UpdatePolicy::Parse(float& value, const TomlValue&/* config*/, const toml::key& key) const
+void UpdatePolicy::Parse(std::string& value, const TomlValue&/* config*/, const toml::key& key) const
 {
-    TomlValue tomlValue;
-    if (TryGet(key, tomlValue))
+    const auto match = stringUpdates->find(key);
+    if (match != stringUpdates->end())
     {
-        value = static_cast<float>(tomlValue.as_floating()); // double -> float
+        value = match->second;
+        assigned->insert(key);
+    }
+}
+
+template <>
+void UpdatePolicy::Parse(NetworkType& value, const TomlValue&/* config*/, const toml::key& key) const
+{
+    const auto match = stringUpdates->find(key);
+    if (match != stringUpdates->end())
+    {
+        value = NetworkTypeLookup.at(match->second);
         assigned->insert(key);
     }
 }
@@ -151,53 +172,42 @@ struct LookupPolicy
     {
     }
 
-    bool TryGet(const std::string& name, TomlValue*& value) const
-    {
-        const auto match = lookups->find(name);
-        if (match != lookups->end())
-        {
-            value = &match->second;
-            return true;
-        }
-        return false;
-    }
-
-    std::map<std::string, TomlValue>* lookups;
+    std::map<std::string, int>* intLookups;
+    std::map<std::string, std::string>* stringLookups;
     std::set<std::string>* found;
 };
 
 template <>
-void LookupPolicy::Parse(std::string& value, const TomlValue&/* config*/, const toml::key& key) const
+void LookupPolicy::Parse(int& value, const TomlValue&/* config*/, const toml::key& key) const
 {
-    TomlValue* tomlValue = nullptr;
-    if (TryGet(key, tomlValue))
+    const auto match = intLookups->find(key);
+    if (match != intLookups->end())
     {
-        *tomlValue = value;
+        match->second = value;
         found->insert(key);
     }
 }
 
 template <>
-void LookupPolicy::Parse(int& value, const TomlValue&/* config*/, const toml::key& key) const
+void LookupPolicy::Parse(std::string& value, const TomlValue&/* config*/, const toml::key& key) const
 {
-    TomlValue* tomlValue = nullptr;
-    if (TryGet(key, tomlValue))
+    const auto match = stringLookups->find(key);
+    if (match != stringLookups->end())
     {
-        *tomlValue = value;
+        match->second = value;
         found->insert(key);
     }
 }
 
-RoleType ParseRole(const std::string& raw)
+template <>
+void LookupPolicy::Parse(NetworkType& value, const TomlValue&/* config*/, const toml::key& key) const
 {
-    int role = RoleType_None;
-    std::stringstream tokenizer(raw);
-    std::string token;
-    while (std::getline(tokenizer, token, '|'))
+    const auto match = stringLookups->find(key);
+    if (match != stringLookups->end())
     {
-        role |= RoleTypeLookup.at(token);
+        match->second = NetworkTypeKeys[value];
+        found->insert(key);
     }
-    return static_cast<RoleType>(role);
 }
 
 template <typename Policy>
@@ -227,6 +237,7 @@ void ParseTraining(TrainingConfig& training, const TomlValue& config, const Poli
 template <typename Policy>
 void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Policy& policy)
 {
+    policy.template Parse<NetworkType>(selfPlay.NetworkType, config, "network_type");
     policy.template Parse<std::string>(selfPlay.NetworkWeights, config, "network_weights");
 
     policy.template Parse<int>(selfPlay.NumWorkers, config, "num_workers");
@@ -255,31 +266,31 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
 template <typename Policy>
 void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
 {
-    const auto& predictionCache = toml::find_or(config, "prediction_cache", TomlValue::table_type());
+    const auto& predictionCache = toml::find_or(config, "prediction_cache", {});
     policy.template Parse<int>(misc.PredictionCache_RequestGibibytes, predictionCache, "request_gibibytes");
     policy.template Parse<int>(misc.PredictionCache_MinGibibytes, predictionCache, "min_gibibytes");
     policy.template Parse<int>(misc.PredictionCache_MaxPly, predictionCache, "max_ply");
 
-    const auto& timeControl = toml::find_or(config, "time_control", TomlValue::table_type());
+    const auto& timeControl = toml::find_or(config, "time_control", {});
     policy.template Parse<int>(misc.TimeControl_SafetyBufferMilliseconds, timeControl, "safety_buffer_milliseconds");
     policy.template Parse<int>(misc.TimeControl_FractionOfRemaining, timeControl, "fraction_remaining");
 
-    const auto& search = toml::find_or(config, "search", TomlValue::table_type());
+    const auto& search = toml::find_or(config, "search", {});
     policy.template Parse<int>(misc.Search_SearchThreads, search, "search_threads");
     policy.template Parse<int>(misc.Search_SearchParallelism, search, "search_parallelism");
     policy.template Parse<int>(misc.Search_GuiUpdateIntervalNodes, search, "gui_update_interval_nodes");
 
-    const auto& storage = toml::find_or(config, "storage", TomlValue::table_type());
+    const auto& storage = toml::find_or(config, "storage", {});
     policy.template Parse<int>(misc.Storage_GamesPerChunk, storage, "games_per_chunk");
 
-    const auto& paths = toml::find_or(config, "paths", TomlValue::table_type());
+    const auto& paths = toml::find_or(config, "paths", {});
     policy.template Parse<std::string>(misc.Paths_Networks, paths, "networks");
     policy.template Parse<std::string>(misc.Paths_TensorBoard, paths, "tensorboard");
     policy.template Parse<std::string>(misc.Paths_Logs, paths, "logs");
     policy.template Parse<std::string>(misc.Paths_Pgns, paths, "pgns");
     policy.template Parse<std::string>(misc.Paths_StrengthTestMarkerPrefix, paths, "strength_test_marker_prefix");
 
-    const auto& optimization = toml::find_or(config, "optimization", TomlValue::table_type());
+    const auto& optimization = toml::find_or(config, "optimization", {});
     policy.template Parse<std::string>(misc.Optimization_Epd, optimization, "epd");
     policy.template Parse<int>(misc.Optimization_Nodes, optimization, "nodes");
     policy.template Parse<int>(misc.Optimization_FailureNodes, optimization, "failure_nodes");
@@ -304,7 +315,7 @@ void Config::Initialize()
 
     // Parse default values.
     Network.Name = toml::find<std::string>(config, "network", "network_name");
-    Network.Role = ParseRole(toml::find<std::string>(config, "network", "role"));
+    Network.Role = toml::find<RoleType>(config, "network", "role");
     ParseTraining(Network.Training, toml::find(config, "training"), defaultPolicy);
     ParseSelfPlay(Network.SelfPlay, toml::find(config, "self_play"), defaultPolicy);
     ParseMisc(Misc, config, defaultPolicy);
@@ -316,8 +327,8 @@ void Config::Initialize()
         const std::string name = toml::find<std::string>(configNetwork, "name");
         if (name == Network.Name)
         {
-            ParseTraining(Network.Training, toml::find_or(configNetwork, "training", TomlValue::table_type()), overridePolicy);
-            ParseSelfPlay(Network.SelfPlay, toml::find_or(configNetwork, "self_play", TomlValue::table_type()), overridePolicy);
+            ParseTraining(Network.Training, toml::find_or(configNetwork, "training", {}), overridePolicy);
+            ParseSelfPlay(Network.SelfPlay, toml::find_or(configNetwork, "self_play", {}), overridePolicy);
             break;
         }
     }
@@ -327,16 +338,7 @@ void Config::Update(const std::map<std::string, float>& floatUpdates, const std:
 {
     // Set up the parsing policy.
     std::set<std::string> assigned;
-    std::map<std::string, TomlValue> updates;
-    for (const auto& [key, value] : floatUpdates)
-    {
-        updates[key] = value;
-    }
-    for (const auto& [key, value] : stringUpdates)
-    {
-        updates[key] = value;
-    }
-    const UpdatePolicy updatePolicy{ &updates, &assigned };
+    const UpdatePolicy updatePolicy{ &floatUpdates, &stringUpdates, &assigned };
 
     // "Parse", only updating the provided keys/values.
     ParseTraining(Network.Training, {}, updatePolicy);
@@ -344,7 +346,14 @@ void Config::Update(const std::map<std::string, float>& floatUpdates, const std:
     ParseMisc(Misc, {}, updatePolicy);
 
     // Validate updates.
-    for (const auto& [key, value] : updates)
+    for (const auto& [key, value] : floatUpdates)
+    {
+        if (assigned.find(key) == assigned.end())
+        {
+            throw std::runtime_error("Failed to update config: " + key);
+        }
+    }
+    for (const auto& [key, value] : stringUpdates)
     {
         if (assigned.find(key) == assigned.end())
         {
@@ -357,16 +366,7 @@ void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string
 {
     // Set up the parsing policy.
     std::set<std::string> found;
-    std::map<std::string, TomlValue> lookups;
-    for (const auto& [key, value] : intLookups)
-    {
-        lookups[key] = value;
-    }
-    for (const auto& [key, value] : stringLookups)
-    {
-        lookups[key] = value;
-    }
-    const LookupPolicy lookupPolicy{ &lookups, &found };
+    const LookupPolicy lookupPolicy{ &intLookups, &stringLookups, &found };
 
     // "Parse", only looking up the provided keys.
     ParseTraining(Network.Training, {}, lookupPolicy);
@@ -374,21 +374,18 @@ void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string
     ParseMisc(Misc, {}, lookupPolicy);
 
     // Validate lookups.
-    for (const auto& [key, value] : lookups)
+    for (const auto& [key, value] : intLookups)
     {
         if (found.find(key) == found.end())
         {
             throw std::runtime_error("Failed to look up: " + key);
         }
     }
-    
-    // Grab primitives.
-    for (auto& [key, value] : intLookups)
+    for (const auto& [key, value] : stringLookups)
     {
-        value = static_cast<int>(lookups[key].as_integer()); // int64 -> int32
-    }
-    for (auto& [key, value] : stringLookups)
-    {
-        value = lookups[key].as_string();
+        if (found.find(key) == found.end())
+        {
+            throw std::runtime_error("Failed to look up: " + key);
+        }
     }
 }

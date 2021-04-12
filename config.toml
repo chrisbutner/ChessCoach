@@ -161,6 +161,7 @@ rates = [2e-4] #[2e-4, 2e-5, 2e-6, 2e-7] # Multiplied by device_count
 
 [self_play]
 
+network_type = "student"
 # Instead of using the latest weights found for "network_name", use these specific ones; e.g., selfplay6a_001000000.
 network_weights = ""
 
@@ -248,6 +249,7 @@ backpropagation_puct_threshold = '(0.0, 0.1)'
 
 # Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # Some options can only be set before initialization; e.g., search threads and parallelism.
+network_type = "string"
 network_weights = "string"
 search_threads = "spin"
 search_parallelism = "spin"
