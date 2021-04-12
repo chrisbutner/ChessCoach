@@ -5,7 +5,9 @@ Tournaments
 	- play vs. a reference stockfish with X elo to avoid multi-TF-on-TPU problem
 
 Optimization
-- work out better threads/parallelism for UCI for 1s moves and 30s moves (optimize virtual loss coefficient in parallel)
+- work out better threads/parallelism/virtual loss for UCI
+	- test for 1s and 30s moves
+	- test locally and on TPUs
 - test with/without SBLE-PUCT, worried about sufficient backprop for losing positions (even deeper within trees, avoiding traps)
 	- implement categorical parameters? or just manually? not sure if skopt can do it - that FB one used bandits to handle it
 - full parameter optimization with Arasan21 and tournaments, after deciding on threads/parallelism

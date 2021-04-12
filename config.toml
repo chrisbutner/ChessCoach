@@ -253,5 +253,6 @@ network_type = "string"
 network_weights = "string"
 search_threads = "spin"
 search_parallelism = "spin"
+safety_buffer_milliseconds = "spin"
 
 ###############################################################################
