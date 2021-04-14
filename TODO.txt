@@ -1,16 +1,11 @@
 Tournaments
-- test teacher prediction
 - set up mini-tournament-based parameter optimization
-	- linux support
+	- (print linux unsupported until multi-proc alpha TPUs)
 	- play vs. a reference stockfish with X elo to avoid multi-TF-on-TPU problem
 
 Optimization
-- work out better threads/parallelism/virtual loss for UCI
-	- test for 1s and 30s moves
-	- test locally and on TPUs
-- test with/without SBLE-PUCT, worried about sufficient backprop for losing positions (even deeper within trees, avoiding traps)
-	- implement categorical parameters? or just manually? not sure if skopt can do it - that FB one used bandits to handle it
-- full parameter optimization with Arasan21 and tournaments, after deciding on threads/parallelism
+- test with Arasan21 and tournaments
+- test with 1s and 30s moves
 
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)
@@ -234,5 +229,7 @@ Won't do
 	- prioritize trainer over players, cannibalize
 	- try delays rather than broken marker for tpus in case of temporary failures, throttling
 - cyclic learning rate and/or fast-SWA (too much complexity too late)
+- parameter optimization
+	- categorical parameters
 - performance
 	- validation log still 11-12s after training log on cluster, try prefetch harder or debug

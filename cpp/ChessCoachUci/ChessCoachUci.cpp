@@ -592,7 +592,7 @@ void ChessCoachUci::InitializeWorkers()
     }
 
     InitializeNetwork();
-    _workerGroup.Initialize(_network.get(), nullptr /* storage */, Config::Network.SelfPlay.NetworkType,
+    _workerGroup.Initialize(_network.get(), nullptr /* storage */, Config::Network.SelfPlay.PredictionNetworkType,
         Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
 }
 

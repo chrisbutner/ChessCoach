@@ -77,7 +77,7 @@ void ChessCoachTrain::TrainChessCoach()
 
     // Start self-play worker threads.
     WorkerGroup workerGroup;
-    workerGroup.Initialize(network.get(), &storage, Config::Network.SelfPlay.NetworkType, Config::Network.SelfPlay.NumWorkers,
+    workerGroup.Initialize(network.get(), &storage, Config::Network.SelfPlay.PredictionNetworkType, Config::Network.SelfPlay.NumWorkers,
         Config::Network.SelfPlay.PredictionBatchSize, &SelfPlayWorker::LoopSelfPlay);
     for (int i = 0; i < Config::Network.SelfPlay.NumWorkers; i++)
     {

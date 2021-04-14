@@ -78,7 +78,7 @@ struct TrainingConfig
 
 struct SelfPlayConfig
 {
-    NetworkType NetworkType;
+    NetworkType PredictionNetworkType;
     std::string NetworkWeights;
 
     int NumWorkers;

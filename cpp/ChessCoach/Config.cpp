@@ -261,7 +261,7 @@ void ParseTraining(TrainingConfig& training, const TomlValue& config, const Poli
 template <typename Policy>
 void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Policy& policy)
 {
-    policy.template Parse<NetworkType>(selfPlay.NetworkType, config, "network_type");
+    policy.template Parse<NetworkType>(selfPlay.PredictionNetworkType, config, "network_type"); // GCC doesn't like type/name colliding
     policy.template Parse<std::string>(selfPlay.NetworkWeights, config, "network_weights");
 
     policy.template Parse<int>(selfPlay.NumWorkers, config, "num_workers");
