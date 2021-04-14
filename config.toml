@@ -178,6 +178,7 @@ root_exploration_fraction = 0.25
 exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
+use_sble_puct = true
 linear_exploration_rate = 500.0
 linear_exploration_base = 10000.0
 virtual_loss_coefficient = 1.25
@@ -205,7 +206,7 @@ fraction_remaining = 20
 [search]
 
 search_threads = 2
-search_parallelism = 256
+search_parallelism = 128
 gui_update_interval_nodes = 1000
 
 [storage]
@@ -254,5 +255,6 @@ network_weights = "string"
 search_threads = "spin"
 search_parallelism = "spin"
 safety_buffer_milliseconds = "spin"
+use_sble_puct = "check"
 
 ###############################################################################

@@ -18,11 +18,11 @@ TEST(Config, ConfigUpdate)
     EXPECT_EQ(Config::Network.Training.PgnInterval, original);
 
     const int updated = (2 * original);
-    Config::Update({ { "pgn_interval", static_cast<float>(updated) } }, {});
+    Config::Update({ { "pgn_interval", static_cast<float>(updated) } }, {}, {});
     EXPECT_NE(Config::Network.Training.PgnInterval, original);
     EXPECT_EQ(Config::Network.Training.PgnInterval, updated);
 
-    EXPECT_THROW(Config::Update({ { "pgn_intervalz", static_cast<float>(updated) } }, {}), std::runtime_error);
+    EXPECT_THROW(Config::Update({ { "pgn_intervalz", static_cast<float>(updated) } }, {}, {}), std::runtime_error);
 }
 
 TEST(Config, MultipleConfigUpdates)
@@ -33,7 +33,7 @@ TEST(Config, MultipleConfigUpdates)
     EXPECT_EQ(Config::Network.Training.PgnInterval, original1);
 
     const int updated1 = (2 * original1);
-    Config::Update({ { "pgn_interval", static_cast<float>(updated1) } }, {});
+    Config::Update({ { "pgn_interval", static_cast<float>(updated1) } }, {}, {});
     EXPECT_NE(Config::Network.Training.PgnInterval, original1);
     EXPECT_EQ(Config::Network.Training.PgnInterval, updated1);
 
@@ -41,7 +41,7 @@ TEST(Config, MultipleConfigUpdates)
     EXPECT_EQ(Config::Network.Training.WaitMilliseconds, original2);
 
     const int updated2 = (2 * original2);
-    Config::Update({ { "wait_milliseconds", static_cast<float>(updated2) } }, {});
+    Config::Update({ { "wait_milliseconds", static_cast<float>(updated2) } }, {}, {});
     EXPECT_NE(Config::Network.Training.WaitMilliseconds, original2);
     EXPECT_EQ(Config::Network.Training.WaitMilliseconds, updated2);
     EXPECT_NE(Config::Network.Training.PgnInterval, original1);
@@ -56,11 +56,26 @@ TEST(Config, ConfigUpdateString)
     EXPECT_EQ(Config::Network.SelfPlay.NetworkWeights, original);
 
     const std::string updated = original + "...";
-    Config::Update({},  { { "network_weights", updated } });
+    Config::Update({}, { { "network_weights", updated } }, {});
     EXPECT_NE(Config::Network.SelfPlay.NetworkWeights, original);
     EXPECT_EQ(Config::Network.SelfPlay.NetworkWeights, updated);
 
-    EXPECT_THROW(Config::Update({},  { { "network_weightz", updated } }), std::runtime_error);
+    EXPECT_THROW(Config::Update({}, { { "network_weightz", updated } }, {}), std::runtime_error);
+}
+
+TEST(Config, ConfigUpdateBool)
+{
+    Config::Initialize();
+
+    const bool original = Config::Network.SelfPlay.UseSblePuct;
+    EXPECT_EQ(Config::Network.SelfPlay.UseSblePuct, original);
+
+    const bool updated = !original;
+    Config::Update({}, {},  { { "use_sble_puct", updated } });
+    EXPECT_NE(Config::Network.SelfPlay.UseSblePuct, original);
+    EXPECT_EQ(Config::Network.SelfPlay.UseSblePuct, updated);
+
+    EXPECT_THROW(Config::Update({}, {}, { { "use_sble_puctz", updated } }), std::runtime_error);
 }
 
 TEST(Config, Lookups)
@@ -69,17 +84,22 @@ TEST(Config, Lookups)
 
     const int garbage1 = 123;
     const std::string garbage2 = "...";
+    const bool garbage3 = false;
     std::map<std::string, int> ints = { { "pgn_interval", garbage1 } };
     std::map<std::string, std::string> strings = { { "network_weights", garbage2 } };
+    std::map<std::string, bool> bools = { { "use_sble_puct", garbage3 } };
     EXPECT_EQ(ints["pgn_interval"], garbage1);
     EXPECT_EQ(strings["network_weights"], garbage2);
 
-    Config::LookUp(ints, strings);
+    Config::LookUp(ints, strings, bools);
     EXPECT_NE(ints["pgn_interval"], garbage1);
     EXPECT_NE(strings["network_weights"], garbage2);
+    EXPECT_NE(bools["use_sble_puct"], garbage3);
 
     std::map<std::string, int> invalid1 = { { "pgn_intervalz", 0 } };
     std::map<std::string, std::string> invalid2 = { { "network_weightz", "" } };
-    EXPECT_THROW(Config::LookUp(invalid1, strings), std::runtime_error);
-    EXPECT_THROW(Config::LookUp(ints, invalid2), std::runtime_error);
+    std::map<std::string, bool> invalid3 = { { "use_sble_puctz", false } };
+    EXPECT_THROW(Config::LookUp(invalid1, strings, bools), std::runtime_error);
+    EXPECT_THROW(Config::LookUp(ints, invalid2, bools), std::runtime_error);
+    EXPECT_THROW(Config::LookUp(ints, strings, invalid3), std::runtime_error);
 }

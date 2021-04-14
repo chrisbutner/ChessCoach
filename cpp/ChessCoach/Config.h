@@ -94,6 +94,7 @@ struct SelfPlayConfig
     float ExplorationRateBase;
     float ExplorationRateInit;
 
+    bool UseSblePuct;
     float LinearExplorationRate;
     float LinearExplorationBase;
     float VirtualLossCoefficient;
@@ -162,8 +163,8 @@ public:
 public:
 
     static void Initialize();
-    static void Update(const std::map<std::string, float>& floatUpdates, const std::map<std::string, std::string>& stringUpdates);
-    static void LookUp(std::map<std::string, int>& intLookups, std::map<std::string, std::string>& stringLookups);
+    static void Update(const std::map<std::string, float>& floatUpdates, const std::map<std::string, std::string>& stringUpdates, const std::map<std::string, bool>& boolUpdates);
+    static void LookUp(std::map<std::string, int>& intLookups, std::map<std::string, std::string>& stringLookups, std::map<std::string, bool>& boolLookups);
 
 };
 

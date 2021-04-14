@@ -21,6 +21,7 @@ using CommandHandlerEntry = std::pair<std::string, CommandHandler>;
 
 static constexpr const char OptionTypeSpin[] = "spin";
 static constexpr const char OptionTypeString[] = "string";
+static constexpr const char OptionTypeCheck[] = "check";
 
 class ChessCoachUci : public ChessCoach
 {
@@ -180,6 +181,7 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
     // Look up default option values.
     std::map<std::string, int> intOptions;
     std::map<std::string, std::string> stringOptions;
+    std::map<std::string, bool> boolOptions;
     for (const auto& [name, type] : Config::Misc.UciOptions)
     {
         // TODO: Need to handle min/max for spin types
@@ -191,12 +193,16 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
         {
             stringOptions[name] = "";
         }
+        else if (type == OptionTypeCheck)
+        {
+            boolOptions[name] = false;
+        }
         else
         {
             throw std::runtime_error("Unsupported UCI option type: " + type + " (" + name + ")");
         }
     }
-    Config::LookUp(intOptions, stringOptions);
+    Config::LookUp(intOptions, stringOptions, boolOptions);
 
     // Reply.
     std::cout << "id name ChessCoach\n"
@@ -209,6 +215,11 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
     {
         const std::string& stringValue = (value.empty() ? "none" : value);
         std::cout << "option name " << name << " type string default " << stringValue << "\n";
+    }
+    for (const auto& [name, value] : boolOptions)
+    {
+        const std::string& boolAsString = (value ? "true" : "false");
+        std::cout << "option name " << name << " type check default " << boolAsString << "\n";
     }
     std::cout << "uciok" << std::endl;
 }
@@ -297,7 +308,7 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
             std::cout << "info string Invalid spin value" << std::endl;
             return;
         }
-        Config::Update({ { name, static_cast<float>(intValue) } }, {});
+        Config::Update({ { name, static_cast<float>(intValue) } }, {}, {});
     }
     else if (match->second == OptionTypeString)
     {
@@ -314,7 +325,17 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
         {
             stringValue = "";
         }
-        Config::Update({}, { { name, stringValue } });
+        Config::Update({}, { { name, stringValue } }, {});
+    }
+    else if (match->second == OptionTypeCheck)
+    {
+        std::string stringValue;
+        if (!(commands >> stringValue) || !((stringValue == "true") || (stringValue == "false")))
+        {
+            std::cout << "info string Invalid check value" << std::endl;
+            return;
+        }
+        Config::Update({}, {}, { { name, (stringValue != "false") } });
     }
     else
     {
@@ -536,7 +557,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << "," << child.prior
                     << "," << child.Value()
-                    << "," << _workerGroup.controllerWorker->CalculatePuctScore<false>(root, &child).first
+                    << "," << _workerGroup.controllerWorker->CalculatePuctScoreAdHoc(root, &child).first
                     << "," << child.visitCount
                     << "," << child.valueWeight
                     << std::endl;
@@ -546,7 +567,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                 std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << " prior=" << child.prior
                     << " value=" << child.Value()
-                    << " ucb=" << _workerGroup.controllerWorker->CalculatePuctScore<false>(root, &child).first
+                    << " ucb=" << _workerGroup.controllerWorker->CalculatePuctScoreAdHoc(root, &child).first
                     << " visits=" << child.visitCount
                     << " weight=" << child.valueWeight
                     << std::endl;

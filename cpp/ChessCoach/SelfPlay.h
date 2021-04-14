@@ -273,10 +273,11 @@ public:
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
-    template <bool ForcePlayouts>
+    template <bool ForcePlayouts, bool UseSblePuct>
     WeightedNode SelectChild(Node* node) const;
-    template <bool ForcePlayouts>
+    template <bool ForcePlayouts, bool UseSblePuct>
     std::pair<float, float> CalculatePuctScore(const Node* parent, const Node* child) const;
+    std::pair<float, float> CalculatePuctScoreAdHoc(const Node* parent, const Node* child) const;
     float CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const;
     void PrunePolicyTarget(Node* root) const;
     void Backpropagate(std::vector<WeightedNode>& searchPath, float value);

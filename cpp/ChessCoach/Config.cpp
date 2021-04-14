@@ -117,6 +117,7 @@ struct UpdatePolicy
 
     const std::map<std::string, float>* floatUpdates;
     const std::map<std::string, std::string>* stringUpdates;
+    const std::map<std::string, bool>* boolUpdates;
     std::set<std::string>* assigned;
 };
 
@@ -155,6 +156,17 @@ void UpdatePolicy::Parse(std::string& value, const TomlValue&/* config*/, const 
 }
 
 template <>
+void UpdatePolicy::Parse(bool& value, const TomlValue&/* config*/, const toml::key& key) const
+{
+    const auto match = boolUpdates->find(key);
+    if (match != boolUpdates->end())
+    {
+        value = match->second;
+        assigned->insert(key);
+    }
+}
+
+template <>
 void UpdatePolicy::Parse(NetworkType& value, const TomlValue&/* config*/, const toml::key& key) const
 {
     const auto match = stringUpdates->find(key);
@@ -174,6 +186,7 @@ struct LookupPolicy
 
     std::map<std::string, int>* intLookups;
     std::map<std::string, std::string>* stringLookups;
+    std::map<std::string, bool>* boolLookups;
     std::set<std::string>* found;
 };
 
@@ -206,6 +219,17 @@ void LookupPolicy::Parse(NetworkType& value, const TomlValue&/* config*/, const 
     if (match != stringLookups->end())
     {
         match->second = NetworkTypeKeys[value];
+        found->insert(key);
+    }
+}
+
+template <>
+void LookupPolicy::Parse(bool& value, const TomlValue&/* config*/, const toml::key& key) const
+{
+    const auto match = boolLookups->find(key);
+    if (match != boolLookups->end())
+    {
+        match->second = value;
         found->insert(key);
     }
 }
@@ -253,6 +277,7 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.ExplorationRateBase, config, "exploration_rate_base");
     policy.template Parse<float>(selfPlay.ExplorationRateInit, config, "exploration_rate_init");
 
+    policy.template Parse<bool>(selfPlay.UseSblePuct, config, "use_sble_puct");
     policy.template Parse<float>(selfPlay.LinearExplorationRate, config, "linear_exploration_rate");
     policy.template Parse<float>(selfPlay.LinearExplorationBase, config, "linear_exploration_base");
     policy.template Parse<float>(selfPlay.VirtualLossCoefficient, config, "virtual_loss_coefficient");
@@ -334,11 +359,11 @@ void Config::Initialize()
     }
 }
 
-void Config::Update(const std::map<std::string, float>& floatUpdates, const std::map<std::string, std::string>& stringUpdates)
+void Config::Update(const std::map<std::string, float>& floatUpdates, const std::map<std::string, std::string>& stringUpdates, const std::map<std::string, bool>& boolUpdates)
 {
     // Set up the parsing policy.
     std::set<std::string> assigned;
-    const UpdatePolicy updatePolicy{ &floatUpdates, &stringUpdates, &assigned };
+    const UpdatePolicy updatePolicy{ &floatUpdates, &stringUpdates, &boolUpdates, &assigned };
 
     // "Parse", only updating the provided keys/values.
     ParseTraining(Network.Training, {}, updatePolicy);
@@ -360,13 +385,20 @@ void Config::Update(const std::map<std::string, float>& floatUpdates, const std:
             throw std::runtime_error("Failed to update config: " + key);
         }
     }
+    for (const auto& [key, value] : boolUpdates)
+    {
+        if (assigned.find(key) == assigned.end())
+        {
+            throw std::runtime_error("Failed to update config: " + key);
+        }
+    }
 }
 
-void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string, std::string>& stringLookups)
+void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string, std::string>& stringLookups, std::map<std::string, bool>& boolLookups)
 {
     // Set up the parsing policy.
     std::set<std::string> found;
-    const LookupPolicy lookupPolicy{ &intLookups, &stringLookups, &found };
+    const LookupPolicy lookupPolicy{ &intLookups, &stringLookups, &boolLookups, &found };
 
     // "Parse", only looking up the provided keys.
     ParseTraining(Network.Training, {}, lookupPolicy);
@@ -382,6 +414,13 @@ void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string
         }
     }
     for (const auto& [key, value] : stringLookups)
+    {
+        if (found.find(key) == found.end())
+        {
+            throw std::runtime_error("Failed to look up: " + key);
+        }
+    }
+    for (const auto& [key, value] : boolLookups)
     {
         if (found.find(key) == found.end())
         {

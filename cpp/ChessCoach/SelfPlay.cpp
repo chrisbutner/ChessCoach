@@ -1176,8 +1176,12 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                 // Force playouts during training only, at the root only.
                 const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
                 WeightedNode selected = forcePlayouts ?
-                    SelectChild<true>(scratchGame.Root()) :
-                    SelectChild<false>(scratchGame.Root());
+                    (Config::Network.SelfPlay.UseSblePuct ?
+                        SelectChild<true, true>(scratchGame.Root()) :
+                        SelectChild<true, false>(scratchGame.Root())) :
+                    (Config::Network.SelfPlay.UseSblePuct ?
+                        SelectChild<false, true>(scratchGame.Root()) :
+                        SelectChild<false, false>(scratchGame.Root()));
 
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration.
@@ -1371,7 +1375,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
 
 // It's possible because of nodes marked off-limits via "expanding"
 // that this method cannot select a child, instead returning NONE/nullptr.
-template <bool ForcePlayouts>
+template <bool ForcePlayouts, bool UseSblePuct>
 WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
 {
     float maxAzPuct = -std::numeric_limits<float>::infinity();
@@ -1382,7 +1386,7 @@ WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
     {
         if (child.expansion.load(std::memory_order_relaxed) != Expansion::Expanding)
         {
-            const auto [azPuct, sblePuct] = CalculatePuctScore<ForcePlayouts>(parent, &child);
+            const auto [azPuct, sblePuct] = CalculatePuctScore<ForcePlayouts, UseSblePuct>(parent, &child);
             if (azPuct > maxAzPuct)
             {
                 maxAzPuct = azPuct;
@@ -1400,13 +1404,15 @@ WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
     const float weight = ((maxAzPuct - azOfMaxSble) <= Config::Network.SelfPlay.BackpropagationPuctThreshold) ? 1.f : 0.f;
     return { maxSble, weight };
 }
-template WeightedNode SelfPlayWorker::SelectChild<true>(Node* parent) const;
-template WeightedNode SelfPlayWorker::SelectChild<false>(Node* parent) const;
+template WeightedNode SelfPlayWorker::SelectChild<true, true>(Node* parent) const;
+template WeightedNode SelfPlayWorker::SelectChild<true, false>(Node* parent) const;
+template WeightedNode SelfPlayWorker::SelectChild<false, true>(Node* parent) const;
+template WeightedNode SelfPlayWorker::SelectChild<false, false>(Node* parent) const;
 
-// Returns { AZ-PUCT, SBLE-PUCT }.
+// Returns { AZ-PUCT, SBLE-PUCT } for UseSblePuct, otherwise { AZ-PUCT, AZ-PUCT }.
 // AZ-PUCT is the AlphaZero Predictor-Upper Confidence bound applied to Trees (with a mate-term modification).
 // SBLE-PUCT is the Selective-Backpropagation, Linear Exploration, Predictor-Upper Confidence bound applied to Trees.
-template <bool ForcePlayouts>
+template <bool ForcePlayouts, bool UseSblePuct>
 std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, const Node* child) const
 {
     const int parentVirtualExploration = (parent->visitCount.load(std::memory_order_relaxed) + parent->visitingCount.load(std::memory_order_relaxed));
@@ -1449,13 +1455,23 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     const float sblePuct = (azPuct + linear);
     return { azPuct, sblePuct };
 }
-template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<true>(const Node* parent, const Node* child) const;
-template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false>(const Node* parent, const Node* child) const;
+template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<true, true>(const Node* parent, const Node* child) const;
+template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<true, false>(const Node* parent, const Node* child) const;
+template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false, true>(const Node* parent, const Node* child) const;
+template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false, false>(const Node* parent, const Node* child) const;
+
+std::pair<float, float> SelfPlayWorker::CalculatePuctScoreAdHoc(const Node* parent, const Node* child) const
+{
+    return Config::Network.SelfPlay.UseSblePuct ?
+        CalculatePuctScore<false, true>(parent, child) :
+        CalculatePuctScore<false, false>(parent, child);
+}
 
 float SelfPlayWorker::CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
 {
     // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
-    return (CalculatePuctScore<false>(parent, child).first - child->ValueWithVirtualLoss() + fixedValue);
+
+    return (CalculatePuctScoreAdHoc(parent, child).first - child->ValueWithVirtualLoss() + fixedValue);
 }
 
 void SelfPlayWorker::PrunePolicyTarget(Node* root) const
@@ -1471,7 +1487,7 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
     }
 
     // Prune visits to other nodes based on UCB regret vs. the most-visited child.
-    const float bestScore = CalculatePuctScore<false>(root, best).first;
+    const float bestScore = CalculatePuctScoreAdHoc(root, best).first;
     int rootPruneCount = 0;
     for (Node& child : *root)
     {
@@ -1962,7 +1978,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             targets.push_back(static_cast<float>(child.visitCount.load(std::memory_order_relaxed)) / sumChildVisits);
             priors.push_back(child.prior);
             values.push_back(child.Value());
-            ucb.push_back(CalculatePuctScore<false>(game.Root(), &child).first);
+            ucb.push_back(CalculatePuctScoreAdHoc(game.Root(), &child).first);
             visits.push_back(child.visitCount.load(std::memory_order_relaxed));
             weights.push_back(child.valueWeight.load(std::memory_order_relaxed));
         }
