@@ -1,11 +1,11 @@
-Tournaments
-- set up mini-tournament-based parameter optimization
-	- (print linux unsupported until multi-proc alpha TPUs)
-	- play vs. a reference stockfish with X elo to avoid multi-TF-on-TPU problem
-
 Optimization
-- test with Arasan21 and tournaments
-- test with 1s and 30s moves
+- TPUs
+	- install cutechess-cli/bayeselo
+	- network.py needs to not auto-init-TF
+	- need to play vs. stockfish baseline (limit to 2500)
+
+Optimization runs
+- TPUs: test STS, Arasan21, mini-tournaments
 
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)
@@ -79,10 +79,6 @@ Prediction cache
 - any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 	- while not full hit rate should be higher? add some new metrics
 	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
-
-Strength/parameter evaluation
-- switch to/add mini-tournaments, rather than just STS/Arasan?
-- try fully-Bayesian again if using mini-tournaments?
 
 PUCT - medium confidence
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
@@ -197,8 +193,9 @@ Deployment
 
 Publishing
 - write-ups
+- final network weights, optimization run (30s move tournament mode)
 - website - game-in-10, one at a time, people can watch, comments shown for each move
-
+	
 Bugs
 - "quit" without "stop" hangs UCI
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop

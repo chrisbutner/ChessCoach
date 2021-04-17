@@ -20,6 +20,7 @@ using CommandHandler = std::function<void(std::stringstream&)>;
 using CommandHandlerEntry = std::pair<std::string, CommandHandler>;
 
 static constexpr const char OptionTypeSpin[] = "spin";
+static constexpr const char OptionTypeFloat[] = "float"; // Not in the UCI spec; used for parameter optimization
 static constexpr const char OptionTypeString[] = "string";
 static constexpr const char OptionTypeCheck[] = "check";
 
@@ -180,6 +181,7 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
 {
     // Look up default option values.
     std::map<std::string, int> intOptions;
+    std::map<std::string, float> floatOptions;
     std::map<std::string, std::string> stringOptions;
     std::map<std::string, bool> boolOptions;
     for (const auto& [name, type] : Config::Misc.UciOptions)
@@ -188,6 +190,10 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
         if (type == OptionTypeSpin)
         {
             intOptions[name] = 0;
+        }
+        else if (type == OptionTypeFloat)
+        {
+            floatOptions[name] = 0.f;
         }
         else if (type == OptionTypeString)
         {
@@ -202,7 +208,7 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
             throw std::runtime_error("Unsupported UCI option type: " + type + " (" + name + ")");
         }
     }
-    Config::LookUp(intOptions, stringOptions, boolOptions);
+    Config::LookUp(intOptions, floatOptions, stringOptions, boolOptions);
 
     // Reply.
     std::cout << "id name ChessCoach\n"
@@ -210,6 +216,11 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
     for (const auto& [name, value] : intOptions)
     {
         std::cout << "option name " << name << " type spin default " << value << "\n";
+    }
+    for (const auto& [name, value] : floatOptions)
+    {
+        // Have to advertise as "string" rather than "float" so that it's recognized as valid; e.g., by cutechess-cli.
+        std::cout << "option name " << name << " type string default " << value << "\n";
     }
     for (const auto& [name, value] : stringOptions)
     {
@@ -308,7 +319,17 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
             std::cout << "info string Invalid spin value" << std::endl;
             return;
         }
-        Config::Update({ { name, static_cast<float>(intValue) } }, {}, {});
+        Config::Update({ { name, intValue } }, {},  {}, {});
+    }
+    else if (match->second == OptionTypeFloat)
+    {
+        float floatValue = 0.f;
+        if (!(commands >> floatValue))
+        {
+            std::cout << "info string Invalid float value" << std::endl;
+            return;
+        }
+        Config::Update({}, { { name, floatValue } }, {}, {});
     }
     else if (match->second == OptionTypeString)
     {
@@ -321,11 +342,11 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
             }
             stringValue += token;
         }
-        if (stringValue == "none")
+        if ((stringValue == "none") || (stringValue == "\"\""))
         {
             stringValue = "";
         }
-        Config::Update({}, { { name, stringValue } }, {});
+        Config::Update({}, {}, { { name, stringValue } }, {});
     }
     else if (match->second == OptionTypeCheck)
     {
@@ -335,7 +356,7 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
             std::cout << "info string Invalid check value" << std::endl;
             return;
         }
-        Config::Update({}, {}, { { name, (stringValue != "false") } });
+        Config::Update({}, {}, {}, { { name, (stringValue != "false") } });
     }
     else
     {

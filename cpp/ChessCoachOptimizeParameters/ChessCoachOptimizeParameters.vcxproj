@@ -266,6 +266,9 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ProjectReference Include="..\ChessCoachUci\ChessCoachUci.vcxproj">
+      <Project>{e3e1da7b-0c6d-4b63-a5ae-6811cb614139}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\ChessCoach\ChessCoach.vcxproj">
       <Project>{7e6a77a3-3609-4351-b360-3919045c0094}</Project>
     </ProjectReference>

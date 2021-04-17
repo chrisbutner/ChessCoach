@@ -6,5 +6,5 @@ tools\win\CuteChess\cutechess-cli.exe ^
 	-engine name=ChessCoach cmd=uci.cmd ^
 	-each proto=uci st=1 timemargin=25 ^
 	-games 2 ^
-	-pgnout %localappdata%\ChessCoach\tournament.pgn
+	-pgnout "%localappdata%\ChessCoach\tournament.pgn"
 popd

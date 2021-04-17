@@ -96,7 +96,7 @@ async def handle(message):
 
 config = network.config
 games_per_chunk = config.misc["storage"]["games_per_chunk"]
-chunks = tf.io.gfile.glob(network.trainer.data_globs[1])
+chunks = tf.io.gfile.glob(network.trainer.data_glob_training)
 game_count = len(chunks) * games_per_chunk
 gui_mode = None
 

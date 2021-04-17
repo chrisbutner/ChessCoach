@@ -9,7 +9,7 @@ sudo apt-get install -y --no-install-recommends \
   meson g++ pkg-config python3-dev libgtest-dev zlib1g-dev python3-pip \
   autoconf automake libtool curl make g++ unzip
 # Our dependencies
-sudo pip3 install toml
+pip3 install toml scikit-optimize matplotlib
 
 # Install cutechess dependencies
 sudo add-apt-repository -y ppa:beineri/opt-qt-5.11.0-bionic

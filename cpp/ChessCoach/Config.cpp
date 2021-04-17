@@ -115,11 +115,33 @@ struct UpdatePolicy
     {
     }
 
+    const std::map<std::string, int>* intUpdates;
     const std::map<std::string, float>* floatUpdates;
     const std::map<std::string, std::string>* stringUpdates;
     const std::map<std::string, bool>* boolUpdates;
     std::set<std::string>* assigned;
 };
+
+template <>
+void UpdatePolicy::Parse(int& value, const TomlValue&/* config*/, const toml::key& key) const
+{
+    const auto match = intUpdates->find(key);
+    if (match != intUpdates->end())
+    {
+        value = match->second;
+        assigned->insert(key);
+    }
+    else
+    {
+        // Still let int updates come in via float to simplify the Python->C++ plumbing for parameter optimization for now.
+        const auto floatMatch = floatUpdates->find(key);
+        if (floatMatch != floatUpdates->end())
+        {
+            value = static_cast<int>(floatMatch->second);
+            assigned->insert(key);
+        }
+    }
+}
 
 template <>
 void UpdatePolicy::Parse(float& value, const TomlValue&/* config*/, const toml::key& key) const
@@ -133,33 +155,10 @@ void UpdatePolicy::Parse(float& value, const TomlValue&/* config*/, const toml::
 }
 
 template <>
-void UpdatePolicy::Parse(int& value, const TomlValue&/* config*/, const toml::key& key) const
-{
-    const auto match = floatUpdates->find(key);
-    if (match != floatUpdates->end())
-    {
-        // Integer updates are passed in as float to simplify Python-to-C++ plumbing, so just cast.
-        value = static_cast<int>(match->second);
-        assigned->insert(key);
-    }
-}
-
-template <>
 void UpdatePolicy::Parse(std::string& value, const TomlValue&/* config*/, const toml::key& key) const
 {
     const auto match = stringUpdates->find(key);
     if (match != stringUpdates->end())
-    {
-        value = match->second;
-        assigned->insert(key);
-    }
-}
-
-template <>
-void UpdatePolicy::Parse(bool& value, const TomlValue&/* config*/, const toml::key& key) const
-{
-    const auto match = boolUpdates->find(key);
-    if (match != boolUpdates->end())
     {
         value = match->second;
         assigned->insert(key);
@@ -177,6 +176,17 @@ void UpdatePolicy::Parse(NetworkType& value, const TomlValue&/* config*/, const 
     }
 }
 
+template <>
+void UpdatePolicy::Parse(bool& value, const TomlValue&/* config*/, const toml::key& key) const
+{
+    const auto match = boolUpdates->find(key);
+    if (match != boolUpdates->end())
+    {
+        value = match->second;
+        assigned->insert(key);
+    }
+}
+
 struct LookupPolicy
 {
     template <typename T>
@@ -185,6 +195,7 @@ struct LookupPolicy
     }
 
     std::map<std::string, int>* intLookups;
+    std::map<std::string, float>* floatLookups;
     std::map<std::string, std::string>* stringLookups;
     std::map<std::string, bool>* boolLookups;
     std::set<std::string>* found;
@@ -195,6 +206,17 @@ void LookupPolicy::Parse(int& value, const TomlValue&/* config*/, const toml::ke
 {
     const auto match = intLookups->find(key);
     if (match != intLookups->end())
+    {
+        match->second = value;
+        found->insert(key);
+    }
+}
+
+template <>
+void LookupPolicy::Parse(float& value, const TomlValue&/* config*/, const toml::key& key) const
+{
+    const auto match = floatLookups->find(key);
+    if (match != floatLookups->end())
     {
         match->second = value;
         found->insert(key);
@@ -359,11 +381,12 @@ void Config::Initialize()
     }
 }
 
-void Config::Update(const std::map<std::string, float>& floatUpdates, const std::map<std::string, std::string>& stringUpdates, const std::map<std::string, bool>& boolUpdates)
+void Config::Update(const std::map<std::string, int>& intUpdates, const std::map<std::string, float>& floatUpdates,
+    const std::map<std::string, std::string>& stringUpdates, const std::map<std::string, bool>& boolUpdates)
 {
     // Set up the parsing policy.
     std::set<std::string> assigned;
-    const UpdatePolicy updatePolicy{ &floatUpdates, &stringUpdates, &boolUpdates, &assigned };
+    const UpdatePolicy updatePolicy{ &intUpdates, &floatUpdates, &stringUpdates, &boolUpdates, &assigned };
 
     // "Parse", only updating the provided keys/values.
     ParseTraining(Network.Training, {}, updatePolicy);
@@ -371,6 +394,13 @@ void Config::Update(const std::map<std::string, float>& floatUpdates, const std:
     ParseMisc(Misc, {}, updatePolicy);
 
     // Validate updates.
+    for (const auto& [key, value] : intUpdates)
+    {
+        if (assigned.find(key) == assigned.end())
+        {
+            throw std::runtime_error("Failed to update config: " + key);
+        }
+    }
     for (const auto& [key, value] : floatUpdates)
     {
         if (assigned.find(key) == assigned.end())
@@ -394,11 +424,12 @@ void Config::Update(const std::map<std::string, float>& floatUpdates, const std:
     }
 }
 
-void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string, std::string>& stringLookups, std::map<std::string, bool>& boolLookups)
+void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string, float>& floatLookups,
+    std::map<std::string, std::string>& stringLookups, std::map<std::string, bool>& boolLookups)
 {
     // Set up the parsing policy.
     std::set<std::string> found;
-    const LookupPolicy lookupPolicy{ &intLookups, &stringLookups, &boolLookups, &found };
+    const LookupPolicy lookupPolicy{ &intLookups, &floatLookups, &stringLookups, &boolLookups, &found };
 
     // "Parse", only looking up the provided keys.
     ParseTraining(Network.Training, {}, lookupPolicy);
@@ -407,6 +438,13 @@ void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string
 
     // Validate lookups.
     for (const auto& [key, value] : intLookups)
+    {
+        if (found.find(key) == found.end())
+        {
+            throw std::runtime_error("Failed to look up: " + key);
+        }
+    }
+    for (const auto& [key, value] : floatLookups)
     {
         if (found.find(key) == found.end())
         {

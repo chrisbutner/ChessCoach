@@ -202,7 +202,7 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
         NonPythonContext context;
 
         // Propagate the provided parameters through Config and UCI search code.
-        Config::Update(parameters /* floatUpdates */, {} /* stringUpdates */, {} /* boolUpdates */);
+        Config::Update({} /* intUpdates */, parameters /* floatUpdates */, {} /* stringUpdates */, {} /* boolUpdates */);
 
         // Use the faster student network, matching UCI.
         assert(Instance().workerGroup);

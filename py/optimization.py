@@ -1,9 +1,11 @@
 import numpy as np
 np.random.seed(1234)
+import platform
 import os
 import time
 import numpy as np
 import re
+import subprocess
 from ast import literal_eval
 from skopt import Optimizer
 from skopt import expected_minimum
@@ -23,6 +25,7 @@ class Session:
     self.config = config
     self.local_output_path = config.join(config.make_local_path(config.misc["paths"]["optimization"]), time.strftime("%Y%m%d-%H%M%S"))
     os.makedirs(self.local_output_path, exist_ok=True)
+    self.tournament_pgn_path = config.join(self.local_output_path, "optimization.pgn")
     self.writer = open(self.config.join(self.local_output_path, "log.txt"), "w")
     self.parameters = self.parse_parameters(config.misc["optimization"]["parameters"])
     self.optimizer = Optimizer(list(self.parameters.values()), n_initial_points=self.n_initial_points, acq_func="EI")
@@ -74,9 +77,53 @@ class Session:
     self.log("################################################################################")
 
   def evaluate(self, point_dict):
-    names = list(n.encode("ascii") for n in point_dict.keys())
+    names = list(point_dict.keys())
     values = list(point_dict.values())
+    if self.config.misc["optimization"]["mode"] == "epd":
+      return self.evaluate_epd(names, values)
+    elif self.config.misc["optimization"]["mode"] == "tournament":
+      return self.evaluate_tournament(names, values)
+    else:
+      raise Exception("Unknown optimization mode: expected 'epd' or 'tournament'")
+
+  def evaluate_epd(self, names, values):
+    names = [name.encode("ascii") for name in names]
+    values = [float(value) for value in values]
     return chesscoach.evaluate_parameters(names, values)
+
+  def evaluate_tournament(self, names, values):
+    if platform.system() != "Windows":
+      raise Exception("Tournament-based optimization currently only supported on Windows: complications with alpha TPUs")
+
+    # Make sure that cutechess-cli doesn't append to an existing pgn.
+    try:
+      os.remove(self.tournament_pgn_path)
+    except:
+      pass
+
+    name_optimize = "ChessCoach_Optimize"
+    name_baseline = "ChessCoach_Baseline"
+
+    tournament_games = self.config.misc["optimization"]["tournament_games"]
+    seconds_per_move = self.config.misc["optimization"]["tournament_movetime_milliseconds"] / 1000.0
+    
+    # Run the mini-tournament and generate optimization.pgn.
+    command = f"cutechess-cli.exe -engine name={name_optimize} cmd=ChessCoachUci.exe "
+    for name, value in zip(names, values):
+      command += f"option.{name}={value} "
+    command += f"-engine name={name_baseline} cmd=ChessCoachUci.exe -each proto=uci st={seconds_per_move} timemargin=1000 dir=\"{os.getcwd()}\" "
+    command += f"-games {tournament_games} -pgnout \"{self.tournament_pgn_path}\""
+    subprocess.run(command, stdin=subprocess.DEVNULL, shell=True)
+
+    # Process optimization.pgn using bayeselo to get an evaluation score.
+    # NOTE: Bayeselo doesn't like quotes around paths.
+    bayeselo_input = f"readpgn {self.tournament_pgn_path}\nelo\nmm\nexactdist\nratings\nx\nx\n".encode("utf-8")
+    process = subprocess.run("bayeselo.exe", input=bayeselo_input, capture_output=True, shell=True)
+    output = process.stdout.decode("utf-8")
+    elo = int(re.search(f"{name_optimize}\\s+(-?\\d+)\\s", output).group(1))
+
+    # Minimizing, so negate.
+    return -elo
 
   def tell(self, iteration, point_dict, point, score):
     optimizer = self.optimizer

@@ -8,4 +8,8 @@ robocopy %1StrengthTests %2StrengthTests\
 if ErrorLevel 8 (exit /B 1)
 robocopy %1Dictionaries %2Dictionaries\ /E
 if ErrorLevel 8 (exit /B 1)
+robocopy %1..\tools\win\CuteChess %2 /E
+if ErrorLevel 8 (exit /B 1)
+robocopy %1..\tools\win\bayeselo %2 /E
+if ErrorLevel 8 (exit /B 1)
 exit /B 0
