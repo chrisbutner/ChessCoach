@@ -60,6 +60,15 @@ void Platform::SetEnvironmentVariable(const char* name, const char* value)
 #endif
 }
 
+void Platform::DebugBreak()
+{
+#ifdef CHESSCOACH_WINDOWS
+    ::__debugbreak();
+#else
+    __asm__ __volatile__("int3");
+#endif
+}
+
 PosixFile::PosixFile(const std::filesystem::path& path, bool write)
 {
 #pragma warning(disable:4996) // It's all fine.

@@ -26,6 +26,8 @@ protected:
 
     void FinalizePython();
     void FinalizeStockfish();
+
+    void OptimizeParameters();
 };
 
 #endif // _CHESSCOACH_H_

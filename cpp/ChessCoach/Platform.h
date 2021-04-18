@@ -20,6 +20,8 @@ public:
     static std::string GetEnvironmentVariable(const char* name);
     static void SetEnvironmentVariable(const char* name, const char* value);
 
+    static void DebugBreak();
+
 };
 
 class PosixFile

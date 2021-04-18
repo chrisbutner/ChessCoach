@@ -1,6 +1,7 @@
 project('ChessCoach', 'cpp', version: '0.9.0', license: 'GPL3',
   default_options: [
     'cpp_std=c++17',
+	'werror=true',
   ])
 
 if get_option('buildtype') == 'release'
@@ -12,7 +13,7 @@ add_project_arguments('-lstdc++fs', '-msse4.2', language: 'cpp')
 add_project_link_arguments('-lstdc++fs', language: 'cpp')
 
 # Rely on MSVC's less pedantic signed/unsigned checking, e.g. around loop indices.
-add_project_arguments('-Werror', '-Wall', '-Wextra', '-Wpedantic', '-Wno-unknown-pragmas', '-Wno-sign-compare', language: 'cpp')
+add_project_arguments('-Wall', '-Wextra', '-Wpedantic', '-Wno-unknown-pragmas', '-Wno-sign-compare', language: 'cpp')
 
 bindir = get_option('bindir')
 datadir = get_option('datadir')
@@ -243,6 +244,21 @@ chesscoachtrain = executable(
   )
 
 ###############################################################################
+# bayeselo
+###############################################################################
+
+bayeselo_sources = [
+  'tools/deb/bayeselo/bayeselo.cpp',
+  ]
+
+bayeselo = executable(
+  'bayeselo',
+  bayeselo_sources,
+  override_options: ['werror=false'],
+  install: true,
+  )
+
+###############################################################################
 # ChessCoachTest
 ###############################################################################
 
@@ -270,6 +286,12 @@ test('AllTests', chesscoachtest, timeout: 300)
 ###############################################################################
 # Install
 ###############################################################################
+
+# Install cutechess-cli
+install_data('tools/deb/cutechess-cli/cutechess-cli', install_dir: bindir)
+
+# Install Stockfish
+install_data('tools/deb/stockfish_13_linux_x64_bmi2/stockfish_13_linux_x64_bmi2', install_dir: bindir)
 
 # Access by Platform::InstallationDataPath()
 install_data('config.toml')

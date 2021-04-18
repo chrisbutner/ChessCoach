@@ -3,7 +3,6 @@ import platform
 import os
 import posixpath
 import enum
-import tensorflow as tf
 
 # Duplicated from "Config.h"
 class PredictionStatus(enum.IntFlag):
@@ -104,6 +103,7 @@ class Config:
     return self.join(self.determine_local_data_root(), self.unmake_path(path))
 
   def latest_model_paths_for_pattern_type_model(self, network_pattern, network_type, model_type):
+    import tensorflow as tf
     glob = self.join(self.misc["paths"]["networks"], network_pattern, network_type, model_type)
     results = [self.join(result, "weights") for result in tf.io.gfile.glob(glob)]
     return results
@@ -112,17 +112,21 @@ class Config:
     return self.join(self.misc["paths"]["networks"], f"{self.network_name}_{str(checkpoint).zfill(9)}", network_type, model_type, "weights")
 
   def count_training_chunks(self):
+    import tensorflow as tf
     glob = self.join(self.training["games_path_training"], "*.chunk")
     return len(tf.io.gfile.glob(glob))
 
   def save_file(self, relative_path, data):
+    import tensorflow as tf
     path = self.make_path(relative_path)
     tf.io.gfile.GFile(path, "wb").write(data)
 
   def load_file(self, relative_path):
+    import tensorflow as tf
     path = self.make_path(relative_path)
     return tf.io.gfile.GFile(path, "rb").read()
 
   def file_exists(self, relative_path):
+    import tensorflow as tf
     path = self.make_path(relative_path)
     return tf.io.gfile.exists(path)

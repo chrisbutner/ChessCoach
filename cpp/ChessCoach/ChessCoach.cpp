@@ -122,6 +122,7 @@ void ChessCoach::InitializePredictionCache()
     PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
 }
 
+// Keep Python visibility isolated to the ChessCoach library.
 void ChessCoach::InitializePythonModule(Storage* storage, WorkerGroup* workerGroup)
 {
     PythonModule::Instance().storage = storage;
@@ -143,4 +144,31 @@ void ChessCoach::FinalizeStockfish()
 INetwork* ChessCoach::CreateNetwork() const
 {
     return new PythonNetwork();
+}
+
+// Keep Python visibility isolated to the ChessCoach library.
+void ChessCoach::OptimizeParameters()
+{
+    // See "ChessCoachOptimizeParameters::Run" for rationale.
+    // This runs forever, so no need to clean anything up.
+    PythonContext context;
+
+    PyObject* sys = PyImport_ImportModule("sys");
+    PythonNetwork::PyAssert(sys);
+    PyObject* sysPath = PyObject_GetAttrString(sys, "path");
+    PythonNetwork::PyAssert(sysPath);
+    PyObject* pythonPath = PyUnicode_FromString(Platform::InstallationScriptPath().string().c_str());
+    PythonNetwork::PyAssert(pythonPath);
+    const int error = PyList_Append(sysPath, pythonPath);
+    PythonNetwork::PyAssert(!error);
+
+    PyObject* module = PyImport_ImportModule("optimization");
+    PythonNetwork::PyAssert(module);
+
+    PyObject* optimizeParametersFunction = PyObject_GetAttrString(module, "optimize_parameters");
+    PythonNetwork::PyAssert(optimizeParametersFunction);
+    PythonNetwork::PyAssert(PyCallable_Check(optimizeParametersFunction));
+
+    PyObject* result = PyObject_CallFunctionObjArgs(optimizeParametersFunction, nullptr);
+    PythonNetwork::PyAssert(result);
 }

@@ -338,6 +338,7 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     policy.template Parse<std::string>(misc.Paths_StrengthTestMarkerPrefix, paths, "strength_test_marker_prefix");
 
     const auto& optimization = toml::find_or(config, "optimization", {});
+    policy.template Parse<std::string>(misc.Optimization_Mode, optimization, "mode");
     policy.template Parse<std::string>(misc.Optimization_Epd, optimization, "epd");
     policy.template Parse<int>(misc.Optimization_Nodes, optimization, "nodes");
     policy.template Parse<int>(misc.Optimization_FailureNodes, optimization, "failure_nodes");

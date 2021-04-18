@@ -7,6 +7,7 @@
 #include <Stockfish/thread.h>
 #include <Stockfish/movegen.h>
 
+#include "Platform.h"
 #include "Game.h"
 #include "Preprocessing.h"
 
@@ -14,8 +15,8 @@
 #define CHECK(x) (void)0
 #define CHECK_FAIL_MOVE(x) { if (!(x)) { return MOVE_NONE; } }
 #else
-#define CHECK(x) { if (!(x)) { ::__debugbreak(); } }
-#define CHECK_FAIL_MOVE(x) { if (!(x)) { ::__debugbreak(); return MOVE_NONE; } }
+#define CHECK(x) { if (!(x)) { Platform::DebugBreak(); } }
+#define CHECK_FAIL_MOVE(x) { if (!(x)) { Platform::DebugBreak(); return MOVE_NONE; } }
 #endif
 
 // Parsing here is quite minimal and brittle, intended to parse very-well-formed PGNs with minimal dev time and improved only as needed.
@@ -219,7 +220,7 @@ bool Pgn::ParseMoves(std::istream& content, StateListPtr& positionStates, Positi
         //if (c == '^')
         //{
         //    std::cout << position.fen() << std::endl;
-        //    ::__debugbreak();
+        //    Platform::DebugBreak();
         //} else
         if (::isdigit(static_cast<unsigned char>(c)))
         {

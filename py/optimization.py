@@ -64,13 +64,22 @@ class Session:
 
   def log_config(self):
     config = self.config
+    mode = self.config.misc["optimization"]["mode"]
     self.log("################################################################################")
     self.log("Starting parameter optimization")
     self.log(f'Output path: {self.local_output_path}')
-    self.log(f'EPD: {config.misc["optimization"]["epd"]}')
-    self.log(f'Nodes: {config.misc["optimization"]["nodes"]}')
-    self.log(f'Failure nodes: {config.misc["optimization"]["failure_nodes"]}')
-    self.log(f'Position limit: {config.misc["optimization"]["position_limit"]}')
+    if mode == "epd":
+      self.log(f"Mode: {mode}")
+      self.log(f'EPD: {config.misc["optimization"]["epd"]}')
+      self.log(f'Nodes: {config.misc["optimization"]["nodes"]}')
+      self.log(f'Failure nodes: {config.misc["optimization"]["failure_nodes"]}')
+      self.log(f'Position limit: {config.misc["optimization"]["position_limit"]}')
+    elif mode == "tournament":
+      self.log(f"Mode: {mode}")
+      self.log(f'Games per evaluation: {config.misc["optimization"]["tournament_games"]}')
+      self.log(f'Milliseconds per move: {config.misc["optimization"]["tournament_movetime_milliseconds"]}')
+    else:
+      raise Exception("Unexpected optimization mode: expected 'epd' or 'tournament'")
     self.log("Parameters:")
     for name, definition in self.parameters.items():
       self.log(f"{name}: {definition}")
@@ -84,7 +93,7 @@ class Session:
     elif self.config.misc["optimization"]["mode"] == "tournament":
       return self.evaluate_tournament(names, values)
     else:
-      raise Exception("Unknown optimization mode: expected 'epd' or 'tournament'")
+      raise Exception("Unexpected optimization mode: expected 'epd' or 'tournament'")
 
   def evaluate_epd(self, names, values):
     names = [name.encode("ascii") for name in names]
@@ -92,8 +101,6 @@ class Session:
     return chesscoach.evaluate_parameters(names, values)
 
   def evaluate_tournament(self, names, values):
-    if platform.system() != "Windows":
-      raise Exception("Tournament-based optimization currently only supported on Windows: complications with alpha TPUs")
 
     # Make sure that cutechess-cli doesn't append to an existing pgn.
     try:
@@ -102,23 +109,27 @@ class Session:
       pass
 
     name_optimize = "ChessCoach_Optimize"
-    name_baseline = "ChessCoach_Baseline"
+    name_baseline = "Stockfish_Baseline"
+
+    stockfish_command = ("stockfish_13_win_x64_bmi2" if platform.system() == "Windows" else "stockfish_13_linux_x64_bmi2")
+    stockfish_options = "option.Threads=1 option.UCI_LimitStrength=true option.UCI_Elo=2600"
 
     tournament_games = self.config.misc["optimization"]["tournament_games"]
     seconds_per_move = self.config.misc["optimization"]["tournament_movetime_milliseconds"] / 1000.0
     
     # Run the mini-tournament and generate optimization.pgn.
-    command = f"cutechess-cli.exe -engine name={name_optimize} cmd=ChessCoachUci.exe "
+    command = f"cutechess-cli -engine name={name_optimize} cmd=ChessCoachUci "
     for name, value in zip(names, values):
       command += f"option.{name}={value} "
-    command += f"-engine name={name_baseline} cmd=ChessCoachUci.exe -each proto=uci st={seconds_per_move} timemargin=1000 dir=\"{os.getcwd()}\" "
+    command += f"-engine name={name_baseline} cmd={stockfish_command} {stockfish_options} "
+    command += f"-each proto=uci st={seconds_per_move} timemargin=1000 dir=\"{os.getcwd()}\" "
     command += f"-games {tournament_games} -pgnout \"{self.tournament_pgn_path}\""
     subprocess.run(command, stdin=subprocess.DEVNULL, shell=True)
 
     # Process optimization.pgn using bayeselo to get an evaluation score.
     # NOTE: Bayeselo doesn't like quotes around paths.
     bayeselo_input = f"readpgn {self.tournament_pgn_path}\nelo\nmm\nexactdist\nratings\nx\nx\n".encode("utf-8")
-    process = subprocess.run("bayeselo.exe", input=bayeselo_input, capture_output=True, shell=True)
+    process = subprocess.run("bayeselo", input=bayeselo_input, capture_output=True, shell=True)
     output = process.stdout.decode("utf-8")
     elo = int(re.search(f"{name_optimize}\\s+(-?\\d+)\\s", output).group(1))
 
@@ -165,3 +176,11 @@ class Session:
       score = self.evaluate(point_dict)
       self.tell(iteration, point_dict, point, score)
       iteration += 1
+
+def optimize_parameters(config=None):
+  if not config:
+    # If config is None then we're not allowed to initialize TensorFlow, so just set "is_tpu" for Linux.
+    # It shouldn't matter, since it mostly affects cloud path use, and optimization explicitly uses local paths.
+    from config import Config
+    config = Config(is_tpu=(platform.system() != "Windows"))
+  Session(config).run()

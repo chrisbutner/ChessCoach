@@ -16,11 +16,6 @@ sudo add-apt-repository -y ppa:beineri/opt-qt-5.11.0-bionic
 sudo apt-get update
 sudo apt-get install qt511-meta-minimal -y --no-install-recommends
 
-# Make bayeselo
-pushd tools/deb/bayeselo
-make
-popd
-
 # Build and install protobuf (leaving the build directory around for flexibility).
 curl -L https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protobuf-cpp-3.13.0.tar.gz | tar -xz
 pushd protobuf-3.13.0

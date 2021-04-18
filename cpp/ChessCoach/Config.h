@@ -140,6 +140,7 @@ struct MiscConfig
     std::string Paths_StrengthTestMarkerPrefix;
 
     // Optimization
+    std::string Optimization_Mode;
     std::string Optimization_Epd;
     int Optimization_Nodes;
     int Optimization_FailureNodes;
