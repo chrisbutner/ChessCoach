@@ -340,9 +340,10 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     const auto& optimization = toml::find_or(config, "optimization", {});
     policy.template Parse<std::string>(misc.Optimization_Mode, optimization, "mode");
     policy.template Parse<std::string>(misc.Optimization_Epd, optimization, "epd");
-    policy.template Parse<int>(misc.Optimization_Nodes, optimization, "nodes");
-    policy.template Parse<int>(misc.Optimization_FailureNodes, optimization, "failure_nodes");
-    policy.template Parse<int>(misc.Optimization_PositionLimit, optimization, "position_limit");
+    policy.template Parse<int>(misc.Optimization_EpdMovetimeMilliseconds, optimization, "epd_movetime_milliseconds");
+    policy.template Parse<int>(misc.Optimization_EpdNodes, optimization, "epd_nodes");
+    policy.template Parse<int>(misc.Optimization_EpdFailureNodes, optimization, "epd_failure_nodes");
+    policy.template Parse<int>(misc.Optimization_EpdPositionLimit, optimization, "epd_position_limit");
 
     // Using https://github.com/ToruNiina/toml11#converting-a-table
     policy.template Parse<std::map<std::string, std::string>>(misc.UciOptions, config, "uci_options");

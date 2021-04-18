@@ -68,18 +68,17 @@ class Session:
     self.log("################################################################################")
     self.log("Starting parameter optimization")
     self.log(f'Output path: {self.local_output_path}')
+    self.log(f"Mode: {mode}")
     if mode == "epd":
-      self.log(f"Mode: {mode}")
       self.log(f'EPD: {config.misc["optimization"]["epd"]}')
-      self.log(f'Nodes: {config.misc["optimization"]["nodes"]}')
-      self.log(f'Failure nodes: {config.misc["optimization"]["failure_nodes"]}')
-      self.log(f'Position limit: {config.misc["optimization"]["position_limit"]}')
+      self.log(f'Milliseconds per position: {config.misc["optimization"]["epd_movetime_milliseconds"]}')
+      self.log(f'Nodes per position: {config.misc["optimization"]["epd_nodes"]}')
+      self.log(f'Failure nodes: {config.misc["optimization"]["epd_failure_nodes"]}')
+      self.log(f'Position limit: {config.misc["optimization"]["epd_position_limit"]}')
     elif mode == "tournament":
       self.log(f"Mode: {mode}")
       self.log(f'Games per evaluation: {config.misc["optimization"]["tournament_games"]}')
       self.log(f'Milliseconds per move: {config.misc["optimization"]["tournament_movetime_milliseconds"]}')
-    else:
-      raise Exception("Unexpected optimization mode: expected 'epd' or 'tournament'")
     self.log("Parameters:")
     for name, definition in self.parameters.items():
       self.log(f"{name}: {definition}")

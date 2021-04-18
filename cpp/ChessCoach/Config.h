@@ -142,9 +142,10 @@ struct MiscConfig
     // Optimization
     std::string Optimization_Mode;
     std::string Optimization_Epd;
-    int Optimization_Nodes;
-    int Optimization_FailureNodes;
-    int Optimization_PositionLimit;
+    int Optimization_EpdMovetimeMilliseconds;
+    int Optimization_EpdNodes;
+    int Optimization_EpdFailureNodes;
+    int Optimization_EpdPositionLimit;
 
     // UCI options
     std::map<std::string, std::string> UciOptions;

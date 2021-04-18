@@ -208,8 +208,8 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
         assert(Instance().workerGroup);
         const std::filesystem::path epdPath = (Platform::InstallationDataPath() / "StrengthTests" / Config::Misc.Optimization_Epd);
         auto [score, total, positions, totalNodesRequired] = Instance().workerGroup->controllerWorker->StrengthTestEpd(
-            Instance().workerGroup->workCoordinator.get(), epdPath, 0 /* moveTimeMs */, Config::Misc.Optimization_Nodes,
-            Config::Misc.Optimization_FailureNodes, Config::Misc.Optimization_PositionLimit, nullptr /* progress */);
+            Instance().workerGroup->workCoordinator.get(), epdPath, Config::Misc.Optimization_EpdMovetimeMilliseconds, Config::Misc.Optimization_EpdNodes,
+            Config::Misc.Optimization_EpdFailureNodes, Config::Misc.Optimization_EpdPositionLimit, nullptr /* progress */);
 
         evaluationScore = totalNodesRequired;
     }

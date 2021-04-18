@@ -1,11 +1,6 @@
 Optimization
-- TPUs
-	- install cutechess-cli/bayeselo
-	- network.py needs to not auto-init-TF
-	- need to play vs. stockfish baseline (limit to 2500)
-
-Optimization runs
-- TPUs: test STS, Arasan21, mini-tournaments
+- need a fix for cutechess-cli timeout with alpha TPUs
+- TPU runs: test STS, Arasan21, mini-tournaments
 
 Training runs
 - evaluate SE/pooling (read over 2f/2d notes)

@@ -234,11 +234,17 @@ mode = "epd"
 log_interval = 10
 plot_interval = 10
 
+# "Nodes required" metric is the node count when the solution was first hit as the principle variation
+# without later switching away, or "epd_failure_nodes" if the wrong answer was given for "bestmove".
+# The first limit of "epd_movetime_milliseconds" and "epd_nodes" hit ends the search for each position,
+# with 0 meaning no limit.
 epd = "Arasan21.epd"
-nodes = 100_000
-failure_nodes = 10_000_000
-position_limit = 10
+epd_movetime_milliseconds = 10_000
+epd_nodes = 0
+epd_failure_nodes = 10_000_000
+epd_position_limit = 10
 
+# Elo metric is calculated relative to baseline (Stockfish limited to 2500 Elo, calibrated using 1 thread).
 tournament_games = 10
 tournament_movetime_milliseconds = 1000
 
