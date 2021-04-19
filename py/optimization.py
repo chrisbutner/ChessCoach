@@ -20,13 +20,16 @@ class Session:
 
   n_initial_points = 16
   plot_color = "#36393f"
+  log_filename = "log.txt"
 
   def __init__(self, config):
     self.config = config
-    self.local_output_path = config.join(config.make_local_path(config.misc["paths"]["optimization"]), time.strftime("%Y%m%d-%H%M%S"))
+    self.local_output_parent = config.make_local_path(config.misc["paths"]["optimization"])
+    self.local_output_child = time.strftime("%Y%m%d-%H%M%S")
+    self.local_output_path = config.join(self.local_output_parent, self.local_output_child)
     os.makedirs(self.local_output_path, exist_ok=True)
     self.tournament_pgn_path = config.join(self.local_output_path, "optimization.pgn")
-    self.writer = open(self.config.join(self.local_output_path, "log.txt"), "w")
+    self.writer = open(self.config.join(self.local_output_path, self.log_filename), "w")
     self.parameters = self.parse_parameters(config.misc["optimization"]["parameters"])
     self.optimizer = Optimizer(list(self.parameters.values()), n_initial_points=self.n_initial_points, acq_func="EI")
 
@@ -151,15 +154,20 @@ class Session:
     if self.burnt_in(result) and (optimizer.space.n_dims > 1) and (iteration % self.config.misc["optimization"]["plot_interval"] == 0):
       self.plot_results(iteration, result)
 
+  def int_or_float(self, text):
+    return float(text) if "." in text else int(text)
+
   def resume(self):
     iteration = 1
-    log_path = None
-    if log_path:
+    if self.config.misc["optimization"]["resume_latest"]:
+      previous = (d for d in next(os.walk(self.local_output_parent))[1] if (d != self.local_output_child))
+      latest = max(previous)
+      log_path = self.config.join(self.local_output_parent, latest, self.log_filename)
       self.log(f"Replaying data from {log_path}")
       with open(log_path, "r") as reader:
         for line in reader:
           if line.startswith(f"{iteration}:"):
-            score, *point = [float(n) for n in re.findall(r"\d+.\d+", line)]
+            score, *point = [self.int_or_float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", line)[1:]]
             point_dict = dict(zip(self.parameters.keys(), point))
             self.tell(iteration, point_dict, point, score)
             iteration += 1
