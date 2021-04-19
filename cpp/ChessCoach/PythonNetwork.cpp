@@ -88,6 +88,23 @@ PythonNetwork::PythonNetwork()
 
 PythonNetwork::~PythonNetwork()
 {
+    // Deallocating long-term Python objects like our API functions and the interpreter isn't really necessary
+    // because we don't allocate multiple (e.g. even when training, the new strength test worker groups use the single network),
+    // so there aren't any obvious possibilities for leaks/growth throughout the process, and the process exiting takes care of everything.
+    //
+    // However, explicitly deallocating can be useful when using memory leak detection tools, so it's often good practice
+    // to do so. Our utilities may be lazy and explicitly finalize Python, but leave the PythonNetwork around until later
+    // (e.g. on the class instead of in a work method), so check for Py_IsInitialized() to see if it's still safe to deallocate here.
+    //
+    // Note that relying on Py_FinalizeEx() to reclaim memory (e.g. for leak detection) has acknowledged bugs:
+    // "Small amounts of memory allocated by the Python interpreter may not be freed (if you find a leak, please report it)."
+    // "Memory tied up in circular references between objects is not freed."
+    // "Some memory allocated by extension modules may not be freed."
+    if (!Py_IsInitialized())
+    {
+        return;
+    }
+
     Py_XDECREF(_optimizeParametersFunction);
     Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_fileExistsFunction);

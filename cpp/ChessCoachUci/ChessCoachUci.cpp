@@ -161,6 +161,8 @@ void ChessCoachUci::Work()
     {
         _workerGroup.ShutDown();
     }
+
+    _network.reset();
 }
 
 bool ChessCoachUci::HandleCommand(std::stringstream& commands, std::string command)
