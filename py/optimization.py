@@ -55,6 +55,7 @@ class Session:
     full_plotpath = self.config.join(self.local_output_path, f"{timestr}-{iteration}.png")
     plt.gcf().patch.set_facecolor(self.plot_color)
     plt.savefig(full_plotpath, dpi=300, facecolor=self.plot_color, bbox_inches="tight")
+    plt.close(plt.gcf())
 
   def log(self, data):
     print(data)
