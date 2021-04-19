@@ -1,5 +1,4 @@
 Optimization
-- need a fix for cutechess-cli timeout with alpha TPUs
 - TPU runs: test STS, Arasan21, mini-tournaments
 
 Training runs

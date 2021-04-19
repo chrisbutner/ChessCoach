@@ -128,7 +128,7 @@ class Session:
     # Process optimization.pgn using bayeselo to get an evaluation score.
     # NOTE: Bayeselo doesn't like quotes around paths.
     bayeselo_input = f"readpgn {self.tournament_pgn_path}\nelo\nmm\nexactdist\nratings\nx\nx\n".encode("utf-8")
-    process = subprocess.run("bayeselo", input=bayeselo_input, capture_output=True, shell=True)
+    process = subprocess.run("bayeselo", input=bayeselo_input, stdout=subprocess.PIPE, shell=True)
     output = process.stdout.decode("utf-8")
     elo = int(re.search(f"{name_optimize}\\s+(-?\\d+)\\s", output).group(1))
 
