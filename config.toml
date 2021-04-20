@@ -117,7 +117,6 @@ role = "train|play"
 
 [training]
 
-architecture = "conv2d"
 num_games = 44_000_000
 window_size = 1_000_000
 batch_size = 512

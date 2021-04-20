@@ -299,11 +299,9 @@ install_subdir('cpp/StrengthTests', install_dir: datadir + '/ChessCoach')
 install_subdir('cpp/Dictionaries', install_dir: datadir + '/ChessCoach')
 
 python_sources = [
-  'py/attention.py',
   'py/config.py',
   'py/dataset.py',
   'py/gui.py',
-  'py/layers.py',
   'py/model.py',
   'py/network.py',
   'py/optimization.py',

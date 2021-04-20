@@ -1,8 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import backend as K
 K.set_image_data_format("channels_first")
-from attention import MultiHeadSelfAttention2D
-from layers import Residual
 import os
 
 class ModelBuilder:
@@ -12,7 +10,6 @@ class ModelBuilder:
   output_planes_count = 73
   residual_count = 19
   filter_count = 256
-  attention_heads = 8
   dense_count = 256
   value_filter_count = 1
   weight_decay = 1e-4
@@ -38,25 +35,26 @@ class ModelBuilder:
   token_unk = "<unk>"
   token_pad = "<pad>"
 
-  def __init__(self):
-    self.architecture_layers = {
-      "conv2d": self.conv2d_layer,
-      "attention": self.attention_layer,
-      "augmented": self.augmented_layer,
-    }
+  def conv2d(self, name, filter_count=None, kernel_size=None, use_bias=False):
+    filter_count = filter_count or self.filter_count
+    kernel_size = kernel_size or (3,3)
+    return tf.keras.layers.Conv2D(filters=filter_count, kernel_size=kernel_size, strides=1, padding="same", data_format="channels_first",
+      use_bias=use_bias, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=name)
 
-  def conv2d_layer(self, name):
-    return tf.keras.layers.Conv2D(filters=self.filter_count, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=name)
-  
-  def attention_layer(self, name):
-    return MultiHeadSelfAttention2D(total_depth=self.filter_count, num_heads=self.attention_heads, weight_decay=self.weight_decay, name=name)
-  
-  def augmented_layer(self, name):
-    attention = MultiHeadSelfAttention2D(total_depth=self.filter_count // 2, num_heads=self.attention_heads, weight_decay=self.weight_decay, name=name + "/attention")
-    conv2d = tf.keras.layers.Conv2D(filters=self.filter_count // 2, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=name + "/conv2d")
-    return lambda x: tf.concat([attention(x), conv2d(x)], axis=1)
+  def residual_piece_v2(self, x, block, piece):
+    if not (block == 0 and piece == 0):
+      x = tf.keras.layers.BatchNormalization(axis=1, name=f"residual_{block}/batchnorm_{piece}")(x)
+      x = tf.keras.layers.ReLU(name=f"residual_{block}/relu_{piece}")(x)
+    x = self.conv2d(name=f"residual_{block}/conv2d_{piece}_{self.filter_count}")(x)
+    return x
+
+  # Requires a Conv2D/BN/ReLU before the tower.
+  # Requires an additional BN/ReLU after the tower.
+  def residual_block_v2(self, x, block):
+    y = self.residual_piece_v2(x, block, 0)
+    y = self.residual_piece_v2(y, block, 1)
+    x = tf.keras.layers.Add(name=f"residual_{block}/add")([x, y])
+    return x
 
   def unpack_planes(self, x):
     shape = x.get_shape()
@@ -70,20 +68,15 @@ class ModelBuilder:
 
   def stem(self, x):
     # Initial convolutional layer
-    x = tf.keras.layers.Conv2D(filters=self.filter_count, kernel_size=(3,3), strides=1, padding="same", data_format="channels_first",
-      name=f"initial/conv2d_{self.filter_count}",
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(x)
+    x = self.conv2d(name=f"initial/conv2d_{self.filter_count}")(x)
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"initial/batchnorm")(x)
     x = tf.keras.layers.ReLU(name=f"initial/relu")(x)
     return x
 
   def tower(self, x, config):
     # Residual layers
-    architecture = config.training["architecture"]
-    architecture_layer = self.architecture_layers[architecture]
-    residual = Residual([architecture_layer, architecture_layer], [architecture, architecture], self.filter_count, self.weight_decay)
     for i in range(self.residual_count):
-      x = residual.build_residual_block_v2(x, i)
+      x = self.residual_block_v2(x, i)
 
     # Tower BN/ReLU
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"tower/batchnorm")(x)
@@ -91,9 +84,7 @@ class ModelBuilder:
     return x
 
   def value_head(self, x, name, output_name):
-    x = tf.keras.layers.Conv2D(filters=self.value_filter_count, kernel_size=(1,1), strides=1, data_format="channels_first",
-      name=f"{name}/conv2d_{self.value_filter_count}",
-      use_bias=False, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay))(x)
+    x = self.conv2d(name=f"{name}/conv2d_{self.value_filter_count}", filter_count=self.value_filter_count, kernel_size=(1,1))(x)
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"{name}/batchnorm")(x)
     x = tf.keras.layers.ReLU(name=f"{name}/relu")(x)
     x = tf.keras.layers.Flatten(name=f"{name}/flatten")(x)
@@ -105,14 +96,11 @@ class ModelBuilder:
     return x
 
   def policy_head(self, x, name, output_name, config):
-    architecture = config.training["architecture"]
-    architecture_layer = self.architecture_layers[architecture]
-    x = architecture_layer(name=f"{name}/{architecture}_{self.filter_count}")(x)
+    x = self.conv2d(name=f"{name}/conv2d_{self.filter_count}")(x)
     x = tf.keras.layers.BatchNormalization(axis=1, name=f"{name}/batchnorm")(x)
     x = tf.keras.layers.ReLU(name=f"{name}/relu")(x)
     # Add bias for these layers with no more batchnorms.
-    policy = tf.keras.layers.Conv2D(filters=self.output_planes_count, kernel_size=(1,1), strides=1, data_format="channels_first",
-      use_bias=True, kernel_initializer="he_normal", kernel_regularizer=tf.keras.regularizers.l2(self.weight_decay), name=output_name)(x)
+    policy = self.conv2d(name=output_name, filter_count=self.output_planes_count, kernel_size=(1,1), use_bias=True)(x)
     return policy
 
   def commentary_encoder_head(self, x, name, output_name):

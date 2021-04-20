@@ -91,9 +91,9 @@ void ChessCoachTrain::TrainChessCoach()
     // Plan full training and resume progress. If the network's step count isn't a multiple of the checkpoint interval, round down.
     // See if there's still work to do in the current/latest network, based on the presence of artifacts in storage.
     //
-    // Note that the starting "networkNumber" is based on the latest saved teacher network, so it assumes that will be the first
+    // Note that the starting "networkNumber" is based on the latest saved teacher or student network, so it assumes that will be the first
     // saved artifact in a set of stages. If not, earlier artifacts will need to be redone. Shouldn't be a problem though: you need
-    // a teacher to train a student, and you need a teacher or student to strength test.
+    // a teacher or student network to strength test.
     TrainingState state;
     state.storage = &storage;
     state.network = network.get();

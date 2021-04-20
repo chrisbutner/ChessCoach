@@ -2,7 +2,7 @@ Optimization
 - TPU runs: test STS, Arasan21, mini-tournaments
 
 Training runs
-- evaluate SE/pooling (read over 2f/2d notes)
+- evaluate SE/pooling
 	- actual SE, as-bias (Wu), hybrid
 	- try batchnorm/relu before SE since we have v2 residuals
 
@@ -19,15 +19,6 @@ Profiling
 - put profiler server behind config to avoid firewall prompts e.g. in UCI
 - try out profiling
 	- capture a trace locally - may be issues with networking/firewall
-
-Criticality training (shelved)
-- add to GUI, look over saved positions, decide whether to drive 800-1600 range
-- either pull in whole change or some of the code cleanup
-	- logging wrong loss to tensorboard in shelved commit, fix
-	- add unit test for criticality training target via decompress API
-
-Next fresh run
-- (requires criticality)
 
 Training improvements (low confidence)
 - pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
