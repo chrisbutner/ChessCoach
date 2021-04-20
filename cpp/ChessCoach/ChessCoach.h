@@ -4,7 +4,6 @@
 #include "Network.h"
 
 class Storage;
-class WorkerGroup;
 
 class ChessCoach
 {
@@ -22,7 +21,7 @@ protected:
     void InitializeStockfish();
     void InitializeChessCoach();
     void InitializePredictionCache();
-    void InitializePythonModule(Storage* storage, WorkerGroup* workerGroup);
+    void InitializePythonModule(Storage* storage, INetwork* network);
 
     void FinalizePython();
     void FinalizeStockfish();

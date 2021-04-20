@@ -204,14 +204,20 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
         // Propagate the provided parameters through Config and UCI search code.
         Config::Update({} /* intUpdates */, parameters /* floatUpdates */, {} /* stringUpdates */, {} /* boolUpdates */);
 
-        // Use the faster student network, matching UCI.
-        assert(Instance().workerGroup);
+        // Set up worker threads (threads/parallelism may be parameters).
+        assert(Instance().network);
+        WorkerGroup workerGroup;
+        workerGroup.Initialize(Instance().network, nullptr /* storage */, Config::Network.SelfPlay.PredictionNetworkType,
+            Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
+
+        // Run the test.
         const std::filesystem::path epdPath = (Platform::InstallationDataPath() / "StrengthTests" / Config::Misc.Optimization_Epd);
-        auto [score, total, positions, totalNodesRequired] = Instance().workerGroup->controllerWorker->StrengthTestEpd(
-            Instance().workerGroup->workCoordinator.get(), epdPath, Config::Misc.Optimization_EpdMovetimeMilliseconds, Config::Misc.Optimization_EpdNodes,
+        auto [score, total, positions, totalNodesRequired] = workerGroup.controllerWorker->StrengthTestEpd(
+            workerGroup.workCoordinator.get(), epdPath, Config::Misc.Optimization_EpdMovetimeMilliseconds, Config::Misc.Optimization_EpdNodes,
             Config::Misc.Optimization_EpdFailureNodes, Config::Misc.Optimization_EpdPositionLimit, nullptr /* progress */);
 
         evaluationScore = totalNodesRequired;
+        workerGroup.ShutDown();
     }
 
     // Return a scalar.

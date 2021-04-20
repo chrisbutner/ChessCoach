@@ -26,7 +26,7 @@ private:
 
 public:
 
-    WorkerGroup* workerGroup = nullptr;
+    INetwork* network = nullptr;
     Storage* storage = nullptr;
 
 private:
