@@ -1,32 +1,15 @@
-Optimization
-- TPU runs: test STS, Arasan21, mini-tournaments
-
-Training runs
-- evaluate SE/pooling
-	- actual SE, as-bias (Wu), hybrid
-	- try batchnorm/relu before SE since we have v2 residuals
-
 Training runs, post-800k, post-2.4m
 - try without mcts value auxiliary again
 - try weaning off teacher or hard-cutoff
 - try switching to teacher-only prediction (SWA? stage predicates in config?)
 
 Next fresh run
-- (require SE)
 - selfplay7, Fresh3
 
 Profiling
 - put profiler server behind config to avoid firewall prompts e.g. in UCI
 - try out profiling
 	- capture a trace locally - may be issues with networking/firewall
-
-Training improvements (low confidence)
-- pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
-- investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
-	- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
-	- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
-- try out "sleeping" in the rotation - train random noise, different distributions
-- try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
 
 Commentary #3
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
@@ -54,16 +37,6 @@ Commentary #5
 	- basically 256->512 embedding rather than categorical->512 embedding
 - try encode before-and-after positions (no flip?) - comment on the move, not the position
 	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
-
-Prediction cache
-- investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
-- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
-	- no gain/loss earlier, try again after more PUCT work that does better for more nodes
-- test speed gain for self-play generation ignoring path dependence, transposition table-style
-- try stockfish-style prefetch asap after hash key update
-- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
-	- while not full hit rate should be higher? add some new metrics
-	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
 
 PUCT - medium confidence
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
@@ -103,21 +76,22 @@ PUCT - later
 	- could this also be used earlier during search, backpropagate up a pending/bounty value via separate field to be replaced
 	  by actual backprops - set it up when saturation point would take from below 1st to 1st in visits
 
-GUI
-- invert uci/gui relationship after working out in-proc/out details
-	- switch between database/UCI modes
-	- browse EPDs
-	- set up positions (paste pgn, fen, move pieces, uci from database position)
-	- go X buttons
-	- drill into moves to see deeper breakdowns during UCI (like ~ ucb moves ...)
-- deal with info panel height/scrolling, move list
-- change the square background rather than adding overlay, need more consistency between black/white squares
-- websocket reconnect
+Prediction cache (after PUCT work finished)
+- investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
+- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
+	- no gain/loss earlier, try again after more PUCT work that does better for more nodes
+- test speed gain for self-play generation ignoring path dependence, transposition table-style
+- try stockfish-style prefetch asap after hash key update
+- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
+	- while not full hit rate should be higher? add some new metrics
+	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
 
-Quality
-- modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
+CPU+GPU integration performance:
+- try vectorize/GPU softmax/UCT calcs
+- break down MCTS timing details just in case anything's off (instrumented, already did some sampling measurements/optimization)
+- image key for prediction cache can be incrementally updated if it helps enough
 
-UCI (#2)
+UCI
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
 	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
 - already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
@@ -139,25 +113,6 @@ UCI (#2)
 	- badly need to play well with X moves in Y, "movestogo", loses games vs. stockfish
 	- don't waste time when only 1 or few legal moves
 	- if dangerous time left, take mate-in-N rather than trying to find faster
-
-CPU+GPU integration performance:
-- try vectorize/GPU softmax/UCT calcs
-- break down MCTS timing details just in case anything's off (instrumented, already did some sampling measurements/optimization)
-- image key for prediction cache can be incrementally updated if it helps enough
-
-Code quality
-- copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
-- switch to vcpkg for windows dependencies
-- fix _ in network names - split on final _
-- factor out all-exist ringbuffer with foreach iteration (begin/end)
-- privatize C++ methods (got too python-brained)
-- try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
-- try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
-- add Python type info everywhere - look up best practices for linting etc.
-- check for any unnecessary move constructors
-- StrengthTestNetwork (naming)
-
-UCI (#3)
 - mate
 	- if root node's terminal value is known, and allowed to stop searching, make a move instantly and save time
 	- add global depth cut-off (a little tricky, need to allow MCTS to "back up" and ban paths that don't reach a leaf in time)
@@ -169,6 +124,30 @@ UCI (#3)
 - implement worthwhile options (work out hash, TT vs. prediction cache)
 - workaround for .exe vs. non in ChessBase, test as kibitzer
 - implement proper time controls/search options, ponder
+
+GUI
+- invert uci/gui relationship after working out in-proc/out details
+	- switch between database/UCI modes
+	- browse EPDs
+	- set up positions (paste pgn, fen, move pieces, uci from database position)
+	- go X buttons
+	- drill into moves to see deeper breakdowns during UCI (like ~ ucb moves ...)
+- deal with info panel height/scrolling, move list
+- change the square background rather than adding overlay, need more consistency between black/white squares
+- websocket reconnect
+
+Code quality
+- modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
+- copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
+- switch to vcpkg for windows dependencies
+- fix _ in network names - split on final _
+- factor out all-exist ringbuffer with foreach iteration (begin/end)
+- privatize C++ methods (got too python-brained)
+- try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
+- try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
+- add Python type info everywhere - look up best practices for linting etc.
+- check for any unnecessary move constructors
+- StrengthTestNetwork (naming)
 
 Deployment
 - re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
@@ -215,3 +194,9 @@ Won't do
 	- categorical parameters
 - performance
 	- validation log still 11-12s after training log on cluster, try prefetch harder or debug
+- training improvements (too expensive with remaining time/resources)
+	- pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
+	- investigate FROST - need to read more, but applied to data efficiency, seems like we could go in a couple directions:
+		- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
+		- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
+	- try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf

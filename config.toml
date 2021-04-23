@@ -4,8 +4,33 @@
 
 [network]
 
-network_name = "selfplay6a"
+network_name = "selfplay6g"
 role = "train|play"
+
+[[networks]]
+
+    name = "selfplay6g"
+
+    [networks.training]
+
+    stages = [
+        # Self-play
+        { stage = "play" },
+
+        # Train self-play, teacher
+        { stage = "train", target = "teacher" },
+        { stage = "save", target = "teacher" },
+        { stage = "save_swa", target = "teacher" },
+
+        # Strength test (STS rating)
+        { stage = "strength_test", target = "teacher" },
+    ]
+
+    games_path_training = "Games/Fresh2"
+
+    [networks.self_play]
+
+    network_type = "teacher"
 
 [[networks]]
 
@@ -24,7 +49,7 @@ role = "train|play"
         { stage = "save", target = "student" },
         { stage = "save_swa", target = "student" },
 
-        # Strength test (STS rating, etc.)
+        # Strength test (STS rating)
         { stage = "strength_test", target = "teacher" },
         { stage = "strength_test", target = "student" },
     ]
@@ -51,7 +76,7 @@ role = "train|play"
         { stage = "save", target = "student" },
         { stage = "save_swa", target = "student" },
 
-        # Strength test (STS rating, etc.)
+        # Strength test (STS rating)
         { stage = "strength_test", target = "teacher" },
         { stage = "strength_test", target = "student" },
     ]
@@ -73,7 +98,7 @@ role = "train|play"
         { stage = "train", target = "teacher" },
         { stage = "save", target = "teacher" },
 
-        # Strength test (STS rating, etc.)
+        # Strength test (STS rating)
         { stage = "strength_test", target = "teacher" },
     ]
 
