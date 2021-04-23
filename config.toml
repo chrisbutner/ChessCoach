@@ -204,10 +204,10 @@ exploration_rate_init = 1.25
 
 use_sble_puct = true
 linear_exploration_rate = 500.0
-linear_exploration_base = 10000.0
-virtual_loss_coefficient = 1.25
-moving_average_build = 0.95
-moving_average_cap = 1500.0
+linear_exploration_base = 40000.0
+virtual_loss_coefficient = 0.5
+moving_average_build = 1.0
+moving_average_cap = 4000.0
 backpropagation_puct_threshold = 0.025
 
 wait_for_updated_network = false
