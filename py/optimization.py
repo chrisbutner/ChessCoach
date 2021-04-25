@@ -16,11 +16,6 @@ try:
 except:
   pass
 
-# Matplotlib also assumes it can access argv[0].
-import sys
-if not hasattr(sys, "argv") or not sys.argv:
-  sys.argv = [""]
-
 class Session:
 
   n_initial_points = 16

@@ -7,11 +7,6 @@ silent = bool(os.environ.get("CHESSCOACH_SILENT"))
 if silent:
   os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-# Work around https://github.com/tensorflow/tensorflow/issues/45994
-import sys
-if not hasattr(sys, "argv") or not sys.argv:
-  sys.argv = [""]
-
 def log(*args):
   if not silent:
     # Flush is required with no tty attached; e.g. docker.

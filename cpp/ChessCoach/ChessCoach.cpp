@@ -83,6 +83,10 @@ void ChessCoach::InitializePython()
 
     Py_Initialize();
 
+    // Initialize argv[0] so that TensorFlow and Matplotlib don't crash, but don't pass in any actual arguments.
+    const wchar_t* empty[] = { L"" };
+    PySys_SetArgvEx(0, const_cast<wchar_t**>(empty), 0 /* updatepath */);
+
     // Initialize numpy.
     if (PY_ARRAY_UNIQUE_SYMBOL == nullptr)
     {
