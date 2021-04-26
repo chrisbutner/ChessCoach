@@ -2053,21 +2053,31 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
 
     // Game clock can stop the search. Use a simple strategy like AlphaZero for now.
     const Color toPlay = _games[0].ToPlay();
-    const int64_t timeAllowed =
-        (_searchState->timeControl.timeRemainingMs[toPlay] / Config::Misc.TimeControl_FractionOfRemaining)
-        + _searchState->timeControl.incrementMs[toPlay]
-        - Config::Misc.TimeControl_SafetyBufferMilliseconds;
-    if ((timeAllowed > 0) && (searchTimeMs >= timeAllowed))
+    const int64_t totalTimeAllowed = (_searchState->timeControl.timeRemainingMs[toPlay] + _searchState->timeControl.incrementMs[toPlay]);
+    if (totalTimeAllowed > 0)
     {
-        workCoordinator->OnWorkItemCompleted();
-        return;
+        int fraction = Config::Misc.TimeControl_FractionOfRemaining;
+        if (_searchState->timeControl.movesToGo > 0)
+        {
+            // If it's 40 moves per 5 min with 2 moves/60 seconds remaining, use 30 seconds.
+            fraction = std::min(fraction, _searchState->timeControl.movesToGo);
+        }
+        const int64_t timeAllowed =
+            (_searchState->timeControl.timeRemainingMs[toPlay] / fraction)
+            + _searchState->timeControl.incrementMs[toPlay]
+            - Config::Misc.TimeControl_SafetyBufferMilliseconds;
+        if (searchTimeMs >= timeAllowed)
+        {
+            workCoordinator->OnWorkItemCompleted();
+            return;
+        }
     }
 
     // No limits set/remaining: make at least the training number of simulations.
     if ((_searchState->timeControl.nodes <= 0) &&
         (_searchState->timeControl.mate <= 0) &&
         (_searchState->timeControl.moveTimeMs <= 0) &&
-        (timeAllowed <= 0) &&
+        (totalTimeAllowed <= 0) &&
         (nodeCount >= Config::Network.SelfPlay.NumSimulations))
     {
         workCoordinator->OnWorkItemCompleted();

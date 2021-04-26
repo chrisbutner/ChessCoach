@@ -146,6 +146,7 @@ struct TimeControl
 
     int64_t timeRemainingMs[COLOR_NB];
     int64_t incrementMs[COLOR_NB];
+    int movesToGo;
 };
 
 class SelfPlayGame : public Game

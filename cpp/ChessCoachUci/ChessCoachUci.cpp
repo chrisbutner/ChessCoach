@@ -440,7 +440,6 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
 void ChessCoachUci::HandleGo(std::stringstream& commands)
 {
     // TODO: searchmoves
-    // TODO: movestogo
 
     TimeControl timeControl = {};
 
@@ -478,6 +477,10 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         else if (token == "binc")
         {
             commands >> timeControl.incrementMs[BLACK];
+        }
+        else if (token == "movestogo")
+        {
+            commands >> timeControl.movesToGo;
         }
     }
 
