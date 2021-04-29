@@ -12,6 +12,7 @@ PyMethodDef PythonModule::ChessCoachMethods[] = {
     { "load_chunk",  PythonModule::LoadChunk, METH_VARARGS, nullptr },
     { "load_game",  PythonModule::LoadGame, METH_VARARGS, nullptr },
     { "load_position",  PythonModule::LoadPosition, METH_VARARGS, nullptr },
+    { "show_line",  PythonModule::ShowLine, METH_VARARGS, nullptr },
     { "evaluate_parameters",  PythonModule::EvaluateParameters, METH_VARARGS, nullptr },
     { nullptr, nullptr, 0, nullptr }
 };
@@ -171,6 +172,32 @@ PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
     Py_DECREF(pythonTos);
     Py_DECREF(pythonPolicyValues);
     return pythonTuple;
+}
+
+PyObject* PythonModule::ShowLine(PyObject* self, PyObject* args)
+{
+    (void)self;
+    PyObject* pythonLine;
+
+    if (!PyArg_UnpackTuple(args, "load_position", 1, 1, &pythonLine) ||
+        !pythonLine ||
+        !PyBytes_Check(pythonLine))
+    {
+        PyErr_SetString(PyExc_TypeError, "Expected 1 arg: line");
+        return nullptr;
+    }
+
+    const Py_ssize_t size = PyBytes_GET_SIZE(pythonLine);
+    const char* data = PyBytes_AS_STRING(pythonLine);
+    std::string line(data, size);
+
+    {
+        NonPythonContext context;
+
+        Instance().worker->GuiShowLine(Instance().network, line);
+    }
+
+    Py_RETURN_NONE;
 }
 
 PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)

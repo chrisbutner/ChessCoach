@@ -22,12 +22,14 @@ private:
     static PyObject* LoadChunk(PyObject* self, PyObject* args);
     static PyObject* LoadGame(PyObject* self, PyObject* args);
     static PyObject* LoadPosition(PyObject* self, PyObject* args);
+    static PyObject* ShowLine(PyObject* self, PyObject* args);
     static PyObject* EvaluateParameters(PyObject* self, PyObject* args);
 
 public:
 
     INetwork* network = nullptr;
     Storage* storage = nullptr;
+    SelfPlayWorker* worker = nullptr;
 
 private:
 

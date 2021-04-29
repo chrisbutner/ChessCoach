@@ -49,7 +49,7 @@ void ChessCoachGui::Run()
 {
     // Ready the PythonModule for incoming requests for position data.
     Storage storage;
-    InitializePythonModule(&storage, nullptr /* network */);
+    InitializePythonModule(&storage, nullptr /* network */, nullptr /* worker */);
 
     // Call in to Python.
     std::unique_ptr<INetwork> network(CreateNetwork());

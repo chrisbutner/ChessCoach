@@ -427,7 +427,7 @@ void PythonNetwork::LaunchGui(const std::string& mode)
     Py_DECREF(pythonMode);
 }
 
-void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
+void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
     const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& targets,
     std::vector<float>& priors, std::vector<float>& values, std::vector<float>& ucb, std::vector<int>& visits, std::vector<int>& weights)
 {
@@ -435,6 +435,9 @@ void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::
 
     PyObject* pythonFen = PyUnicode_FromStringAndSize(fen.data(), fen.size());
     PyAssert(pythonFen);
+
+    PyObject* pythonLine = PyUnicode_FromStringAndSize(line.data(), line.size());
+    PyAssert(pythonLine);
 
     PyObject* pythonNodeCount = PyLong_FromLong(nodeCount);
     PyAssert(pythonNodeCount);
@@ -474,7 +477,7 @@ void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::
         Py_ARRAY_LENGTH(moveDims), moveDims, NPY_INT32, weights.data());
     PythonNetwork::PyAssert(pythonWeights);
 
-    PyObject* result = PyObject_CallFunctionObjArgs(_updateGuiFunction, pythonFen, pythonNodeCount, pythonEvaluation, pythonPrincipleVariation,
+    PyObject* result = PyObject_CallFunctionObjArgs(_updateGuiFunction, pythonFen, pythonLine, pythonNodeCount, pythonEvaluation, pythonPrincipleVariation,
         pythonSans, pythonFroms, pythonTos, pythonTargets, pythonPriors, pythonValues, pythonUcb, pythonVisits, pythonWeights, nullptr);
     PyAssert(result);
 
@@ -491,6 +494,7 @@ void PythonNetwork::UpdateGui(const std::string& fen, int nodeCount, const std::
     Py_DECREF(pythonPrincipleVariation);
     Py_DECREF(pythonEvaluation);
     Py_DECREF(pythonNodeCount);
+    Py_DECREF(pythonLine);
     Py_DECREF(pythonFen);
 }
 

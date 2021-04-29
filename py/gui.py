@@ -91,6 +91,10 @@ async def handle(message):
       requested_game = message.get("game")
       requested_position = message.get("position")
       await show_position(requested_game, requested_position)
+  elif message["type"] == "line":
+    if gui_mode == "push":
+      line = message.get("line")
+      show_line(line)
 
 # ----- Game and position data -----
 
@@ -159,6 +163,9 @@ async def show_position(requested_game, requested_position):
       for (san, move_from, move_to, target) in zip(sans, froms, tos, targets)],
   }))
 
+def show_line(line):
+  chesscoach.show_line(line.encode("utf-8"))
+
 # ----- API -----
 
 def launch(mode):
@@ -167,11 +174,12 @@ def launch(mode):
   _ensure_serving()
   webbrowser.open(f"http://localhost:{port}/gui.html")
 
-def update(fen, node_count, evaluation, principle_variation, sans, froms, tos, targets, priors, values, ucb, visits, weights):
+def update(fen, line, node_count, evaluation, principle_variation, sans, froms, tos, targets, priors, values, ucb, visits, weights):
   assert gui_mode == "push"
   dispatch(json.dumps({
     "type": "uci_data",
     "fen": fen,
+    "line": line,
     "node_count": node_count,
     "evaluation": evaluation,
     "principle_variation": principle_variation,
@@ -201,6 +209,7 @@ def update(fen, node_count, evaluation, principle_variation, sans, froms, tos, t
 # {
 #   "type": "uci_data",
 #   "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#   "line": "",
 #   "node_count": 350024,
 #   "evaluation": "0.527982 (0.0979088 pawns)",
 #   "principle_variation": "d4 d5 c4 c6 Nf3 Nf6 Nc3 e6 e3 Nbd7 Qc2 Bd6 Bd3 O-O O-O dxc4 Bxc4 b5 Be2 Bb7 e4 e5 Rd1 Qc7 dxe5 Nxe5 Nxe5 Bxe5 g3 ",

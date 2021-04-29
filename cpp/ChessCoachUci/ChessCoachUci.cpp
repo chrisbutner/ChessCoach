@@ -620,6 +620,9 @@ void ChessCoachUci::InitializeWorkers()
     InitializeNetwork();
     _workerGroup.Initialize(_network.get(), nullptr /* storage */, Config::Network.SelfPlay.PredictionNetworkType,
         Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
+
+    // Let the GUI call back in to show requested lines.
+    InitializePythonModule(nullptr /* storage */, _network.get(), _workerGroup.controllerWorker.get());
 }
 
 void ChessCoachUci::StopAndReadyWorkers()

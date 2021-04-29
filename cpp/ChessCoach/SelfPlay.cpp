@@ -736,6 +736,8 @@ void SearchState::Reset(const TimeControl& setTimeControl)
     lastBestNodes = 0;
     timeControl = setTimeControl;
     previousNodeCount = 0;
+    guiLine.clear();
+    guiLineMoves.clear();
 
     nodeCount = 0;
     failedNodeCount = 0;
@@ -1924,15 +1926,22 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
     if (_searchState->gui && (forceUpdate ||
         ((nodeCount / interval) > (_searchState->previousNodeCount / interval))))
     {
-        const SelfPlayGame& game = _games[0];
-        const Node* root = game.Root();
+        // Drill down to the requested line.
+        SelfPlayGame lineGame = _games[0];
+        for (const Move move : _searchState->guiLineMoves)
+        {
+            lineGame.ApplyMoveWithRoot(move, lineGame.Root()->Child(move));
+        }
+
+        // Wait to update the GUI until a principle variation exists.
+        const Node* root = lineGame.Root();
         const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
         if (!bestChild)
         {
             return;
         }
 
-        const std::string fen = game.GetPosition().fen();
+        const std::string fen = lineGame.GetPosition().fen();
 
         // Value is from the parent's perspective, so that's already correct for the root perspective
         std::stringstream evaluation;
@@ -1951,7 +1960,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 
         // Compose a SAN principle variation: more expensive but only used for GUI and only every "Search_GuiUpdateIntervalNodes".
         std::stringstream principleVariation;
-        SelfPlayGame pvGame = game;
+        SelfPlayGame pvGame = lineGame;
         const Node* pvBestChild = bestChild;
         while (pvBestChild)
         {
@@ -1974,28 +1983,60 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         std::vector<int> weights;
 
         float sumChildVisits = 0.f;
-        for (const Node& child : *game.Root())
+        for (const Node& child : *lineGame.Root())
         {
             sumChildVisits += static_cast<float>(child.visitCount.load(std::memory_order_relaxed));
         }
-        for (const Node& child : *game.Root())
+        for (const Node& child : *lineGame.Root())
         {
             const Move move = Move(child.move);
-            sans.emplace_back(Pgn::San(game.GetPosition(), move, (child.terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>()) /* showCheckmate */));
+            sans.emplace_back(Pgn::San(lineGame.GetPosition(), move, (child.terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>()) /* showCheckmate */));
             froms.emplace_back(Game::SquareName[from_sq(move)]);
             tos.emplace_back(Game::SquareName[to_sq(move)]);
             targets.push_back(static_cast<float>(child.visitCount.load(std::memory_order_relaxed)) / sumChildVisits);
             priors.push_back(child.prior);
             values.push_back(child.Value());
-            ucb.push_back(CalculatePuctScoreAdHoc(game.Root(), &child).first);
+            ucb.push_back(CalculatePuctScoreAdHoc(lineGame.Root(), &child).first);
             visits.push_back(child.visitCount.load(std::memory_order_relaxed));
             weights.push_back(child.valueWeight.load(std::memory_order_relaxed));
         }
 
-        network->UpdateGui(fen, nodeCount, evaluation.str(), principleVariation.str(),
+        network->UpdateGui(fen, _searchState->guiLine, nodeCount, evaluation.str(), principleVariation.str(),
             sans, froms, tos, targets, priors, values, ucb, visits, weights);
     }
     _searchState->previousNodeCount = nodeCount;
+}
+
+void SelfPlayWorker::GuiShowLine(INetwork* network, const std::string& line)
+{
+    if (line == _searchState->guiLine)
+    {
+        return;
+    }
+
+    // Parse the line SANs.
+    std::vector<Move> lineMoves;
+    SelfPlayGame lineGame = _games[0];
+    std::stringstream lineSans(line);
+    std::string san;
+    while (lineSans >> san)
+    {
+        lineMoves.emplace_back(Pgn::ParseSan(lineGame.GetPosition(), san));
+        const Move& move = lineMoves.back(); // Reference returned by "emplace_back" may be invalid on MSVC when reallocating.
+        lineGame.ApplyMoveWithRoot(move, lineGame.Root()->Child(move));
+
+        // Don't show lines for unexpanded nodes, or nodes with no principle variation.
+        const Node* bestChild = lineGame.Root()->bestChild.load(std::memory_order_relaxed);
+        if (!lineGame.Root()->IsExpanded() || !bestChild)
+        {
+            return;
+        }
+    }
+
+    // Send an update to the GUI using the new "guiLineMoves".
+    _searchState->guiLine = line;
+    _searchState->guiLineMoves = std::move(lineMoves);
+    CheckUpdateGui(network, true /* forceUpdate */);
 }
 
 void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)

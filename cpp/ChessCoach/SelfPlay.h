@@ -229,6 +229,8 @@ struct SearchState
     int lastBestNodes;
     TimeControl timeControl;
     int previousNodeCount;
+    std::string guiLine;
+    std::vector<Move> guiLineMoves;
 
     // All workers
     SelfPlayGame* position;
@@ -294,6 +296,8 @@ public:
     void SearchUpdatePosition(const std::string& fen, const std::vector<Move>& moves, bool forceNewPosition);
     void CommentOnPosition(INetwork* network);
     PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
+
+    void GuiShowLine(INetwork* network, const std::string& line);
 
     std::tuple<int, int, int, int> StrengthTestEpd(WorkCoordinator* workCoordinator, const std::filesystem::path& epdPath,
         int moveTimeMs, int nodes, int failureNodes, int positionLimit,

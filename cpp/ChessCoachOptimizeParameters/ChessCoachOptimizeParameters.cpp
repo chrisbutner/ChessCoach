@@ -45,7 +45,7 @@ void ChessCoachOptimizeParameters::Run()
     {
         // Prepare to run strength tests to evaluate parameters.
         std::unique_ptr<INetwork> network(CreateNetwork());
-        InitializePythonModule(nullptr /* storage */, network.get());
+        InitializePythonModule(nullptr /* storage */, network.get(), nullptr /* worker */);
 
         // Call in to Python.
         network->OptimizeParameters();

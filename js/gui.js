@@ -65,6 +65,22 @@
             row.style.backgroundColor = null;
             overlaysHighlightAll();
         });
+
+        row.addEventListener("click", () => {
+            showLineAddSan(move.san);
+        });
+    }
+
+    function showLine(line) {
+        socket.send(JSON.stringify({
+            type: "line",
+            line: line,
+        }))
+    }
+
+    function showLineAddSan(san) {
+        line = (data.line ? data.line + " " + san : san);
+        showLine(line);
     }
 
     function requestPosition() {
@@ -117,7 +133,7 @@
         // Add the new UCI data to history, clearing history first if it's a new search.
         if (dataHistory.length > 0) {
             const last = dataHistory[dataHistory.length - 1];
-            if ((uciData.fen !== last.fen) || (uciData.node_count < last.node_count)) {
+            if ((uciData.fen !== last.fen) || (uciData.line !== last.line) || (uciData.node_count < last.node_count)) {
                 dataHistory = [];
                 data = null;
             }
@@ -144,6 +160,7 @@
         board.position(data.fen);
 
         document.getElementById("fen").textContent = data.fen;
+        document.getElementById("line").textContent = data.line || "(home)";
         document.getElementById("nodeCount").textContent = `${data.node_count} nodes`;
         document.getElementById("evaluation").textContent = data.evaluation;
         document.getElementById("principleVariation").textContent = "Principle variation: " + data.principle_variation;
@@ -323,5 +340,16 @@
             data = newData;
             renderUciData();
         }
+    });
+
+    document.getElementById("lineBack").addEventListener("click", () => {
+        if (data && data.line) {
+            line = data.line.substring(0, data.line.lastIndexOf(" "));
+            showLine(line);
+        }
+    });
+
+    document.getElementById("lineHome").addEventListener("click", () => {
+        showLine("");
     });
 })();
