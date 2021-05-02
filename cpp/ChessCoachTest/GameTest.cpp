@@ -60,3 +60,40 @@ TEST(Game, FlipBoard)
     Bitboard debugFlipWhitePawns = position.pieces(WHITE, PAWN);
     EXPECT_EQ(flipBlackPawns, debugFlipWhitePawns);
 }
+
+TEST(Game, FlipSpecialMoves)
+{
+    const Move moves[] =
+    {
+        make_move(SQ_E2, SQ_E4),
+
+        make<ENPASSANT>(SQ_E5, SQ_D6),
+
+        make<PROMOTION>(SQ_D7, SQ_D8, QUEEN),
+        make<PROMOTION>(SQ_D7, SQ_D8, ROOK),
+        make<PROMOTION>(SQ_D7, SQ_D8, BISHOP),
+        make<PROMOTION>(SQ_D7, SQ_D8, KNIGHT),
+
+        make<PROMOTION>(SQ_D7, SQ_E8, QUEEN),
+        make<PROMOTION>(SQ_D7, SQ_E8, ROOK),
+        make<PROMOTION>(SQ_D7, SQ_E8, BISHOP),
+        make<PROMOTION>(SQ_D7, SQ_E8, KNIGHT),
+
+        make<PROMOTION>(SQ_D2, SQ_D1, QUEEN),
+        make<PROMOTION>(SQ_D2, SQ_D1, ROOK),
+        make<PROMOTION>(SQ_D2, SQ_D1, BISHOP),
+        make<PROMOTION>(SQ_D2, SQ_D1, KNIGHT),
+
+        make<PROMOTION>(SQ_D2, SQ_E1, QUEEN),
+        make<PROMOTION>(SQ_D2, SQ_E1, ROOK),
+        make<PROMOTION>(SQ_D2, SQ_E1, BISHOP),
+        make<PROMOTION>(SQ_D2, SQ_E1, KNIGHT),
+    };
+    for (const Move move : moves)
+    {
+        EXPECT_EQ(move, Game::FlipMove(WHITE, move));
+        EXPECT_NE(move, Game::FlipMove(BLACK, move));
+        EXPECT_EQ(move, Game::FlipMove(WHITE, Game::FlipMove(WHITE, move)));
+        EXPECT_EQ(move, Game::FlipMove(BLACK, Game::FlipMove(BLACK, move)));
+    }
+}

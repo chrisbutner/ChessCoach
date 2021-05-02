@@ -280,7 +280,6 @@ tournament_movetime_milliseconds = 1000
 # '(0.0, 1.0)'
 # '(1e3, 1e6, "log-uniform")'
 # '("small", "medium", "large")'
-#
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # NOTE: Parameters must also be listed under [uci_options] when using mini-tournament-based optimization.
 search_parallelism = '(1, 128)'

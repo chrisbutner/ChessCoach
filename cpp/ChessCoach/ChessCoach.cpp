@@ -65,6 +65,13 @@ void ChessCoach::Finalize()
 
 void ChessCoach::InitializePython()
 {
+    // Handle repeated initialization during tests.
+    if (Py_IsInitialized())
+    {
+        // Otherwise, we don't hold the GIL, and PySys_SetArgvEx->PySys_SetObject blows up on null thread state.
+        return;
+    }
+
     // Work around a Python crash.
     const std::string pythonHome = Platform::GetEnvironmentVariable("PYTHONHOME");
     if (pythonHome.empty())

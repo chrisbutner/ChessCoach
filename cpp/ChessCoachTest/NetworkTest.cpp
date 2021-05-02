@@ -44,6 +44,7 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
     ASSERT_NE(moveNode, nullptr);
 
     Node* previousRoot = game.Root();
+    game.Root()->bestChild = moveNode;
     game.StoreSearchStatistics();
     game.ApplyMoveWithRootAndHistory(move, moveNode);
     game.PruneExcept(previousRoot, moveNode);
@@ -80,6 +81,7 @@ TEST(Network, Policy)
 
     // Generate policy labels. Make sure that legal moves are non-zero and the rest are zero.
     Node* previousRoot = game.Root();
+    game.Root()->bestChild = selected;
     game.StoreSearchStatistics();
     game.ApplyMoveWithRootAndHistory(firstMove, selected);
     game.PruneExcept(previousRoot, selected);
