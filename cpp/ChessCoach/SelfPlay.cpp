@@ -1395,19 +1395,16 @@ WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
     Node* maxSble = nullptr;
     for (Node& child : *parent)
     {
-        if (child.expansion.load(std::memory_order_relaxed) != Expansion::Expanding)
+        const auto [azPuct, sblePuct] = CalculatePuctScore<ForcePlayouts, UseSblePuct>(parent, &child);
+        if (azPuct > maxAzPuct)
         {
-            const auto [azPuct, sblePuct] = CalculatePuctScore<ForcePlayouts, UseSblePuct>(parent, &child);
-            if (azPuct > maxAzPuct)
-            {
-                maxAzPuct = azPuct;
-            }
-            if (sblePuct > maxSblePuct)
-            {
-                maxSblePuct = sblePuct;
-                azOfMaxSble = azPuct;
-                maxSble = &child;
-            }
+            maxAzPuct = azPuct;
+        }
+        if ((sblePuct > maxSblePuct) && (child.expansion.load(std::memory_order_relaxed) != Expansion::Expanding))
+        {
+            maxSblePuct = sblePuct;
+            azOfMaxSble = azPuct;
+            maxSble = &child;
         }
     }
 
