@@ -103,7 +103,7 @@ public:
     bool IsExpanded() const;
     float Value() const;
     float ValueWithVirtualLoss() const;
-    void SampleValue(float movingAverageBuild, float movingAverageCap, float value);
+    int SampleValue(float movingAverageBuild, float movingAverageCap, float value);
 
     Node* Child(Move match);
 
@@ -114,20 +114,73 @@ public:
     int32_t childCount;
     float prior;
     uint16_t move;
-    std::atomic<Expansion> expansion;
-    std::atomic_uint8_t visitingCount;
+    std::atomic_uint16_t visitingCount;
     std::atomic_int visitCount;
     std::atomic<float> valueAverage;
     std::atomic_int valueWeight;
+    std::atomic_int upWeight;
+    std::atomic<Expansion> expansion;
+    uint8_t padding[11];
     std::atomic<TerminalValue> terminalValue;
 };
 static_assert(sizeof(TerminalValue) == 8);
-static_assert(sizeof(Node) == 48);
+static_assert(sizeof(Node) == 64);
 
 struct WeightedNode
 {
     Node* node;
-    float weight;
+    int weight;
+};
+
+struct ScoredNode
+{
+    Node* node;
+    float score;
+    float virtualExploration;
+
+    ScoredNode(Node* setNode, float setScore, float setVirtualExploration)
+        : node(setNode)
+        , score(setScore)
+        , virtualExploration(setVirtualExploration)
+    {
+    }
+
+    bool operator<(const ScoredNode& other) const
+    {
+        return score > other.score;
+    }
+};
+
+class PuctContext
+{
+public:
+
+    PuctContext(Node* parent);
+    template <bool ForcePlayouts>
+    WeightedNode SelectChild() const;
+    float CalculatePuctScoreAdHoc(const Node* child) const;
+    void PrunePolicyTarget() const;
+
+private:
+
+    thread_local static std::vector<ScoredNode> ScoredNodes;
+
+private:
+
+    template <bool ForcePlayouts>
+    float CalculateAzPuctScore(const Node* child, float childVirtualExploration) const;
+    float CalculateSblePuctScore(float azPuctScore, float childVirtualExploration) const;
+    float CalculatePuctScoreFixedValue(const Node* child, float fixedValue) const;
+    float VirtualExploration(const Node* node) const;
+
+private:
+
+    Node* _parent;
+    float _parentVirtualExploration;
+    float _explorationNumerator;
+    int _eliminationTopCount;
+    float _linearExplorationRate;
+    float _linearExplorationBase;
 };
 
 enum class SelfPlayState
@@ -276,14 +329,7 @@ public:
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
     void AddExplorationNoise(SelfPlayGame& game) const;
     Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
-    template <bool ForcePlayouts, bool UseSblePuct>
-    WeightedNode SelectChild(Node* node) const;
-    template <bool ForcePlayouts, bool UseSblePuct>
-    std::pair<float, float> CalculatePuctScore(const Node* parent, const Node* child) const;
-    std::pair<float, float> CalculatePuctScoreAdHoc(const Node* parent, const Node* child) const;
-    float CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const;
-    void PrunePolicyTarget(Node* root) const;
-    void Backpropagate(std::vector<WeightedNode>& searchPath, float value);
+    void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
     void BackpropagateMate(const std::vector<WeightedNode>& searchPath);
     void FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* node);
     void UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath);

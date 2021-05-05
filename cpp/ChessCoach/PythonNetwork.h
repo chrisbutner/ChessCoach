@@ -69,7 +69,7 @@ public:
     virtual void LaunchGui(const std::string& mode);
     virtual void UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
         const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& targets,
-        std::vector<float>& priors, std::vector<float>& values, std::vector<float>& ucb, std::vector<int>& visits, std::vector<int>& weights);
+        std::vector<float>& priors, std::vector<float>& values, std::vector<float>& puct, std::vector<int>& visits, std::vector<int>& weights, std::vector<int>& upWeights);
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, int decompressPositionsModulus,
         InputPlanes* imagesOut, float* valuesOut, OutputPlanes* policiesOut);

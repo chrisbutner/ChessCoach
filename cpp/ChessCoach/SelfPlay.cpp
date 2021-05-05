@@ -55,8 +55,8 @@ TerminalValue& TerminalValue::operator=(const int8_t value)
 
     if (value > 0)
     {
-        const int mateNSaturated = std::min(static_cast<int8_t>(Game::UcbMateTerm.size() - 1), value);
-        _mateTerm = Game::UcbMateTerm[mateNSaturated];
+        const int mateNSaturated = std::min(static_cast<int8_t>(Game::PuctMateTerm.size() - 1), value);
+        _mateTerm = Game::PuctMateTerm[mateNSaturated];
     }
     else
     {
@@ -139,12 +139,13 @@ Node::Node()
     , childCount{}
     , prior{}
     , move{}
-    , expansion{}
     , visitingCount{}
     , visitCount{}
     , valueAverage{}
     , valueWeight{}
-    , terminalValue{{}}
+    , upWeight{}
+    , expansion{}
+    , terminalValue{ {} }
 {
 }
 
@@ -155,11 +156,12 @@ Node::Node(const Node& other)
     , childCount(other.childCount)
     , prior(other.prior)
     , move(other.move)
-    , expansion(other.expansion.load(std::memory_order_relaxed))
     , visitingCount(other.visitingCount.load(std::memory_order_relaxed))
     , visitCount(other.visitCount.load(std::memory_order_relaxed))
     , valueAverage(other.valueAverage.load(std::memory_order_relaxed))
     , valueWeight(other.valueWeight.load(std::memory_order_relaxed))
+    , upWeight(other.upWeight.load(std::memory_order_relaxed))
+    , expansion(other.expansion.load(std::memory_order_relaxed))
     , terminalValue(other.terminalValue.load(std::memory_order_relaxed))
 {
 }
@@ -209,7 +211,8 @@ float Node::Value() const
         return INetwork::MapProbability11To01(static_cast<float>(mateSign));
     }
 
-    // First-play urgency (FPU) is zero, a loss. Start with "valueAverage" and "valueWeight" at zero.
+    // Initialize "valueAverage" to first-play urgency (FPU) and "valueWeight" to zero.
+    // The first "SampleValue" completely clobbers the FPU because of the zero "valueWeight".
     return valueAverage.load(std::memory_order_relaxed);
 }
 
@@ -223,13 +226,15 @@ float Node::ValueWithVirtualLoss() const
         return INetwork::MapProbability11To01(static_cast<float>(mateSign));
     }
 
-    // First-play urgency (FPU) is zero, a loss. Start with "valueAverage" and "valueWeight" at zero.
+    // Initialize "valueAverage" to first-play urgency (FPU) and "valueWeight" to zero.
+    // The first "SampleValue" completely clobbers the FPU because of the zero "valueWeight".
     const float virtualLossCount = (visitingCount.load(std::memory_order_relaxed) * Config::Network.SelfPlay.VirtualLossCoefficient);
     const float weight = static_cast<float>(valueWeight.load(std::memory_order_relaxed));
-    return valueAverage.load(std::memory_order_relaxed) * weight / std::max(1.f, (weight + virtualLossCount));
+    const float safeWeight = std::max(1.f, weight); // Solves non-zero FPU and virtual loss denominator concerns.
+    return valueAverage.load(std::memory_order_relaxed) * safeWeight / (safeWeight + virtualLossCount);
 }
 
-void Node::SampleValue(float movingAverageBuild, float movingAverageCap, float value)
+int Node::SampleValue(float movingAverageBuild, float movingAverageCap, float value)
 {
     const int newWeight = (valueWeight.fetch_add(1, std::memory_order_relaxed) + 1);
     float current = valueAverage.load(std::memory_order_relaxed);
@@ -237,6 +242,7 @@ void Node::SampleValue(float movingAverageBuild, float movingAverageCap, float v
         current,
         (current + (value - current) / std::clamp(newWeight * movingAverageBuild, 1.f, movingAverageCap)),
         std::memory_order_relaxed));
+    return newWeight;
 }
 
 Node* Node::Child(Move match)
@@ -295,7 +301,7 @@ SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
-    , _searchRootPly(other.Ply())
+    , _searchRootPly(other._searchRootPly)
     , _result(other._result)
 {
     assert(&other != this);
@@ -312,7 +318,7 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
-    _searchRootPly = other.Ply();
+    _searchRootPly = other._searchRootPly;
     _result = other._result;
 
     return *this;
@@ -587,6 +593,7 @@ void SelfPlayGame::Expand(int moveCount)
     {
         root->children[i].move = static_cast<uint16_t>(_expandAndEvaluate_moves[i].move);
         root->children[i].prior = _cachedPriors[i];
+        root->children[i].valueAverage = CHESSCOACH_FIRST_PLAY_URGENCY;
     }
 }
 
@@ -1114,7 +1121,7 @@ void SelfPlayWorker::Play(int index)
         }
 
         assert(selected != nullptr);
-        PrunePolicyTarget(root);
+        PuctContext(root).PrunePolicyTarget();
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
         game.PruneExcept(root, selected /* == game.Root() */);
@@ -1177,7 +1184,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             scratchGame = game;
             assert(searchPath.empty());
             searchPath.clear();
-            searchPath.push_back({ scratchGame.Root(), 1.f });
+            searchPath.push_back({ scratchGame.Root(), 1 });
             scratchGame.Root()->visitingCount.fetch_add(1, std::memory_order_relaxed);
 
             // We need this acquire-load to synchronize with the release-store of the expanding thread
@@ -1187,12 +1194,8 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                 // Force playouts during training only, at the root only.
                 const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
                 WeightedNode selected = forcePlayouts ?
-                    (Config::Network.SelfPlay.UseSblePuct ?
-                        SelectChild<true, true>(scratchGame.Root()) :
-                        SelectChild<true, false>(scratchGame.Root())) :
-                    (Config::Network.SelfPlay.UseSblePuct ?
-                        SelectChild<false, true>(scratchGame.Root()) :
-                        SelectChild<false, false>(scratchGame.Root()));
+                    PuctContext(scratchGame.Root()).SelectChild<true>() :
+                    PuctContext(scratchGame.Root()).SelectChild<false>();
 
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration.
@@ -1238,7 +1241,10 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // it doesn't really have a parent in the game, but you can still consider the flipped value
         // as the side-to-play's broad evaluation of the position.
         assert(!std::isnan(value));
-        Backpropagate(searchPath, value);
+        // Also get the root's value from the leaf's perspective in case it's needed for draw-sibling-FPU (see inside Backpropagate()).
+        const float rootValue = Game::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), game.Root()->valueAverage.load(std::memory_order_relaxed));
+        assert(!std::isnan(rootValue));
+        Backpropagate(searchPath, value, rootValue);
         _searchState->nodeCount.fetch_add(1, std::memory_order_relaxed);
 
         // If we *just found out* that this leaf is a checkmate, prove it backwards as far as possible.
@@ -1261,6 +1267,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             game.Root()->visitCount.store(1, std::memory_order_relaxed);
             game.Root()->valueAverage.store(0.f, std::memory_order_relaxed);
             game.Root()->valueWeight.store(0, std::memory_order_relaxed);
+            game.Root()->upWeight.store(0, std::memory_order_relaxed);
 
             // Add exploration noise if not searching.
             if (!game.TryHard())
@@ -1355,13 +1362,17 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         std::discrete_distribution distribution(weights.begin(), weights.end());
         return &game.Root()->children[distribution(Random::Engine)];
     }
-    else if (game.TryHard() && allowDiversity && (game.Ply() < Config::Network.SelfPlay.NumSampingMoves))
+    else if (game.TryHard() && allowDiversity && (game.Ply() < Config::Network.SelfPlay.NumSampingMoves) &&
+        (Config::Network.SelfPlay.MoveDiversityTemperature > 0.f))
     {
         // "When we forced AlphaZero to play with greater diversity (by softmax sampling with a temperature of 10.0 among moves
         // for which the value was no more than 1% away from the best move for the first 30 plies) the winning rate increased from 5.8% to 14%."
-        const float valueDeltaThreshold = 0.01f;
-        const float softmaxSampleTemperature = 10.f;
-        std::vector<Node*> best = CollectBestMoves(game.Root(), valueDeltaThreshold);
+        //
+        // We can use a similar system, but SBLE-PUCT introduces some complications:
+        // - Visits become very even at high node counts because of linear exploration.
+        // - UpWeight should be more representative of "deserved" visits, but isn't because there's no backpropagation catch-up for unlucky ordering.
+        // So, sample based on visits, but greatly lower the softmax sampling temperature.
+        std::vector<Node*> best = CollectBestMoves(game.Root(), Config::Network.SelfPlay.MoveDiversityValueDeltaThreshold);
         if (best.size() == 1)
         {
             return best.back();
@@ -1372,7 +1383,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         std::vector<float> bestWeights(best.size());
         for (int i = 0; i < best.size(); i++)
         {
-            bestWeights[i] = std::pow(static_cast<float>(best[i]->visitCount.load(std::memory_order_relaxed)) / bestVisitCount, 1.f / softmaxSampleTemperature);
+            bestWeights[i] = std::pow(static_cast<float>(best[i]->visitCount.load(std::memory_order_relaxed)) / bestVisitCount, 1.f / Config::Network.SelfPlay.MoveDiversityTemperature);
         }
         std::discrete_distribution distribution(bestWeights.begin(), bestWeights.end());
         return best[distribution(Random::Engine)];
@@ -1384,68 +1395,102 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
     }
 }
 
+thread_local std::vector<ScoredNode> PuctContext::ScoredNodes;
+
+PuctContext::PuctContext(Node* parent)
+    : _parent(parent)
+{
+    // Pre-compute repeatedly-used terms.
+    _parentVirtualExploration = VirtualExploration(parent);
+
+    const float explorationRateBase = Config::Network.SelfPlay.ExplorationRateBase;
+    const float explorationRateInit = Config::Network.SelfPlay.ExplorationRateInit;
+    _explorationNumerator =
+        (std::log((_parentVirtualExploration + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
+        std::sqrt(_parentVirtualExploration);
+
+    _eliminationTopCount = std::min(parent->childCount,
+        std::max(2,
+            static_cast<int>(
+                std::pow(2.f, Config::Network.SelfPlay.EliminationBase - std::log(_parentVirtualExploration / 1000.f) / std::log(Config::Network.SelfPlay.EliminationRate))
+                )));
+
+    // Localize repeatedly-used config.
+    _linearExplorationRate = Config::Network.SelfPlay.LinearExplorationRate;
+    _linearExplorationBase = Config::Network.SelfPlay.LinearExplorationBase;
+}
+
 // It's possible because of nodes marked off-limits via "expanding"
 // that this method cannot select a child, instead returning NONE/nullptr.
-template <bool ForcePlayouts, bool UseSblePuct>
-WeightedNode SelfPlayWorker::SelectChild(Node* parent) const
+template <bool ForcePlayouts>
+WeightedNode PuctContext::SelectChild() const
 {
     float maxAzPuct = -std::numeric_limits<float>::infinity();
     float maxSblePuct = -std::numeric_limits<float>::infinity();
     float azOfMaxSble = -std::numeric_limits<float>::infinity();
+    float maxSblePuctIncludingBlocked = -std::numeric_limits<float>::infinity();
     Node* maxSble = nullptr;
-    for (Node& child : *parent)
+    bool bestWasBlocked = false;
+
+    // It might be better to keep children sorted/pivoted, but that's not viable with multiple threads mutating scores.
+    ScoredNodes.clear();
+    for (Node& child : *_parent)
     {
-        const auto [azPuct, sblePuct] = CalculatePuctScore<ForcePlayouts, UseSblePuct>(parent, &child);
-        if (azPuct > maxAzPuct)
+        const float childVirtualExploration = VirtualExploration(&child);
+        const float azPuct = CalculateAzPuctScore<ForcePlayouts>(&child, childVirtualExploration);
+        maxAzPuct = std::max(maxAzPuct, azPuct);
+        ScoredNodes.emplace_back(&child, azPuct, childVirtualExploration);
+    }
+    std::nth_element(ScoredNodes.begin(), ScoredNodes.begin() + _eliminationTopCount, ScoredNodes.end());
+
+    for (int i = 0; i < ScoredNodes.size(); i++)
+    {
+        Node* child = ScoredNodes[i].node;
+        const float azPuct = ScoredNodes[i].score;
+        const float sblePuct = (i < _eliminationTopCount) ? CalculateSblePuctScore(azPuct, ScoredNodes[i].virtualExploration) : azPuct;
+        if (sblePuct > maxSblePuct)
         {
-            maxAzPuct = azPuct;
-        }
-        if ((sblePuct > maxSblePuct) && (child.expansion.load(std::memory_order_relaxed) != Expansion::Expanding))
-        {
-            maxSblePuct = sblePuct;
-            azOfMaxSble = azPuct;
-            maxSble = &child;
+            // Can also include other gates here, like flood protection in small sub-trees.
+            const bool blocked = (child->expansion.load(std::memory_order_relaxed) == Expansion::Expanding);
+            if (!blocked)
+            {
+                maxSblePuct = sblePuct;
+                azOfMaxSble = azPuct;
+                maxSble = child;
+            }
+            if (sblePuct > maxSblePuctIncludingBlocked)
+            {
+                maxSblePuctIncludingBlocked = sblePuct;
+                bestWasBlocked = blocked;
+            }
         }
     }
 
     // Select child using max(SBLE-PUCT), but only backpropagate value if its AZ-PUCT is within range of max(AZ-PUCT).
-    const float weight = ((maxAzPuct - azOfMaxSble) <= Config::Network.SelfPlay.BackpropagationPuctThreshold) ? 1.f : 0.f;
+    const int weight = (!bestWasBlocked) & ((azOfMaxSble / maxAzPuct) >= Config::Network.SelfPlay.BackpropagationPuctThreshold);
     return { maxSble, weight };
 }
-template WeightedNode SelfPlayWorker::SelectChild<true, true>(Node* parent) const;
-template WeightedNode SelfPlayWorker::SelectChild<true, false>(Node* parent) const;
-template WeightedNode SelfPlayWorker::SelectChild<false, true>(Node* parent) const;
-template WeightedNode SelfPlayWorker::SelectChild<false, false>(Node* parent) const;
+template WeightedNode PuctContext::SelectChild<true>() const;
+template WeightedNode PuctContext::SelectChild<false>() const;
 
-// Returns { AZ-PUCT, SBLE-PUCT } for UseSblePuct, otherwise { AZ-PUCT, AZ-PUCT }.
-// AZ-PUCT is the AlphaZero Predictor-Upper Confidence bound applied to Trees (with a mate-term modification).
-// SBLE-PUCT is the Selective-Backpropagation, Linear Exploration, Predictor-Upper Confidence bound applied to Trees.
-template <bool ForcePlayouts, bool UseSblePuct>
-std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, const Node* child) const
+// AZ-PUCT is the AlphaZero Predictor-Upper Confidence bound applied to Trees (with a mate-term modification and virtual exploration/loss).
+template <bool ForcePlayouts>
+float PuctContext::CalculateAzPuctScore(const Node* child, float childVirtualExploration) const
 {
-    const int parentVirtualExploration = (parent->visitCount.load(std::memory_order_relaxed) + parent->visitingCount.load(std::memory_order_relaxed));
-    const int childVirtualExploration = (child->visitCount.load(std::memory_order_relaxed) + child->visitingCount.load(std::memory_order_relaxed));
-
     // We force playouts only during training, so we don't care about virtual loss or exploration issues
     // that would otherwise occur when returning a constant infinity.
     if constexpr (ForcePlayouts)
     {
-        if (childVirtualExploration < static_cast<int>(std::sqrt(2.f * child->prior * parentVirtualExploration)))
+        if (childVirtualExploration < std::floor(std::sqrt(2.f * child->prior * _parentVirtualExploration)))
         {
-            return { std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity() };
+            return std::numeric_limits<float>::infinity();
         }
     }
 
     // Calculate the exploration rate, which is multiplied by (a) the prior to incentivize exploration,
     // and (b) a mate-in-N lookup to incentivize sufficient exploitation of forced mates, dependent on depth.
-    // Include "visitingCount" to help parallel searches diverge.
-    const float parentVirtualExplorationFloat = static_cast<float>(parentVirtualExploration);
-    const float childVirtualExplorationFloat = static_cast<float>(childVirtualExploration);
-    const float explorationRateBase = Config::Network.SelfPlay.ExplorationRateBase;
-    const float explorationRateInit = Config::Network.SelfPlay.ExplorationRateInit;
-    const float explorationRate =
-        (std::log((parentVirtualExplorationFloat + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
-        std::sqrt(parentVirtualExplorationFloat) / (childVirtualExplorationFloat + 1.f);
+    // Include "visitingCount" to help parallel searches diverge ("virtual exploration").
+    const float explorationRate = _explorationNumerator / (childVirtualExploration + 1.f);
 
     // (a) prior score
     const float priorScore = explorationRate * child->prior;
@@ -1453,62 +1498,62 @@ std::pair<float, float> SelfPlayWorker::CalculatePuctScore(const Node* parent, c
     // (b) mate-in-N score
     const float mateScore = child->terminalValue.load(std::memory_order_relaxed).MateScore(explorationRate);
 
-    // Calculate SBLE-PUCT terms.
-    // TODO: Work in progress
-    const float linearExplorationRate = Config::Network.SelfPlay.LinearExplorationRate;
-    const float linearExplorationBase = Config::Network.SelfPlay.LinearExplorationBase;
-    const float linear = parentVirtualExplorationFloat / ((linearExplorationRate * childVirtualExplorationFloat) + linearExplorationBase);
-
-    const float azPuct = (child->ValueWithVirtualLoss() + priorScore + mateScore);
-    const float sblePuct = (azPuct + linear);
-    return { azPuct, sblePuct };
+    return (child->ValueWithVirtualLoss() + priorScore + mateScore);
 }
-template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<true, true>(const Node* parent, const Node* child) const;
-template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<true, false>(const Node* parent, const Node* child) const;
-template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false, true>(const Node* parent, const Node* child) const;
-template std::pair<float, float> SelfPlayWorker::CalculatePuctScore<false, false>(const Node* parent, const Node* child) const;
 
-std::pair<float, float> SelfPlayWorker::CalculatePuctScoreAdHoc(const Node* parent, const Node* child) const
+// SBLE-PUCT is the Selective-Backpropagation, Linear Exploration, Predictor-Upper Confidence bound applied to Trees.
+float PuctContext::CalculateSblePuctScore(float azPuctScore, float childVirtualExploration) const
 {
-    return Config::Network.SelfPlay.UseSblePuct ?
-        CalculatePuctScore<false, true>(parent, child) :
-        CalculatePuctScore<false, false>(parent, child);
+    // Calculate SBLE-PUCT linear term.
+    const float linear = _parentVirtualExploration / ((_linearExplorationRate * childVirtualExploration) + _linearExplorationBase);
+
+    return (azPuctScore + linear);
 }
 
-float SelfPlayWorker::CalculatePuctScoreFixedValue(const Node* parent, const Node* child, float fixedValue) const
+float PuctContext::CalculatePuctScoreAdHoc(const Node* child) const
+{
+    // AZ-PUCT with no forced playouts makes the most sense for pruning and display for humans.
+    return CalculateAzPuctScore<false>(child, VirtualExploration(child));
+}
+
+float PuctContext::CalculatePuctScoreFixedValue(const Node* child, float fixedValue) const
 {
     // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
-
-    return (CalculatePuctScoreAdHoc(parent, child).first - child->ValueWithVirtualLoss() + fixedValue);
+    return (CalculatePuctScoreAdHoc(child) - child->ValueWithVirtualLoss() + fixedValue);
 }
 
-void SelfPlayWorker::PrunePolicyTarget(Node* root) const
+float PuctContext::VirtualExploration(const Node* node) const
+{
+    return static_cast<float>(node->visitCount.load(std::memory_order_relaxed) + node->visitingCount.load(std::memory_order_relaxed));
+}
+
+void PuctContext::PrunePolicyTarget() const
 {
     // Find the most-visited child: ignore hard mate selection rules.
-    Node* best = &root->children[0];
-    for (int i = 1; i < root->childCount; i++)
+    Node* best = &_parent->children[0];
+    for (int i = 1; i < _parent->childCount; i++)
     {
-        if (root->children[i].visitCount.load(std::memory_order_relaxed) > best->visitCount.load(std::memory_order_relaxed))
+        if (_parent->children[i].visitCount.load(std::memory_order_relaxed) > best->visitCount.load(std::memory_order_relaxed))
         {
-            best = &root->children[i];
+            best = &_parent->children[i];
         }
     }
 
-    // Prune visits to other nodes based on UCB regret vs. the most-visited child.
-    const float bestScore = CalculatePuctScoreAdHoc(root, best).first;
+    // Prune visits to other nodes based on PUCT regret vs. the most-visited child.
+    const float bestScore = CalculatePuctScoreAdHoc(best);
     int rootPruneCount = 0;
-    for (Node& child : *root)
+    for (Node& child : *_parent)
     {
         if (&child == best)
         {
             continue;
         }
 
-        // Pre-decrement before "CalculateUcbScore" to save one calculation per child.
+        // Pre-decrement before "CalculatePuctScore" to save one calculation per child.
         int pruneCount = 0;
         const int originalVisitCount = child.visitCount.load(std::memory_order_relaxed);
         const float fixedValue = child.Value();
-        while ((child.visitCount.fetch_sub(1, std::memory_order_relaxed) >= 1) && (CalculatePuctScoreFixedValue(root, &child, fixedValue) < bestScore))
+        while ((child.visitCount.fetch_sub(1, std::memory_order_relaxed) >= 1) && (CalculatePuctScoreFixedValue(&child, fixedValue) < bestScore))
         {
             pruneCount++;
         }
@@ -1520,15 +1565,16 @@ void SelfPlayWorker::PrunePolicyTarget(Node* root) const
     }
 
     // Use the root's original visit count for exploration terms while pruning, and delay corresponding adjustments until the end here.
-    root->visitCount.store(root->visitCount - rootPruneCount, std::memory_order_relaxed);
+    _parent->visitCount.store(_parent->visitCount - rootPruneCount, std::memory_order_relaxed);
 }
 
-void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value)
+void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue)
 {
     // Each ply has a different player, so flip each time.
     const float movingAverageBuild = Config::Network.SelfPlay.MovingAverageBuild;
     const float movingAverageCap = Config::Network.SelfPlay.MovingAverageCap;
     int weight = 1;
+    Node* previous = nullptr;
     for (int i = static_cast<int>(searchPath.size()) - 1; i >= 0; i--)
     {
         Node* node = searchPath[i].node;
@@ -1536,13 +1582,42 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
         node->visitCount.fetch_add(1, std::memory_order_relaxed);
         if (weight)
         {
-            node->SampleValue(movingAverageBuild, movingAverageCap, value);
-            
+            const int newWeight = node->SampleValue(movingAverageBuild, movingAverageCap, value);
+            if (previous)
+            {
+                previous->upWeight.fetch_add(1, std::memory_order_relaxed);
+            }
+
+            // When a leaf node is first visited and the value is an exact draw, update the first-play urgency (FPU)
+            // of the draw's siblings to the root's value (flipped if necessary), so that if a player has a winning position,
+            // they are not forced to keep visiting and backpropagating a draw that was encountered by surprise with a high prior.
+            // This obviates the need for flood protection in small sub-trees, and solves more problems in practice.
+            //
+            // There are two potential issues with this logic:
+            // - The neural network evaluation or quantized prediction cache evaluation may exactly equal a draw score.
+            //   This is unfortunate, but only results in a small slow-down for the initial visits to siblings with
+            //   sufficient exploration incentive.
+            // - If another thread just backpropagated into a sibling with an exact loss score as its first (few) sample(s)
+            //   then we may clobber the actual weighted average, because we can only CAS against one variable. This could be
+            //   dangerous, delaying future visits to the win potentially for a long time, but should be exceedingly rare.
+            if ((newWeight == 1) && (value == CHESSCOACH_VALUE_DRAW) && (i == static_cast<int>(searchPath.size()) - 1) && (i > 0))
+            {
+                // Iterate over siblings.
+                for (Node& child : *searchPath[i - 1].node)
+                {
+                    if (child.valueWeight.load(std::memory_order_relaxed) == 0)
+                    {
+                        float expected = CHESSCOACH_FIRST_PLAY_URGENCY;
+                        child.valueAverage.compare_exchange_strong(expected, rootValue, std::memory_order_relaxed);
+                    }
+                }
+            }
         }
-        value = SelfPlayGame::FlipValue(value);
+        value = Game::FlipValue(value);
 
         // Weights are always 0 or 1 with current SBLE-PUCT.
         weight = std::min(weight, static_cast<int>(searchPath[i].weight));
+        previous = node;
     }
 }
 
@@ -1975,15 +2050,17 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         std::vector<float> targets;
         std::vector<float> priors;
         std::vector<float> values;
-        std::vector<float> ucb;
+        std::vector<float> puct;
         std::vector<int> visits;
         std::vector<int> weights;
+        std::vector<int> upWeights;
 
         float sumChildVisits = 0.f;
         for (const Node& child : *lineGame.Root())
         {
             sumChildVisits += static_cast<float>(child.visitCount.load(std::memory_order_relaxed));
         }
+        PuctContext puctContext(lineGame.Root());
         for (const Node& child : *lineGame.Root())
         {
             const Move move = Move(child.move);
@@ -1993,13 +2070,14 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             targets.push_back(static_cast<float>(child.visitCount.load(std::memory_order_relaxed)) / sumChildVisits);
             priors.push_back(child.prior);
             values.push_back(child.Value());
-            ucb.push_back(CalculatePuctScoreAdHoc(lineGame.Root(), &child).first);
+            puct.push_back(puctContext.CalculatePuctScoreAdHoc(&child));
             visits.push_back(child.visitCount.load(std::memory_order_relaxed));
             weights.push_back(child.valueWeight.load(std::memory_order_relaxed));
+            upWeights.push_back(child.upWeight.load(std::memory_order_relaxed));
         }
 
         network->UpdateGui(fen, _searchState->guiLine, nodeCount, evaluation.str(), principleVariation.str(),
-            sans, froms, tos, targets, priors, values, ucb, visits, weights);
+            sans, froms, tos, targets, priors, values, puct, visits, weights, upWeights);
     }
     _searchState->previousNodeCount = nodeCount;
 }

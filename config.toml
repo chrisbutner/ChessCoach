@@ -202,13 +202,16 @@ root_exploration_fraction = 0.25
 exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
-use_sble_puct = true
-linear_exploration_rate = 500.0
-linear_exploration_base = 10000.0
-virtual_loss_coefficient = 1.0
+linear_exploration_rate = 200.0
+linear_exploration_base = 40000.0
+virtual_loss_coefficient = 0.25
 moving_average_build = 0.95
 moving_average_cap = 1500.0
-backpropagation_puct_threshold = 0.025
+backpropagation_puct_threshold = 0.98
+elimination_base = 8.0
+elimination_rate = 3.0
+move_diversity_value_delta_threshold = 0.01
+move_diversity_temperature = 0.75
 
 wait_for_updated_network = false
 
@@ -224,7 +227,7 @@ max_ply = 24
 
 [time_control]
 
-safety_buffer_milliseconds = 25
+safety_buffer_milliseconds = 100
 fraction_remaining = 20
 
 [search]
@@ -299,7 +302,6 @@ network_weights = "string"
 search_threads = "spin"
 search_parallelism = "spin"
 safety_buffer_milliseconds = "spin"
-use_sble_puct = "check"
 linear_exploration_rate = "float"
 linear_exploration_base = "float"
 virtual_loss_coefficient = "float"

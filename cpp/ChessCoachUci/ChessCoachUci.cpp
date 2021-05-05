@@ -539,7 +539,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
         return;
     }
 
-    if (token == "ucb")
+    if ((token == "ucb") || (token == "puct"))
     {
         bool csv = false;
         while (commands >> token)
@@ -556,46 +556,49 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
 
         SelfPlayGame* game;
         _workerGroup.controllerWorker->DebugGame(0, &game, nullptr, nullptr, nullptr);
-        SelfPlayGame ucbGame = *game;
+        SelfPlayGame puctGame = *game;
 
         // If "moves" wasn't seen then we already consumed the rest of the line.
         while (commands >> token)
         {
-            Move move = UCI::to_move(ucbGame.GetPosition(), token);
+            Move move = UCI::to_move(puctGame.GetPosition(), token);
             if (move == MOVE_NONE)
             {
                 break;
             }
 
-            ucbGame.ApplyMoveWithRoot(move, ucbGame.Root()->Child(move));
+            puctGame.ApplyMoveWithRoot(move, puctGame.Root()->Child(move));
         }
 
         if (csv)
         {
-            std::cout << "move,prior,value,ucb,visits,weight" << std::endl;
+            std::cout << "move,prior,value,puct,visits,weight,upWeight" << std::endl;
         }
 
-        Node* root = ucbGame.Root();
+        Node* root = puctGame.Root();
+        PuctContext puctContext(root);
         for (const Node& child : *root)
         {
             if (csv)
             {
-                std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
+                std::cout << Pgn::San(puctGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << "," << child.prior
                     << "," << child.Value()
-                    << "," << _workerGroup.controllerWorker->CalculatePuctScoreAdHoc(root, &child).first
+                    << "," << puctContext.CalculatePuctScoreAdHoc(&child)
                     << "," << child.visitCount
                     << "," << child.valueWeight
+                    << "," << child.upWeight
                     << std::endl;
             }
             else
             {
-                std::cout << Pgn::San(ucbGame.GetPosition(), Move(child.move), true /* showCheckmate */)
+                std::cout << Pgn::San(puctGame.GetPosition(), Move(child.move), true /* showCheckmate */)
                     << " prior=" << child.prior
                     << " value=" << child.Value()
-                    << " ucb=" << _workerGroup.controllerWorker->CalculatePuctScoreAdHoc(root, &child).first
+                    << " puct=" << puctContext.CalculatePuctScoreAdHoc(&child)
                     << " visits=" << child.visitCount
                     << " weight=" << child.valueWeight
+                    << " upWeight=" << child.upWeight
                     << std::endl;
             }
         }

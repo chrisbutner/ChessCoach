@@ -94,13 +94,16 @@ struct SelfPlayConfig
     float ExplorationRateBase;
     float ExplorationRateInit;
 
-    bool UseSblePuct;
     float LinearExplorationRate;
     float LinearExplorationBase;
     float VirtualLossCoefficient;
     float MovingAverageBuild;
     float MovingAverageCap;
     float BackpropagationPuctThreshold;
+    float EliminationBase;
+    float EliminationRate;
+    float MoveDiversityValueDeltaThreshold;
+    float MoveDiversityTemperature;
 
     bool WaitForUpdatedNetwork;
 };

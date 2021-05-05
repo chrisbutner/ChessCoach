@@ -82,15 +82,15 @@ TEST(Config, ConfigUpdateBool)
 {
     Config::Initialize();
 
-    const bool original = Config::Network.SelfPlay.UseSblePuct;
-    EXPECT_EQ(Config::Network.SelfPlay.UseSblePuct, original);
+    const bool original = Config::Network.SelfPlay.WaitForUpdatedNetwork;
+    EXPECT_EQ(Config::Network.SelfPlay.WaitForUpdatedNetwork, original);
 
     const bool updated = !original;
-    Config::Update({}, {}, {}, { { "use_sble_puct", updated } });
-    EXPECT_NE(Config::Network.SelfPlay.UseSblePuct, original);
-    EXPECT_EQ(Config::Network.SelfPlay.UseSblePuct, updated);
+    Config::Update({}, {}, {}, { { "wait_for_updated_network", updated } });
+    EXPECT_NE(Config::Network.SelfPlay.WaitForUpdatedNetwork, original);
+    EXPECT_EQ(Config::Network.SelfPlay.WaitForUpdatedNetwork, updated);
 
-    EXPECT_THROW(Config::Update({}, {}, {}, { { "use_sble_puctz", updated } }), std::runtime_error);
+    EXPECT_THROW(Config::Update({}, {}, {}, { { "wait_for_updated_networkz", updated } }), std::runtime_error);
 }
 
 TEST(Config, Lookups)
@@ -100,26 +100,26 @@ TEST(Config, Lookups)
     const int garbage1 = 123;
     const float garbage2 = 0.5f;
     const std::string garbage3 = "...";
-    const bool garbage4 = false;
+    const bool garbage4 = true;
     std::map<std::string, int> ints = { { "pgn_interval", garbage1 } };
     std::map<std::string, float> floats = { { "root_dirichlet_alpha", garbage2 } };
     std::map<std::string, std::string> strings = { { "network_weights", garbage3 } };
-    std::map<std::string, bool> bools = { { "use_sble_puct", garbage4 } };
+    std::map<std::string, bool> bools = { { "wait_for_updated_network", garbage4 } };
     EXPECT_EQ(ints["pgn_interval"], garbage1);
     EXPECT_EQ(floats["root_dirichlet_alpha"], garbage2);
     EXPECT_EQ(strings["network_weights"], garbage3);
-    EXPECT_EQ(ints["use_sble_puct"], garbage4);
+    EXPECT_EQ(ints["wait_for_updated_network"], garbage4);
 
     Config::LookUp(ints, floats, strings, bools);
     EXPECT_NE(ints["pgn_interval"], garbage1);
     EXPECT_NE(floats["root_dirichlet_alpha"], garbage2);
     EXPECT_NE(strings["network_weights"], garbage3);
-    EXPECT_NE(bools["use_sble_puct"], garbage4);
+    EXPECT_NE(bools["wait_for_updated_network"], garbage4);
 
     std::map<std::string, int> invalid1 = { { "pgn_intervalz", 0 } };
     std::map<std::string, float> invalid2 = { { "root_dirichlet_alphaz", 0.f } };
     std::map<std::string, std::string> invalid3 = { { "network_weightz", "" } };
-    std::map<std::string, bool> invalid4 = { { "use_sble_puctz", false } };
+    std::map<std::string, bool> invalid4 = { { "wait_for_updated_networkz", false } };
     EXPECT_THROW(Config::LookUp(invalid1, floats, strings, bools), std::runtime_error);
     EXPECT_THROW(Config::LookUp(ints, invalid2, strings, bools), std::runtime_error);
     EXPECT_THROW(Config::LookUp(ints, floats, invalid3, bools), std::runtime_error);

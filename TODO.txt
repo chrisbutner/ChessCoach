@@ -1,15 +1,24 @@
-Training runs, post-800k, post-2.4m
-- try without mcts value auxiliary again
-- try weaning off teacher or hard-cutoff
-- try switching to teacher-only prediction (SWA? stage predicates in config?)
+Next
+- running (6g): extension of existing full run with teacher-only prediction (w/ SWA, conditional config if it works)
+- training run with same-perspective history planes (need a way to swap bytes in graph mode - run all network tests)
 
-Next fresh run
-- selfplay7, Fresh3
+Cleanup
+- Remove profiling
+- Trim away drags/toggles etc. from GUI
+- delete stockfish evaluation from Game
 
-Profiling
-- put profiler server behind config to avoid firewall prompts e.g. in UCI
-- try out profiling
-	- capture a trace locally - may be issues with networking/firewall
+UCI/tournaments/parallelism
+- try out teacher prediction in Arasan21, tournaments, etc. - adjust parallelism
+
+Training - fresh run
+	- recent PUCT changes (draw-sibling-FPU, etc.)
+	- keep forced playouts but remove pruning
+	- selfplay7, Fresh3
+
+Training - after PUCT work
+- try full run with 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
+	- need to emulate parallelism/vloss/wideband for the 50k?
+	- selfplay8, Fresh4
 
 Commentary #3
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
@@ -39,22 +48,17 @@ Commentary #5
 	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
 
 PUCT - medium confidence
+- try prior flattening with high nodes again, despite linear
+	- 3qkb1r/3n1ppp/R1Npp3/6P1/QPr2P2/2P5/7P/4R1K1 b k - 2 27 - need Rxc6, avoid Qc8
+	- can also help more backprops go to value rather than value+prior at high node counts
+- try blend in prior softening towards endgame
+	- 8/2Q5/8/2k5/6K1/8/3r4/q7 b - - 38 113 - avoid Kd4 - work around overly sharp priors
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
 	- try hard exhaustive term (e.g. 1 per child after N visits)
 - try value stddev
-- try decouple linear term from value/prior deltas - not enough pure linear, not enough backprops in low-value-squish subtrees
-	- causes scrambling at low value squish, even prior exploration term maybe
-	- look at 2r2rk1/1b2qppp/pp3n2/n2p4/P2N4/RPN1P3/2Q1BPPP/5RK1 w - - 1 17 (need to find b4)
-- try elimination
-- try softer backprop weights (e.g. help with 0.77 vs. 0.78 value example - although threshold with hard weights may still work there)
-- last all-out attempt at position #3 before returning to 800 training target and actual training again
+- last all-out attempt at position #3
 	- try last-value again but scaled down (constant or f(n))
 	- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing
-
-PUCT - low confidence
-- try sufficiency threshold or minimum value delta
-- try use virtual loss only for selection PUCT, not for AZPUCT/backprop-check (lose a lot of backprops, probably not viable)
-- try integrate trained criticality back in
 
 PUCT - expensive/failed ideas
 - catch up on unpropagated value when returning via AZPUCT (+upSum, +upWeight)
@@ -63,18 +67,13 @@ PUCT - expensive/failed ideas
 
 PUCT - finishing
 - ablate PUCT terms, trim down to just parallelism/mate improvements, confidently measure what helps
-- CPU-optimize: e.g. can calculate global exploration factor much less often, much more required with new terms
-- see if there's enough speedup from cache-aligning nodes and just paying for the extra self-play memory
-	- (assume not because we usually need to visit a bunch of children at once; depends on isolated parent access)
 - need long long search time parameter optimization for 1.25+ constant, e.g. applying similar to new terms
-
-PUCT - training
-- see if anything helps 800 node range (i.e. optimize parameters with nodes=800), or 1600, etc.
 
 PUCT - later
 - try use saturation point of visits/ucb to extend 800 simulations or UCI time control if visits would exceed current best
 	- could this also be used earlier during search, backpropagate up a pending/bounty value via separate field to be replaced
 	  by actual backprops - set it up when saturation point would take from below 1st to 1st in visits
+- add move diversity temperature to mini-tournament optimization (may need lots of data, maybe soft-finish other params first)
 
 Prediction cache (after PUCT work finished)
 - investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
@@ -85,11 +84,6 @@ Prediction cache (after PUCT work finished)
 - any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 	- while not full hit rate should be higher? add some new metrics
 	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
-
-CPU+GPU integration performance:
-- try vectorize/GPU softmax/UCT calcs
-- break down MCTS timing details just in case anything's off (instrumented, already did some sampling measurements/optimization)
-- image key for prediction cache can be incrementally updated if it helps enough
 
 UCI
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
@@ -108,6 +102,8 @@ UCI
 	- for N+small delta, which would have UCB > current best
 	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
 - profile CPU again
+	- Game copy/assignment takes 20% CPU on _previousPositions copy, see if there's anything smarter
+	- try vectorize/GPU softmax/UCT calcs
 - tail Backpropagate into BackpropagateVisitsOnly
 - basic improvements to time control
 	- badly need to play well with X moves in Y, "movestogo", loses games vs. stockfish
@@ -126,15 +122,7 @@ UCI
 - implement proper time controls/search options, ponder
 
 GUI
-- invert uci/gui relationship after working out in-proc/out details
-	- switch between database/UCI modes
-	- browse EPDs
-	- set up positions (paste pgn, fen, move pieces, uci from database position)
-	- go X buttons
-	- drill into moves to see deeper breakdowns during UCI (like ~ ucb moves ...)
-- deal with info panel height/scrolling, move list
 - change the square background rather than adding overlay, need more consistency between black/white squares
-- websocket reconnect
 
 Code quality
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
@@ -162,6 +150,7 @@ Publishing
 	
 Bugs
 - "quit" without "stop" hangs UCI
+- "quit" after multiple "go" commands can hang UCI
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
@@ -193,6 +182,8 @@ Won't do
 - parameter optimization
 	- categorical parameters
 - performance
+	- TF profiling - just live with what we have, v3-8 alpha TPUs decent as-is, not worth investment until more stable tooling, not using C++ inference anyway
+	- use hard-elimination to prune sub-trees while searching
 	- validation log still 11-12s after training log on cluster, try prefetch harder or debug
 - training improvements (too expensive with remaining time/resources)
 	- pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
@@ -200,3 +191,13 @@ Won't do
 		- use as intended, grab a bunch of unlabeled games, gradually pseudo-label better (end up with more data)
 		- treat existing labels as pseudo-labels (e.g. poor-confidence value-from-final-result) and refine (end up with improved label quality)
 	- try knowledge distillation for regression ideas: http://www.cs.ox.ac.uk/files/11078/ICCV19_Distilling_Knowledge_From_a_Deep_Pose_Regressor_Network.pdf
+- GUI (analysis workflow is good enough inverted)
+	- invert uci/gui relationship after working out in-proc/out details
+		- switch between database/UCI modes
+		- browse EPDs
+		- set up positions (paste pgn, fen, move pieces, uci from database position)
+		- go X buttons
+	- deal with info panel height/scrolling, move list
+	- websocket reconnect
+- PUCT ideas
+	- many too expensive, difficult, volatile, etc.

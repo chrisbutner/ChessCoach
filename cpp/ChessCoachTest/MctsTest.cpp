@@ -251,9 +251,9 @@ TEST(Mcts, MateProving)
     // Make ply2child0 a mate-in-1 (M1) and backpropagate.
     game->Root()->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { game->Root(), 1.f },
-        { game->Root()->Child(Move(0)), 1.f },
-        { game->Root()->Child(Move(0))->Child(Move(0)), 1.f }});
+        { game->Root(), 1 },
+        { game->Root()->Child(Move(0)), 1 },
+        { game->Root()->Child(Move(0))->Child(Move(0)), 1 }});
     CheckMateN(game->Root()->Child(Move(0))->Child(Move(0)), 1);
     CheckOpponentMateN(game->Root()->Child(Move(0)), 1);
     CheckNonTerminal(game->Root());
@@ -265,11 +265,11 @@ TEST(Mcts, MateProving)
     // Make ply2child5 a mate-in-2 (M2) and backpropagate.
     game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { game->Root(), 1.f },
-        { game->Root()->Child(Move(1)), 1.f },
-        { game->Root()->Child(Move(1))->Child(Move(1)), 1.f },
-        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)), 1.f },
-        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)), 1.f }});
+        { game->Root(), 1 },
+        { game->Root()->Child(Move(1)), 1 },
+        { game->Root()->Child(Move(1))->Child(Move(1)), 1 },
+        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)), 1 },
+        { game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)), 1 }});
     CheckMateN(game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0))->Child(Move(0)), 1);
     CheckOpponentMateN(game->Root()->Child(Move(1))->Child(Move(1))->Child(Move(0)), 1);
     CheckMateN(game->Root()->Child(Move(1))->Child(Move(1)), 2);
@@ -280,13 +280,13 @@ TEST(Mcts, MateProving)
     // This should cause the root to get recognized as a mate-in-4 (M4).
     game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0))->terminalValue = TerminalValue::MateIn<1>();
     selfPlayWorker.BackpropagateMate({
-        { game->Root(), 1.f },
-        { game->Root()->Child(Move(2)), 1.f },
-        { game->Root()->Child(Move(2))->Child(Move(2)), 1.f },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0)), 1.f },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)), 1.f },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1.f },
-        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1.f }});
+        { game->Root(), 1 },
+        { game->Root()->Child(Move(2)), 1 },
+        { game->Root()->Child(Move(2))->Child(Move(2)), 1 },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0)), 1 },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)), 1 },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1 },
+        { game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1 }});
     CheckMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1);
     CheckOpponentMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0))->Child(Move(0)), 1);
     CheckMateN(game->Root()->Child(Move(2))->Child(Move(2))->Child(Move(0))->Child(Move(0)), 2);
@@ -442,7 +442,7 @@ TEST(Mcts, SamplingUci)
     game->Root()->bestChild = &game->Root()->children[0];
 
     // Validate UCI sampling. Just shove samples in "valueWeight".
-    // Expect visits in proportion to visit counts re-exponentiated with temperature 10.
+    // Expect visits in proportion to visit counts re-exponentiated with temperature 0.75.
     const int sampleCount = 100000;
     const float epsilon = 0.005f;
     for (int i = 0; i < sampleCount; i++)
@@ -450,10 +450,10 @@ TEST(Mcts, SamplingUci)
         Node* selected = selfPlayWorker.SelectMove(*game, true /* allowDiversity */);
         selected->valueWeight++;
     }
-    EXPECT_NEAR(static_cast<float>(game->Root()->children[0].valueWeight) / sampleCount, 0.2696f, epsilon);
-    EXPECT_NEAR(static_cast<float>(game->Root()->children[1].valueWeight) / sampleCount, 0.2607f, epsilon);
-    EXPECT_NEAR(static_cast<float>(game->Root()->children[2].valueWeight) / sampleCount, 0.2477f, epsilon);
-    EXPECT_NEAR(static_cast<float>(game->Root()->children[3].valueWeight) / sampleCount, 0.2219f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[0].valueWeight) / sampleCount, 0.4911f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[1].valueWeight) / sampleCount, 0.3136f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[2].valueWeight) / sampleCount, 0.1587f, epsilon);
+    EXPECT_NEAR(static_cast<float>(game->Root()->children[3].valueWeight) / sampleCount, 0.0367f, epsilon);
 
     game->PruneAll();
 }

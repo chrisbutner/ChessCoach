@@ -299,13 +299,16 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.ExplorationRateBase, config, "exploration_rate_base");
     policy.template Parse<float>(selfPlay.ExplorationRateInit, config, "exploration_rate_init");
 
-    policy.template Parse<bool>(selfPlay.UseSblePuct, config, "use_sble_puct");
     policy.template Parse<float>(selfPlay.LinearExplorationRate, config, "linear_exploration_rate");
     policy.template Parse<float>(selfPlay.LinearExplorationBase, config, "linear_exploration_base");
     policy.template Parse<float>(selfPlay.VirtualLossCoefficient, config, "virtual_loss_coefficient");
     policy.template Parse<float>(selfPlay.MovingAverageBuild, config, "moving_average_build");
     policy.template Parse<float>(selfPlay.MovingAverageCap, config, "moving_average_cap");
     policy.template Parse<float>(selfPlay.BackpropagationPuctThreshold, config, "backpropagation_puct_threshold");
+    policy.template Parse<float>(selfPlay.EliminationBase, config, "elimination_base");
+    policy.template Parse<float>(selfPlay.EliminationRate, config, "elimination_rate");
+    policy.template Parse<float>(selfPlay.MoveDiversityValueDeltaThreshold, config, "move_diversity_value_delta_threshold");
+    policy.template Parse<float>(selfPlay.MoveDiversityTemperature, config, "move_diversity_temperature");
 
     policy.template Parse<bool>(selfPlay.WaitForUpdatedNetwork, config, "wait_for_updated_network");
 }

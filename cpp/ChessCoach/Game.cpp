@@ -7,7 +7,7 @@
 
 int Game::QueenKnightPlane[SQUARE_NB];
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
-std::array<float, 25> Game::UcbMateTerm;
+std::array<float, 25> Game::PuctMateTerm;
 thread_local PoolAllocator<StateInfo, Game::BlockSizeBytes> Game::StateAllocator;
 
 StateInfo* Game::AllocateState()
@@ -55,14 +55,14 @@ void Game::Initialize()
     }
 
     // Set up scores for various mate-in-N to encourage visits and differentiate depths.
-    UcbMateTerm[0] = 0.f;
-    UcbMateTerm[1] = 1.f;
-    for (int n = 2; n < UcbMateTerm.size(); n++)
+    PuctMateTerm[0] = 0.f;
+    PuctMateTerm[1] = 1.f;
+    for (int n = 2; n < PuctMateTerm.size(); n++)
     {
-        UcbMateTerm[n] = (1.f / (1 << n));
+        PuctMateTerm[n] = (1.f / (1 << n));
     }
-    assert(UcbMateTerm[2] == 0.25f);
-    assert(UcbMateTerm[3] == 0.125f);
+    assert(PuctMateTerm[2] == 0.25f);
+    assert(PuctMateTerm[3] == 0.125f);
 }
 
 Game::Game()

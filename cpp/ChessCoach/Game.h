@@ -16,6 +16,8 @@ constexpr const static float CHESSCOACH_VALUE_DRAW = 0.5f;
 constexpr const static float CHESSCOACH_VALUE_LOSS = 0.0f;
 constexpr const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
 
+constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY = CHESSCOACH_VALUE_LOSS;
+
 class Game
 {
 public:
@@ -116,7 +118,7 @@ public:
         "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
     };
 
-    static std::array<float, 25> UcbMateTerm;
+    static std::array<float, 25> PuctMateTerm;
 
 public:
 
