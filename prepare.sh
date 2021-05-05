@@ -12,9 +12,7 @@ sudo apt-get install -y --no-install-recommends \
 pip3 install toml scikit-optimize matplotlib
 
 # Install cutechess dependencies
-sudo add-apt-repository -y ppa:beineri/opt-qt-5.11.0-bionic
-sudo apt-get update
-sudo apt-get install qt511-meta-minimal -y --no-install-recommends
+sudo apt-get install -y --no-install-recommends qt5-default
 
 # Build and install protobuf (leaving the build directory around for flexibility).
 curl -L https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protobuf-cpp-3.13.0.tar.gz | tar -xz
