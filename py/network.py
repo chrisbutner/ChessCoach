@@ -631,10 +631,6 @@ networks = Networks(config)
 datasets = DatasetBuilder(config)
 trainer = Trainer(networks, tpu_strategy, devices, datasets)
 
-# Start the profiler server.
-profiler_server_port = 6009
-tf.profiler.experimental.server.start(profiler_server_port)
-
 # Log some configuration.
 log("################################################################################")
 log("Network:", config.network_name)
@@ -655,5 +651,4 @@ elif isinstance(trainer.strategy, tf.distribute.MirroredStrategy):
   log("Training strategy: Mirrored")
 else:
   log("Training strategy: Default")
-log(f"Profiler server: localhost:{profiler_server_port}")
 log("################################################################################")

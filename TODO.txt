@@ -3,7 +3,6 @@ Next
 - training run with same-perspective history planes (need a way to swap bytes in graph mode - run all network tests)
 
 Cleanup
-- Remove profiling
 - Trim away drags/toggles etc. from GUI
 - delete stockfish evaluation from Game
 
@@ -131,8 +130,6 @@ Code quality
 - fix _ in network names - split on final _
 - factor out all-exist ringbuffer with foreach iteration (begin/end)
 - privatize C++ methods (got too python-brained)
-- try split up MCTS vs. selfplaygames better - e.g. maybe move softmax/selectmove out? separate files?
-- try split SelfPlayGame/Worker vs. "UciGame/Worker" better somehow (including image/value/policy arrays, batch sizes, etc.)
 - add Python type info everywhere - look up best practices for linting etc.
 - check for any unnecessary move constructors
 - StrengthTestNetwork (naming)
