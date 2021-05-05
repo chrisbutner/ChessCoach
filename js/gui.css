@@ -14,21 +14,6 @@ button {
     margin: 5px 5px;
 }
 
-.spare-pieces-7492f {
-    display: inline-block;
-    padding: 0px !important;
-    margin: 5px 5px;
-}
-
-.spare-pieces-7492f img {
-    width: 60px !important;
-    height: 60px !important;
-}
-
-#sparePieces {
-    display: none;
-}
-
 #moves {
     margin-top: 20px;
     width: 100%;

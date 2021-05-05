@@ -3,7 +3,6 @@ Next
 - training run with same-perspective history planes (need a way to swap bytes in graph mode - run all network tests)
 
 Cleanup
-- Trim away drags/toggles etc. from GUI
 - delete stockfish evaluation from Game
 
 UCI/tournaments/parallelism

@@ -179,9 +179,6 @@
     const config = {
         pieceTheme: "chessboardjs/img/chesspieces/wikipedia/{piece}.png",
         position: "start",
-        draggable: true,
-        dropOffBoard: "trash",
-        sparePieces: true,
     };
 
     const board = Chessboard("board", config);
@@ -193,26 +190,6 @@
     let position = 0;
     let data = null;
     let dataHistory = [];
-
-    const sparePieces = document.getElementById("sparePieces");
-    const sparePiecesTop = document.querySelector(".spare-pieces-top-4028b");
-    const sparePiecesBottom = document.querySelector(".spare-pieces-bottom-ae20f");
-
-    document.getElementById("board").appendChild(sparePieces);
-    sparePieces.appendChild(sparePiecesBottom);
-    sparePieces.appendChild(sparePiecesTop);
-
-    document.getElementById("togglePieces").addEventListener("click", () => {
-        sparePieces.style.display = (getComputedStyle(sparePieces, null).display === "none") ? "block" : "none";
-    });
-
-    document.getElementById("startButton").addEventListener("click", () => {
-        board.start(false);
-    });
-
-    document.getElementById("clearButton").addEventListener("click", () => {
-        board.clear(false);
-    });
 
     for (const file of "abcdefgh") {
         for (let rank = 1; rank <= 8; rank++) {
