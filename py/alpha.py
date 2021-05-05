@@ -36,12 +36,12 @@ deployment_configs = {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-train:selfplay6g_v13",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-train:selfplay6g_v14",
         "on_error": "dmesg",
       },
       "play": {
         "count": 19,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay6g_v13",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay6g_v14",
         "on_error": "dmesg",
       },
     },
@@ -50,7 +50,7 @@ deployment_configs = {
     "roles": {
       "play": {
         "count": 8,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay6g_v13",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay6g_v14",
         "on_error": "dmesg",
       },
     },
