@@ -301,7 +301,7 @@ SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
-    , _searchRootPly(other._searchRootPly)
+    , _searchRootPly(other.Ply()) // Scratch games during MCTS need to snap off higher search roots.
     , _result(other._result)
 {
     assert(&other != this);
@@ -318,7 +318,7 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
-    _searchRootPly = other._searchRootPly;
+    _searchRootPly = other.Ply(); // Scratch games during MCTS need to snap off higher search roots.
     _result = other._result;
 
     return *this;
