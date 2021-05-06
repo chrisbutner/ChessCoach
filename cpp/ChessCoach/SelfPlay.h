@@ -156,10 +156,8 @@ class PuctContext
 public:
 
     PuctContext(Node* parent);
-    template <bool ForcePlayouts>
     WeightedNode SelectChild() const;
     float CalculatePuctScoreAdHoc(const Node* child) const;
-    void PrunePolicyTarget() const;
 
 private:
 
@@ -167,10 +165,8 @@ private:
 
 private:
 
-    template <bool ForcePlayouts>
     float CalculateAzPuctScore(const Node* child, float childVirtualExploration) const;
     float CalculateSblePuctScore(float azPuctScore, float childVirtualExploration) const;
-    float CalculatePuctScoreFixedValue(const Node* child, float fixedValue) const;
     float VirtualExploration(const Node* node) const;
 
 private:
@@ -224,8 +220,8 @@ public:
     bool TryHard() const;
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
-    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore);
-    void Expand(int moveCount);
+    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, float firstPlayUrgency);
+    void Expand(int moveCount, float firstPlayUrgency);
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
     float CalculateMctsValue() const;

@@ -108,7 +108,7 @@ TEST(Config, Lookups)
     EXPECT_EQ(ints["pgn_interval"], garbage1);
     EXPECT_EQ(floats["root_dirichlet_alpha"], garbage2);
     EXPECT_EQ(strings["network_weights"], garbage3);
-    EXPECT_EQ(ints["wait_for_updated_network"], garbage4);
+    EXPECT_EQ(bools["wait_for_updated_network"], garbage4);
 
     Config::LookUp(ints, floats, strings, bools);
     EXPECT_NE(ints["pgn_interval"], garbage1);

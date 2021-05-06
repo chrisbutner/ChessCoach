@@ -337,7 +337,7 @@ TEST(Mcts, TwofoldRepetition)
 
         SelfPlayState state = SelfPlayState::Working;
         PredictionCacheChunk* cacheStore = nullptr;
-        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore);
+        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore, CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
         EXPECT_EQ(value, CHESSCOACH_VALUE_DRAW);
     }
 
@@ -359,7 +359,7 @@ TEST(Mcts, TwofoldRepetition)
 
         SelfPlayState state = SelfPlayState::Working;
         PredictionCacheChunk* cacheStore = nullptr;
-        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore);
+        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore, CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
         EXPECT_NE(value, CHESSCOACH_VALUE_DRAW);
         EXPECT_TRUE(std::isnan(value)); // A non-terminal position requires a network evaluation.
     }

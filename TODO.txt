@@ -7,7 +7,7 @@ UCI/tournaments/parallelism
 
 Training - fresh run
 	- recent PUCT changes (draw-sibling-FPU, etc.)
-	- keep forced playouts but remove pruning
+	- win-FPU at root
 	- (maybe) same-perspective history planes
 	- selfplay7, Fresh3
 

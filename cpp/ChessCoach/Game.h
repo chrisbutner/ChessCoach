@@ -16,7 +16,8 @@ constexpr const static float CHESSCOACH_VALUE_DRAW = 0.5f;
 constexpr const static float CHESSCOACH_VALUE_LOSS = 0.0f;
 constexpr const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
 
-constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY = CHESSCOACH_VALUE_LOSS;
+constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT = CHESSCOACH_VALUE_LOSS;
+constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY_ROOT = CHESSCOACH_VALUE_WIN;
 
 class Game
 {

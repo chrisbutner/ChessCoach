@@ -418,7 +418,7 @@ bool SelfPlayGame::TakeExpansionOwnership(Node* node)
     return node->expansion.compare_exchange_strong(expected, Expansion::Expanding, std::memory_order_relaxed);
 }
 
-float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore)
+float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, float firstPlayUrgency)
 {
     Node* root = _root;
 
@@ -540,7 +540,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         if (hitCached)
         {
             // Expand child nodes with the cached priors.
-            Expand(workingMoveCount);
+            Expand(workingMoveCount, firstPlayUrgency);
             assert(state == SelfPlayState::Working);
             return cachedValue;
         }
@@ -568,7 +568,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     Softmax(moveCount, _cachedPriors.data()); // Logits -> priors
 
     // Expand child nodes with the calculated priors.
-    Expand(moveCount);
+    Expand(moveCount, firstPlayUrgency);
 
     // Store in the cache if appropriate.
     if (cacheStore)
@@ -581,7 +581,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     return value;
 }
 
-void SelfPlayGame::Expand(int moveCount)
+void SelfPlayGame::Expand(int moveCount, float firstPlayUrgency)
 {
     Node* root = _root;
     assert(!root->IsExpanded());
@@ -593,7 +593,7 @@ void SelfPlayGame::Expand(int moveCount)
     {
         root->children[i].move = static_cast<uint16_t>(_expandAndEvaluate_moves[i].move);
         root->children[i].prior = _cachedPriors[i];
-        root->children[i].valueAverage = CHESSCOACH_FIRST_PLAY_URGENCY;
+        root->children[i].valueAverage = firstPlayUrgency;
     }
 }
 
@@ -1121,7 +1121,6 @@ void SelfPlayWorker::Play(int index)
         }
 
         assert(selected != nullptr);
-        PuctContext(root).PrunePolicyTarget();
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
         game.PruneExcept(root, selected /* == game.Root() */);
@@ -1191,14 +1190,9 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             // so that the side-effects - children - are visible here.
             while (scratchGame.Root()->expansion.load(std::memory_order_acquire) == Expansion::Expanded)
             {
-                // Force playouts during training only, at the root only.
-                const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
-                WeightedNode selected = forcePlayouts ?
-                    PuctContext(scratchGame.Root()).SelectChild<true>() :
-                    PuctContext(scratchGame.Root()).SelectChild<false>();
-
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration.
+                WeightedNode selected = PuctContext(scratchGame.Root()).SelectChild();
                 if (!selected.node)
                 {
                     assert(game.TryHard());
@@ -1222,7 +1216,9 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // Despite these complications, it's best to keep terminal and non-terminal evaluation consolidated within ExpandAndEvaluate
         // because beyond trivially cached terminal evaluations, both depend on move generation.
         const bool wasImmediateMate = (scratchGame.Root()->terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>());
-        float value = scratchGame.ExpandAndEvaluate(state, cacheStore);
+        const bool isSearchRoot = (game.Root() == scratchGame.Root());
+        const float firstPlayUrgency = (isSearchRoot ? CHESSCOACH_FIRST_PLAY_URGENCY_ROOT : CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
+        float value = scratchGame.ExpandAndEvaluate(state, cacheStore, firstPlayUrgency);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             // Wait for network evaluation/priors to come back.
@@ -1261,7 +1257,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // and then whenever a previously-unexpanded node is reached as a root (like a 2-repetition,
         // or a child that wasn't visited, but alternatives were getting mated). Fix the visitCount to 1
         // so that exploration incentives are normal, in case the node had a lot of 2-repetition terminal visits.
-        if (game.Root() == scratchGame.Root())
+        if (isSearchRoot)
         {
             assert(searchPath.size() == 1);
             game.Root()->visitCount.store(1, std::memory_order_relaxed);
@@ -1422,7 +1418,6 @@ PuctContext::PuctContext(Node* parent)
 
 // It's possible because of nodes marked off-limits via "expanding"
 // that this method cannot select a child, instead returning NONE/nullptr.
-template <bool ForcePlayouts>
 WeightedNode PuctContext::SelectChild() const
 {
     float maxAzPuct = -std::numeric_limits<float>::infinity();
@@ -1437,7 +1432,7 @@ WeightedNode PuctContext::SelectChild() const
     for (Node& child : *_parent)
     {
         const float childVirtualExploration = VirtualExploration(&child);
-        const float azPuct = CalculateAzPuctScore<ForcePlayouts>(&child, childVirtualExploration);
+        const float azPuct = CalculateAzPuctScore(&child, childVirtualExploration);
         maxAzPuct = std::max(maxAzPuct, azPuct);
         ScoredNodes.emplace_back(&child, azPuct, childVirtualExploration);
     }
@@ -1470,23 +1465,10 @@ WeightedNode PuctContext::SelectChild() const
     const int weight = (!bestWasBlocked) & ((azOfMaxSble / maxAzPuct) >= Config::Network.SelfPlay.BackpropagationPuctThreshold);
     return { maxSble, weight };
 }
-template WeightedNode PuctContext::SelectChild<true>() const;
-template WeightedNode PuctContext::SelectChild<false>() const;
 
 // AZ-PUCT is the AlphaZero Predictor-Upper Confidence bound applied to Trees (with a mate-term modification and virtual exploration/loss).
-template <bool ForcePlayouts>
 float PuctContext::CalculateAzPuctScore(const Node* child, float childVirtualExploration) const
 {
-    // We force playouts only during training, so we don't care about virtual loss or exploration issues
-    // that would otherwise occur when returning a constant infinity.
-    if constexpr (ForcePlayouts)
-    {
-        if (childVirtualExploration < std::floor(std::sqrt(2.f * child->prior * _parentVirtualExploration)))
-        {
-            return std::numeric_limits<float>::infinity();
-        }
-    }
-
     // Calculate the exploration rate, which is multiplied by (a) the prior to incentivize exploration,
     // and (b) a mate-in-N lookup to incentivize sufficient exploitation of forced mates, dependent on depth.
     // Include "visitingCount" to help parallel searches diverge ("virtual exploration").
@@ -1512,60 +1494,13 @@ float PuctContext::CalculateSblePuctScore(float azPuctScore, float childVirtualE
 
 float PuctContext::CalculatePuctScoreAdHoc(const Node* child) const
 {
-    // AZ-PUCT with no forced playouts makes the most sense for pruning and display for humans.
-    return CalculateAzPuctScore<false>(child, VirtualExploration(child));
-}
-
-float PuctContext::CalculatePuctScoreFixedValue(const Node* child, float fixedValue) const
-{
-    // Value is a clean addition term, so just swap it out. Only done during pruning, not during actual MCTS search.
-    return (CalculatePuctScoreAdHoc(child) - child->ValueWithVirtualLoss() + fixedValue);
+    // AZ-PUCT makes the most sense to display.
+    return CalculateAzPuctScore(child, VirtualExploration(child));
 }
 
 float PuctContext::VirtualExploration(const Node* node) const
 {
     return static_cast<float>(node->visitCount.load(std::memory_order_relaxed) + node->visitingCount.load(std::memory_order_relaxed));
-}
-
-void PuctContext::PrunePolicyTarget() const
-{
-    // Find the most-visited child: ignore hard mate selection rules.
-    Node* best = &_parent->children[0];
-    for (int i = 1; i < _parent->childCount; i++)
-    {
-        if (_parent->children[i].visitCount.load(std::memory_order_relaxed) > best->visitCount.load(std::memory_order_relaxed))
-        {
-            best = &_parent->children[i];
-        }
-    }
-
-    // Prune visits to other nodes based on PUCT regret vs. the most-visited child.
-    const float bestScore = CalculatePuctScoreAdHoc(best);
-    int rootPruneCount = 0;
-    for (Node& child : *_parent)
-    {
-        if (&child == best)
-        {
-            continue;
-        }
-
-        // Pre-decrement before "CalculatePuctScore" to save one calculation per child.
-        int pruneCount = 0;
-        const int originalVisitCount = child.visitCount.load(std::memory_order_relaxed);
-        const float fixedValue = child.Value();
-        while ((child.visitCount.fetch_sub(1, std::memory_order_relaxed) >= 1) && (CalculatePuctScoreFixedValue(&child, fixedValue) < bestScore))
-        {
-            pruneCount++;
-        }
-        child.visitCount.store(originalVisitCount - pruneCount, std::memory_order_relaxed);
-        rootPruneCount += pruneCount;
-
-        // Note that further descendants aren't having visits pruned here. That's okay because (a) they can eventually pruned here
-        // after further moves are played, and (b) the parent count is fixed to match the sum of children in "ApplyMoveWithRootAndHistory".
-    }
-
-    // Use the root's original visit count for exploration terms while pruning, and delay corresponding adjustments until the end here.
-    _parent->visitCount.store(_parent->visitCount - rootPruneCount, std::memory_order_relaxed);
 }
 
 void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue)
@@ -1607,7 +1542,7 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
                 {
                     if (child.valueWeight.load(std::memory_order_relaxed) == 0)
                     {
-                        float expected = CHESSCOACH_FIRST_PLAY_URGENCY;
+                        float expected = CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT;
                         child.valueAverage.compare_exchange_strong(expected, rootValue, std::memory_order_relaxed);
                     }
                 }
