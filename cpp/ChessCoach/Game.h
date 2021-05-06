@@ -149,8 +149,6 @@ public:
     void GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::OutputPlanes& policyOut) const;
     void GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const;
     void GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIndices, const float* policyValues, INetwork::OutputPlanes& policyOut);
-    bool StockfishCanEvaluate() const;
-    float StockfishEvaluation() const;
     const Position& GetPosition() const;
 
     inline Position& DebugPosition() { return _position; }

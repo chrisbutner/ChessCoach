@@ -1,7 +1,6 @@
 #include "Game.h"
 
 #include <Stockfish/thread.h>
-#include <Stockfish/evaluate.h>
 
 #include "Config.h"
 
@@ -434,18 +433,6 @@ void Game::GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIn
     {
         policyFlat[policyIndices[i]] = policyValues[i];
     }
-}
-
-bool Game::StockfishCanEvaluate() const
-{
-    return !_position.checkers();
-}
-
-float Game::StockfishEvaluation() const
-{
-    const Value centipawns = Eval::evaluate(_position);
-    const float probability = CentipawnsToProbability(static_cast<float>(centipawns));
-    return probability;
 }
 
 const Position& Game::GetPosition() const

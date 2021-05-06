@@ -2,15 +2,13 @@ Next
 - running (6g): extension of existing full run with teacher-only prediction (w/ SWA, conditional config if it works)
 - training run with same-perspective history planes (need a way to swap bytes in graph mode - run all network tests)
 
-Cleanup
-- delete stockfish evaluation from Game
-
 UCI/tournaments/parallelism
 - try out teacher prediction in Arasan21, tournaments, etc. - adjust parallelism
 
 Training - fresh run
 	- recent PUCT changes (draw-sibling-FPU, etc.)
 	- keep forced playouts but remove pruning
+	- (maybe) same-perspective history planes
 	- selfplay7, Fresh3
 
 Training - after PUCT work
@@ -179,7 +177,7 @@ Won't do
 	- categorical parameters
 - performance
 	- TF profiling - just live with what we have, v3-8 alpha TPUs decent as-is, not worth investment until more stable tooling, not using C++ inference anyway
-	- use hard-elimination to prune sub-trees while searching
+	- use hard-elimination to deallocate sub-trees while searching
 	- validation log still 11-12s after training log on cluster, try prefetch harder or debug
 - training improvements (too expensive with remaining time/resources)
 	- pseudonegatives (look up the paper again, may be difficult/impossible for chess, invalid positions)
