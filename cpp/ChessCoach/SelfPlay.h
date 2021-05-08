@@ -82,7 +82,7 @@ enum class Expansion : uint8_t
     Expanded,
 };
 
-struct Node
+struct alignas(64) Node
 {
 public:
 
@@ -125,6 +125,7 @@ public:
 };
 static_assert(sizeof(TerminalValue) == 8);
 static_assert(sizeof(Node) == 64);
+static_assert(alignof(Node) == 64);
 
 struct WeightedNode
 {
