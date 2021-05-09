@@ -67,10 +67,7 @@ void Game::Initialize()
 Game::Game()
     : _parentState(nullptr)
     , _currentState(AllocateState())
-    , _previousPositions(INetwork::InputPreviousPositionCount)
-    , _previousPositionsOldest(0)
-    , _previousPositionsCount(0)
-
+    , _moves()
 {
     _position.set(Config::StartingPosition, false /* isChess960 */, _currentState, Threads.main());
 }
@@ -78,9 +75,7 @@ Game::Game()
 Game::Game(const std::string& fen, const std::vector<Move>& moves)
     : _parentState(nullptr)
     , _currentState(AllocateState())
-    , _previousPositions(INetwork::InputPreviousPositionCount)
-    , _previousPositionsOldest(0)
-    , _previousPositionsCount(0) // Incremented by each ApplyMove below
+    , _moves() // Built up in each ApplyMove below
 
 {
     _position.set(fen, false /* isChess960 */, _currentState, Threads.main());
@@ -95,9 +90,7 @@ Game::Game(const Game& other)
     : _position(other._position)
     , _parentState(other._currentState) // Don't delete the parent game's states.
     , _currentState(other._currentState)
-    , _previousPositions(other._previousPositions)
-    , _previousPositionsOldest(other._previousPositionsOldest)
-    , _previousPositionsCount(other._previousPositionsCount)
+    , _moves(other._moves)
 {
     assert(&other != this);
 }
@@ -112,9 +105,7 @@ Game& Game::operator=(const Game& other)
     _position = other._position;
     _parentState = other._currentState; // Don't delete the parent game's states.
     _currentState = other._currentState;
-    _previousPositions = other._previousPositions;
-    _previousPositionsOldest = other._previousPositionsOldest;
-    _previousPositionsCount = other._previousPositionsCount;
+    _moves = other._moves;
 
     return *this;
 }
@@ -123,9 +114,7 @@ Game::Game(Game&& other) noexcept
     : _position(other._position)
     , _parentState(other._parentState)
     , _currentState(other._currentState)
-    , _previousPositions(std::move(other._previousPositions))
-    , _previousPositionsOldest(other._previousPositionsOldest)
-    , _previousPositionsCount(other._previousPositionsCount)
+    , _moves(std::move(other._moves))
 {
     other._parentState = nullptr;
     other._currentState = nullptr;
@@ -143,9 +132,7 @@ Game& Game::operator=(Game&& other) noexcept
     _position = other._position;
     _parentState = other._parentState;
     _currentState = other._currentState;
-    _previousPositions = std::move(other._previousPositions);
-    _previousPositionsOldest = other._previousPositionsOldest;
-    _previousPositionsCount = other._previousPositionsCount;
+    _moves = std::move(other._moves);
 
     other._parentState = nullptr;
     other._currentState = nullptr;
@@ -165,20 +152,14 @@ Color Game::ToPlay() const
 
 void Game::ApplyMove(Move move)
 {
-    _previousPositions[_previousPositionsOldest] = _position;
-    _previousPositionsOldest = (_previousPositionsOldest + 1) % INetwork::InputPreviousPositionCount;
-    _previousPositionsCount = std::min(INetwork::InputPreviousPositionCount + 0, _previousPositionsCount + 1);
-
+    _moves.push_back(move);
     _currentState = AllocateState();
     _position.do_move(move, *_currentState);
 }
 
 void Game::ApplyMoveMaybeNull(Move move)
 {
-    _previousPositions[_previousPositionsOldest] = _position;
-    _previousPositionsOldest = (_previousPositionsOldest + 1) % INetwork::InputPreviousPositionCount;
-    _previousPositionsCount = std::min(INetwork::InputPreviousPositionCount + 0, _previousPositionsCount + 1);
-
+    _moves.push_back(move);
     _currentState = AllocateState();
     if (move != MOVE_NULL)
     {
@@ -275,7 +256,7 @@ int Game::Ply() const
     return _position.game_ply();
 }
 
-Key Game::GenerateImageKey() const
+Key Game::GenerateImageKey()
 {
     // No need to flip anything for hash keys: for a particular position, it's always the same player to move.
     // Stockfish key includes material and castling rights, so we just need to add history and no-progress.
@@ -285,57 +266,41 @@ Key Game::GenerateImageKey() const
     // Add no-progress plane to key.
     Key key = PredictionCache_NoProgressCount[std::min(NoProgressSaturationCount, _position.rule50_count())];
 
-    // Add last 7 positions.
-    int previousPositionIndex = _previousPositionsOldest;
-    for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
+    // Add last 7 positions + 1 current position.
+    // If there are fewer, no need to synthesize/saturate, since we're just differentating
+    // positions/histories, not feeding planes into a neural network, so just stop rotating/hashing.
+    const int historyPositionCount = std::min(INetwork::InputPreviousPositionCount + 0, static_cast<int>(_moves.size()));
+    HistoryWalker<INetwork::InputPreviousPositionCount> history(this, historyPositionCount);
+    int rotation = 0;
+    while (history.Next())
     {
-        const Position& position = _previousPositions[previousPositionIndex];
-        key ^= (position.state_info() ? Rotate(position.key(), INetwork::InputPreviousPositionCount - i) : 0);
-        previousPositionIndex = (previousPositionIndex + 1) % INetwork::InputPreviousPositionCount;
+        key ^= Rotate(_position.key(), rotation++);
     }
-
-    // Add current position.
-    key ^= _position.key();
 
     return key;
 }
 
-void Game::GenerateImage(INetwork::InputPlanes& imageOut) const
+void Game::GenerateImage(INetwork::InputPlanes& imageOut)
 {
     GenerateImage(imageOut.data());
 }
 
-void Game::GenerateImage(INetwork::PackedPlane* imageOut) const
+void Game::GenerateImage(INetwork::PackedPlane* imageOut)
 {
     int nextPlane = 0;
 
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = ToPlay();
 
-    // Add last 7 positions' pieces, planes 0-83.
+    // Add last 7 positions' pieces + 1 current position's pieces, planes 0-95.
+    // If any history positions are missing, saturate at the earliest history/current position.
     assert(nextPlane == 0);
-    // With 7 history positions before 1 current position, the first history position will be from a flipped perspective vs. the current position.
-    // This could normally be inspected via position.ToPlay(), but because of saturation for non-existent history, this could be innacurate.
-    Color historyPerspective = Color((INetwork::InputPreviousPositionCount % 2) ^ ToPlay());
-    for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
+    HistoryWalker<INetwork::InputPreviousPositionCount> history(this, INetwork::InputPreviousPositionCount);
+    while (history.Next())
     {
-        // If there are no history positions, saturate at the current position.
-        const Position& position = (_previousPositionsCount == 0) ?
-            _position :
-            _previousPositions[(_previousPositionsOldest +
-                // Otherwise, saturate at the earliest history position.
-                std::max(i, INetwork::InputPreviousPositionCount - _previousPositionsCount))
-                % INetwork::InputPreviousPositionCount];
-        GeneratePiecePlanes(imageOut, nextPlane, position, historyPerspective);
-
+        GeneratePiecePlanes(imageOut, nextPlane, _position, history.Perspective());
         nextPlane += INetwork::InputPiecePlanesPerPosition;
-        historyPerspective = ~historyPerspective;
     }
-
-    // Add current position's pieces, planes 84-95.
-    assert(nextPlane == 84);
-    GeneratePiecePlanes(imageOut, nextPlane, _position, toPlay);
-    nextPlane += INetwork::InputPiecePlanesPerPosition;
 
     // Castling planes 96-99
     assert(nextPlane == 96);
@@ -519,4 +484,88 @@ Key Game::Rotate(Key key, unsigned int distance) const
     const unsigned int mask = 63;
     distance &= mask;
     return (key >> distance) | (key << (-distance & mask));
+}
+
+// Operates over the Game's low-level Position, so the two will diverge until the final Next() is called.
+template <int MaxHistoryMoves>
+HistoryWalker<MaxHistoryMoves>::HistoryWalker(Game* game, int historyMoves)
+    : _game(game)
+    , _perspective(game->ToPlay())
+    , _redoMoves{}
+    , _redoStates{}
+    , _redoCount(0)
+    , _redoIndex(0)
+{
+    assert(historyMoves <= MaxHistoryMoves);
+
+    for (int i = 0; i < historyMoves; i++)
+    {
+        // Leave room at index 0 for a synthetic MOVE_NONE for the initial Next() call.
+        const int redoMoveIndex = (historyMoves - i);
+        const int historyMoveIndex = (static_cast<int>(game->_moves.size()) - i - 1);
+        if (historyMoveIndex >= 0)
+        {
+            // This is a real history move to undo. It may be a null move; e.g., for commentary games.
+            const Move move = game->_moves[historyMoveIndex];
+            _redoStates[redoMoveIndex] = game->_position.state_info();
+            if (move != MOVE_NULL)
+            {
+                _game->_position.undo_move(move);
+            }
+            else
+            {
+                _game->_position.undo_null_move();
+            }
+            _redoMoves[redoMoveIndex] = move;
+        }
+        else
+        {
+            // There are no more history moves/positions, so saturate at the earliest history/current position.
+            _redoMoves[redoMoveIndex] = MOVE_NONE;
+        }
+        _redoCount++;
+        _perspective = ~_perspective;
+    }
+
+    // The initial Next() call needs to get us to the earliest history position/perspective, so use a synthetic MOVE_NONE at index 0.
+    _redoMoves[0] = MOVE_NONE;
+    _redoCount++;
+    _perspective = ~_perspective;
+}
+
+template <int MaxHistoryMoves>
+bool HistoryWalker<MaxHistoryMoves>::Next()
+{
+    // If e.g. historyMoves is 7 then Next() will return true 8 times, for 7 history positions plus 1 current position.
+    if (_redoIndex >= _redoCount)
+    {
+        return false;
+    }
+
+    // Reapply the move if it exists. Otherwise, this was saturated from the earliest history/current position.
+    const Move move = _redoMoves[_redoIndex];
+    if (move != MOVE_NONE)
+    {
+        if (move != MOVE_NULL)
+        {
+            _game->_position.redo_move(move, *_redoStates[_redoIndex]);
+        }
+        else
+        {
+            _game->_position.redo_null_move(*_redoStates[_redoIndex]);
+        }
+    }
+
+    // The perspective flips every history position, even for saturated positions, to give the neural network consistent inputs.
+    // This doesn't matter for the starting position of a game, but does for set-up FEN positions (e.g. in STS strength tests).
+    _perspective = ~_perspective;
+
+    _redoIndex++;
+    return true;
+}
+
+template <int MaxHistoryMoves>
+Color HistoryWalker<MaxHistoryMoves>::Perspective()
+{
+    return _perspective;
 }

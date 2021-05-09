@@ -41,25 +41,3 @@ TEST(Stockfish, EmptyPosition)
     EXPECT_EQ(position.pieces(BLACK, QUEEN), 0);
     EXPECT_EQ(position.pieces(BLACK, KING), 0);
 }
-
-TEST(Stockfish, EmptyGamePositionHistory)
-{
-    ChessCoach chessCoach;
-    chessCoach.Initialize();
-
-    Game game;
-
-    for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
-    {
-        const Position& position = game.DebugPreviousPosition(i);
-        EXPECT_EQ(position.state_info(), nullptr);
-
-        for (Rank rank = RANK_1; rank <= RANK_8; ++rank)
-        {
-            for (File file = FILE_A; file <= FILE_H; ++file)
-            {
-                EXPECT_EQ(position.piece_on(make_square(file, rank)), NO_PIECE);
-            }
-        }
-    }
-}

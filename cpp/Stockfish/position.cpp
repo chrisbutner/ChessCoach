@@ -866,6 +866,91 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   assert(pos_is_ok());
 }
 
+// cbutner-start
+void Position::redo_move(Move m, StateInfo& newSt) {
+
+    assert(is_ok(m));
+    assert(&newSt != st);
+
+    st = &newSt;
+
+    // Increment ply counters. In particular, rule50 will be reset to zero later on
+    // in case of a capture or a pawn move.
+    ++gamePly;
+
+    Color us = sideToMove;
+    Color them = ~us;
+    Square from = from_sq(m);
+    Square to = to_sq(m);
+    Piece pc = piece_on(from);
+    Piece captured = type_of(m) == ENPASSANT ? make_piece(them, PAWN) : piece_on(to);
+
+    assert(color_of(pc) == us);
+    assert(captured == NO_PIECE || color_of(captured) == (type_of(m) != CASTLING ? them : us));
+    assert(type_of(captured) != KING);
+
+    if (type_of(m) == CASTLING)
+    {
+        assert(pc == make_piece(us, KING));
+        assert(captured == make_piece(us, ROOK));
+
+        Square rfrom, rto;
+        do_castling<true>(us, from, to, rfrom, rto);
+
+        captured = NO_PIECE;
+    }
+
+    if (captured)
+    {
+        Square capsq = to;
+
+        // If the captured piece is a pawn, update pawn hash key, otherwise
+        // update non-pawn material.
+        if (type_of(captured) == PAWN)
+        {
+            if (type_of(m) == ENPASSANT)
+            {
+                capsq -= pawn_push(us);
+
+                assert(pc == make_piece(us, PAWN));
+                assert(relative_rank(us, to) == RANK_6);
+                assert(piece_on(to) == NO_PIECE);
+                assert(piece_on(capsq) == make_piece(them, PAWN));
+            }
+        }
+
+        // Update board and piece lists
+        remove_piece(capsq);
+
+        if (type_of(m) == ENPASSANT)
+            board[capsq] = NO_PIECE;
+    }
+
+    // Move the piece. The tricky Chess960 castling is handled earlier
+    if (type_of(m) != CASTLING)
+        move_piece(from, to);
+
+    // If the moving piece is a pawn do some special extra work
+    if (type_of(pc) == PAWN)
+    {
+        if (type_of(m) == PROMOTION)
+        {
+            Piece promotion = make_piece(us, promotion_type(m));
+
+            assert(relative_rank(us, to) == RANK_8);
+            assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= QUEEN);
+
+            remove_piece(to);
+            put_piece(promotion, to);
+        }
+    }
+
+    sideToMove = ~sideToMove;
+
+    assert(pos_is_ok());
+}
+// cbutner-finish
+
 
 /// Position::undo_move() unmakes a move. When it returns, the position should
 /// be restored to exactly the same state as before the move was made.
@@ -985,6 +1070,20 @@ void Position::do_null_move(StateInfo& newSt) {
 
   assert(pos_is_ok());
 }
+
+// cbutner-start
+void Position::redo_null_move(StateInfo& newSt) {
+
+    assert(!checkers());
+    assert(&newSt != st);
+
+    st = &newSt;
+
+    sideToMove = ~sideToMove;
+
+    assert(pos_is_ok());
+}
+// cbutner-finish
 
 void Position::undo_null_move() {
 

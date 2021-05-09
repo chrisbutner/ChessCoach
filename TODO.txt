@@ -7,7 +7,7 @@ Training - after plateauing
 - try teacher-only prediction w/ SWA again (conditional config if it works)
 
 Repetitions
-- try adding repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
+- try full run adding repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
 
 Endgame tablebases (e.g. using some Stockfish Syzygy code: probably no need for DTZ?)
 - strength getting up there, worth a shot to push further
@@ -92,22 +92,10 @@ UCI
 		- complicated with multiple levels of visits
 		- complicated if 2nd best is also mate/terminal
 		- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?
-- (still needed?) try out a backtracking implementation of virtual exploration/loss that goes as deep
-	  as it can into good lines and can choose between 2nd best here vs. 2nd best up one level, etc.,
-	  choosing better nodes overall and avoiding failed simulations
-- (does this make any sense?) try speculative budgeting in addition to virtual exploration/loss
-	- for N+small delta, which would have UCB > current best
-	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
 - profile CPU again
-	- Game copy/assignment takes 20% CPU on _previousPositions copy, see if there's anything smarter
-		- Position is 2168 bytes; 101*64-bit planes + 64-bit key = 816 bytes
-		- Can use back-pointing nodes like StateInfos to avoid copies on scratch/shadow game spawns,
-		  just different because of ring with e.g. snap -> play 15 moves -> snap -> play 1 move
-		- Storing 1 history node per position vs. 7 history positions per position saves ~95% space/copy/init
 	- try vectorize/GPU softmax/UCT calcs
 - tail Backpropagate into BackpropagateVisitsOnly
 - basic improvements to time control
-	- badly need to play well with X moves in Y, "movestogo", loses games vs. stockfish
 	- don't waste time when only 1 or few legal moves
 	- if dangerous time left, take mate-in-N rather than trying to find faster
 - mate
@@ -130,7 +118,6 @@ Code quality
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - switch to vcpkg for windows dependencies
 - fix _ in network names - split on final _
-- factor out all-exist ringbuffer with foreach iteration (begin/end)
 - privatize C++ methods (got too python-brained)
 - add Python type info everywhere - look up best practices for linting etc.
 - check for any unnecessary move constructors

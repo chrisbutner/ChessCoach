@@ -53,7 +53,7 @@ TEST(PredictionCache, SumValidation)
     chessCoach.Initialize();
 
     const Game startingPosition;
-    const Game game1 = startingPosition;
+    Game game1 = startingPosition;
     const Key game1_key1 = game1.GenerateImageKey();
 
     // Simple priors

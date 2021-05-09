@@ -140,9 +140,9 @@ public:
     bool IsDrawByNoProgressOrThreefoldRepetition() const;
     bool PiecesMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;
     int Ply() const;
-    Key GenerateImageKey() const;
-    void GenerateImage(INetwork::InputPlanes& imageOut) const;
-    void GenerateImage(INetwork::PackedPlane* imageOut) const;
+    Key GenerateImageKey();
+    void GenerateImage(INetwork::InputPlanes& imageOut);
+    void GenerateImage(INetwork::PackedPlane* imageOut);
     void GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::PackedPlane* auxiliaryOut) const;
     float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
     float& PolicyValue(INetwork::PlanesPointerFlat policyInOut, Move move) const;
@@ -153,9 +153,11 @@ public:
     const Position& GetPosition() const;
 
     inline Position& DebugPosition() { return _position; }
-    inline Position& DebugPreviousPosition(int index) { return _previousPositions[index]; }
 
 private:
+
+    template <int MaxHistoryMoves>
+    friend class HistoryWalker;
 
     void Free();
     void GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const;
@@ -168,9 +170,28 @@ protected:
     Position _position;
     StateInfo* _parentState;
     StateInfo* _currentState;
-    std::vector<Position> _previousPositions;
-    int _previousPositionsOldest;
-    int _previousPositionsCount;
+    std::vector<Move> _moves;
+};
+
+template <int MaxHistoryMoves>
+class HistoryWalker
+{
+public:
+
+    HistoryWalker(Game* game, int historyMoves);
+
+    bool Next();
+    Color Perspective();
+
+private:
+
+    // Keep everything on the stack.
+    Game* _game;
+    Color _perspective;
+    std::array<Move, MaxHistoryMoves + 1> _redoMoves; // Leave room at index 0 for a synthetic MOVE_NONE for the initial Next() call.
+    std::array<StateInfo*, MaxHistoryMoves + 1> _redoStates; // Stay in sync with _redoMoves.
+    int _redoCount;
+    int _redoIndex;
 };
 
 static_assert(CHESSCOACH_VALUE_WIN > CHESSCOACH_VALUE_DRAW);

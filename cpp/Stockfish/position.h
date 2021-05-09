@@ -78,6 +78,7 @@ public:
   //Position(const Position&) = delete;
   //Position& operator=(const Position&) = delete;
   inline const StateInfo* state_info() const { return st; }
+  inline StateInfo* state_info() { return st; }
   // cbutner-finish
 
   // FEN string input/output
@@ -142,6 +143,12 @@ public:
   void undo_move(Move m);
   void do_null_move(StateInfo& newSt);
   void undo_null_move();
+
+  // cbutner-start
+  // Redoing moves (StateInfo is already correct, no need to recompute)
+  void redo_move(Move m, StateInfo& newSt);
+  void redo_null_move(StateInfo& newSt);
+  // cbutner-finish
 
   // Static Exchange Evaluation
   bool see_ge(Move m, Value threshold = VALUE_ZERO) const;
