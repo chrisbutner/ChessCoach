@@ -289,7 +289,7 @@ SelfPlayGame::SelfPlayGame(const std::string& fen, const std::vector<Move>& move
     , _image(image)
     , _value(value)
     , _policy(policy)
-    , _searchRootPly(Ply()) // Important for this to be moves.size() when searching positions.
+    , _searchRootPly(Ply()) // Important for this to be FEN ply + moves.size() when searching positions.
     , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }

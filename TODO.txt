@@ -1,20 +1,22 @@
-Next
-- running (6g): extension of existing full run with teacher-only prediction (w/ SWA, conditional config if it works)
-- training run with same-perspective history planes (need a way to swap bytes in graph mode - run all network tests)
-
-UCI/tournaments/parallelism
-- try out teacher prediction in Arasan21, tournaments, etc. - adjust parallelism
+Now
+- looks like playing workers will pick up the non-swa model then the swa model later after cooldown - fix
 
 Training - fresh run
-	- recent PUCT changes (draw-sibling-FPU, etc.)
-	- win-FPU at root
-	- (maybe) same-perspective history planes
 	- selfplay7, Fresh3
 
 Training - after PUCT work
 - try full run with 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
 	- need to emulate parallelism/vloss/wideband for the 50k?
 	- selfplay8, Fresh4
+
+Training - after plateauing
+- try teacher-only prediction w/ SWA again (conditional config if it works)
+
+Repetitions
+- try adding repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
+
+Endgame tablebases (e.g. using some Stockfish Syzygy code: probably no need for DTZ?)
+- strength getting up there, worth a shot to push further
 
 Commentary #3
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
@@ -49,6 +51,9 @@ PUCT - medium confidence
 	- can also help more backprops go to value rather than value+prior at high node counts
 - try blend in prior softening towards endgame
 	- 8/2Q5/8/2k5/6K1/8/3r4/q7 b - - 38 113 - avoid Kd4 - work around overly sharp priors
+- try a more absolute linear term too - but higher value still needs to take over on visit count (quickly if possible) for best-move preference
+	- (sounds exactly like prior flattening)
+	- kr6/ppq3b1/2pNQ1p1/7p/7P/1R4P1/P4PB1/3n2K1 w - - 0 32 - find Rxb7 M10 - gets stuck on Ne8
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
 	- try hard exhaustive term (e.g. 1 per child after N visits)
 - try value stddev
@@ -72,6 +77,7 @@ PUCT - later
 - add move diversity temperature to mini-tournament optimization (may need lots of data, maybe soft-finish other params first)
 
 Prediction cache (after PUCT work finished)
+- even with no-history/TT trial, do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
 - investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
 - test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
 	- no gain/loss earlier, try again after more PUCT work that does better for more nodes
@@ -80,6 +86,7 @@ Prediction cache (after PUCT work finished)
 - any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 	- while not full hit rate should be higher? add some new metrics
 	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
+- set by MiB - more consistent with other engines, already mostly supported, may fit tuned better
 
 UCI
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
@@ -99,6 +106,10 @@ UCI
 	- can we still speculatively backprop, and is it needed after introducing scaled virtual loss
 - profile CPU again
 	- Game copy/assignment takes 20% CPU on _previousPositions copy, see if there's anything smarter
+		- Position is 2168 bytes; 101*64-bit planes + 64-bit key = 816 bytes
+		- Can use back-pointing nodes like StateInfos to avoid copies on scratch/shadow game spawns,
+		  just different because of ring with e.g. snap -> play 15 moves -> snap -> play 1 move
+		- Storing 1 history node per position vs. 7 history positions per position saves ~95% space/copy/init
 	- try vectorize/GPU softmax/UCT calcs
 - tail Backpropagate into BackpropagateVisitsOnly
 - basic improvements to time control
@@ -133,6 +144,8 @@ Code quality
 
 Deployment
 - re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
+	- student on GPU, 4*256, teacher/student(which?) on TPU, 16*256 for both
+	- make sure multi-GPU-on-desktop is supported - reevaluate params
 - installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
 - add windows command line build script, binplace somewhere cleanly

@@ -118,25 +118,32 @@ TEST(Network, ImagePieceHistoryPlanes)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    Game game;
+    Game game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {});
 
+    const int fourthFinalHistoryPlanes = (INetwork::InputPreviousPositionCount - 4) * INetwork::InputPiecePlanesPerPosition;
+    const int secondFinalHistoryPlanes = (INetwork::InputPreviousPositionCount - 2) * INetwork::InputPiecePlanesPerPosition;
     const int finalHistoryPlanes = (INetwork::InputPreviousPositionCount - 1) * INetwork::InputPiecePlanesPerPosition;
     const int currentPositionPlanes = INetwork::InputPreviousPositionCount * INetwork::InputPiecePlanesPerPosition;
 
-    // Ensure that the final history plane is all zeros.
+    // Ensure that the final history their-pawns plane, flipped, equals the set up position's our-pawns, by saturation + flip.
     std::unique_ptr<INetwork::InputPlanes> image1(std::make_unique<INetwork::InputPlanes>());
     game.GenerateImage(*image1);
-    const INetwork::PackedPlane startingPositionOurPawns = (*image1)[currentPositionPlanes + 0];
-    for (int i = 0; i < INetwork::InputPiecePlanesPerPosition; i++)
-    {
-        EXPECT_EQ((*image1)[finalHistoryPlanes + i], 0);
-    }
+    const INetwork::PackedPlane setUpPositionOurPawns = (*image1)[currentPositionPlanes + 0];
+    EXPECT_EQ(Game::FlipBoard((*image1)[finalHistoryPlanes + 6]), setUpPositionOurPawns);
 
-    // Make a move. Ensure that the final history our-pawns plane equals the starting position's.
-    game.ApplyMove(make_move(SQ_E2, SQ_E4));
+    // Ensure that the second-final history our-pawns plane equals the set up position's our-pawns, by saturation (2 flips equals 0 flips).
+    EXPECT_EQ((*image1)[secondFinalHistoryPlanes + 0], setUpPositionOurPawns);
+
+    // Make two pawn moves, then two rook moves. Ensure that the second-final history our-pawns plane equals the current position's, but not the fourth-final.
+    game.ApplyMove(make_move(SQ_A2, SQ_A3));
+    game.ApplyMove(make_move(SQ_A7, SQ_A6));
+    game.ApplyMove(make_move(SQ_H1, SQ_G1));
+    game.ApplyMove(make_move(SQ_H8, SQ_G8));
     std::unique_ptr<INetwork::InputPlanes> image2(std::make_unique<INetwork::InputPlanes>());
     game.GenerateImage(*image2);
-    EXPECT_EQ((*image2)[finalHistoryPlanes + 0], startingPositionOurPawns);
+    const INetwork::PackedPlane currentPositionOurPawns = (*image2)[currentPositionPlanes + 0];
+    EXPECT_EQ((*image2)[secondFinalHistoryPlanes + 0], currentPositionOurPawns);
+    EXPECT_NE((*image2)[fourthFinalHistoryPlanes + 0], currentPositionOurPawns);
 }
 
 TEST(Network, CompressDecompress)
@@ -217,8 +224,6 @@ TEST(Network, CompressDecompress)
     // More sanity-checks.
     EXPECT_NE(mctsValues[0], mctsValues[1]);
     static_assert(INetwork::InputPreviousPositionCount == 7);
-    EXPECT_EQ(images[6][0], 0);
-    EXPECT_NE(images[7][0], 0);
 }
 
 TEST(Network, CompressDecompressSparse)

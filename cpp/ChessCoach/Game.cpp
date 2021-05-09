@@ -69,6 +69,7 @@ Game::Game()
     , _currentState(AllocateState())
     , _previousPositions(INetwork::InputPreviousPositionCount)
     , _previousPositionsOldest(0)
+    , _previousPositionsCount(0)
 
 {
     _position.set(Config::StartingPosition, false /* isChess960 */, _currentState, Threads.main());
@@ -79,6 +80,7 @@ Game::Game(const std::string& fen, const std::vector<Move>& moves)
     , _currentState(AllocateState())
     , _previousPositions(INetwork::InputPreviousPositionCount)
     , _previousPositionsOldest(0)
+    , _previousPositionsCount(0) // Incremented by each ApplyMove below
 
 {
     _position.set(fen, false /* isChess960 */, _currentState, Threads.main());
@@ -95,6 +97,7 @@ Game::Game(const Game& other)
     , _currentState(other._currentState)
     , _previousPositions(other._previousPositions)
     , _previousPositionsOldest(other._previousPositionsOldest)
+    , _previousPositionsCount(other._previousPositionsCount)
 {
     assert(&other != this);
 }
@@ -111,6 +114,7 @@ Game& Game::operator=(const Game& other)
     _currentState = other._currentState;
     _previousPositions = other._previousPositions;
     _previousPositionsOldest = other._previousPositionsOldest;
+    _previousPositionsCount = other._previousPositionsCount;
 
     return *this;
 }
@@ -121,6 +125,7 @@ Game::Game(Game&& other) noexcept
     , _currentState(other._currentState)
     , _previousPositions(std::move(other._previousPositions))
     , _previousPositionsOldest(other._previousPositionsOldest)
+    , _previousPositionsCount(other._previousPositionsCount)
 {
     other._parentState = nullptr;
     other._currentState = nullptr;
@@ -140,6 +145,7 @@ Game& Game::operator=(Game&& other) noexcept
     _currentState = other._currentState;
     _previousPositions = std::move(other._previousPositions);
     _previousPositionsOldest = other._previousPositionsOldest;
+    _previousPositionsCount = other._previousPositionsCount;
 
     other._parentState = nullptr;
     other._currentState = nullptr;
@@ -161,6 +167,7 @@ void Game::ApplyMove(Move move)
 {
     _previousPositions[_previousPositionsOldest] = _position;
     _previousPositionsOldest = (_previousPositionsOldest + 1) % INetwork::InputPreviousPositionCount;
+    _previousPositionsCount = std::min(INetwork::InputPreviousPositionCount + 0, _previousPositionsCount + 1);
 
     _currentState = AllocateState();
     _position.do_move(move, *_currentState);
@@ -170,6 +177,7 @@ void Game::ApplyMoveMaybeNull(Move move)
 {
     _previousPositions[_previousPositionsOldest] = _position;
     _previousPositionsOldest = (_previousPositionsOldest + 1) % INetwork::InputPreviousPositionCount;
+    _previousPositionsCount = std::min(INetwork::InputPreviousPositionCount + 0, _previousPositionsCount + 1);
 
     _currentState = AllocateState();
     if (move != MOVE_NULL)
@@ -191,7 +199,7 @@ Move Game::ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces)
     for (const Move move : legalMoves)
     {
         _position.do_move(move, state);
-        GeneratePiecePlanes(checkPieces, 0, _position);
+        GeneratePiecePlanes(checkPieces, 0, _position, _position.side_to_move());
         if (PiecesMatch(checkPieces, resultingPieces))
         {
             _position.undo_move(move);
@@ -306,19 +314,27 @@ void Game::GenerateImage(INetwork::PackedPlane* imageOut) const
 
     // Add last 7 positions' pieces, planes 0-83.
     assert(nextPlane == 0);
-    int previousPositionIndex = _previousPositionsOldest;
+    // With 7 history positions before 1 current position, the first history position will be from a flipped perspective vs. the current position.
+    // This could normally be inspected via position.ToPlay(), but because of saturation for non-existent history, this could be innacurate.
+    Color historyPerspective = Color((INetwork::InputPreviousPositionCount % 2) ^ ToPlay());
     for (int i = 0; i < INetwork::InputPreviousPositionCount; i++)
     {
-        const Position& position = _previousPositions[previousPositionIndex];
-        GeneratePiecePlanes(imageOut, nextPlane, position);
+        // If there are no history positions, saturate at the current position.
+        const Position& position = (_previousPositionsCount == 0) ?
+            _position :
+            _previousPositions[(_previousPositionsOldest +
+                // Otherwise, saturate at the earliest history position.
+                std::max(i, INetwork::InputPreviousPositionCount - _previousPositionsCount))
+                % INetwork::InputPreviousPositionCount];
+        GeneratePiecePlanes(imageOut, nextPlane, position, historyPerspective);
 
         nextPlane += INetwork::InputPiecePlanesPerPosition;
-        previousPositionIndex = (previousPositionIndex + 1) % INetwork::InputPreviousPositionCount;
+        historyPerspective = ~historyPerspective;
     }
 
     // Add current position's pieces, planes 84-95.
     assert(nextPlane == 84);
-    GeneratePiecePlanes(imageOut, nextPlane, _position);
+    GeneratePiecePlanes(imageOut, nextPlane, _position, toPlay);
     nextPlane += INetwork::InputPiecePlanesPerPosition;
 
     // Castling planes 96-99
@@ -349,7 +365,7 @@ void Game::GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::P
     const Color toPlay = ToPlay();
 
     // Add current position's pieces, planes 84-95 (becoming future positions' planes 72-83, 60-71, etc.).
-    GeneratePiecePlanes(piecesOut, nextPieces, _position);
+    GeneratePiecePlanes(piecesOut, nextPieces, _position, toPlay);
     nextPieces += INetwork::InputPiecePlanesPerPosition;
 
     // Castling planes 96-99
@@ -459,29 +475,27 @@ void Game::Free()
     // Nodes are freed outside of Game objects because they outlive the games through MCTS tree reuse.
 }
 
-void Game::GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position) const
+void Game::GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const
 {
-    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
-    const Color toPlay = position.side_to_move();
+    // If it's black perspective, flip the board and flip colors.
+    imageOut[planeOffset + 0] = position.pieces(perspective, PAWN);
+    imageOut[planeOffset + 1] = position.pieces(perspective, KNIGHT);
+    imageOut[planeOffset + 2] = position.pieces(perspective, BISHOP);
+    imageOut[planeOffset + 3] = position.pieces(perspective, ROOK);
+    imageOut[planeOffset + 4] = position.pieces(perspective, QUEEN);
+    imageOut[planeOffset + 5] = position.pieces(perspective, KING);
 
-    imageOut[planeOffset + 0] = position.pieces(toPlay, PAWN);
-    imageOut[planeOffset + 1] = position.pieces(toPlay, KNIGHT);
-    imageOut[planeOffset + 2] = position.pieces(toPlay, BISHOP);
-    imageOut[planeOffset + 3] = position.pieces(toPlay, ROOK);
-    imageOut[planeOffset + 4] = position.pieces(toPlay, QUEEN);
-    imageOut[planeOffset + 5] = position.pieces(toPlay, KING);
-
-    imageOut[planeOffset + 6] = position.pieces(~toPlay, PAWN);
-    imageOut[planeOffset + 7] = position.pieces(~toPlay, KNIGHT);
-    imageOut[planeOffset + 8] = position.pieces(~toPlay, BISHOP);
-    imageOut[planeOffset + 9] = position.pieces(~toPlay, ROOK);
-    imageOut[planeOffset + 10] = position.pieces(~toPlay, QUEEN);
-    imageOut[planeOffset + 11] = position.pieces(~toPlay, KING);
+    imageOut[planeOffset + 6] = position.pieces(~perspective, PAWN);
+    imageOut[planeOffset + 7] = position.pieces(~perspective, KNIGHT);
+    imageOut[planeOffset + 8] = position.pieces(~perspective, BISHOP);
+    imageOut[planeOffset + 9] = position.pieces(~perspective, ROOK);
+    imageOut[planeOffset + 10] = position.pieces(~perspective, QUEEN);
+    imageOut[planeOffset + 11] = position.pieces(~perspective, KING);
 
     static_assert(INetwork::InputPiecePlanesPerPosition == 12);
 
-    // Piece colors are already conditionally flipped via toPlay/~toPlay ordering. Flip all vertically if BLACK to play.
-    if (toPlay == BLACK)
+    // Piece colors are already conditionally flipped via perspective/~perspective ordering. Flip all vertically if BLACK to play.
+    if (perspective == BLACK)
     {
         for (int i = planeOffset; i < planeOffset + INetwork::InputPiecePlanesPerPosition; i++)
         {

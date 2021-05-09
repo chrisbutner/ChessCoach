@@ -158,7 +158,7 @@ public:
 private:
 
     void Free();
-    void GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position) const;
+    void GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const;
     void FillPlane(INetwork::PackedPlane& plane, bool value) const;
     Key Rotate(Key key, unsigned int distance) const;
 
@@ -170,6 +170,7 @@ protected:
     StateInfo* _currentState;
     std::vector<Position> _previousPositions;
     int _previousPositionsOldest;
+    int _previousPositionsCount;
 };
 
 static_assert(CHESSCOACH_VALUE_WIN > CHESSCOACH_VALUE_DRAW);

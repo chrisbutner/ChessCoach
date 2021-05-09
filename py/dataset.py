@@ -63,8 +63,14 @@ class DatasetBuilder:
     image_pieces = image_pieces_auxiliary[:, :self.input_piece_planes_per_position]
     image_auxiliary = image_pieces_auxiliary[:, self.input_piece_planes_per_position:]
 
+    # Saturate the first position back for the 7 non-existent history positions.
+    # Since we know that it's the starting position for training data, no need to flip perspective per position (no-op).
+    assert self.input_previous_position_count == 7
+    image_pieces_padded = tf.pad(image_pieces, [[1, 0], [0, 0]], mode="SYMMETRIC")
+    image_pieces_padded = tf.pad(image_pieces_padded, [[2, 0], [0, 0]], mode="SYMMETRIC")
+    image_pieces_padded = tf.pad(image_pieces_padded, [[4, 0], [0, 0]], mode="SYMMETRIC")
+
     # Take a slice of the last N positions' piece planes and concatenate this position's auxiliary planes.
-    image_pieces_padded = tf.pad(image_pieces, [[self.input_previous_position_count, 0], [0, 0]])
     gathered_pieces = tf.map_fn(lambda x: image_pieces_padded[x:x + self.input_previous_position_plus_current_count], indices)
     gathered_pieces = tf.reshape(gathered_pieces, [-1, self.input_previous_position_plus_current_count * self.input_piece_planes_per_position])
     gathered_auxiliary = tf.gather(image_auxiliary, indices)
