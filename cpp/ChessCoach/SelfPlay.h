@@ -231,7 +231,7 @@ public:
     SavedGame Save() const;
     void PruneExcept(Node* root, Node*& except);
     void PruneAll();
-    void UpdateSearchRootPly();
+    void UpdateGameForNewSearchRoot();
 
     Move ParseSan(const std::string& san);
 

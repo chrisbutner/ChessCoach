@@ -721,9 +721,23 @@ void SelfPlayGame::PruneAllInternal(Node* node)
     node->childCount = 0;
 }
 
-void SelfPlayGame::UpdateSearchRootPly()
+void SelfPlayGame::UpdateGameForNewSearchRoot()
 {
+    // Update the search root ply for draw-checking.
     _searchRootPly = Ply();
+
+    // If we won't hit the "isSearchRoot" expansion in "RunMcts", set first-play urgency (FPU) to a win here for children of the root.
+    if (_root->IsExpanded())
+    {
+        for (Node& child : *_root)
+        {
+            if (child.valueWeight.load(std::memory_order_relaxed) == 0)
+            {
+                float expected = CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT;
+                child.valueAverage.compare_exchange_strong(expected, CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed);
+            }
+        }
+    }
 }
 
 Move SelfPlayGame::ParseSan(const std::string& san)
@@ -911,8 +925,8 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
     }
 
     // The additional moves are being applied to an existing game for efficiency, but really we're setting up
-    // a new position, so update the search root ply for draw-checking.
-    game.UpdateSearchRootPly();
+    // a new position, so make necessary updates.
+    game.UpdateGameForNewSearchRoot();
 }
 
 void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, int step, int checkpoint)
