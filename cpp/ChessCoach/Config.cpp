@@ -14,7 +14,9 @@ using TomlValue = toml::basic_value<toml::discard_comments, std::map, std::vecto
 // the parse needs to be repeated.
 //
 // Additionally, both C++ and Python independently parse the toml config, to lazily simplify the API boundary.
-// Updates need to be manually propagated when required.
+// Updates need to be manually propagated at runtime when required.
+//
+// Update code in sync with "is_swa_for_network_type" in config.py.
 const std::map<std::string, StageType> StageTypeLookup = {
     { "play", StageType_Play },
     { "train", StageType_Train },

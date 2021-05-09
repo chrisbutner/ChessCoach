@@ -111,6 +111,10 @@ class Config:
   def make_model_path(self, network_type, model_type, checkpoint):
     return self.join(self.misc["paths"]["networks"], f"{self.network_name}_{str(checkpoint).zfill(9)}", network_type, model_type, "weights")
 
+  # This is brittle, but necessary and low-churn. Update code in sync with "StageTypeLookup" in Config.cpp.
+  def is_swa_for_network_type(self, network_type):
+    return any(stage["stage"] == "save_swa" and stage.get("target", None) == network_type for stage in self.training["stages"])
+
   def count_training_chunks(self):
     import tensorflow as tf
     glob = self.join(self.training["games_path_training"], "*.chunk")

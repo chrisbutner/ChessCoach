@@ -173,6 +173,7 @@ class Network:
     self.model_builder = model_builder
     self.training_compiler = None
     self._network_weights = config.self_play["network_weights"]
+    self.prediction_model_type = "swa" if config.is_swa_for_network_type(network_type) else "model"
     self.initialize()
 
   @property
@@ -233,7 +234,7 @@ class Network:
       if models.full:
         return
 
-      models.full, models.model_path = self.build_full(device_index, ["model", "swa"])
+      models.full, models.model_path = self.build_full(device_index, self.prediction_model_type)
       models.full_weights_last_check = time.time()
   
   def build_full(self, log_device_context, model_types):
@@ -261,7 +262,7 @@ class Network:
 
   def check_update_prediction_full(self, device_index):
     models = self.models_predict[device_index]
-    model_path = self.latest_model_path(["model", "swa"])
+    model_path = self.latest_model_path(self.prediction_model_type)
     if model_path:
       # Compare model paths using ModelPath.__lt__ and check for a more recent one in storage.
       newer_weights_available = (models.model_path < model_path)

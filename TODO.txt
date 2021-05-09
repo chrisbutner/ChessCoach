@@ -1,6 +1,3 @@
-Now
-- looks like playing workers will pick up the non-swa model then the swa model later after cooldown - fix
-
 Training - fresh run
 	- selfplay7, Fresh3
 
