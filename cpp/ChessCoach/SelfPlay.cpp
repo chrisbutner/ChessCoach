@@ -55,6 +55,12 @@ TerminalValue& TerminalValue::operator=(const int8_t value)
 
     if (value > 0)
     {
+        // Encourage visits to faster mates over slower mates. They're more promising (a mate-in-3
+        // is more likely to become a mate-in-1 than a mate-in-5) and it helps shape a better
+        // training target during self-play. In the end, SelectMove will pick the fastest mate
+        // regardless of visits though.
+        //
+        // This term needs to be multiplied by the exploration rate in order to keep up at high visit counts.
         const int mateNSaturated = std::min(static_cast<int8_t>(Game::PuctMateTerm.size() - 1), value);
         _mateTerm = Game::PuctMateTerm[mateNSaturated];
     }
@@ -68,6 +74,8 @@ TerminalValue& TerminalValue::operator=(const int8_t value)
         // before the exhaustive search finishes, because better priors get searched and disincentivized
         // sooner. So, rely on every-other-step mate-in-N incentives to help guide search, and SelectMove
         // preferring slower opponent mates (in the worst case).
+        //
+        // See Node::SetTerminalValue for more TerminalValue special-casing and explanation.
         //
         // Also, no adjustment for draws at the moment.
         _mateTerm = 0.f;
@@ -243,6 +251,39 @@ int Node::SampleValue(float movingAverageBuild, float movingAverageCap, float va
         (current + (value - current) / std::clamp(newWeight * movingAverageBuild, 1.f, movingAverageCap)),
         std::memory_order_relaxed));
     return newWeight;
+}
+
+void Node::SetTerminalValue(TerminalValue value)
+{
+    const TerminalValue previous = terminalValue.exchange(value, std::memory_order_relaxed);
+    
+    // Clear out almost all prior-based incentive to explore forced losses.
+    // This helps avoid wasted visits to high-prior but lost positions, sometimes causing blunders.
+    //
+    // The search will scramble to visit every other non-losing sibling before returning to known losses,
+    // which helps find some alternative value faster, and helps prove forced parent wins faster, but may
+    // make it harder to differentiate between faster and slower forced losses (opponent mates). This feels
+    // like a very acceptable trade-off.
+    //
+    // When scrambling, search threads may visit every other sibling and put them into an Expanding
+    // state waiting for a neural network evaluation, before returning to the only alternative, the
+    // forced loss. This is still safe though because the "blocked" logic in "PuctContext::SelectChild"
+    // will kick in, preventing backpropagation, so visits/weight may look high, but "upWeight" will stay
+    // low, and value should remain good up the tree. The combination of this and now-very low incentive
+    // to visit means that the equivalent of draw-sibling-FPU isn't needed for forced losses.
+    //
+    // Unfortunately, forced losses will still receive linear exploration incentive, but much later, by design,
+    // and this will stop eventually after elimination. Not ideal, but probably not a practical issue,
+    // and a little too expensive at runtime to do much about.
+    //
+    // In order to leave some texture behind, divide the prior by a large number rather than zeroing it.
+    //
+    // See "TerminalValue::operator=" for more TerminalValue special-casing and explanation.
+    if (!previous.IsOpponentMateInN() && value.IsOpponentMateInN())
+    {
+        // Only this thread has permission to clobber the non-atomic prior field.
+        prior /= 1000.f;
+    }
 }
 
 Node* Node::Child(Move match)
@@ -466,7 +507,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         {
             // Value from the parent's perspective.
             const TerminalValue newTerminalValue = (_position.checkers() ? TerminalValue::MateIn<1>() : TerminalValue::Draw());
-            root->terminalValue.store(newTerminalValue, std::memory_order_relaxed);
+            root->SetTerminalValue(newTerminalValue);
             assert(state == SelfPlayState::Working);
             return newTerminalValue.ImmediateValue();
         }
@@ -496,7 +537,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         {
             // Value from the parent's perspective (easy, it's a draw).
             const TerminalValue newTerminalValue = TerminalValue::Draw();
-            root->terminalValue.store(newTerminalValue, std::memory_order_relaxed);
+            root->SetTerminalValue(newTerminalValue);
             assert(state == SelfPlayState::Working);
             return newTerminalValue.ImmediateValue();
         }
@@ -1610,7 +1651,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
             if (!parentTerminalValue.IsOpponentMateInN() ||
                 (newMateN < parentTerminalValue.OpponentMateN()))
             {
-                parent->terminalValue.store(TerminalValue::OpponentMateIn(newMateN), std::memory_order_relaxed);
+                parent->SetTerminalValue(TerminalValue::OpponentMateIn(newMateN));
 
                 // The parent just became worse, so the grandparent may need a different best-child.
                 // The regular principle variation update isn't sufficient because it assumes that
@@ -1648,7 +1689,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
             }
 
             assert(longestChildOpponentMateN > 0);
-            parent->terminalValue.store(TerminalValue::MateIn(longestChildOpponentMateN + 1), std::memory_order_relaxed);
+            parent->SetTerminalValue(TerminalValue::MateIn(longestChildOpponentMateN + 1));
         }
 
         childIsMate = !childIsMate;

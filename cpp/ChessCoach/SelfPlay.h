@@ -104,6 +104,7 @@ public:
     float Value() const;
     float ValueWithVirtualLoss() const;
     int SampleValue(float movingAverageBuild, float movingAverageCap, float value);
+    void SetTerminalValue(TerminalValue value);
 
     Node* Child(Move match);
 
