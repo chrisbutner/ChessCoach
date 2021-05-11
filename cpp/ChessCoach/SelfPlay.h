@@ -235,6 +235,8 @@ public:
 
     Move ParseSan(const std::string& san);
 
+    void DebugExpandCanonicalOrdering();
+
 private:
 
     bool TakeExpansionOwnership(Node* node);

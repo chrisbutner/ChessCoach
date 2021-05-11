@@ -597,6 +597,23 @@ void SelfPlayGame::Expand(int moveCount, float firstPlayUrgency)
     }
 }
 
+void SelfPlayGame::DebugExpandCanonicalOrdering()
+{
+    _expandAndEvaluate_endMoves = generate<LEGAL>(_position, _expandAndEvaluate_moves);
+    std::sort(_expandAndEvaluate_moves, _expandAndEvaluate_endMoves, [&](auto a, auto b)
+        {
+            return FlipMove(ToPlay(), a) < FlipMove(ToPlay(), b);
+        });
+    int moveCount = 0;
+    for (ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
+    {
+        _cachedPriors[moveCount] = PolicyValue(*_policy, cur->move); // Logits
+        moveCount++;
+    }
+    Softmax(moveCount, _cachedPriors.data()); // Logits -> priors
+    Expand(moveCount, CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
+}
+
 // Avoid Position::is_draw because it regenerates legal moves.
 // If we've already just checked for checkmate and stalemate then this works fine.
 bool SelfPlayGame::IsDrawByTwofoldRepetition(int plyToSearchRoot)

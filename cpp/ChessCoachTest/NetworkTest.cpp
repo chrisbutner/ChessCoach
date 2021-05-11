@@ -402,3 +402,96 @@ TEST(Network, NullMoveFlip)
         EXPECT_EQ(original, nullFlipTheirs);
     }
 }
+
+TEST(Network, EvaluationColorSymmetry)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    const int batchSize = 64;
+    std::array<std::vector<INetwork::InputPlanes>, COLOR_NB> images{ std::vector<INetwork::InputPlanes>(batchSize), std::vector<INetwork::InputPlanes>(batchSize) };
+    std::array<std::vector<float>, COLOR_NB> values{ std::vector<float>(batchSize), std::vector<float>(batchSize) };
+    std::array<std::vector<INetwork::OutputPlanes>, COLOR_NB> policies{ std::vector<INetwork::OutputPlanes>(batchSize), std::vector<INetwork::OutputPlanes>(batchSize) };
+
+    std::array<SelfPlayGame, COLOR_NB> asymmetricGames =
+    {
+        SelfPlayGame(Config::StartingPosition, {}, false /* tryHard */, nullptr, nullptr, nullptr),
+        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 b - - 0 1", {}, false /* tryHard */, nullptr, nullptr, nullptr),
+    };
+
+    std::array<SelfPlayGame, COLOR_NB> symmetricGames =
+    {
+        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 w - - 0 1", {}, false /* tryHard */, nullptr, nullptr, &policies[WHITE][0]),
+        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 b - - 0 1", {}, false /* tryHard */, nullptr, nullptr, &policies[BLACK][0]),
+    };
+
+    for (Color toPlay : { WHITE, BLACK })
+    {
+        EXPECT_LE(MoveList<LEGAL>(asymmetricGames[toPlay].GetPosition()).size(), batchSize);
+        EXPECT_LE(MoveList<LEGAL>(symmetricGames[toPlay].GetPosition()).size(), batchSize);
+    }
+
+    EXPECT_EQ(images[WHITE], images[BLACK]);
+    EXPECT_EQ(values[WHITE], values[BLACK]);
+    EXPECT_EQ(policies[WHITE], policies[BLACK]);
+
+    // Use a real network for predictions.
+    std::unique_ptr<INetwork> network(chessCoach.CreateNetwork());
+
+    // Evaluate an asymmetric position as a sanity check.
+    SelfPlayGame game2(nullptr, nullptr, nullptr);
+    for (Color toPlay : { WHITE, BLACK })
+    {
+        EXPECT_EQ(images[toPlay][0][0], 0UL);
+        EXPECT_EQ(values[toPlay][0], 0.f);
+        EXPECT_EQ(policies[toPlay][0][0][0][0], 0.f);
+        asymmetricGames[toPlay].GenerateImage(images[toPlay][0]);
+        network->PredictBatch(Config::Network.SelfPlay.PredictionNetworkType, 1, images[toPlay].data(), values[toPlay].data(), policies[toPlay].data());
+        EXPECT_NE(images[toPlay][0][0], 0UL);
+        EXPECT_NE(values[toPlay][0], 0.f);
+        EXPECT_NE(policies[toPlay][0][0][0][0], 0.f);
+    }
+    EXPECT_NE(images[WHITE], images[BLACK]);
+    EXPECT_NE(values[WHITE], values[BLACK]);
+    EXPECT_NE(policies[WHITE], policies[BLACK]);
+
+    // Expand the symmetric position for white and black and compare network outputs.
+    for (Color toPlay : { WHITE, BLACK })
+    {
+        symmetricGames[toPlay].GenerateImage(images[toPlay][0]);
+        network->PredictBatch(Config::Network.SelfPlay.PredictionNetworkType, 1, images[toPlay].data(), values[toPlay].data(), policies[toPlay].data());
+        symmetricGames[toPlay].DebugExpandCanonicalOrdering();
+        EXPECT_TRUE(symmetricGames[toPlay].Root()->IsExpanded());
+        EXPECT_EQ(symmetricGames[toPlay].Root()->childCount, MoveList<LEGAL>(symmetricGames[toPlay].GetPosition()).size());
+    }
+    EXPECT_EQ(images[WHITE], images[BLACK]);
+    EXPECT_EQ(values[WHITE], values[BLACK]);
+    EXPECT_EQ(policies[WHITE], policies[BLACK]);
+    
+    // Evaluate each of the child positions for white and black and compare network outputs.
+    for (Color toPlay : { WHITE, BLACK })
+    {
+        int index = 1;
+        for (Node& child : *symmetricGames[toPlay].Root())
+        {
+            SelfPlayGame scratchGame = symmetricGames[toPlay];
+            scratchGame.ApplyMove(Move(child.move));
+            EXPECT_EQ(images[toPlay][index][0], 0UL);
+            EXPECT_EQ(values[toPlay][index], 0.f);
+            EXPECT_EQ(policies[toPlay][index][0][0][0], 0.f);
+            scratchGame.GenerateImage(images[toPlay][index]);
+            EXPECT_NE(images[toPlay][index][0], 0UL);
+            EXPECT_NE(images[toPlay][index], images[toPlay][index - 1]);
+            index++;
+        }
+        network->PredictBatch(Config::Network.SelfPlay.PredictionNetworkType, batchSize, images[toPlay].data(), values[toPlay].data(), policies[toPlay].data());
+        for (int checkIndex = 1; checkIndex <= symmetricGames[toPlay].Root()->childCount; checkIndex++)
+        {
+            EXPECT_NE(values[toPlay][checkIndex], 0.f);
+            EXPECT_NE(policies[toPlay][checkIndex][0][0][0], 0.f);
+        }
+    }
+    EXPECT_EQ(images[WHITE], images[BLACK]);
+    EXPECT_EQ(values[WHITE], values[BLACK]);
+    EXPECT_EQ(policies[WHITE], policies[BLACK]);
+}
