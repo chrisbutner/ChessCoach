@@ -35,8 +35,8 @@ TEST(PredictionCache, Basic)
         game2.ApplyMove(move);
     }
 
-    Key game1_key = game1.GenerateImageKey();
-    Key game2_key = game2.GenerateImageKey();
+    Key game1_key = game1.GenerateImageKey(false /* tryHard */);
+    Key game2_key = game2.GenerateImageKey(false /* tryHard */);
 
     EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_EQ(game1_key, game2_key);
@@ -54,7 +54,7 @@ TEST(PredictionCache, SumValidation)
 
     const Game startingPosition;
     Game game1 = startingPosition;
-    const Key game1_key1 = game1.GenerateImageKey();
+    const Key game1_key1 = game1.GenerateImageKey(false /* tryHard */);
 
     // Simple priors
     EXPECT_FALSE(TryGetPrediction(game1_key1, true, { 0.1f, 0.2f, 0.3f, 0.4f }));
@@ -92,8 +92,8 @@ TEST(PredictionCache, PathDependence)
 
     // Make sure that two starting positions match in the prediction cache.
 
-    Key game1_key1 = game1.GenerateImageKey();
-    Key game2_key1 = game2.GenerateImageKey();
+    Key game1_key1 = game1.GenerateImageKey(false /* tryHard */);
+    Key game2_key1 = game2.GenerateImageKey(false /* tryHard */);
     
     EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_EQ(game1_key1, game2_key1);
@@ -105,8 +105,8 @@ TEST(PredictionCache, PathDependence)
     game1.ApplyMove(make_move(SQ_A2, SQ_A3));
     game2.ApplyMove(make_move(SQ_B2, SQ_B3));
 
-    Key game1_key2 = game1.GenerateImageKey();
-    Key game2_key2 = game2.GenerateImageKey();
+    Key game1_key2 = game1.GenerateImageKey(false /* tryHard */);
+    Key game2_key2 = game2.GenerateImageKey(false /* tryHard */);
 
     EXPECT_NE(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_NE(game1_key2, game2_key2);
@@ -122,8 +122,8 @@ TEST(PredictionCache, PathDependence)
     game1.ApplyMove(make_move(SQ_B2, SQ_B3));
     game2.ApplyMove(make_move(SQ_A2, SQ_A3));
     
-    Key game1_key3 = game1.GenerateImageKey();
-    Key game2_key3 = game2.GenerateImageKey();
+    Key game1_key3 = game1.GenerateImageKey(false /* tryHard */);
+    Key game2_key3 = game2.GenerateImageKey(false /* tryHard */);
 
     EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_NE(game1_key3, game2_key3);
@@ -146,8 +146,8 @@ TEST(PredictionCache, Quantization)
         game2.ApplyMove(move);
     }
 
-    Key game1_key = game1.GenerateImageKey();
-    Key game2_key = game2.GenerateImageKey();
+    Key game1_key = game1.GenerateImageKey(false /* tryHard */);
+    Key game2_key = game2.GenerateImageKey(false /* tryHard */);
 
     EXPECT_EQ(game1.GetPosition().key(), game2.GetPosition().key());
     EXPECT_EQ(game1_key, game2_key);

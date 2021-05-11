@@ -256,28 +256,53 @@ int Game::Ply() const
     return _position.game_ply();
 }
 
-Key Game::GenerateImageKey()
+Key Game::GenerateImageKey(bool tryHard)
 {
-    // No need to flip anything for hash keys: for a particular position, it's always the same player to move.
-    // Stockfish key includes material and castling rights, so we just need to add history and no-progress.
-    // Because Zobrist keys are iteratively updated via moves, they collide when combining positions that are
-    // reached by different permutations of the same set of moves. So, rotate the key to differentiate.
-
-    // Add no-progress plane to key.
-    Key key = PredictionCache_NoProgressCount[std::min(NoProgressSaturationCount, _position.rule50_count())];
-
-    // Add last 7 positions + 1 current position.
-    // If there are fewer, no need to synthesize/saturate, since we're just differentating
-    // positions/histories, not feeding planes into a neural network, so just stop rotating/hashing.
-    const int historyPositionCount = std::min(INetwork::InputPreviousPositionCount + 0, static_cast<int>(_moves.size()));
-    HistoryWalker<INetwork::InputPreviousPositionCount> history(this, historyPositionCount);
-    int rotation = 0;
-    while (history.Next())
+    // No need to flip anything for hash keys: for a particular position, it's always the same player to move,
+    // side-to-move is encoded in the key, and we're not feeding in to a neural network, just differentiating.
+    if (tryHard)
     {
-        key ^= Rotate(_position.key(), rotation++);
+        // In UCI mode (search/tournament/analysis), use the prediction cache as a transposition table such that
+        // transpositions intentionally collide and reuse neural network predictions. This is a speed/accuracy
+        // trade-off. Because the engine is effectively GPU/TPU-bound, with CPU to spare, getting a cache hit is
+        // almost a 100% free node, which can be spent deeper inside the hit to get an even more accurate evaluation
+        // in compensation. The risk is that (a) neural network volatility vs. history planes or (b) sharp edges
+        // related to repetition or no-progress draw rules result in an overly optimistic or pessimistic evaluation
+        // or skewed set of priors, resulting in wasting too many nodes or missing ideas. The hope is that the broader
+        // and deeper search from the additional nodes more than compensates for any inaccuracies.
+        //
+        // In contrast, in self-play mode when generating training data (the "else" below), include history and no-progress
+        // to match neural network planes and get as accurate a prediction as possible, at the expense of speed/throughput.
+        // The idea there is to give as much information and gradient to the training process as possible, especially when
+        // learning subtleties like 3-repetition and 50-move (no-progress) rules.
+        //
+        // It's possible that it would also be better to include less or no history in self-play mode, but this would
+        // require too much end-to-end testing for our current scope (i.e. from scratch with fresh data each time),
+        // so err on the proven side.
+        return _position.key();
     }
+    else
+    {
+        // Stockfish key includes material and castling rights, so we just need to add history and no-progress.
+        // Because Zobrist keys are iteratively updated via moves, they collide when combining positions that are
+        // reached by different permutations of the same set of moves. So, rotate the key to differentiate.
 
-    return key;
+        // Add no-progress plane to key.
+        Key key = PredictionCache_NoProgressCount[std::min(NoProgressSaturationCount, _position.rule50_count())];
+
+        // Add last 7 positions + 1 current position.
+        // If there are fewer, no need to synthesize/saturate, since we're just differentating
+        // positions/histories, not feeding planes into a neural network, so just stop rotating/hashing.
+        const int historyPositionCount = std::min(INetwork::InputPreviousPositionCount + 0, static_cast<int>(_moves.size()));
+        HistoryWalker<INetwork::InputPreviousPositionCount> history(this, historyPositionCount);
+        int rotation = 0;
+        while (history.Next())
+        {
+            key ^= Rotate(_position.key(), rotation++);
+        }
+
+        return key;
+    }
 }
 
 void Game::GenerateImage(INetwork::InputPlanes& imageOut)

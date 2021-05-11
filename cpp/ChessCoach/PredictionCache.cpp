@@ -55,7 +55,7 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
             // and we may get unlucky on certain batches (don't actually need to cache pure uniform).
             //
             // Allow for 120 quanta error, ~0.18% (used to be much higher with 8-bit quantization, ~3.5% for 9).
-            // This allows for the largest uniform error for legal moves in [1, 256].
+            // This allows for the largest uniform error for legal move count in [1, 256].
 
             int priorSum = 0;
             for (int m = 0; m < moveCount; m++)
@@ -89,7 +89,7 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
 
 void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float* priors)
 {
-    // If the same full key is found than that entry needs to be replaced so that
+    // If the same full key is found then that entry needs to be replaced so that
     // TryGet finds it. Otherwise, replace the oldest entry.
     int oldestIndex = 0;
     for (int i = 0; i < EntryCount; i++)
@@ -213,8 +213,6 @@ void PredictionCache::Allocate(int requestGib, int minGib)
         {
             _allocatedRequestGib = requestGib;
             _allocatedMinGib = minGib;
-            std::cout << "Allocated prediction cache, size=" << sizeGib << " GiB, tables=" << tableCount
-                << " (request=" << requestGib << " GiB, min=" << minGib << " GiB)" << std::endl;
             break;
         }
 

@@ -1,16 +1,16 @@
-Training - after PUCT work
-- try full run with 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
-	- need to emulate parallelism/vloss/wideband for the 50k?
-	- selfplay8, Fresh4
-
-Training - after plateauing
-- try teacher-only prediction w/ SWA again (conditional config if it works)
-
-Repetitions
-- try full run adding repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
-
 Endgame tablebases (e.g. using some Stockfish Syzygy code: probably no need for DTZ?)
 - strength getting up there, worth a shot to push further
+
+Elimination budget
+- calculate 0-1 t factor based on remaining time
+	- cycle that for inf style, doubling fake remaining each time reached
+	- at root use raw t - at others, take base-2-log/exp of parent visits vs. root visits and compensate schedule because starting later
+
+Training
+- after plateauing - try teacher-only prediction w/ SWA again (conditional config if it works)
+- full run - 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
+	- need to emulate parallelism/vloss/wideband for the 50k, or 1*1 okay?
+- full run - add repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
 
 Commentary #3
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
@@ -49,11 +49,17 @@ PUCT - medium confidence
 	- (sounds exactly like prior flattening)
 	- kr6/ppq3b1/2pNQ1p1/7p/7P/1R4P1/P4PB1/3n2K1 w - - 0 32 - find Rxb7 M10 - gets stuck on Ne8
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
-	- try hard exhaustive term (e.g. 1 per child after N visits)
+	- try hard exhaustive term (e.g. 1 per child after N visits - maybe M grandparent visits)
+	- 8/8/8/2P3R1/5B2/2rP1p2/p1P1PP2/RnQ1K2k w Q - 5 3 - find M2
 - try value stddev
 - last all-out attempt at position #3
 	- try last-value again but scaled down (constant or f(n))
 	- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing
+- think of ways to catch up visits when suddenly finding value at very high nodes
+	- some kind of high-trust/verification PUCT saturation calc?
+	- backpropagate more than 1 weight/visit per, for high overall visits + deep leaf?
+- work on making more progress in endgames - may be worse now with higher NPS from cache-as-TT
+	- 8/8/8/4ppk1/8/8/6K1/8 b - - 0 84
 
 PUCT - expensive/failed ideas
 - catch up on unpropagated value when returning via AZPUCT (+upSum, +upWeight)
@@ -69,18 +75,6 @@ PUCT - later
 	- could this also be used earlier during search, backpropagate up a pending/bounty value via separate field to be replaced
 	  by actual backprops - set it up when saturation point would take from below 1st to 1st in visits
 - add move diversity temperature to mini-tournament optimization (may need lots of data, maybe soft-finish other params first)
-
-Prediction cache (after PUCT work finished)
-- even with no-history/TT trial, do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
-- investigate collisions (non-transposition style) during single search UCI affecting value convergence (details in 1/28 notes)
-- test for average strength gain/loss ignoring path dependence and using in UCI/strengthtest for transpositions
-	- no gain/loss earlier, try again after more PUCT work that does better for more nodes
-- test speed gain for self-play generation ignoring path dependence, transposition table-style
-- try stockfish-style prefetch asap after hash key update
-- any more cache tuning? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
-	- while not full hit rate should be higher? add some new metrics
-	- can probably remove max-ply if switching to transposition style - clear probe metrics after ramp-up, then measure
-- set by MiB - more consistent with other engines, already mostly supported, may fit tuned better
 
 UCI
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
@@ -106,11 +100,14 @@ UCI
 		- also strength-test
 	- forced draw propagation if it'll help
 - look into LCB move selection (Wu, LZ)
-- implement worthwhile options (work out hash, TT vs. prediction cache)
-- workaround for .exe vs. non in ChessBase, test as kibitzer
-- implement proper time controls/search options, ponder
+- workaround for .exe vs. non in ChessBase - can we probe for virtuals and activate before initializing python?
+- implement remaining commands/options - searchmoves - spin option min/max - check spec again
+- set prediction cache size (hash size) by MiB - more consistent with other engines, already mostly supported
+- cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
+- any more prediction cache tuning for self-play? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 
 GUI
+- don't error on supervised data - use prior, no need to match result (often adjudicated)
 - change the square background rather than adding overlay, need more consistency between black/white squares
 
 Code quality

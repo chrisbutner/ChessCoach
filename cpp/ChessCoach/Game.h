@@ -140,7 +140,7 @@ public:
     bool IsDrawByNoProgressOrThreefoldRepetition() const;
     bool PiecesMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;
     int Ply() const;
-    Key GenerateImageKey();
+    Key GenerateImageKey(bool tryHard);
     void GenerateImage(INetwork::InputPlanes& imageOut);
     void GenerateImage(INetwork::PackedPlane* imageOut);
     void GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::PackedPlane* auxiliaryOut) const;

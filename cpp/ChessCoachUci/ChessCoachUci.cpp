@@ -97,6 +97,7 @@ void ChessCoachUci::Initialize()
     InitializePython();
     InitializeStockfish();
     InitializeChessCoach();
+    InitializePredictionCache();
 
     // Validate config.
     const int totalParallelism = (Config::Misc.Search_SearchThreads * Config::Misc.Search_SearchParallelism);

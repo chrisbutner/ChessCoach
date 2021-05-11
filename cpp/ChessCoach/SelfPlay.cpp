@@ -529,7 +529,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         // to evict less. However, in search (TryHard) it's better to keep everything recent.
         cacheStore = nullptr;
         float cachedValue = std::numeric_limits<float>::quiet_NaN();
-        _imageKey = GenerateImageKey();
+        _imageKey = GenerateImageKey(TryHard());
         bool hitCached = false;
         if ((workingMoveCount <= PredictionCacheEntry::MaxMoveCount) &&
             (TryHard() || (Ply() <= Config::Misc.PredictionCache_MaxPly)))
@@ -1164,7 +1164,6 @@ void SelfPlayWorker::SaveToStorageAndLog(INetwork* network, int index)
     const float gameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _gameStarts[index]).count();
     const float mctsTime = (gameTime / ply);
     std::cout << "Game " << gameNumber << ", ply " << ply << ", time " << gameTime << ", mcts time " << mctsTime << ", result " << result << std::endl;
-    //PredictionCache::Instance.PrintDebugInfo();
 }
 
 void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* /*images*/, float* values, INetwork::OutputPlanes* policies)

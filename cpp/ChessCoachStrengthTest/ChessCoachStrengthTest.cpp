@@ -128,6 +128,7 @@ void ChessCoachStrengthTest::Initialize()
     InitializePython();
     InitializeStockfish();
     InitializeChessCoach();
+    InitializePredictionCache();
 }
 
 static void PrintProgress(const std::string& fen, const std::string& target, const std::string& chosen, int score, int total, int nodeScore)
