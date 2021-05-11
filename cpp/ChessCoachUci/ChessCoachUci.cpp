@@ -385,6 +385,9 @@ void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
     _positionUpdated = true;
     _positionFen = Config::StartingPosition;
     _positionMoves.clear();
+
+    // Also clear the prediction cache, for repeatability/consistency during analysis.
+    PredictionCache::Instance.Clear();
 }
 
 void ChessCoachUci::HandlePosition(std::stringstream& commands)
