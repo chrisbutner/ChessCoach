@@ -18,7 +18,7 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
 
     int moveIndex = 0;
     Node* moveNode = nullptr;
-    game.Root()->childCount = static_cast<int>(legalMoves.size());
+    game.Root()->childCount = legalMoveCount;
     game.Root()->children = new Node[game.Root()->childCount]{};
     for (Move legalMove : legalMoves)
     {

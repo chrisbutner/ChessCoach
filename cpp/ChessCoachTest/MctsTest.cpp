@@ -458,3 +458,72 @@ TEST(Mcts, SamplingUci)
     game->PruneAll();
 }
 
+TEST(Mcts, PrepareExpandedRoot)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SearchState searchState{};
+    SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    
+    const int index = 0;
+    SelfPlayGame* game;
+    SelfPlayState* state;
+    float* values;
+    INetwork::OutputPlanes* policies;
+
+    selfPlayWorker.DebugGame(index, &game, &state, &values, &policies);
+    selfPlayWorker.SetUpGame(index);
+
+    // "GPU" work, in advance.
+    const int gameCount = 1;
+    std::fill(values, values + gameCount, CHESSCOACH_VALUE_DRAW);
+    INetwork::PlanesPointerFlat policiesPtr = reinterpret_cast<INetwork::PlanesPointerFlat>(policies);
+    const int policyCount = (gameCount * INetwork::OutputPlanesFloatCount);
+    std::fill(policiesPtr, policiesPtr + policyCount, 0.f);
+
+    bool coverageA = false;
+    bool coverageB = false;
+    bool coverageC = false;
+    int lastPly = 0;
+    while ((*state != SelfPlayState::Finished) && (lastPly < 10))
+    {
+        // CPU work
+        selfPlayWorker.Play(index);
+
+        if ((game->Ply() > lastPly) && game->Root()->IsExpanded())
+        {
+            // Expect exploration noise at the root.
+            if (game->Root()->childCount >= 2)
+            {
+                EXPECT_NE(game->Root()->children[0].prior, game->Root()->children[1].prior);
+                coverageA = true;
+            }
+
+            for (const Node& child : *game->Root())
+            {
+                // Expect win-FPU for children of the root, unless draw-sibling-FPU kicked.
+                EXPECT_TRUE(
+                    ((child.visitCount > 0) && (child.valueAverage == CHESSCOACH_VALUE_DRAW)) || // Backprops
+                    ((child.visitCount == 0) && (child.valueAverage == CHESSCOACH_FIRST_PLAY_URGENCY_ROOT)) || // Win-FPU
+                    ((child.visitCount == 0) && (child.valueAverage == Game::FlipValue(game->Root()->valueAverage))) // Draw-sibling-FPU
+                    );
+                coverageB = true;
+                
+                if (child.IsExpanded() && (child.childCount >= 2))
+                {
+                    // No win-FPU or exploration noise deeper in the tree.
+                    EXPECT_FALSE((child.children[0].visitCount == 0) && (child.children[0].valueAverage == CHESSCOACH_FIRST_PLAY_URGENCY_ROOT));
+                    EXPECT_EQ(child.children[0].prior, child.children[1].prior);
+                    coverageC = true;
+                }
+            }
+
+            lastPly = game->Ply();
+        }
+    }
+
+    EXPECT_TRUE(coverageA);
+    EXPECT_TRUE(coverageB);
+    EXPECT_TRUE(coverageC);
+}
