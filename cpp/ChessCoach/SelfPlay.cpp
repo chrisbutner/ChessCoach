@@ -442,13 +442,20 @@ void SelfPlayGame::ApplyMoveWithRoot(Move move, Node* newRoot)
     ApplyMove(move);
     _root = newRoot;
 
-    // Don't adjust visit counts here because this is a common path; e.g. for scratch games also.
+    // Don't prepare an expanded root here because this is a common path; e.g. for scratch games also.
 }
 
 void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
 {
     ApplyMoveWithRoot(move, newRoot);
     _history.push_back(move);
+
+    // If this new root is already expanded then we won't hit the "isSearchRoot" expansion in "RunMcts", so perform necessary preparations.
+    assert(!TryHard());
+    if (newRoot->IsExpanded())
+    {
+        PrepareExpandedRoot();
+    }
 }
 
 bool SelfPlayGame::TakeExpansionOwnership(Node* node)
@@ -784,17 +791,57 @@ void SelfPlayGame::UpdateGameForNewSearchRoot()
     // Update the search root ply for draw-checking.
     _searchRootPly = Ply();
 
-    // If we won't hit the "isSearchRoot" expansion in "RunMcts", set first-play urgency (FPU) to a win here for children of the root.
+    // If this new root is already expanded then we won't hit the "isSearchRoot" expansion in "RunMcts", so perform necessary preparations.
+    assert(TryHard());
     if (_root->IsExpanded())
     {
-        for (Node& child : *_root)
+        PrepareExpandedRoot();
+    }
+}
+
+// This is a common path for self-play and search, (a) when expanding an initial/updated root, or (b) when updating the root to an already-expanded child.
+// - For both self-play and search, case (a) is recognized by "isSearchRoot" in "RunMcts".
+// - For self-play, case (b) will almost always be hit after the starting position, since each immediate child should be visited at least once, and we reuse the MCTS tree.
+// - For search, case (b) will be hit when we're able to reuse an existing position; e.g., after moves have been played, or searching deeper positions without a "ucinewgame".
+void SelfPlayGame::PrepareExpandedRoot()
+{
+    // Set first-play urgency (FPU) to a win here for children of the root.
+    for (Node& child : *_root)
+    {
+        if (child.valueWeight.load(std::memory_order_relaxed) == 0)
         {
-            if (child.valueWeight.load(std::memory_order_relaxed) == 0)
-            {
-                float expected = CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT;
-                child.valueAverage.compare_exchange_strong(expected, CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed);
-            }
+            float expected = CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT;
+            child.valueAverage.compare_exchange_strong(expected, CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed);
         }
+    }
+
+    // Add exploration noise if not searching.
+    if (!TryHard())
+    {
+        AddExplorationNoise();
+    }
+}
+
+void SelfPlayGame::AddExplorationNoise()
+{
+    std::gamma_distribution<float> gamma(Config::Network.SelfPlay.RootDirichletAlpha, 1.f);
+
+    // Use "_cachedPriors" as scratch space.
+
+    float noiseSum = 0.f;
+    for (int i = 0; i < _root->childCount; i++)
+    {
+        _cachedPriors[i] = gamma(Random::Engine);
+        noiseSum += _cachedPriors[i];
+    }
+
+    int childIndex = 0;
+    for (Node& child : *_root)
+    {
+        const float normalized = (_cachedPriors[childIndex++] / noiseSum);
+        assert(!std::isnan(normalized));
+        assert(!std::isinf(normalized));
+        child.prior = (child.prior * (1 - Config::Network.SelfPlay.RootExplorationFraction) + normalized * Config::Network.SelfPlay.RootExplorationFraction);
     }
 }
 
@@ -1328,19 +1375,19 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // and then whenever a previously-unexpanded node is reached as a root (like a 2-repetition,
         // or a child that wasn't visited, but alternatives were getting mated). Fix the visitCount to 1
         // so that exploration incentives are normal, in case the node had a lot of 2-repetition terminal visits.
+        // Note that we don't generally update previously-2-repetition visits, just when they become search roots.
         if (isSearchRoot)
         {
+            // Only make these corrections when freshly expanding, not inside "PrepareExpandedRoot" for already-expanded children,
+            // in which case we want to preserve visits, etc., so that exploration continues normally.
             assert(searchPath.size() == 1);
             game.Root()->visitCount.store(1, std::memory_order_relaxed);
-            game.Root()->valueAverage.store(0.f, std::memory_order_relaxed);
+            game.Root()->valueAverage.store(CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed); // Meaningless, but be consistent.
             game.Root()->valueWeight.store(0, std::memory_order_relaxed);
             game.Root()->upWeight.store(0, std::memory_order_relaxed);
 
-            // Add exploration noise if not searching.
-            if (!game.TryHard())
-            {
-                AddExplorationNoise(game);
-            }
+            // Perform necessary preparations, like adding exploration noise for self-play games.
+            game.PrepareExpandedRoot();
         }
 
         // Clear the search path after decrementing "visitingCount" to avoid duplicate decrement on search stop/resume.
@@ -1366,28 +1413,6 @@ void SelfPlayWorker::FailNode(std::vector<WeightedNode>& searchPath)
     }
     searchPath.clear();
     _searchState->failedNodeCount.fetch_add(1, std::memory_order_relaxed);
-}
-
-void SelfPlayWorker::AddExplorationNoise(SelfPlayGame& game) const
-{
-    std::gamma_distribution<float> gamma(Config::Network.SelfPlay.RootDirichletAlpha, 1.f);
-    std::vector<float> noise(game.Root()->childCount);
-
-    float noiseSum = 0.f;
-    for (int i = 0; i < noise.size(); i++)
-    {
-        noise[i] = gamma(Random::Engine);
-        noiseSum += noise[i];
-    }
-
-    int childIndex = 0;
-    for (Node& child : *game.Root())
-    {
-        const float normalized = (noise[childIndex++] / noiseSum);
-        assert(!std::isnan(normalized));
-        assert(!std::isinf(normalized));
-        child.prior = (child.prior * (1 - Config::Network.SelfPlay.RootExplorationFraction) + normalized * Config::Network.SelfPlay.RootExplorationFraction);
-    }
 }
 
 Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) const

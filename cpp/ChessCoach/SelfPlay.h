@@ -233,6 +233,7 @@ public:
     void PruneExcept(Node* root, Node*& except);
     void PruneAll();
     void UpdateGameForNewSearchRoot();
+    void PrepareExpandedRoot();
 
     Move ParseSan(const std::string& san);
 
@@ -240,6 +241,7 @@ public:
 
 private:
 
+    void AddExplorationNoise();
     bool TakeExpansionOwnership(Node* node);
     void PruneAllInternal(Node* root);
 
@@ -327,7 +329,6 @@ public:
     void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
     Node* RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
-    void AddExplorationNoise(SelfPlayGame& game) const;
     Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
     void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
     void BackpropagateMate(const std::vector<WeightedNode>& searchPath);
