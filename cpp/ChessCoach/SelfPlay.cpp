@@ -1369,7 +1369,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
 
         // Adjust best-child pointers (principle variation) now that visits and mates have propagated.
         UpdatePrincipleVariation(searchPath);
-        ValidatePrincipleVariation(scratchGame.Root());
+        ValidatePrincipleVariation(game.Root());
 
         // Expanding the search root is a special case. It happens at the very start of a game,
         // and then whenever a previously-unexpanded node is reached as a root (like a 2-repetition,
@@ -1723,20 +1723,23 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
 
 void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* parent)
 {
-    bool updatedBestChild = false;
-    const Node* parentBestChild = parent->bestChild.load(std::memory_order_relaxed);
+    // We may update the best child multiple times in this loop. E.g. just discovered current best loses to mate,
+    // then loop through and see 9 visits, then 10 visits, then 11 visits.
+    bool updateBestChild = false;
+    Node* parentBestChild = parent->bestChild.load(std::memory_order_relaxed);
     for (Node& child : *parent)
     {
         if (WorseThan(parentBestChild, &child))
         {
-            parent->bestChild.store(&child, std::memory_order_relaxed);
-            updatedBestChild = true;
+            parentBestChild = &child;
+            updateBestChild = true;
         }
     }
 
-    // We updated a best-child, but that only changed the principle variation if this parent was part of it.
-    if (updatedBestChild)
+    // We're updating a best-child, but that only changes the principle variation if this parent was part of it.
+    if (updateBestChild)
     {
+        parent->bestChild.store(parentBestChild, std::memory_order_relaxed);
         for (int i = 0; i < searchPath.size() - 1; i++)
         {
             if (searchPath[i].node == parent)
