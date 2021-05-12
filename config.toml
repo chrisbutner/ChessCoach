@@ -213,6 +213,8 @@ elimination_rate = 3.0
 move_diversity_value_delta_threshold = 0.01
 move_diversity_temperature = 0.75
 
+syzygy_path = ""
+
 wait_for_updated_network = false
 
 ###############################################################################
@@ -308,5 +310,6 @@ virtual_loss_coefficient = "float"
 moving_average_build = "float"
 moving_average_cap = "float"
 backpropagation_puct_threshold = "float"
+syzygy_path = "string"
 
 ###############################################################################

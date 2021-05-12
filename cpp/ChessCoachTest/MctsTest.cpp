@@ -337,7 +337,7 @@ TEST(Mcts, TwofoldRepetition)
 
         SelfPlayState state = SelfPlayState::Working;
         PredictionCacheChunk* cacheStore = nullptr;
-        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore, CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
+        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore, &searchState, true /* isSearchRoot */);
         EXPECT_EQ(value, CHESSCOACH_VALUE_DRAW);
     }
 
@@ -359,7 +359,7 @@ TEST(Mcts, TwofoldRepetition)
 
         SelfPlayState state = SelfPlayState::Working;
         PredictionCacheChunk* cacheStore = nullptr;
-        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore, CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
+        const float value = searchRoot.ExpandAndEvaluate(state, cacheStore, &searchState, true /* isSearchRoot */);
         EXPECT_NE(value, CHESSCOACH_VALUE_DRAW);
         EXPECT_TRUE(std::isnan(value)); // A non-terminal position requires a network evaluation.
     }
@@ -502,11 +502,10 @@ TEST(Mcts, PrepareExpandedRoot)
 
             for (const Node& child : *game->Root())
             {
-                // Expect win-FPU for children of the root, unless draw-sibling-FPU kicked.
+                // Expect win-FPU for children of the root. We overwrite any default or draw-sibling-FPU.
                 EXPECT_TRUE(
                     ((child.visitCount > 0) && (child.valueAverage == CHESSCOACH_VALUE_DRAW)) || // Backprops
-                    ((child.visitCount == 0) && (child.valueAverage == CHESSCOACH_FIRST_PLAY_URGENCY_ROOT)) || // Win-FPU
-                    ((child.visitCount == 0) && (child.valueAverage == Game::FlipValue(game->Root()->valueAverage))) // Draw-sibling-FPU
+                    ((child.visitCount == 0) && (child.valueAverage == CHESSCOACH_FIRST_PLAY_URGENCY_ROOT)) // Win-FPU
                     );
                 coverageB = true;
                 

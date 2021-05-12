@@ -11,6 +11,7 @@
 
 #include <Stockfish/thread.h>
 #include <Stockfish/uci.h>
+#include <Stockfish/syzygy/tbprobe.h>
 
 #include <ChessCoach/ChessCoach.h>
 #include <ChessCoach/WorkerGroup.h>
@@ -372,6 +373,10 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
         InitializeNetwork();
         _network->UpdateNetworkWeights(Config::Network.SelfPlay.NetworkWeights);
     }
+    else if (name == "syzygy_path")
+    {
+        Tablebases::init(Config::Network.SelfPlay.SyzygyPath);
+    }
 }
 
 void ChessCoachUci::HandleRegister(std::stringstream& /*commands*/)
@@ -388,6 +393,9 @@ void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
 
     // Also clear the prediction cache, for repeatability/consistency during analysis.
     PredictionCache::Instance.Clear();
+
+    // Work around problems with swapping out memory-mapped pages by reinitializing tablebases each game.
+    Tablebases::init(Config::Network.SelfPlay.SyzygyPath);
 }
 
 void ChessCoachUci::HandlePosition(std::stringstream& commands)

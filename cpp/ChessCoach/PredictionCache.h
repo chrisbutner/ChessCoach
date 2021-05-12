@@ -22,9 +22,14 @@ static_assert(sizeof(PredictionCacheEntry) == 128);
 
 struct alignas(1024) PredictionCacheChunk
 {
+public:
+
+    void Put(Key key, float value, int moveCount, const float* priors);
+
+private:
+
     void Clear();
     bool TryGet(Key key, int moveCount, float* valueOut, float* priorsOut);
-    void Put(Key key, float value, int moveCount, const float* priors);
 
 private:
 

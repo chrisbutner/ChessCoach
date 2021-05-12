@@ -5,13 +5,34 @@
 
 TEST(Stockfish, CentipawnConversion)
 {
-    const float epsilon = 0.001f;
+    EXPECT_EQ(Game::CentipawnsToProbability(VALUE_DRAW), CHESSCOACH_VALUE_DRAW);
+    EXPECT_EQ(Game::CentipawnsToProbability(VALUE_MATE), CHESSCOACH_VALUE_WIN);
+    EXPECT_EQ(Game::CentipawnsToProbability(-VALUE_MATE), CHESSCOACH_VALUE_LOSS);
 
-    EXPECT_NEAR(Game::CentipawnsToProbability(0), CHESSCOACH_VALUE_DRAW, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability(12800), CHESSCOACH_VALUE_WIN, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability(-12800), CHESSCOACH_VALUE_LOSS, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability(32000), CHESSCOACH_VALUE_WIN, epsilon);
-    EXPECT_NEAR(Game::CentipawnsToProbability(-32000), CHESSCOACH_VALUE_LOSS, epsilon);
+    EXPECT_EQ(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN), CHESSCOACH_VALUE_WIN);
+    EXPECT_EQ(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW), CHESSCOACH_VALUE_DRAW);
+    EXPECT_EQ(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_LOSS), CHESSCOACH_VALUE_LOSS);
+
+    EXPECT_EQ(Game::ProbabilityToCentipawns(CHESSCOACH_VALUE_WIN), CHESSCOACH_CENTIPAWNS_WIN);
+    EXPECT_EQ(Game::ProbabilityToCentipawns(CHESSCOACH_VALUE_DRAW), CHESSCOACH_CENTIPAWNS_DRAW);
+    EXPECT_EQ(Game::ProbabilityToCentipawns(CHESSCOACH_VALUE_LOSS), CHESSCOACH_CENTIPAWNS_LOSS);
+
+    EXPECT_LT(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN - 1), CHESSCOACH_VALUE_WIN);
+    EXPECT_EQ(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN + 1), CHESSCOACH_VALUE_WIN);
+
+    EXPECT_GT(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_LOSS + 1), CHESSCOACH_VALUE_LOSS);
+    EXPECT_EQ(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_LOSS - 1), CHESSCOACH_VALUE_LOSS);
+
+    EXPECT_GT(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW + 1), CHESSCOACH_VALUE_DRAW);
+    EXPECT_LT(Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW - 1), CHESSCOACH_VALUE_DRAW);
+
+    const float sixDecimalPlaces = 1000000.f;
+    const int insufficientQuantum = 2;
+    EXPECT_EQ(std::round(sixDecimalPlaces * Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN - insufficientQuantum)) / sixDecimalPlaces, CHESSCOACH_VALUE_WIN);
+    EXPECT_NE(std::round(sixDecimalPlaces * Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN - CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM)) / sixDecimalPlaces, CHESSCOACH_CENTIPAWNS_WIN);
+    EXPECT_NE(std::round(sixDecimalPlaces * Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW - CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM)) / sixDecimalPlaces, CHESSCOACH_CENTIPAWNS_DRAW);
+    EXPECT_NE(std::round(sixDecimalPlaces * Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM)) / sixDecimalPlaces, CHESSCOACH_CENTIPAWNS_DRAW);
+    EXPECT_NE(std::round(sixDecimalPlaces * Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_LOSS + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM)) / sixDecimalPlaces, CHESSCOACH_CENTIPAWNS_LOSS);
 }
 
 TEST(Stockfish, EmptyPosition)

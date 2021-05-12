@@ -11,7 +11,7 @@
 #include <ChessCoach/SelfPlay.h>
 #include <ChessCoach/ChessCoach.h>
 
-void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
+void ApplyMoveExpandWithPattern(SelfPlayWorker& selfPlayWorker, SelfPlayGame& game, Move move, int patternIndex)
 {
     const MoveList legalMoves = MoveList<LEGAL>(game.GetPosition());
     const int legalMoveCount = static_cast<int>(legalMoves.size());
@@ -46,7 +46,7 @@ void ApplyMoveExpandWithPattern(SelfPlayGame& game, Move move, int patternIndex)
     Node* previousRoot = game.Root();
     game.Root()->bestChild = moveNode;
     game.StoreSearchStatistics();
-    game.ApplyMoveWithRootAndHistory(move, moveNode);
+    game.ApplyMoveWithRootAndHistory(move, moveNode, selfPlayWorker);
     game.PruneExcept(previousRoot, moveNode);
 }
 TEST(Network, Policy)
@@ -58,6 +58,7 @@ TEST(Network, Policy)
     std::vector<float> values(Config::Network.SelfPlay.PredictionBatchSize);
     std::vector<INetwork::OutputPlanes> policies(Config::Network.SelfPlay.PredictionBatchSize);
 
+    SelfPlayWorker dummyWorker(nullptr /* storage */, nullptr /* searchState */, 0 /* gameCount */);
     SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {}, false /* tryHard */, &images[0], &values[0], &policies[0]);
     
     MoveList legalMoves = MoveList<LEGAL>(game.GetPosition());
@@ -83,7 +84,7 @@ TEST(Network, Policy)
     Node* previousRoot = game.Root();
     game.Root()->bestChild = selected;
     game.StoreSearchStatistics();
-    game.ApplyMoveWithRootAndHistory(firstMove, selected);
+    game.ApplyMoveWithRootAndHistory(firstMove, selected, dummyWorker);
     game.PruneExcept(previousRoot, selected);
     game.Complete();
     std::unique_ptr<INetwork::OutputPlanes> labels(std::make_unique<INetwork::OutputPlanes>());
@@ -151,6 +152,7 @@ TEST(Network, CompressDecompress)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
+    SelfPlayWorker dummyWorker(nullptr /* storage */, nullptr /* searchState */, 0 /* gameCount */);
     SelfPlayGame game(nullptr, nullptr, nullptr);
 
     // Play some moves, generating mostly different policy distributions for each move.
@@ -162,7 +164,7 @@ TEST(Network, CompressDecompress)
     };
     for (int i = 0; i < moves.size(); i++)
     {
-        ApplyMoveExpandWithPattern(game, moves[i], i);
+        ApplyMoveExpandWithPattern(dummyWorker, game, moves[i], i);
     }
     game.Root()->terminalValue = TerminalValue::MateIn<1>(); // Fudge a non-draw so that flips are interesting.
     game.Complete();
@@ -231,6 +233,7 @@ TEST(Network, CompressDecompressSparse)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
+    SelfPlayWorker dummyWorker(nullptr /* storage */, nullptr /* searchState */, 0 /* gameCount */);
     SelfPlayGame game(nullptr, nullptr, nullptr);
 
     // Play some moves, generating mostly different policy distributions for each move.
@@ -242,7 +245,7 @@ TEST(Network, CompressDecompressSparse)
     };
     for (int i = 0; i < moves.size(); i++)
     {
-        ApplyMoveExpandWithPattern(game, moves[i], i);
+        ApplyMoveExpandWithPattern(dummyWorker, game, moves[i], i);
     }
     game.Root()->terminalValue = TerminalValue::MateIn<1>(); // Fudge a non-draw so that flips are interesting.
     game.Complete();

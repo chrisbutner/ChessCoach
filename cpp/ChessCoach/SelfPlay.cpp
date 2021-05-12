@@ -15,11 +15,7 @@
 #include "Config.h"
 #include "Pgn.h"
 #include "Random.h"
-
-TerminalValue TerminalValue::NonTerminal()
-{
-    return {};
-}
+#include "Syzygy.h"
 
 int8_t TerminalValue::Draw()
 {
@@ -40,7 +36,6 @@ int8_t TerminalValue::OpponentMateIn(int8_t n)
 
 TerminalValue::TerminalValue()
     : _value()
-    , _mateTerm(0.f)
 {
 }
 
@@ -52,35 +47,6 @@ TerminalValue::TerminalValue(const int8_t value)
 TerminalValue& TerminalValue::operator=(const int8_t value)
 {
     _value = value;
-
-    if (value > 0)
-    {
-        // Encourage visits to faster mates over slower mates. They're more promising (a mate-in-3
-        // is more likely to become a mate-in-1 than a mate-in-5) and it helps shape a better
-        // training target during self-play. In the end, SelectMove will pick the fastest mate
-        // regardless of visits though.
-        //
-        // This term needs to be multiplied by the exploration rate in order to keep up at high visit counts.
-        const int mateNSaturated = std::min(static_cast<int8_t>(Game::PuctMateTerm.size() - 1), value);
-        _mateTerm = Game::PuctMateTerm[mateNSaturated];
-    }
-    else
-    {
-        // No adjustment for opponent-mate-in-N. The goal of the search in that situation is already
-        // to go wide rather than deep and find some paths with value. Adding disincentives (with some
-        // variation of inverse exploration rate coefficient) can help exhaustive searches finish in
-        // fewer nodes in opponent-mate-in-N trees; however, the calculations slow down the search to
-        // more processing time overall despite fewer nodes, and worse principle variations are preferred
-        // before the exhaustive search finishes, because better priors get searched and disincentivized
-        // sooner. So, rely on every-other-step mate-in-N incentives to help guide search, and SelectMove
-        // preferring slower opponent mates (in the worst case).
-        //
-        // See Node::SetTerminalValue for more TerminalValue special-casing and explanation.
-        //
-        // Also, no adjustment for draws at the moment.
-        _mateTerm = 0.f;
-    }
-
     return *this;
 }
 
@@ -137,7 +103,36 @@ int8_t TerminalValue::EitherMateN() const
 
 float TerminalValue::MateScore(float explorationRate) const
 {
-    return (explorationRate * _mateTerm);
+    const int value = EitherMateN();
+    if (value > 0)
+    {
+        // Encourage visits to faster mates over slower mates. They're more promising (a mate-in-3
+        // is more likely to become a mate-in-1 than a mate-in-5) and it helps shape a better
+        // training target during self-play. In the end, SelectMove will pick the fastest mate
+        // regardless of visits though.
+        //
+        // This term needs to be multiplied by the exploration rate in order to keep up at high visit counts.
+        static_assert((1.f / (1 << 2)) == 0.25f);
+        static_assert((1.f / (1 << 3)) == 0.125f);
+        const float mateTerm = (value == 1) ? 1.f : (1.f / (1 << value));
+        return (explorationRate * mateTerm);
+    }
+    else
+    {
+        // No adjustment for opponent-mate-in-N. The goal of the search in that situation is already
+        // to go wide rather than deep and find some paths with value. Adding disincentives (with some
+        // variation of inverse exploration rate coefficient) can help exhaustive searches finish in
+        // fewer nodes in opponent-mate-in-N trees; however, the calculations slow down the search to
+        // more processing time overall despite fewer nodes, and worse principle variations are preferred
+        // before the exhaustive search finishes, because better priors get searched and disincentivized
+        // sooner. So, rely on every-other-step mate-in-N incentives to help guide search, and SelectMove
+        // preferring slower opponent mates (in the worst case).
+        //
+        // See Node::SetTerminalValue for more TerminalValue special-casing and explanation.
+        //
+        // Also, no adjustment for draws at the moment.
+        return 0.f;
+    }
 }
 
 // GCC doesn't like "Node() = default", needs a nested brace for terminalValue.
@@ -152,11 +147,13 @@ Node::Node()
     , valueAverage{}
     , valueWeight{}
     , upWeight{}
-    , expansion{}
     , terminalValue{ {} }
+    , expansion{}
+    , tablebaseRank{}
+    , tablebaseScore{}
+    , tablebaseBound{}
 {
 }
-
 
 Node::Node(const Node& other)
     : bestChild(other.bestChild.load(std::memory_order_relaxed))
@@ -169,8 +166,11 @@ Node::Node(const Node& other)
     , valueAverage(other.valueAverage.load(std::memory_order_relaxed))
     , valueWeight(other.valueWeight.load(std::memory_order_relaxed))
     , upWeight(other.upWeight.load(std::memory_order_relaxed))
-    , expansion(other.expansion.load(std::memory_order_relaxed))
     , terminalValue(other.terminalValue.load(std::memory_order_relaxed))
+    , expansion(other.expansion.load(std::memory_order_relaxed))
+    , tablebaseRank(other.tablebaseRank.load(std::memory_order_relaxed))
+    , tablebaseScore(other.tablebaseScore.load(std::memory_order_relaxed))
+    , tablebaseBound(other.tablebaseBound.load(std::memory_order_relaxed))
 {
 }
 
@@ -253,6 +253,29 @@ int Node::SampleValue(float movingAverageBuild, float movingAverageCap, float va
     return newWeight;
 }
 
+// If needed, this bounding can be merged with mate-proving and TerminalValue, but it all becomes very complicated.
+float Node::TablebaseBoundedValue(float value) const
+{
+    // It would be most correct to write score then bound with release-store, and read score then bound
+    // with acquire-load. However, we only backpropagate value, not bounds, so the worst-case impact is
+    // low on platforms that don't auto-release. Just take the risk and skip the fence for performance.
+    const float score = tablebaseScore.load(std::memory_order_relaxed);
+    const Bound bound = tablebaseBound.load(std::memory_order_relaxed);
+    switch (bound)
+    {
+    case BOUND_NONE:
+        return value;
+    case BOUND_UPPER:
+        return std::min(score, value);
+    case BOUND_LOWER:
+        return std::max(score, value);
+    case BOUND_EXACT:
+        return score;
+    default:
+        throw std::runtime_error("Unexpected Bound type");
+    }
+}
+
 void Node::SetTerminalValue(TerminalValue value)
 {
     const TerminalValue previous = terminalValue.exchange(value, std::memory_order_relaxed);
@@ -278,8 +301,24 @@ void Node::SetTerminalValue(TerminalValue value)
     //
     // In order to leave some texture behind, divide the prior by a large number rather than zeroing it.
     //
-    // See "TerminalValue::operator=" for more TerminalValue special-casing and explanation.
+    // See "TerminalValue::MateScore" for more TerminalValue special-casing and explanation.
     if (!previous.IsOpponentMateInN() && value.IsOpponentMateInN())
+    {
+        // Only this thread has permission to clobber the non-atomic prior field.
+        prior /= 1000.f;
+    }
+}
+
+void Node::SetTablebaseScoreBound(float score, Bound bound)
+{
+    // It would be most correct to write score then bound with release-store, and read score then bound
+    // with acquire-load. However, we only backpropagate value, not bounds, so the worst-case impact is
+    // low on platforms that don't auto-release. Just take the risk and skip the fence for performance.
+    tablebaseScore.store(score, std::memory_order_relaxed);
+    const Bound previousBound = tablebaseBound.exchange(bound, std::memory_order_relaxed);
+
+    // Follow the same logic as "SetTerminalValue()" for clearing exploration incentive for known losses.
+    if ((previousBound != BOUND_UPPER) && (bound == BOUND_UPPER))
     {
         // Only this thread has permission to clobber the non-atomic prior field.
         prior /= 1000.f;
@@ -445,7 +484,7 @@ void SelfPlayGame::ApplyMoveWithRoot(Move move, Node* newRoot)
     // Don't prepare an expanded root here because this is a common path; e.g. for scratch games also.
 }
 
-void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
+void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker)
 {
     ApplyMoveWithRoot(move, newRoot);
     _history.push_back(move);
@@ -454,7 +493,7 @@ void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot)
     assert(!TryHard());
     if (newRoot->IsExpanded())
     {
-        PrepareExpandedRoot();
+        selfPlayWorker.PrepareExpandedRoot(*this);
     }
 }
 
@@ -466,9 +505,10 @@ bool SelfPlayGame::TakeExpansionOwnership(Node* node)
     return node->expansion.compare_exchange_strong(expected, Expansion::Expanding, std::memory_order_relaxed);
 }
 
-float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, float firstPlayUrgency)
+float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot)
 {
     Node* root = _root;
+    const float firstPlayUrgency = (isSearchRoot ? CHESSCOACH_FIRST_PLAY_URGENCY_ROOT : CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
 
     // A known-terminal leaf will remain a leaf, so be prepared to
     // quickly return its terminal value on repeated visits.
@@ -589,6 +629,14 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         {
             // Expand child nodes with the cached priors.
             Expand(workingMoveCount, firstPlayUrgency);
+            
+            // Probe endgame tablebases for a WDL score for the parent.
+            // No need to update "cachedValue" here for a successful probe: handled generally in Backpropagate().
+            if (Syzygy::ProbeWdl(*this, isSearchRoot))
+            {
+                searchState->tablebaseHitCount.fetch_add(1, std::memory_order_relaxed);
+            }
+
             assert(state == SelfPlayState::Working);
             return cachedValue;
         }
@@ -617,6 +665,13 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
 
     // Expand child nodes with the calculated priors.
     Expand(moveCount, firstPlayUrgency);
+
+    // Probe endgame tablebases for a WDL score for the parent.
+    // No need to update "value" here for a successful probe: handled generally in Backpropagate().
+    if (Syzygy::ProbeWdl(*this, isSearchRoot))
+    {
+        searchState->tablebaseHitCount.fetch_add(1, std::memory_order_relaxed);
+    }
 
     // Store in the cache if appropriate.
     if (cacheStore)
@@ -648,7 +703,7 @@ void SelfPlayGame::Expand(int moveCount, float firstPlayUrgency)
 void SelfPlayGame::DebugExpandCanonicalOrdering()
 {
     _expandAndEvaluate_endMoves = generate<LEGAL>(_position, _expandAndEvaluate_moves);
-    std::sort(_expandAndEvaluate_moves, _expandAndEvaluate_endMoves, [&](auto a, auto b)
+    std::sort(_expandAndEvaluate_moves, _expandAndEvaluate_endMoves, [&](const ExtMove a, const ExtMove b)
         {
             return FlipMove(ToPlay(), a) < FlipMove(ToPlay(), b);
         });
@@ -786,42 +841,6 @@ void SelfPlayGame::PruneAllInternal(Node* node)
     node->childCount = 0;
 }
 
-void SelfPlayGame::UpdateGameForNewSearchRoot()
-{
-    // Update the search root ply for draw-checking.
-    _searchRootPly = Ply();
-
-    // If this new root is already expanded then we won't hit the "isSearchRoot" expansion in "RunMcts", so perform necessary preparations.
-    assert(TryHard());
-    if (_root->IsExpanded())
-    {
-        PrepareExpandedRoot();
-    }
-}
-
-// This is a common path for self-play and search, (a) when expanding an initial/updated root, or (b) when updating the root to an already-expanded child.
-// - For both self-play and search, case (a) is recognized by "isSearchRoot" in "RunMcts".
-// - For self-play, case (b) will almost always be hit after the starting position, since each immediate child should be visited at least once, and we reuse the MCTS tree.
-// - For search, case (b) will be hit when we're able to reuse an existing position; e.g., after moves have been played, or searching deeper positions without a "ucinewgame".
-void SelfPlayGame::PrepareExpandedRoot()
-{
-    // Set first-play urgency (FPU) to a win here for children of the root.
-    for (Node& child : *_root)
-    {
-        if (child.valueWeight.load(std::memory_order_relaxed) == 0)
-        {
-            float expected = CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT;
-            child.valueAverage.compare_exchange_strong(expected, CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed);
-        }
-    }
-
-    // Add exploration noise if not searching.
-    if (!TryHard())
-    {
-        AddExplorationNoise();
-    }
-}
-
 void SelfPlayGame::AddExplorationNoise()
 {
     std::gamma_distribution<float> gamma(Config::Network.SelfPlay.RootDirichletAlpha, 1.f);
@@ -843,6 +862,11 @@ void SelfPlayGame::AddExplorationNoise()
         assert(!std::isinf(normalized));
         child.prior = (child.prior * (1 - Config::Network.SelfPlay.RootExplorationFraction) + normalized * Config::Network.SelfPlay.RootExplorationFraction);
     }
+}
+
+void SelfPlayGame::UpdateSearchRootPly()
+{
+    _searchRootPly = Ply();
 }
 
 Move SelfPlayGame::ParseSan(const std::string& san)
@@ -867,6 +891,7 @@ void SearchState::Reset(const TimeControl& setTimeControl)
 
     nodeCount = 0;
     failedNodeCount = 0;
+    tablebaseHitCount = 0;
     principleVariationChanged = false;
 }
 
@@ -1031,7 +1056,7 @@ void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves
 
     // The additional moves are being applied to an existing game for efficiency, but really we're setting up
     // a new position, so make necessary updates.
-    game.UpdateGameForNewSearchRoot();
+    UpdateGameForNewSearchRoot(game);
 }
 
 void SelfPlayWorker::TrainNetwork(INetwork* network, NetworkType networkType, int step, int checkpoint)
@@ -1241,7 +1266,7 @@ void SelfPlayWorker::Play(int index)
 
         assert(selected != nullptr);
         game.StoreSearchStatistics();
-        game.ApplyMoveWithRootAndHistory(Move(selected->move), selected);
+        game.ApplyMoveWithRootAndHistory(Move(selected->move), selected, *this);
         game.PruneExcept(root, selected /* == game.Root() */);
         // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
         _searchState->principleVariationChanged.store(true, std::memory_order_release); // First move in PV is now gone.
@@ -1335,8 +1360,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         // because beyond trivially cached terminal evaluations, both depend on move generation.
         const bool wasImmediateMate = (scratchGame.Root()->terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>());
         const bool isSearchRoot = (game.Root() == scratchGame.Root());
-        const float firstPlayUrgency = (isSearchRoot ? CHESSCOACH_FIRST_PLAY_URGENCY_ROOT : CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
-        float value = scratchGame.ExpandAndEvaluate(state, cacheStore, firstPlayUrgency);
+        float value = scratchGame.ExpandAndEvaluate(state, cacheStore, _searchState, isSearchRoot);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             // Wait for network evaluation/priors to come back.
@@ -1387,7 +1411,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             game.Root()->upWeight.store(0, std::memory_order_relaxed);
 
             // Perform necessary preparations, like adding exploration noise for self-play games.
-            game.PrepareExpandedRoot();
+            PrepareExpandedRoot(game);
         }
 
         // Clear the search path after decrementing "visitingCount" to avoid duplicate decrement on search stop/resume.
@@ -1413,6 +1437,69 @@ void SelfPlayWorker::FailNode(std::vector<WeightedNode>& searchPath)
     }
     searchPath.clear();
     _searchState->failedNodeCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+void SelfPlayWorker::UpdateGameForNewSearchRoot(SelfPlayGame& game)
+{
+    // Update the search root ply for draw-checking.
+    game.UpdateSearchRootPly();
+
+    // If this new root is already expanded then we won't hit the "isSearchRoot" expansion in "RunMcts", so perform necessary preparations.
+    assert(game.TryHard());
+    if (game.Root()->IsExpanded())
+    {
+        PrepareExpandedRoot(game);
+    }
+}
+
+// This is a common path for self-play and search, (a) when expanding an initial/updated root, or (b) when updating the root to an already-expanded child.
+// - For both self-play and search, case (a) is recognized by "isSearchRoot" in "RunMcts".
+// - For self-play, case (b) will almost always be hit after the starting position, since each immediate child should be visited at least once, and we reuse the MCTS tree.
+// - For search, case (b) will be hit when we're able to reuse an existing position; e.g., after moves have been played, or searching deeper positions without a "ucinewgame".
+void SelfPlayWorker::PrepareExpandedRoot(SelfPlayGame& game)
+{
+    // Set first-play urgency (FPU) to a win here for children of the root.
+    for (Node& child : *game.Root())
+    {
+        // Only one thread can be working on this node: we've either just made a move in self-play/UCI, which is a single-threaded pause
+        // between multi-threaded work, or we've taken expansion ownership until we go back and set Expansion::Expanded.
+        //
+        // Therefore, it's safe to replace whatever FPU was there, as long as "valueWeight" is zero (e.g. replace draw-sibling-FPU, which could be anything).
+        //
+        // We may overwrite a root-probed tablebase score, but it will be restored on the first backpropagation because of the
+        // bounded value (see SelfPlayWorker::Backpropagate) and zero "valueWeight" (see Node::SampleValue).
+        if (child.valueWeight.load(std::memory_order_relaxed) == 0)
+        {
+            child.valueAverage.store(CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed);
+        }
+    }
+
+    // Add exploration noise if not searching.
+    if (!game.TryHard())
+    {
+        game.AddExplorationNoise();
+    }
+
+    // Probing endgame tablebases at the root is important for "last-resort" move selection
+    // in case the search doesn't find a good line concretely; e.g., especially when the
+    // no-progress count won't reset anymore, like in KBN vs. K.
+    //
+    // For endgames like King/Bishop/Knight vs. King (KBNK) we need distance-to-zero (DTZ) information
+    // in order to choose moves that preserve the win, not just based on the piece layout, but piece layout plus
+    // current 50-move/no-progress count.
+    //
+    // When there are too many pieces at the root to probe endgame tablebases, we can still try
+    // to probe individual leaf positions when they reach few enough pieces. We only probe win/draw/loss (WDL)
+    // "at zero", when progress has just been made (pawn move or capture). Accurate search is still very necessary.
+    if (Syzygy::ProbeTablebasesAtRoot(game))
+    {
+        // In addition to setting tablebase ranks, which we use even before proven mate categories for move selection,
+        // we just updated root child value: not just FPU, but bounded value for nodes with existing valueWeight too.
+        // Fix up the principle variation to take all of this into account. This may result in a "bestChild", or
+        // collected best children, with zero visits, which needs to be handled carefully.
+        _searchState->tablebaseHitCount.fetch_add(game.Root()->childCount, std::memory_order_relaxed);
+        FixPrincipleVariation({ { game.Root(), 0 }, { game.Root(), 0 } }, game.Root());
+    }
 }
 
 Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) const
@@ -1469,13 +1556,15 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         {
             return best.back();
         }
-        // CollectBestMoves only selects from the same mate category as "bestMove", so "bestMove" has the most visits among the collected.
-        // Re-exponentiate using temperature=10. |(N/max(N))^(1/t)| gives the same result as softmax(log(N)/t) but skips the logarithm.
-        const float bestVisitCount = static_cast<float>(bestChild->visitCount.load(std::memory_order_relaxed));
+        // CollectBestMoves only selects from the same tablebase rank/mate categories as "bestMove", so "bestMove" has the most visits among the collected.
+        // Re-exponentiate using different temperature. |(N/max(N))^(1/t)| gives the same result as softmax(log(N)/t) but skips the logarithm.
+        //
+        // Set visit counts to at least one in case nodes are best-collected because of a root tablebase probe.
+        const float bestVisitCount = static_cast<float>(std::max(1, bestChild->visitCount.load(std::memory_order_relaxed)));
         std::vector<float> bestWeights(best.size());
         for (int i = 0; i < best.size(); i++)
         {
-            bestWeights[i] = std::pow(static_cast<float>(best[i]->visitCount.load(std::memory_order_relaxed)) / bestVisitCount, 1.f / Config::Network.SelfPlay.MoveDiversityTemperature);
+            bestWeights[i] = std::pow(static_cast<float>(std::max(1, best[i]->visitCount.load(std::memory_order_relaxed))) / bestVisitCount, 1.f / Config::Network.SelfPlay.MoveDiversityTemperature);
         }
         std::discrete_distribution distribution(bestWeights.begin(), bestWeights.end());
         return best[distribution(Random::Engine)];
@@ -1613,16 +1702,26 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
         node->visitCount.fetch_add(1, std::memory_order_relaxed);
         if (weight)
         {
+            // If this node has a tablebase score/bound set then we know we can achieve at least/exactly/at most that,
+            // so backpropagate the bounded value up the tree.
+            //
+            // Also, if this node has a tablebase score/bound set and we picked a sub-par exploration-only node down below
+            // (i.e. weight is now zero, and we didn't reach this point), we could restart the weight chain, since we know
+            // that the bounded value accurately represents the node. However, this has performance impact, and may not be necessary.
+            value = node->TablebaseBoundedValue(value);
+
             const int newWeight = node->SampleValue(movingAverageBuild, movingAverageCap, value);
             if (previous)
             {
                 previous->upWeight.fetch_add(1, std::memory_order_relaxed);
             }
 
+            // Implement "draw-sibling-FPU":
+            //
             // When a leaf node is first visited and the value is an exact draw, update the first-play urgency (FPU)
             // of the draw's siblings to the root's value (flipped if necessary), so that if a player has a winning position,
             // they are not forced to keep visiting and backpropagating a draw that was encountered by surprise with a high prior.
-            // This obviates the need for flood protection in small sub-trees, and solves more problems in practice.
+            // This removes the need for flood protection in small sub-trees, and solves more problems in practice.
             //
             // There are two potential issues with this logic:
             // - The neural network evaluation or quantized prediction cache evaluation may exactly equal a draw score.
@@ -1784,7 +1883,7 @@ void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
         const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
         for (const Node& child : *root)
         {
-            if (child.visitCount > 0)
+            if (child.visitCount.load(std::memory_order_relaxed) > 0)
             {
                 assert(!WorseThan(bestChild, &child));
             }
@@ -1802,6 +1901,20 @@ bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
         return true;
     }
 
+    // It's important to differentiate using tablebase rank first, when known, since this gives absolute
+    // guarantees on preserving a win or draw when distance-to-zero (DTZ) information is available.
+    //
+    // When ranks are the same - e.g. two different wins with no repetition since last progress - we can use
+    // proven mates discovered through search to choose a faster win.
+    //
+    // With perfect search, we could find a faster mate than the "safe" Syzygy route, since Syzygy tables don't
+    // include distance-to-mate (DTM) information. However, if we considered proven mate information before
+    // tablebase rank we could end up drawing via the 50-move rule, so choose the safest route.
+    if (lhs->tablebaseRank != rhs->tablebaseRank)
+    {
+        return lhs->tablebaseRank < rhs->tablebaseRank;
+    }
+
     // Prefer faster mates and slower opponent mates.
     int lhsEitherMateN = lhs->terminalValue.load(std::memory_order_relaxed).EitherMateN();
     int rhsEitherMateN = rhs->terminalValue.load(std::memory_order_relaxed).EitherMateN();
@@ -1816,7 +1929,7 @@ bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
     }
 
     // Prefer more visits.
-    return (lhs->visitCount < rhs->visitCount);
+    return (lhs->visitCount.load(std::memory_order_relaxed) < rhs->visitCount.load(std::memory_order_relaxed));
 }
 
 std::vector<Node*> SelfPlayWorker::CollectBestMoves(Node* parent, float valueDeltaThreshold) const
@@ -1824,12 +1937,15 @@ std::vector<Node*> SelfPlayWorker::CollectBestMoves(Node* parent, float valueDel
     Node* bestChild = parent->bestChild.load(std::memory_order_relaxed);
     assert(bestChild);
     std::vector<Node*> best = { bestChild };
+    const int bestTablebaseRank = bestChild->tablebaseRank.load(std::memory_order_relaxed);
     const int bestEitherMateN = bestChild->terminalValue.load(std::memory_order_relaxed).EitherMateN();
     const float valueThreshold = (bestChild->Value() - valueDeltaThreshold);
     for (Node& child : *parent)
     {
-        // Other candidates must be in the same mate category as the best child.
-        if ((&child == bestChild) || (child.terminalValue.load(std::memory_order_relaxed).EitherMateN() != bestEitherMateN))
+        // Other candidates must be in the same tablebase rank and mate categories as the best child.
+        if ((&child == bestChild) ||
+            (child.tablebaseRank.load(std::memory_order_relaxed) != bestTablebaseRank) ||
+            (child.terminalValue.load(std::memory_order_relaxed).EitherMateN() != bestEitherMateN))
         {
             continue;
         }
@@ -2273,6 +2389,7 @@ void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
     const int depth = static_cast<int>(principleVariation.size());
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState->nodeCount.load(std::memory_order_relaxed);
+    const int tablebaseHitCount = _searchState->tablebaseHitCount.load(std::memory_order_relaxed);
     const float searchTimeSeconds = std::chrono::duration<float>(sinceSearchStart).count();
     const int nodesPerSecond = static_cast<int>(nodeCount / searchTimeSeconds);
     const int failedNodesPerSecond = static_cast<int>(_searchState->failedNodeCount.load(std::memory_order_relaxed) / searchTimeSeconds);
@@ -2295,7 +2412,7 @@ void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
     {
         std::cout << " fnps " << failedNodesPerSecond;
     }
-    std::cout << " time " << searchTimeMs << " hashfull " << hashfullPermille;
+    std::cout << " tbhits " << tablebaseHitCount << " time " << searchTimeMs << " hashfull " << hashfullPermille;
     if (debug)
     {
         std::cout << " hashhit " << PredictionCache::Instance.PermilleHits()

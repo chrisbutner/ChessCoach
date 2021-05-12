@@ -1,7 +1,7 @@
-Endgame tablebases (e.g. using some Stockfish Syzygy code: probably no need for DTZ?)
-- strength getting up there, worth a shot to push further
-- need to log "tbhits"
-- don't backprop value < parent value if both are WDL probes/terminalValues
+Check UCI/search MCTS details
+- does mctsSimulation in RunMcts ever overflow for TryHard()?
+- do we ever call SelectMove() after 1k loops for TryHard()?
+- once a node fails, are the rest guaranteed to follow the same path and fail on the same thread? short-circuit?
 
 Elimination budget
 - calculate 0-1 t factor based on remaining time
@@ -12,6 +12,7 @@ Training
 - after plateauing - try teacher-only prediction w/ SWA again (conditional config if it works)
 - full run - 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
 	- need to emulate parallelism/vloss/wideband for the 50k, or 1*1 okay?
+- full run - 15% chance to syzygy probe root or WDL deeper during self-play - acts like auxiliary head at low loss weight, points good direction
 - full run - add repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
 
 Commentary #3
@@ -117,6 +118,7 @@ Code quality
 - add Python type info everywhere - look up best practices for linting etc.
 - check for any unnecessary move constructors
 - StrengthTestNetwork (naming)
+- tail common code in ExpandAndEvaluate? (goto?)
 
 Deployment
 - re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
@@ -146,9 +148,6 @@ Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
 - Mixed precision (depends on specific hardware, complicates code)
 - Richer UCI features like multiPV or ponder
-- endgame tablebases (e.g. leveraging Stockfish probing code)
-	- UCI: not interesting enough, others can add if going for pure strength
-	- Training: complicated, scope too large - self-play needs to make mistakes to learn imbalances
 - contempt (self-play or UCI)
 - ~100MB-sized chunks
 	- complicated by supervised vs. self-play size, and time between networks for small self-play clusters

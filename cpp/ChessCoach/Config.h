@@ -105,6 +105,8 @@ struct SelfPlayConfig
     float MoveDiversityValueDeltaThreshold;
     float MoveDiversityTemperature;
 
+    std::string SyzygyPath;
+
     bool WaitForUpdatedNetwork;
 };
 

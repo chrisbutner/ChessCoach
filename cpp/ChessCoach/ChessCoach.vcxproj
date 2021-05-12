@@ -302,6 +302,7 @@
     <ClCompile Include="SavedGame.cpp" />
     <ClCompile Include="SelfPlay.cpp" />
     <ClCompile Include="Storage.cpp" />
+    <ClCompile Include="Syzygy.cpp" />
     <ClCompile Include="Threading.cpp" />
     <ClCompile Include="WorkerGroup.cpp" />
   </ItemGroup>
@@ -336,6 +337,7 @@
     <ClInclude Include="SavedGame.h" />
     <ClInclude Include="SelfPlay.h" />
     <ClInclude Include="Storage.h" />
+    <ClInclude Include="Syzygy.h" />
     <ClInclude Include="Threading.h" />
     <ClInclude Include="WorkerGroup.h" />
   </ItemGroup>

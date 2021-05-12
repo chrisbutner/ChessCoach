@@ -19,6 +19,13 @@ constexpr const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
 constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT = CHESSCOACH_VALUE_LOSS;
 constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY_ROOT = CHESSCOACH_VALUE_WIN;
 
+constexpr const static int CHESSCOACH_CENTIPAWNS_WIN = 12800;
+constexpr const static int CHESSCOACH_CENTIPAWNS_DRAW = 0;
+constexpr const static int CHESSCOACH_CENTIPAWNS_LOSS = -12800;
+
+// Could choose a smaller quantum for draws because of the non-uniform mapping, but keep it simple for now.
+constexpr const static int CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM = 3;
+
 class Game
 {
 public:
@@ -34,7 +41,7 @@ public:
     constexpr static float CentipawnConversionPhase = 1.5620688421f;
     constexpr static float CentipawnConversionScale = 111.714640912f;
 
-    inline static float CentipawnsToProbability(float centipawns)
+    inline static float CentipawnsToProbability(int centipawns)
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
         const float probability11 = (::atanf(centipawns / CentipawnConversionScale) / CentipawnConversionPhase);
@@ -42,12 +49,12 @@ public:
         return std::clamp(probability01, 0.f, 1.f);
     }
 
-    inline static float ProbabilityToCentipawns(float probability01)
+    inline static int ProbabilityToCentipawns(float probability01)
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
         const float probability11 = INetwork::MapProbability01To11(probability01);
         const float centipawns = (::tanf(probability11 * CentipawnConversionPhase) * CentipawnConversionScale);
-        return centipawns;
+        return std::lround(centipawns);
     }
 
     constexpr static Move FlipMove(Color color, Move move)
@@ -119,8 +126,6 @@ public:
         "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
     };
 
-    static std::array<float, 25> PuctMateTerm;
-
 public:
 
     Game();
@@ -151,6 +156,7 @@ public:
     void GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const;
     void GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIndices, const float* policyValues, INetwork::OutputPlanes& policyOut);
     const Position& GetPosition() const;
+    Position& GetPosition();
 
     inline Position& DebugPosition() { return _position; }
 
@@ -197,6 +203,9 @@ private:
 static_assert(CHESSCOACH_VALUE_WIN > CHESSCOACH_VALUE_DRAW);
 static_assert(CHESSCOACH_VALUE_DRAW > CHESSCOACH_VALUE_LOSS);
 static_assert(CHESSCOACH_VALUE_UNINITIALIZED == CHESSCOACH_VALUE_UNINITIALIZED);
+
+static_assert(CHESSCOACH_CENTIPAWNS_WIN > CHESSCOACH_CENTIPAWNS_DRAW);
+static_assert(CHESSCOACH_CENTIPAWNS_DRAW > CHESSCOACH_CENTIPAWNS_LOSS);
 
 static_assert(Game::FlipValue(CHESSCOACH_VALUE_WIN) == CHESSCOACH_VALUE_LOSS);
 static_assert(Game::FlipValue(CHESSCOACH_VALUE_LOSS) == CHESSCOACH_VALUE_WIN);

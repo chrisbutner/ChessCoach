@@ -6,7 +6,6 @@
 
 int Game::QueenKnightPlane[SQUARE_NB];
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
-std::array<float, 25> Game::PuctMateTerm;
 thread_local PoolAllocator<StateInfo, Game::BlockSizeBytes> Game::StateAllocator;
 
 StateInfo* Game::AllocateState()
@@ -52,16 +51,6 @@ void Game::Initialize()
     {
         PredictionCache_NoProgressCount[i] = rng.rand<Key>();
     }
-
-    // Set up scores for various mate-in-N to encourage visits and differentiate depths.
-    PuctMateTerm[0] = 0.f;
-    PuctMateTerm[1] = 1.f;
-    for (int n = 2; n < PuctMateTerm.size(); n++)
-    {
-        PuctMateTerm[n] = (1.f / (1 << n));
-    }
-    assert(PuctMateTerm[2] == 0.25f);
-    assert(PuctMateTerm[3] == 0.125f);
 }
 
 Game::Game()
@@ -194,9 +183,9 @@ Move Game::ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces)
 
 Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
 {
-    // Walk through legal moves from highest value to lowest and pick the first one that matches the game result.
+    // Walk through legal moves from highest policy value to lowest and pick the first one that matches the game result.
     // We don't have enough information here to fully replicate "SelfPlayWorker::WorseThan" logic, e.g. "TerminalValue"
-    // and mate-proving, but hopefully at MCTS time that guided the "bestNode" to the highest value in time.
+    // and mate-proving, but hopefully at MCTS time that guided the "bestNode" to the highest policy value in time.
     //
     // This guess can definitely be wrong though and shouldn't be trusted too much. It's irrelevant for training and
     // is mainly to allow sane PGN generation for the debug GUI.
@@ -442,6 +431,11 @@ void Game::GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIn
 }
 
 const Position& Game::GetPosition() const
+{
+    return _position;
+}
+
+Position& Game::GetPosition()
 {
     return _position;
 }

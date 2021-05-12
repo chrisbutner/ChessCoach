@@ -18,12 +18,9 @@
 #include "PredictionCache.h"
 #include "Epd.h"
 
-// Add "alignas(8)" to side-step ABI back-compatibility issue on Windows.
-class alignas(8) TerminalValue
+class TerminalValue
 {
 public:
-
-    static TerminalValue NonTerminal();
 
     static int8_t Draw();
 
@@ -72,7 +69,6 @@ public:
 private:
 
     std::optional<int8_t> _value;
-    float _mateTerm;
 };
 
 enum class Expansion : uint8_t
@@ -104,7 +100,9 @@ public:
     float Value() const;
     float ValueWithVirtualLoss() const;
     int SampleValue(float movingAverageBuild, float movingAverageCap, float value);
+    float TablebaseBoundedValue(float value) const;
     void SetTerminalValue(TerminalValue value);
+    void SetTablebaseScoreBound(float score, Bound bound);
 
     Node* Child(Move match);
 
@@ -112,19 +110,27 @@ public:
 
     std::atomic<Node*> bestChild;
     Node* children;
+
     int32_t childCount;
     float prior;
     uint16_t move;
     std::atomic_uint16_t visitingCount;
     std::atomic_int visitCount;
+
     std::atomic<float> valueAverage;
     std::atomic_int valueWeight;
     std::atomic_int upWeight;
-    std::atomic<Expansion> expansion;
-    uint8_t padding[11];
     std::atomic<TerminalValue> terminalValue;
+    std::atomic<Expansion> expansion;
+    uint8_t padding1[1];
+
+    std::atomic_int tablebaseRank;
+    std::atomic<float> tablebaseScore;
+    std::atomic<Bound> tablebaseBound;
+    uint8_t padding2[4];
 };
-static_assert(sizeof(TerminalValue) == 8);
+static_assert(sizeof(TerminalValue) == 2);
+static_assert(sizeof(Expansion) == 1);
 static_assert(sizeof(Node) == 64);
 static_assert(alignof(Node) == 64);
 
@@ -200,6 +206,9 @@ struct TimeControl
     int movesToGo;
 };
 
+class SelfPlayWorker;
+struct SearchState;
+
 class SelfPlayGame : public Game
 {
 public:
@@ -221,8 +230,8 @@ public:
 
     bool TryHard() const;
     void ApplyMoveWithRoot(Move move, Node* newRoot);
-    void ApplyMoveWithRootAndHistory(Move move, Node* newRoot);
-    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, float firstPlayUrgency);
+    void ApplyMoveWithRootAndHistory(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker);
+    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot);
     void Expand(int moveCount, float firstPlayUrgency);
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
@@ -232,8 +241,8 @@ public:
     SavedGame Save() const;
     void PruneExcept(Node* root, Node*& except);
     void PruneAll();
-    void UpdateGameForNewSearchRoot();
-    void PrepareExpandedRoot();
+    void AddExplorationNoise();
+    void UpdateSearchRootPly();
 
     Move ParseSan(const std::string& san);
 
@@ -241,7 +250,6 @@ public:
 
 private:
 
-    void AddExplorationNoise();
     bool TakeExpansionOwnership(Node* node);
     void PruneAllInternal(Node* root);
 
@@ -292,6 +300,7 @@ struct SearchState
     std::atomic_bool debug;
     std::atomic_int nodeCount;
     std::atomic_int failedNodeCount;
+    std::atomic_int tablebaseHitCount;
     std::atomic_bool principleVariationChanged;
 };
 
@@ -340,6 +349,9 @@ public:
     void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
     void DebugResetGame(int index);
 
+    void UpdateGameForNewSearchRoot(SelfPlayGame& game);
+    void PrepareExpandedRoot(SelfPlayGame& game);
+
     void SearchUpdatePosition(const std::string& fen, const std::vector<Move>& moves, bool forceNewPosition);
     void CommentOnPosition(INetwork* network);
     PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
@@ -363,6 +375,10 @@ private:
     void PrintPrincipleVariation(bool searchFinished);
     void SearchInitialize(const SelfPlayGame* position);
     void SearchPlay();
+
+    void ProbeTablebasesAtRoot(SelfPlayGame& game) const;
+    bool ProbeDtzAtRoot(SelfPlayGame& game) const;
+    bool ProbeWdlAtRoot(SelfPlayGame& game) const;
 
     std::tuple<Move, int, int> StrengthTestPosition(WorkCoordinator* workCoordinator, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes);
     std::pair<int, int> JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes);
