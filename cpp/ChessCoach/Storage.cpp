@@ -231,13 +231,16 @@ void Storage::SaveChunk(const std::filesystem::path& path, const std::vector<Sav
     }
 }
 
+// This is only used to drive the ChessCoachGui tool. TFRecords are normally loaded
+// using the tf.data pipeline in dataset.py but that's 100x-1000x too slow for
+// random access to games and positions.
 void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex, SavedGame* gameOut)
 {
     google::protobuf::io::ArrayInputStream wrapped(chunkContents.data(), static_cast<int>(chunkContents.size()));
     google::protobuf::io::GzipInputStream zip(&wrapped, google::protobuf::io::GzipInputStream::ZLIB);
 
     // The chunk is stored as a bunch of concatenated TFRecords, using zlib.
-    for (int i = 0; i < gameIndex - 1; i++)
+    for (int i = 0; i < gameIndex; i++)
     {
         if (!SkipTfRecord(zip))
         {
