@@ -4,7 +4,7 @@
 
 [network]
 
-network_name = "selfplay7"
+network_name = "selfplay8"
 role = "train|play"
 
 [[networks]]
@@ -34,7 +34,7 @@ role = "train|play"
 
 [[networks]]
 
-    name = "selfplay7"
+    name = "selfplay8"
 
     [networks.training]
 
@@ -54,7 +54,7 @@ role = "train|play"
         { stage = "strength_test", target = "student" },
     ]
 
-    games_path_training = "Games/Fresh3"
+    games_path_training = "Games/Fresh4"
 
 [[networks]]
 
