@@ -211,7 +211,7 @@ backpropagation_puct_threshold = 0.98
 elimination_base = 8.0
 elimination_rate = 3.0
 move_diversity_value_delta_threshold = 0.01
-move_diversity_temperature = 0.75
+move_diversity_temperature = 0.0
 
 syzygy_path = ""
 

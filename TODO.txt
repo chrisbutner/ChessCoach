@@ -72,6 +72,7 @@ PUCT - expensive/failed ideas
 PUCT - finishing
 - ablate PUCT terms, trim down to just parallelism/mate improvements, confidently measure what helps
 - need long long search time parameter optimization for 1.25+ constant, e.g. applying similar to new terms
+- try UCI move diversity again, maybe visit% threshold param, maybe first N moves param, optimize
 
 PUCT - later
 - try use saturation point of visits/ucb to extend 800 simulations or UCI time control if visits would exceed current best
