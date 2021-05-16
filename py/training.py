@@ -143,13 +143,17 @@ class Trainer:
     if teacher_network:
       model.init(teacher_network)
 
+    # Prepare learning rate schedule.
+    model.optimizer.iterations.assign(initial_epoch * steps_per_epoch, read_value=False)
+    if log:
+      learning_rate = model.optimizer.learning_rate(model.optimizer.iterations) if callable(model.optimizer.learning_rate) else model.optimizer.learning_rate
+      self.log("Learning rate:", learning_rate.numpy().item())
+
     # Train.
     callbacks = [LogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)] if log else []
     model.fit(data_training, verbose=0, callbacks=callbacks,
       validation_data=data_validation, validation_steps=1, validation_freq=1,
       steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
-    if log:
-      self.log("Learning rate:", model.optimizer.learning_rate(model.optimizer._iterations).numpy().item())
 
   def train_commentary(self, network, starting_step, checkpoint):
     # Create models on the distribution strategy scope
@@ -173,11 +177,15 @@ class Trainer:
     initial_epoch = (starting_step - 1) // validation_interval
     epochs = checkpoint // validation_interval
 
+    # Prepare learning rate schedule.
+    model.optimizer.iterations.assign(initial_epoch * steps_per_epoch, read_value=False)
+    learning_rate = model.optimizer.learning_rate(model.optimizer.iterations) if callable(model.optimizer.learning_rate) else model.optimizer.learning_rate
+    self.log("Learning rate:", learning_rate.numpy().item())
+
     # Train.
     log_callback = CommentaryLogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)
     model.fit(data_commentary_training, verbose=0, callbacks=[log_callback],
       steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
-    self.log("Learning rate:", model.optimizer.learning_rate(model.optimizer._iterations).numpy().item())
 
   def log_scalars(self, network, step, names, values):
     network.ensure_tensorboard()
