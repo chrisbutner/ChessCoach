@@ -588,7 +588,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
         }
 
         Node* root = puctGame.Root();
-        PuctContext puctContext(root);
+        PuctContext puctContext(&_workerGroup.searchState, root);
         for (const Node& child : *root)
         {
             if (csv)

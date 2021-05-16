@@ -159,11 +159,14 @@ struct ScoredNode
     }
 };
 
+class SelfPlayWorker;
+struct SearchState;
+
 class PuctContext
 {
 public:
 
-    PuctContext(Node* parent);
+    PuctContext(const SearchState* searchState, Node* parent);
     WeightedNode SelectChild() const;
     float CalculatePuctScoreAdHoc(const Node* child) const;
 
@@ -204,10 +207,10 @@ struct TimeControl
     int64_t timeRemainingMs[COLOR_NB];
     int64_t incrementMs[COLOR_NB];
     int movesToGo;
-};
 
-class SelfPlayWorker;
-struct SearchState;
+    float eliminationFraction;
+    int eliminationRootVisitCount;
+};
 
 class SelfPlayGame : public Game
 {
@@ -375,10 +378,6 @@ private:
     void PrintPrincipleVariation(bool searchFinished);
     void SearchInitialize(const SelfPlayGame* position);
     void SearchPlay();
-
-    void ProbeTablebasesAtRoot(SelfPlayGame& game) const;
-    bool ProbeDtzAtRoot(SelfPlayGame& game) const;
-    bool ProbeWdlAtRoot(SelfPlayGame& game) const;
 
     std::tuple<Move, int, int> StrengthTestPosition(WorkCoordinator* workCoordinator, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes);
     std::pair<int, int> JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes);

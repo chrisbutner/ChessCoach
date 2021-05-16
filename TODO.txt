@@ -3,12 +3,8 @@ Check UCI/search MCTS details
 - do we ever call SelectMove() after 1k loops for TryHard()?
 - once a node fails, are the rest guaranteed to follow the same path and fail on the same thread? short-circuit?
 
-Elimination budget
-- calculate 0-1 t factor based on remaining time
-	- cycle that for inf style, doubling fake remaining each time reached
-	- at root use raw t - at others, take base-2-log/exp of parent visits vs. root visits and compensate schedule because starting later
-
 Training
+- add back forced playouts + pruning? or add 8x virtual virtual loss during self-play?
 - after plateauing - try teacher-only prediction w/ SWA again (conditional config if it works)
 - full run - 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
 	- need to emulate parallelism/vloss/wideband for the 50k, or 1*1 okay?
@@ -43,31 +39,24 @@ Commentary #5
 	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
 
 PUCT - medium confidence
-- try prior flattening with high nodes again, despite linear
+- try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
 	- 3qkb1r/3n1ppp/R1Npp3/6P1/QPr2P2/2P5/7P/4R1K1 b k - 2 27 - need Rxc6, avoid Qc8
+	- kr6/ppq3b1/2pNQ1p1/7p/7P/1R4P1/P4PB1/3n2K1 w - - 0 32 - find Rxb7 M10 - gets stuck on Ne8
 	- can also help more backprops go to value rather than value+prior at high node counts
 - try blend in prior softening towards endgame
 	- 8/2Q5/8/2k5/6K1/8/3r4/q7 b - - 38 113 - avoid Kd4 - work around overly sharp priors
-- try a more absolute linear term too - but higher value still needs to take over on visit count (quickly if possible) for best-move preference
-	- (sounds exactly like prior flattening)
-	- kr6/ppq3b1/2pNQ1p1/7p/7P/1R4P1/P4PB1/3n2K1 w - - 0 32 - find Rxb7 M10 - gets stuck on Ne8
 - try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
 	- try hard exhaustive term (e.g. 1 per child after N visits - maybe M grandparent visits)
 	- 8/8/8/2P3R1/5B2/2rP1p2/p1P1PP2/RnQ1K2k w Q - 5 3 - find M2
 - try value stddev
 - last all-out attempt at position #3
 	- try last-value again but scaled down (constant or f(n))
-	- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing
+	- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing - decay
 - think of ways to catch up visits when suddenly finding value at very high nodes
 	- some kind of high-trust/verification PUCT saturation calc?
 	- backpropagate more than 1 weight/visit per, for high overall visits + deep leaf?
 - work on making more progress in endgames - may be worse now with higher NPS from cache-as-TT
 	- 8/8/8/4ppk1/8/8/6K1/8 b - - 0 84
-
-PUCT - expensive/failed ideas
-- catch up on unpropagated value when returning via AZPUCT (+upSum, +upWeight)
-- regret-pruning (+upSum, +upWeight)
-- RAVE term, decaying with exploration (+amafSum, +amafWeight)
 
 PUCT - finishing
 - ablate PUCT terms, trim down to just parallelism/mate improvements, confidently measure what helps
@@ -83,32 +72,27 @@ PUCT - later
 UCI
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
 	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
-- already forcing value() for proved mate/opponent mate, but investigate positions and see whether mate term still helps M3 vs. M2, etc.
-	- read over notes from initial work there, check for pitfalls
-	- only count as UCI "node" when expanding, not when terminal - same with initial expansions? - same with simulation count (800)?
-- profile CPU again
-	- try vectorize/GPU softmax/UCT calcs
 - tail Backpropagate into BackpropagateVisitsOnly
 - basic improvements to time control
-	- don't waste time when only 1 or few legal moves
-	- if dangerous time left, take mate-in-N rather than trying to find faster
-- mate
-	- if root node's terminal value is known, and allowed to stop searching, make a move instantly and save time
-	- add global depth cut-off (a little tricky, need to allow MCTS to "back up" and ban paths that don't reach a leaf in time)
-	- add killer heuristic (needs to vanish quickly with exploration)
-		- test with M1 position with M1 prior artifically set low for ply 0
-		- also strength-test
-	- forced draw propagation if it'll help
-- look into LCB move selection (Wu, LZ)
+	- don't waste time when only 1 legal move
+	- if dangerous time left, take mate-in-N or TB win rather than trying to find faster
 - workaround for .exe vs. non in ChessBase - can we probe for virtuals and activate before initializing python?
 - implement remaining commands/options - searchmoves - spin option min/max - check spec again
 - set prediction cache size (hash size) by MiB - more consistent with other engines, already mostly supported
 - cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
-- any more prediction cache tuning for self-play? - hits about 70% full 40% hit rate after 3142 games, 12 ply max
 
 GUI
 - don't error on supervised data - use prior, no need to match result (often adjudicated)
 - change the square background rather than adding overlay, need more consistency between black/white squares
+
+Bugs
+- "quit" without "stop" hangs UCI
+- "quit" after multiple "go" commands can hang UCI
+- Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
+- Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
+- SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
+- Rare ephemeral storage issue on cluster, might be core dumps
+- shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
 
 Code quality
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
@@ -133,17 +117,6 @@ Publishing
 - write-ups
 - final network weights, optimization run (30s move tournament mode)
 - website - game-in-10, one at a time, people can watch, comments shown for each move
-	
-Bugs
-- "quit" without "stop" hangs UCI
-- "quit" after multiple "go" commands can hang UCI
-- Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
-- Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
-- SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
-- Rare ephemeral storage issue on cluster, might be core dumps
-
-Low priority
-- shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)

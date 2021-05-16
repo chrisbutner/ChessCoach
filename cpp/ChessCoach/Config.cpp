@@ -307,8 +307,7 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.MovingAverageBuild, config, "moving_average_build");
     policy.template Parse<float>(selfPlay.MovingAverageCap, config, "moving_average_cap");
     policy.template Parse<float>(selfPlay.BackpropagationPuctThreshold, config, "backpropagation_puct_threshold");
-    policy.template Parse<float>(selfPlay.EliminationBase, config, "elimination_base");
-    policy.template Parse<float>(selfPlay.EliminationRate, config, "elimination_rate");
+    policy.template Parse<int>(selfPlay.EliminationBaseExponent, config, "elimination_base_exponent");
     policy.template Parse<float>(selfPlay.MoveDiversityValueDeltaThreshold, config, "move_diversity_value_delta_threshold");
     policy.template Parse<float>(selfPlay.MoveDiversityTemperature, config, "move_diversity_temperature");
 

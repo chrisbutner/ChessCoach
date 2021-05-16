@@ -1335,7 +1335,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
             {
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration.
-                WeightedNode selected = PuctContext(scratchGame.Root()).SelectChild();
+                WeightedNode selected = PuctContext(_searchState, scratchGame.Root()).SelectChild();
                 if (!selected.node)
                 {
                     assert(game.TryHard());
@@ -1578,7 +1578,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
 
 thread_local std::vector<ScoredNode> PuctContext::ScoredNodes;
 
-PuctContext::PuctContext(Node* parent)
+PuctContext::PuctContext(const SearchState* searchState, Node* parent)
     : _parent(parent)
 {
     // Pre-compute repeatedly-used terms.
@@ -1590,11 +1590,19 @@ PuctContext::PuctContext(Node* parent)
         (std::log((_parentVirtualExploration + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
         std::sqrt(_parentVirtualExploration);
 
-    _eliminationTopCount = std::min(parent->childCount,
-        std::max(2,
-            static_cast<int>(
-                std::pow(2.f, Config::Network.SelfPlay.EliminationBase - std::log(_parentVirtualExploration / 1000.f) / std::log(Config::Network.SelfPlay.EliminationRate))
-                )));
+    // At the root, use "eliminationFraction" to exponentially decay down from the top 64 to top 2 children based on AZ-PUCT score,
+    // with only the top K receiving SBLE-PUCT linear exploration incentive.
+    //
+    // At other nodes with fewer visits, eliminate less harshly early on, based on the fraction of root visits.
+    //
+    // Bound to at least 2, then at most the child count.
+    const int eliminationExponent = std::max(1, Config::Network.SelfPlay.EliminationBaseExponent -
+        static_cast<int>(searchState->timeControl.eliminationFraction * Config::Network.SelfPlay.EliminationBaseExponent));
+    const int parentVisitCount = std::max(1, _parent->visitCount.load(std::memory_order_relaxed));
+    const int rootVisitCount = std::max(parentVisitCount, searchState->timeControl.eliminationRootVisitCount);
+    const int rootVisitAdjusted = std::min((1 << Config::Network.SelfPlay.EliminationBaseExponent),
+        ((1 << eliminationExponent) * rootVisitCount / parentVisitCount));
+    _eliminationTopCount = std::min(_parent->childCount, rootVisitAdjusted);
 
     // Localize repeatedly-used config.
     _linearExplorationRate = Config::Network.SelfPlay.LinearExplorationRate;
@@ -2210,7 +2218,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         {
             sumChildVisits += static_cast<float>(child.visitCount.load(std::memory_order_relaxed));
         }
-        PuctContext puctContext(lineGame.Root());
+        PuctContext puctContext(_searchState, lineGame.Root());
         for (const Node& child : *lineGame.Root())
         {
             const Move move = Move(child.move);
@@ -2287,14 +2295,6 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
         return;
     }
 
-    // Nodes can stop the search.
-    const int nodeCount = _searchState->nodeCount.load(std::memory_order_relaxed);
-    if ((_searchState->timeControl.nodes > 0) && (nodeCount >= _searchState->timeControl.nodes))
-    {
-        workCoordinator->OnWorkItemCompleted();
-        return;
-    }
-
     // Mate can stop the search.
     if (_searchState->timeControl.mate > 0)
     {
@@ -2309,12 +2309,35 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
     const std::chrono::duration sinceSearchStart = (std::chrono::high_resolution_clock::now() - _searchState->searchStart);
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
 
-    // Specified think time can stop the search.
-    if ((_searchState->timeControl.moveTimeMs > 0) &&
-        (searchTimeMs >= (_searchState->timeControl.moveTimeMs - Config::Misc.TimeControl_SafetyBufferMilliseconds)))
+    // Nodes deeper in the tree with fewer visits receive less harsh elimination. Capture the baseline.
+    _searchState->timeControl.eliminationRootVisitCount = root->visitCount.load(std::memory_order_relaxed);
+
+    // Nodes can stop the search.
+    const int nodeCount = _searchState->nodeCount.load(std::memory_order_relaxed);
+    if (_searchState->timeControl.nodes > 0)
     {
-        workCoordinator->OnWorkItemCompleted();
-        return;
+        if (nodeCount >= _searchState->timeControl.nodes)
+        {
+            workCoordinator->OnWorkItemCompleted();
+            return;
+        }
+
+        // We are "eliminationFraction" of the way through the search, based on nodes.
+        _searchState->timeControl.eliminationFraction = (static_cast<float>(nodeCount) / _searchState->timeControl.nodes);
+    }
+
+    // Specified think time can stop the search.
+    if (_searchState->timeControl.moveTimeMs > 0)
+    {
+        const int64_t timeAllowed = (_searchState->timeControl.moveTimeMs - Config::Misc.TimeControl_SafetyBufferMilliseconds);
+        if (searchTimeMs >= timeAllowed)
+        {
+            workCoordinator->OnWorkItemCompleted();
+            return;
+        }
+
+        // We are "eliminationFraction" of the way through the search, based on move time.
+        _searchState->timeControl.eliminationFraction = (static_cast<float>(searchTimeMs) / timeAllowed);
     }
 
     // Game clock can stop the search. Use a simple strategy like AlphaZero for now.
@@ -2337,6 +2360,9 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
             workCoordinator->OnWorkItemCompleted();
             return;
         }
+
+        // We are "eliminationFraction" of the way through the search, based on time remaining and simple time control strategy.
+        _searchState->timeControl.eliminationFraction = (static_cast<float>(searchTimeMs) / timeAllowed);
     }
 
     // No limits set/remaining: make at least the training number of simulations.

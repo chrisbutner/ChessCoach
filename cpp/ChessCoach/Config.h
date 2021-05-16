@@ -100,8 +100,7 @@ struct SelfPlayConfig
     float MovingAverageBuild;
     float MovingAverageCap;
     float BackpropagationPuctThreshold;
-    float EliminationBase;
-    float EliminationRate;
+    int EliminationBaseExponent;
     float MoveDiversityValueDeltaThreshold;
     float MoveDiversityTemperature;
 
