@@ -90,8 +90,6 @@ GUI
 - change the square background rather than adding overlay, need more consistency between black/white squares
 
 Bugs
-- don't allow "not waiting" for play roles if no networks (e.g. switching to teacher-only + SWA)
-- don't allow using fresh networks for prediction (throw)
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free

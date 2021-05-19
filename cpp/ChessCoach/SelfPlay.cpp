@@ -931,12 +931,15 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
         }
 
         // Warm up the GIL and predictions.
-        const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, 1);
-        if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
+        if (!uniform)
         {
-            // This thread has permission to clear the prediction cache after seeing an updated network.
-            std::cout << "Clearing the prediction cache" << std::endl;
-            PredictionCache::Instance.Clear();
+            const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, 1);
+            if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
+            {
+                // This thread has permission to clear the prediction cache after seeing an updated network.
+                std::cout << "Clearing the prediction cache" << std::endl;
+                PredictionCache::Instance.Clear();
+            }
         }
 
         // Set up any uninitialized games. It's important to do this here so that "_gameStarts" is accurate for MCTS timing.

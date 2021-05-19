@@ -195,9 +195,9 @@ class Network:
 
   @property
   def info(self):
-    model_path = self.latest_model_path("model")
+    _, model_path = self.latest_model_path("model")
     step_count = model_path.step_count() if model_path else 0
-    swa_path = self.latest_model_path("swa")
+    _, swa_path = self.latest_model_path("swa")
     swa_step_count = swa_path.step_count() if swa_path else 0
     training_chunk_count = config.count_training_chunks()
     relative_path = config.unmake_path(config.path.dirname(config.path.dirname(config.path.dirname(model_path.path)))).encode("ascii") if model_path else b""
@@ -234,17 +234,19 @@ class Network:
       if models.full:
         return
 
-      models.full, models.model_path = self.build_full(device_index, self.prediction_model_type)
+      models.full, models.model_path = self.build_full(device_index, self.prediction_model_type, allow_fresh=False)
       models.full_weights_last_check = time.time()
   
-  def build_full(self, log_device_context, model_types):
+  def build_full(self, log_device_context, model_types, allow_fresh):
     # Either load it from disk, or create a new one.
     with model_creation_lock:
-      model_path = self.latest_model_path(model_types)
+      glob, model_path = self.latest_model_path(model_types)
       if model_path:
         log(f"Loading model ({log_device_context}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
         full = self.model_builder()
         self.load_weights(full, model_path.path)
+      elif not allow_fresh:
+        raise Exception(f"Missing network weights for ({log_device_context}/{self.network_type}/model) at {glob}")
       else:
         log(f"Creating new model ({log_device_context}/{self.network_type}/model)")
         full = self.model_builder()
@@ -262,7 +264,7 @@ class Network:
 
   def check_update_prediction_full(self, device_index):
     models = self.models_predict[device_index]
-    model_path = self.latest_model_path(self.prediction_model_type)
+    _, model_path = self.latest_model_path(self.prediction_model_type)
     if model_path:
       # Compare model paths using ModelPath.__lt__ and check for a more recent one in storage.
       newer_weights_available = (models.model_path < model_path)
@@ -298,7 +300,7 @@ class Network:
       return self.models_train.train
 
     # Build a full model.
-    self.models_train.full, _ = self.build_full("training", "model")
+    self.models_train.full, _ = self.build_full("training", "model", allow_fresh=True)
 
     # Take the training subset from the full model.
     self.models_train.train = ModelBuilder().subset_train(self.models_train.full)
@@ -336,7 +338,7 @@ class Network:
 
       # Either load from disk, or create new.
       with model_creation_lock:
-        model_path = self.latest_model_path("commentary")
+        _, model_path = self.latest_model_path("commentary")
         if model_path:
           log(f"Loading model ({device_index}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
           models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, strategy=None)
@@ -359,7 +361,7 @@ class Network:
     # Either load from disk, or create new.
     with model_creation_lock:
       log_device_context = "training"
-      model_path = self.latest_model_path("commentary")
+      _, model_path = self.latest_model_path("commentary")
       if model_path:
         log(f"Loading model ({log_device_context}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
         self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full, trainer.strategy)
@@ -439,7 +441,7 @@ class Network:
       self.models_train.swa_required = self.calculate_swa_networks_required()
       
       # Contribute existing checkpoint weights up to the required count.
-      model_paths = self.latest_model_paths("model", self.models_train.swa_required)
+      _, model_paths = self.latest_model_paths("model", self.models_train.swa_required)
       scratch = self.model_builder()
       for model_path in model_paths:
         log(f"Contributing weights to SWA model: ({log_device_context}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
@@ -461,23 +463,23 @@ class Network:
     return np.partition(np.array(x), partition)[-max_count:]
 
   def latest_model_path(self, model_types):
-    model_paths = self.find_filter_model_paths(model_types)
-    return max(model_paths) if model_paths else None
+    glob, model_paths = self.find_filter_model_paths(model_types)
+    return glob, (max(model_paths) if model_paths else None)
   
   def latest_model_paths(self, model_types, max_count):
-    model_paths = self.find_filter_model_paths(model_types)
+    glob, model_paths = self.find_filter_model_paths(model_types)
     model_paths = self.partial_sort_latest(model_paths, max_count)
-    return model_paths
+    return glob, model_paths
 
   def find_filter_model_paths(self, model_types):
     single_model_type = isinstance(model_types, str)
     model_type_glob = model_types if single_model_type else "*"
     network_pattern = self.network_weights if self.network_weights else (self.config.network_name + "_*")
-    results = self.config.latest_model_paths_for_pattern_type_model(network_pattern, self.network_type, model_type_glob)
+    glob, results = self.config.latest_model_paths_for_pattern_type_model(network_pattern, self.network_type, model_type_glob)
     model_paths = [ModelPath(result) for result in results]
     if not single_model_type:
       model_paths = [m for m in model_paths if m.model_type() in model_types]
-    return model_paths
+    return glob, model_paths
 
   def make_model_path(self, model_type, checkpoint):
     return ModelPath(self.config.make_model_path(self.network_type, model_type, checkpoint))

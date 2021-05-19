@@ -106,7 +106,7 @@ class Config:
     import tensorflow as tf
     glob = self.join(self.misc["paths"]["networks"], network_pattern, network_type, model_type)
     results = [self.join(result, "weights") for result in tf.io.gfile.glob(glob)]
-    return results
+    return glob, results
 
   def make_model_path(self, network_type, model_type, checkpoint):
     return self.join(self.misc["paths"]["networks"], f"{self.network_name}_{str(checkpoint).zfill(9)}", network_type, model_type, "weights")

@@ -42,6 +42,7 @@ private:
     void ValidateSchedule(const TrainingState& state);
     void ResumeTraining(TrainingState& stateInOut);
     bool IsStageComplete(const TrainingState& state);
+    void WaitForUpdatedNetwork(const TrainingState& state);
 
     Window CalculateWindow(const TrainingState& state);
 };
@@ -260,27 +261,13 @@ void ChessCoachTrain::StageTrainCommentary(const TrainingState& state)
 
 void ChessCoachTrain::StageSave(const TrainingState& state)
 {
-    // If this machine isn't a trainer, and "wait_for_updated_network" is *true*, wait until we see someone else save this network type + checkpoint.
-    // If this machine isn't a trainer, and "wait_for_updated_network" is *false*, return immediately and start playing the next set of games,
-    // *except* when this is the first network and we're generating uniform predictions.
+    // If this machine isn't a trainer then we may need to wait for an updated network, or we may be able to keep playing (see inside "WaitForUpdatedNetwork").
     // In either case, the network will be updated and used when available, even mid-game (detected and updated in network.py, observed and handled in SelfPlay.cpp).
     const int checkpoint = state.Checkpoint();
     if (!state.HasRole(RoleType_Train))
     {
-        if (Config::Network.SelfPlay.WaitForUpdatedNetwork || (state.networkNumber == 1))
-        {
-            std::cout << "Waiting: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << checkpoint << "]" << std::endl;
-            while (!IsStageComplete(state))
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(Config::Network.Training.WaitMilliseconds));
-            }
-            return;
-        }
-        else
-        {
-            std::cout << "Not waiting: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << checkpoint << "]" << std::endl;
-            return;
-        }
+        WaitForUpdatedNetwork(state);
+        return;
     }
 
     // Log the stage info in a consistent format.
@@ -292,27 +279,13 @@ void ChessCoachTrain::StageSave(const TrainingState& state)
 
 void ChessCoachTrain::StageSaveSwa(const TrainingState& state)
 {
-    // If this machine isn't a trainer, and "wait_for_updated_network" is *true*, wait until we see someone else save this network type + checkpoint.
-    // If this machine isn't a trainer, and "wait_for_updated_network" is *false*, return immediately and start playing the next set of games,
-    // *except* when this is the first network and we're generating uniform predictions.
+    // If this machine isn't a trainer then we may need to wait for an updated network, or we may be able to keep playing (see inside "WaitForUpdatedNetwork").
     // In either case, the network will be updated and used when available, even mid-game (detected and updated in network.py, observed and handled in SelfPlay.cpp).
     const int checkpoint = state.Checkpoint();
     if (!state.HasRole(RoleType_Train))
     {
-        if (Config::Network.SelfPlay.WaitForUpdatedNetwork || (state.networkNumber == 1))
-        {
-            std::cout << "Waiting: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << checkpoint << "]" << std::endl;
-            while (!IsStageComplete(state))
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(Config::Network.Training.WaitMilliseconds));
-            }
-            return;
-        }
-        else
-        {
-            std::cout << "Not waiting: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << checkpoint << "]" << std::endl;
-            return;
-        }
+        WaitForUpdatedNetwork(state);
+        return;
     }
 
     // Log the stage info in a consistent format.
@@ -320,6 +293,32 @@ void ChessCoachTrain::StageSaveSwa(const TrainingState& state)
 
     // Save the network. It logs enough internally.
     state.workerGroup->controllerWorker->SaveSwaNetwork(state.network, state.Stage().Target, checkpoint);
+}
+
+void ChessCoachTrain::WaitForUpdatedNetwork(const TrainingState& state)
+{
+    // If "wait_for_updated_network" is *false*, return immediately and start playing the next set of games,
+    // *except* when (a) this is the first network and we're generating uniform predictions (don't generate too much junk)
+    // or (b) when we don't see any network weights to use (e.g. switching to teacher-only-prediction-with-SWA mid-training).
+    if (!Config::Network.SelfPlay.WaitForUpdatedNetwork && (state.networkNumber > 1))
+    {
+        // Check for at least one set of network weights to use by faking a TrainingState.
+        TrainingState imitateFirstNetwork = state;
+        imitateFirstNetwork.networkNumber = 1;
+        if (IsStageComplete(imitateFirstNetwork))
+        {
+            std::cout << "Not waiting: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << state.Checkpoint() << "]" << std::endl;
+            return;
+        }
+    }
+
+    // We have to wait here until we see someone else save this network type + checkpoint.
+    std::cout << "Waiting: [" << StageTypeNames[state.Stage().Stage] << "][" << NetworkTypeNames[state.Stage().Target] << "][" << state.Checkpoint() << "]" << std::endl;
+    while (!IsStageComplete(state))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(Config::Network.Training.WaitMilliseconds));
+    }
+    return;
 }
 
 void ChessCoachTrain::StageStrengthTest(const TrainingState& state)
