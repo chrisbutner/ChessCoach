@@ -518,12 +518,18 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
 
 void ChessCoachUci::HandleStop(std::stringstream& /*commands*/)
 {
-    InitializeWorkers();
-    StopAndReadyWorkers();
+    if (_workerGroup.IsInitialized())
+    {
+        StopAndReadyWorkers();
+    }
 }
 
 void ChessCoachUci::HandleQuit(std::stringstream& /*commands*/)
 {
+    if (_workerGroup.IsInitialized())
+    {
+        StopAndReadyWorkers();
+    }
     _quit = true;
 }
 

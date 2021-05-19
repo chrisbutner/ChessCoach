@@ -4,6 +4,10 @@ Check UCI/search MCTS details
 - once a node fails, are the rest guaranteed to follow the same path and fail on the same thread? short-circuit?
 
 Training
+- try fpu-weight instead of forced playouts - use weight = 1 or 2 instead of 0 for root children during self-play
+	- find some easy sacrifice + win positions, make sure it gets multiple visits instead of 1 and stopping with various noise
+		-  rn3rk1/5ppp/p3pn2/1bpq4/8/2PB3P/5PP1/QN1R2K1 w - - 0 20
+	- still need to prune though or no?
 - add back forced playouts + pruning? or add 8x virtual virtual loss during self-play?
 - after plateauing - try teacher-only prediction w/ SWA again (conditional config if it works)
 - full run - 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
@@ -86,15 +90,15 @@ GUI
 - change the square background rather than adding overlay, need more consistency between black/white squares
 
 Bugs
-- "quit" without "stop" hangs UCI
-- "quit" after multiple "go" commands can hang UCI
+- don't allow "not waiting" for play roles if no networks (e.g. switching to teacher-only + SWA)
+- don't allow using fresh networks for prediction (throw)
 - Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
-- Rare ephemeral storage issue on cluster, might be core dumps
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
 
 Code quality
+- instead of Optimizer.iterations, make subset/full share optimizer, save/load optimizer weights, validate .iterations before training
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - switch to vcpkg for windows dependencies
