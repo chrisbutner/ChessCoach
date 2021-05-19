@@ -30,8 +30,9 @@ class Config:
     assert self.role
     
     # Make sure that the network named is in the list of networks, and expose the name.
-    network_config = next(c for c in config["networks"] if c["name"] == self.network_name)
-    assert(network_config)
+    network_config = next((c for c in config["networks"] if c["name"] == self.network_name), None)
+    if not network_config:
+      raise Exception(f'Network name "{self.network_name}" not found in config')
     
     # Promote "training" and "self_play" to attributes and merge defaults and overrides.
     training_overrides = network_config.get("training", {})

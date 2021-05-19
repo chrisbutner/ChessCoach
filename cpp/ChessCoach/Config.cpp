@@ -375,7 +375,8 @@ void Config::Initialize()
     ParseSelfPlay(Network.SelfPlay, toml::find(config, "self_play"), defaultPolicy);
     ParseMisc(Misc, config, defaultPolicy);
 
-    // Parse network configs.
+    // Parse current network config overrides.
+    bool found = false;
     const std::vector<TomlValue> configNetworks = toml::find<std::vector<TomlValue>>(config, "networks");
     for (const TomlValue& configNetwork : configNetworks)
     {
@@ -384,8 +385,13 @@ void Config::Initialize()
         {
             ParseTraining(Network.Training, toml::find_or(configNetwork, "training", {}), overridePolicy);
             ParseSelfPlay(Network.SelfPlay, toml::find_or(configNetwork, "self_play", {}), overridePolicy);
+            found = true;
             break;
         }
+    }
+    if (!found)
+    {
+        throw std::runtime_error("Network name \"" + Network.Name + "\" not found in config");
     }
 }
 

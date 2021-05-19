@@ -86,7 +86,6 @@ UCI
 - cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
 
 Bugs
-- Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
 
