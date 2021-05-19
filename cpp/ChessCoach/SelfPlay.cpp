@@ -1886,6 +1886,12 @@ void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<WeightedNode>& s
 
 void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
 {
+    // Principle variation may be temporarily invalid from a search thread's perspective when multiple are running.
+    if (_games[0].TryHard() && (Config::Misc.Search_SearchThreads > 1))
+    {
+        return;
+    }
+
     while (root)
     {
         const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
