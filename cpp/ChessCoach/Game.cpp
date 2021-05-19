@@ -212,7 +212,18 @@ Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
         }
         _position.undo_move(move);
     }
-    throw std::runtime_error("Failed to guess move matching result and policy");
+
+    // No legal move matches the game result, so assume that the game was adjudicated and just pick the move with
+    // the highest policy value as a wild guess.
+    //
+    // For "supervised" datasets, generated from PGNs rather than self-play tree statistics, policy values will be
+    // one-hot, so the choice is easy.
+    if (!bestMoves.empty())
+    {
+        return bestMoves[0].first;
+    }
+
+    throw std::runtime_error("No final move is possible in stored game");
 }
 
 // Avoid Position::is_draw because it regenerates legal moves.

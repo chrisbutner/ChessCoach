@@ -53,6 +53,9 @@ private:
     bool SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) const;
     std::filesystem::path MakeLocalPath(const std::filesystem::path& root, const std::filesystem::path& path);
 
+    template <typename T>
+    bool Read(google::protobuf::io::ZeroCopyInputStream& stream, T& value) const;
+
 private:
 
     const Game _startingPosition;

@@ -248,18 +248,12 @@ void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex,
         }
     }
 
-    // We're reading from memory so just expect enough slop bytes, don't mess around.
-    const void* buffer;
-    int size = 0;
+    // Read the payload length and skip its crc32c.
     uint64_t payloadLength;
-    uint32_t crc32c;
-    const int preambleSize = (sizeof(payloadLength) + sizeof(crc32c));
-    if (!zip.Next(&buffer, &size) || (size < preambleSize))
+    if (!Read(zip, payloadLength) || !zip.Skip(sizeof(uint32_t)))
     {
         throw std::runtime_error("Failed to parse chunk");
     }
-    payloadLength = *reinterpret_cast<const uint64_t*>(buffer);
-    zip.BackUp(size - preambleSize);
 
     // The game is stored as a TFRecord using zlib.
     message::Example compressedGame;
@@ -324,30 +318,10 @@ void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex,
     }
 }
 
-#pragma warning(disable:4706) // Intentionally assigning, not comparing
 bool Storage::SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) const
 {
-    bool ok;
-    const void* buffer;
-    int size = 0;
-    uint64_t payloadLength = 0;
-    int payloadLengthOffset = 0;
-    while ((ok = stream.Next(&buffer, &size)))
-    {
-        const int copyLength = std::min(size, static_cast<int>(sizeof(payloadLength)) - payloadLengthOffset);
-        if (copyLength > 0)
-        {
-            // Just assume we're running on little-endian.
-            std::memcpy(reinterpret_cast<char*>(&payloadLength) + payloadLengthOffset, buffer, copyLength);
-            stream.BackUp(size - copyLength);
-
-            payloadLengthOffset += copyLength;
-            if (payloadLengthOffset >= sizeof(payloadLength))
-            {
-                break;
-            }
-        }
-    }
+    uint64_t payloadLength;
+    bool ok = Read(stream, payloadLength);
     if (ok)
     {
         // Skip the two CRC32Cs plus the payload.
@@ -355,7 +329,36 @@ bool Storage::SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) co
     }
     return ok;
 }
+
+#pragma warning(disable:4706) // Intentionally assigning, not comparing
+template <typename T>
+bool Storage::Read(google::protobuf::io::ZeroCopyInputStream& stream, T& value) const
+{
+    bool ok;
+    const void* buffer;
+    int size = 0;
+    int offset = 0;
+    while ((ok = stream.Next(&buffer, &size)))
+    {
+        const int copyLength = std::min(size, static_cast<int>(sizeof(value)) - offset);
+        if (copyLength > 0)
+        {
+            // Just assume we're running on little-endian.
+            std::memcpy(reinterpret_cast<char*>(&value) + offset, buffer, copyLength);
+            stream.BackUp(size - copyLength);
+
+            offset += copyLength;
+            if (offset >= sizeof(value))
+            {
+                break;
+            }
+        }
+    }
+    return ok;
+}
 #pragma warning(default:4706) // Intentionally assigning, not comparing
+template bool Storage::Read<int>(google::protobuf::io::ZeroCopyInputStream& stream, int& value) const;
+template bool Storage::Read<uint64_t>(google::protobuf::io::ZeroCopyInputStream& stream, uint64_t& value) const;
 
 message::Example Storage::DebugPopulateGame(const SavedGame& game) const
 {

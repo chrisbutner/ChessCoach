@@ -85,12 +85,7 @@ UCI
 - set prediction cache size (hash size) by MiB - more consistent with other engines, already mostly supported
 - cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
 
-GUI
-- don't error on supervised data - use prior, no need to match result (often adjudicated)
-- change the square background rather than adding overlay, need more consistency between black/white squares
-
 Bugs
-- Some kind of race condition spamming next-chunk button in GUI, locks up Python/C++ interop
 - Close cleanly if selfplay/UCI network not found by name in config list, in Python or C++
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
@@ -106,6 +101,7 @@ Code quality
 - check for any unnecessary move constructors
 - StrengthTestNetwork (naming)
 - tail common code in ExpandAndEvaluate? (goto?)
+- consolidate exception types in C++ and Python
 
 Deployment
 - re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
@@ -155,6 +151,7 @@ Won't do
 		- browse EPDs
 		- set up positions (paste pgn, fen, move pieces, uci from database position)
 		- go X buttons
+	- change the square background rather than adding overlay, need more consistency between black/white squares
 	- deal with info panel height/scrolling, move list
 	- websocket reconnect
 - PUCT ideas
