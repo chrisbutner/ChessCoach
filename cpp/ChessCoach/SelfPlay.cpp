@@ -2285,7 +2285,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
 {
     // Always try to do at least 1-2 simulations so that a "best" move exists.
     // Note that this may not be possible because of a hard "stop" or "position" command,
-    // so SelectMove, PrintPrincipleVariation and OnSearchFinished handle the case of no bestMove.
+    // so SelectMove, PrintPrincipleVariation and OnSearchFinished handle the case of no bestChild.
     const Node* root = _games[0].Root();
     const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
     if (!bestChild)
@@ -2365,6 +2365,13 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
             + _searchState->timeControl.incrementMs[toPlay]
             - Config::Misc.TimeControl_SafetyBufferMilliseconds;
         if (searchTimeMs >= timeAllowed)
+        {
+            workCoordinator->OnWorkItemCompleted();
+            return;
+        }
+
+        // In game clock mode, time can always be saved up for future moves, so if there's only one legal move then make it.
+        if (_games[0].Root()->IsExpanded() && (_games[0].Root()->childCount == 1))
         {
             workCoordinator->OnWorkItemCompleted();
             return;
