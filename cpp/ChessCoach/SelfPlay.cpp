@@ -508,7 +508,6 @@ bool SelfPlayGame::TakeExpansionOwnership(Node* node)
 float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot)
 {
     Node* root = _root;
-    const float firstPlayUrgency = (isSearchRoot ? CHESSCOACH_FIRST_PLAY_URGENCY_ROOT : CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
 
     // A known-terminal leaf will remain a leaf, so be prepared to
     // quickly return its terminal value on repeated visits.
@@ -627,18 +626,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         }
         if (hitCached)
         {
-            // Expand child nodes with the cached priors.
-            Expand(workingMoveCount, firstPlayUrgency);
-            
-            // Probe endgame tablebases for a WDL score for the parent.
-            // No need to update "cachedValue" here for a successful probe: handled generally in Backpropagate().
-            if (Syzygy::ProbeWdl(*this, isSearchRoot))
-            {
-                searchState->tablebaseHitCount.fetch_add(1, std::memory_order_relaxed);
-            }
-
-            assert(state == SelfPlayState::Working);
-            return cachedValue;
+            return FinishExpanding(state, cacheStore, searchState, isSearchRoot, workingMoveCount, cachedValue);
         }
 
         // Prepare for a prediction from the network.
@@ -663,7 +651,41 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     }
     Softmax(moveCount, _cachedPriors.data()); // Logits -> priors
 
-    // Expand child nodes with the calculated priors.
+    return FinishExpanding(state, cacheStore, searchState, isSearchRoot, moveCount, value);
+}
+
+float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot, int moveCount, float value)
+{
+    // Store evaluated value/priors in the cache if appropriate, before any filtering.
+    if (cacheStore)
+    {
+        assert(moveCount <= PredictionCacheEntry::MaxMoveCount);
+        cacheStore->Put(_imageKey, value, moveCount, _cachedPriors.data());
+    }
+
+    // Handle the UCI "searchmoves" filter at the search root.
+    if (isSearchRoot && !searchState->searchMoves.empty())
+    {
+        // Perform a simplified parallel-array version of std::remove_if, knowing that values are small and primitive.
+        int replace = 0;
+        for (int i = 0; i < moveCount; i++)
+        {
+            if (std::find(searchState->searchMoves.begin(), searchState->searchMoves.end(), _expandAndEvaluate_moves[i].move) != searchState->searchMoves.end())
+            {
+                // This move is allowed, so move it to the start. No need to std::move primitives.
+                _expandAndEvaluate_moves[replace] = _expandAndEvaluate_moves[i];
+                _cachedPriors[replace] = _cachedPriors[i];
+                replace++;
+            }
+        }
+
+        // We know that "searchState->searchMoves" are legal (see "UCI::to_move"), so expect the exact number.
+        moveCount = replace;
+        assert(moveCount == searchState->searchMoves.size());
+    }
+
+    // Expand child nodes with the evaluated or cached priors.
+    const float firstPlayUrgency = (isSearchRoot ? CHESSCOACH_FIRST_PLAY_URGENCY_ROOT : CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
     Expand(moveCount, firstPlayUrgency);
 
     // Probe endgame tablebases for a WDL score for the parent.
@@ -671,13 +693,6 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     if (Syzygy::ProbeWdl(*this, isSearchRoot))
     {
         searchState->tablebaseHitCount.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    // Store in the cache if appropriate.
-    if (cacheStore)
-    {
-        assert(moveCount <= PredictionCacheEntry::MaxMoveCount);
-        cacheStore->Put(_imageKey, value, moveCount, _cachedPriors.data());
     }
 
     state = SelfPlayState::Working;

@@ -432,7 +432,7 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
     // If "moves" wasn't seen then we already consumed the rest of the line.
     while (commands >> token)
     {
-        Move move = UCI::to_move(position, token);
+        const Move move = UCI::to_move(position, token);
         if (move == MOVE_NONE)
         {
             break;
@@ -451,9 +451,8 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
 
 void ChessCoachUci::HandleGo(std::stringstream& commands)
 {
-    // TODO: searchmoves
-
     TimeControl timeControl = {};
+    std::vector<Move> searchMoves;
 
     std::string token;
     while (commands >> token)
@@ -494,6 +493,28 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         {
             commands >> timeControl.movesToGo;
         }
+        else if (token == "searchmoves")
+        {
+            // Set up the last "position" specified to give proper context to the "searchmoves".
+            Position position;
+            StateListPtr positionStates(new std::deque<StateInfo>(1));
+            position.set(_positionFen, false /* isChess960 */, &positionStates->back(), Threads.main());
+            for (Move move : _positionMoves)
+            {
+                position.do_move(move, positionStates->emplace_back());
+            }
+
+            // Unlike in "position ... moves ...", these moves don't depend on each other, so it's okay
+            // to skip over any invalid/illegal moves and keep parsing.
+            while (commands >> token)
+            {
+                const Move move = UCI::to_move(position, token);
+                if (move != MOVE_NONE)
+                {
+                    searchMoves.push_back(move);
+                }
+            }
+        }
     }
 
     InitializeWorkers();
@@ -506,10 +527,18 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         _network->LaunchGui("push");
     }
 
+    // Clear the tree before and after "searchmoves" searches.
+    if (!_workerGroup.searchState.searchMoves.empty() || !searchMoves.empty())
+    {
+        _isNewGame = true;
+        _positionUpdated = true;
+    }
+
     // Propagate the position if updated.
     PropagatePosition();
 
     _workerGroup.searchState.Reset(timeControl);
+    _workerGroup.searchState.searchMoves = std::move(searchMoves);
 
     PredictionCache::Instance.ResetProbeMetrics();
 
@@ -579,7 +608,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
         // If "moves" wasn't seen then we already consumed the rest of the line.
         while (commands >> token)
         {
-            Move move = UCI::to_move(puctGame.GetPosition(), token);
+            const Move move = UCI::to_move(puctGame.GetPosition(), token);
             if (move == MOVE_NONE)
             {
                 break;

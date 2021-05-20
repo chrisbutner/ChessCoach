@@ -235,6 +235,7 @@ public:
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndHistory(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot);
+    float FinishExpanding(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot, int moveCount, float value);
     void Expand(int moveCount, float firstPlayUrgency);
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
     void Softmax(int moveCount, float* distribution) const;
@@ -289,6 +290,7 @@ struct SearchState
     bool gui;
     std::string positionFen;
     std::vector<Move> positionMoves;
+    std::vector<Move> searchMoves; // Not *necessarily* the primary worker, but only the first worker to expand the root.
     std::chrono::time_point<std::chrono::high_resolution_clock> searchStart;
     std::chrono::time_point<std::chrono::high_resolution_clock> lastPrincipleVariationPrint;
     uint16_t lastBestMove;

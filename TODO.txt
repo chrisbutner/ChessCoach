@@ -78,7 +78,7 @@ UCI
 	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
 - tail Backpropagate into BackpropagateVisitsOnly
 - workaround for .exe vs. non in ChessBase - can we probe for virtuals and activate before initializing python?
-- implement remaining commands/options - searchmoves - spin option min/max - check spec again
+- spin option min/max
 - set prediction cache size (hash size) by MiB - more consistent with other engines, already mostly supported
 - cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
 
@@ -94,7 +94,6 @@ Code quality
 - privatize C++ methods (got too python-brained)
 - check for any unnecessary move constructors
 - StrengthTestNetwork (naming)
-- tail common code in ExpandAndEvaluate? (goto?)
 - consolidate exception types in C++ and Python
 
 Deployment
