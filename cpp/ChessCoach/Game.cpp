@@ -220,7 +220,9 @@ Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
     // one-hot, so the choice is easy.
     if (!bestMoves.empty())
     {
-        return bestMoves[0].first;
+        const Move move = bestMoves[0].first;
+        ApplyMove(move);
+        return move;
     }
 
     throw std::runtime_error("No final move is possible in stored game");

@@ -441,6 +441,10 @@ TEST(Mcts, SamplingUci)
     game->Root()->visitCount = (game->Root()->children[0].visitCount + game->Root()->children[1].visitCount + game->Root()->children[2].visitCount + game->Root()->children[3].visitCount);
     game->Root()->bestChild = &game->Root()->children[0];
 
+    // Back up temperature.
+    const float temperatureBackup = Config::Network.SelfPlay.MoveDiversityTemperature;
+    Config::Network.SelfPlay.MoveDiversityTemperature = 0.75f;
+
     // Validate UCI sampling. Just shove samples in "valueWeight".
     // Expect visits in proportion to visit counts re-exponentiated with temperature 0.75.
     const int sampleCount = 100000;
@@ -454,6 +458,9 @@ TEST(Mcts, SamplingUci)
     EXPECT_NEAR(static_cast<float>(game->Root()->children[1].valueWeight) / sampleCount, 0.3136f, epsilon);
     EXPECT_NEAR(static_cast<float>(game->Root()->children[2].valueWeight) / sampleCount, 0.1587f, epsilon);
     EXPECT_NEAR(static_cast<float>(game->Root()->children[3].valueWeight) / sampleCount, 0.0367f, epsilon);
+
+    // Restore temperature.
+    Config::Network.SelfPlay.MoveDiversityTemperature = temperatureBackup;
 
     game->PruneAll();
 }

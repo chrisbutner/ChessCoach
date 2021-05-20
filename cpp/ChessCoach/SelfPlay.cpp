@@ -667,6 +667,7 @@ float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*&
     if (isSearchRoot && !searchState->searchMoves.empty())
     {
         // Perform a simplified parallel-array version of std::remove_if, knowing that values are small and primitive.
+        float filteredSum = 0.f;
         int replace = 0;
         for (int i = 0; i < moveCount; i++)
         {
@@ -675,13 +676,19 @@ float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*&
                 // This move is allowed, so move it to the start. No need to std::move primitives.
                 _expandAndEvaluate_moves[replace] = _expandAndEvaluate_moves[i];
                 _cachedPriors[replace] = _cachedPriors[i];
+                filteredSum += _cachedPriors[i];
                 replace++;
             }
         }
 
         // We know that "searchState->searchMoves" are legal (see "UCI::to_move"), so expect the exact number.
+        // Iterate back over the allowed moves and re-normalize their priors.
         moveCount = replace;
         assert(moveCount == searchState->searchMoves.size());
+        for (int i = 0; i < replace; i++)
+        {
+            _cachedPriors[i] /= filteredSum;
+        }
     }
 
     // Expand child nodes with the evaluated or cached priors.
@@ -2306,7 +2313,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
     if (!bestChild)
     {
         // Stop despite any other instructions (e.g. infinite) if the root is terminal.
-        if (_games[0].Root()->terminalValue.load(std::memory_order_relaxed).IsImmediate())
+        if (root->terminalValue.load(std::memory_order_relaxed).IsImmediate())
         {
             workCoordinator->OnWorkItemCompleted();
         }
@@ -2386,7 +2393,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
         }
 
         // In game clock mode, time can always be saved up for future moves, so if there's only one legal move then make it.
-        if (_games[0].Root()->IsExpanded() && (_games[0].Root()->childCount == 1))
+        if (root->IsExpanded() && (root->childCount == 1))
         {
             workCoordinator->OnWorkItemCompleted();
             return;
