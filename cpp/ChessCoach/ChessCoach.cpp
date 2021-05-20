@@ -72,7 +72,9 @@ void ChessCoach::InitializePython()
         return;
     }
 
-    // Work around a Python crash.
+    // Python path/home detection is broken on Windows. Work around it by assuming that we're in an Anaconda environment
+    // on Windows and copying CONDA_PREFIX to PYTHONHOME before initializing Python. There's also "Py_SetPythonHome",
+    // but this is simpler than decoding to a wide string and keeping static storage around.
     const std::string pythonHome = Platform::GetEnvironmentVariable("PYTHONHOME");
     if (pythonHome.empty())
     {
@@ -88,7 +90,8 @@ void ChessCoach::InitializePython()
         throw std::runtime_error("Failed to register 'chesscoach' module");
     }
 
-    Py_Initialize();
+    // Pass initsigs=0 so that Python doesn't take over signal handling.
+    Py_InitializeEx(0 /* initsigs */);
 
     // Initialize argv[0] so that TensorFlow and Matplotlib don't crash, but don't pass in any actual arguments.
     const wchar_t* empty[] = { L"" };
