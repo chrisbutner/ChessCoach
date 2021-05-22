@@ -341,7 +341,7 @@ public:
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(INetwork* network, int index);
     void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
-    Node* RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+    bool RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
     Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
     void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);

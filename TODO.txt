@@ -1,8 +1,3 @@
-Check UCI/search MCTS details
-- does mctsSimulation in RunMcts ever overflow for TryHard()?
-- do we ever call SelectMove() after 1k loops for TryHard()?
-- once a node fails, are the rest guaranteed to follow the same path and fail on the same thread? short-circuit?
-
 Training
 - try fpu-weight instead of forced playouts - use weight = 1 or 2 instead of 0 for root children during self-play
 	- find some easy sacrifice + win positions, make sure it gets multiple visits instead of 1 and stopping with various noise

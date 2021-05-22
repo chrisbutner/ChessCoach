@@ -1283,12 +1283,17 @@ void SelfPlayWorker::Play(int index)
     while (!IsTerminal(game))
     {
         Node* root = game.Root();
-        Node* selected = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
+        const bool mctsFinished = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             return;
         }
 
+        // During self-play there are no threading-based node failures, so if we're not waiting for a prediction,
+        // assert that MCTS finished successfully and we can pick a move.
+        Node* selected = SelectMove(game, true /* allowDiversity */);
+        (void)mctsFinished;
+        assert(mctsFinished);
         assert(selected != nullptr);
         game.StoreSearchStatistics();
         game.ApplyMoveWithRootAndHistory(Move(selected->move), selected, *this);
@@ -1330,13 +1335,18 @@ void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* /
     std::fill(policiesFlat, policiesFlat + policyCount, 0.f);
 }
 
-Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
     std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore)
 {
     // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
     // We need to break out and check for PV changes, search stopping, etc. However, need to keep number
     // high enough to get good speed-up from prediction cache hits. Go with 1000 for now.
-    const int numSimulations = (game.TryHard() ? (mctsSimulation + 1000) : Config::Network.SelfPlay.NumSimulations);
+    int numSimulations = Config::Network.SelfPlay.NumSimulations;
+    if (game.TryHard())
+    {
+        mctsSimulation = 0;
+        numSimulations = 1000;
+    }
     for (; mctsSimulation < numSimulations; mctsSimulation++)
     {
         if (state == SelfPlayState::Working)
@@ -1365,7 +1375,7 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
                 {
                     assert(game.TryHard());
                     FailNode(searchPath);
-                    return nullptr;
+                    return false;
                 }
 
                 scratchGame.ApplyMoveWithRoot(Move(selected.node->move), selected.node);
@@ -1389,14 +1399,14 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         if (state == SelfPlayState::WaitingForPrediction)
         {
             // Wait for network evaluation/priors to come back.
-            return nullptr;
+            return false;
         }
         else if (std::isnan(value))
         {
             // Another thread took ownership and is expanding or expanded the node. We have to just give up this round.
             assert(game.TryHard());
             FailNode(searchPath);
-            return nullptr;
+            return false;
         }
 
         // The value we get is from the final node of the scratch game from its parent's perspective,
@@ -1450,8 +1460,9 @@ Node* SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Sel
         }
     }
 
+    // Self-play resets the simulation count here only.
     mctsSimulation = 0;
-    return SelectMove(game, true /* allowDiversity */);
+    return true;
 }
 
 void SelfPlayWorker::FailNode(std::vector<WeightedNode>& searchPath)
