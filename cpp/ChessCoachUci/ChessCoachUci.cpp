@@ -16,6 +16,7 @@
 #include <ChessCoach/ChessCoach.h>
 #include <ChessCoach/WorkerGroup.h>
 #include <ChessCoach/Pgn.h>
+#include <ChessCoach/Syzygy.h>
 
 using CommandHandler = std::function<void(std::stringstream&)>;
 using CommandHandlerEntry = std::pair<std::string, CommandHandler>;
@@ -64,6 +65,7 @@ private:
 private:
 
     bool _quit = false;
+    bool _syzygyLoaded = false;
     bool _guiLaunched = false;
     bool _isNewGame = true;
     bool _positionUpdated = true;
@@ -373,9 +375,10 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
         InitializeNetwork();
         _network->UpdateNetworkWeights(Config::Network.SelfPlay.NetworkWeights);
     }
-    else if (name == "syzygy_path")
+    else if (name == "syzygy")
     {
-        Tablebases::init(Config::Network.SelfPlay.SyzygyPath);
+        Syzygy::Reload();
+        _syzygyLoaded = true;
     }
 }
 
@@ -395,7 +398,8 @@ void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
     PredictionCache::Instance.Clear();
 
     // Work around problems with swapping out memory-mapped pages by reinitializing tablebases each game.
-    Tablebases::init(Config::Network.SelfPlay.SyzygyPath);
+    Syzygy::Reload();
+    _syzygyLoaded = true;
 }
 
 void ChessCoachUci::HandlePosition(std::stringstream& commands)
@@ -673,6 +677,13 @@ void ChessCoachUci::InitializeWorkers()
 
     // Let the GUI call back in to show requested lines.
     InitializePythonModule(nullptr /* storage */, _network.get(), _workerGroup.controllerWorker.get());
+
+    // Initialize tablebases if never done.
+    if (!_syzygyLoaded)
+    {
+        Syzygy::Reload();
+        _syzygyLoaded = true;
+    }
 }
 
 void ChessCoachUci::StopAndReadyWorkers()

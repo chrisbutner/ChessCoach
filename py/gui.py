@@ -11,7 +11,7 @@ import os
 import network
 import tensorflow as tf
 try:
-  import chesscoach
+  import chesscoach # See PythonModule.cpp
 except:
   pass
 

@@ -42,6 +42,11 @@ namespace Tablebases
     extern int Cardinality;
 }
 
+void Syzygy::Reload()
+{
+    Tablebases::init(Config::Misc.Paths_Syzygy);
+}
+
 bool Syzygy::ProbeTablebasesAtRoot(SelfPlayGame& game)
 {
     bool RootInTB = false;

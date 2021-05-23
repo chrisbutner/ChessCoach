@@ -3,6 +3,7 @@ import platform
 import os
 import posixpath
 import enum
+import subprocess
 
 # Duplicated from "Config.h"
 class PredictionStatus(enum.IntFlag):
@@ -59,6 +60,9 @@ class Config:
     for key, value in self.misc["paths"].items():
       if not key.startswith("tpu") and not key.startswith("strength_test"):
         self.misc["paths"][key] = self.make_dir_path(value)
+
+    # Copy locally any files that need to be memory-mapped.
+    self.replicate_locally(self.misc["paths"]["syzygy"])
 
   def determine_data_root(self):
     if self.is_tpu:
@@ -135,3 +139,18 @@ class Config:
     import tensorflow as tf
     path = self.make_path(relative_path)
     return tf.io.gfile.exists(path)
+
+  def replicate_locally(self, path):
+    assert path.startswith(self.data_root)
+    local_path = self.make_local_path(path)
+    if path == local_path:
+      # Already local
+      return
+    if self.path.exists(local_path) and any(os.listdir(local_path)):
+      # Already replicated
+      return
+    os.makedirs(local_path, exist_ok=True)
+    idempotent_source = self.join(path, "*")
+    process = subprocess.run(f'gsutil -m cp -r "{idempotent_source}" "{local_path}"', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+    process.check_returncode()
+    

@@ -38,6 +38,10 @@ Storage::Storage()
     _localTrainingGamePath = MakeLocalPath(rootPath, _relativeTrainingGamePath);
     _localLogsPath = MakeLocalPath(rootPath, Config::Misc.Paths_Logs);
     _relativePgnsPath = Config::Misc.Paths_Pgns;
+
+    // Update the Syzygy path in config to the locally-rooted one for use by search and self-play.
+    // This is pretty messy/undiscoverable but simplifies UCI settings code.
+    Config::Misc.Paths_Syzygy = MakeLocalPath(rootPath, Config::Misc.Paths_Syzygy).string();
 }
 
 void Storage::InitializeLocalGamesChunks(INetwork* network)

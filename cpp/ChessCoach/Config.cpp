@@ -313,8 +313,6 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.MoveDiversityValueDeltaThreshold, config, "move_diversity_value_delta_threshold");
     policy.template Parse<float>(selfPlay.MoveDiversityTemperature, config, "move_diversity_temperature");
 
-    policy.template Parse<std::string>(selfPlay.SyzygyPath, config, "syzygy_path");
-
     policy.template Parse<bool>(selfPlay.WaitForUpdatedNetwork, config, "wait_for_updated_network");
 }
 
@@ -343,6 +341,7 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     policy.template Parse<std::string>(misc.Paths_TensorBoard, paths, "tensorboard");
     policy.template Parse<std::string>(misc.Paths_Logs, paths, "logs");
     policy.template Parse<std::string>(misc.Paths_Pgns, paths, "pgns");
+    policy.template Parse<std::string>(misc.Paths_Syzygy, paths, "syzygy");
     policy.template Parse<std::string>(misc.Paths_StrengthTestMarkerPrefix, paths, "strength_test_marker_prefix");
 
     const auto& optimization = toml::find_or(config, "optimization", {});

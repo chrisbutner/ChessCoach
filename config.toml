@@ -214,8 +214,6 @@ elimination_base_exponent = 8 # Start by giving the top 2^8 = 256 children linea
 move_diversity_value_delta_threshold = 0.01
 move_diversity_temperature = 0.0
 
-syzygy_path = ""
-
 wait_for_updated_network = false
 
 ###############################################################################
@@ -254,6 +252,7 @@ logs = "Logs"
 pgns = "Pgns"
 optimization = "Optimization"
 alpha_manager = "AlphaManager"
+syzygy = "Syzygy"
 
 strength_test_marker_prefix = "StrengthTestComplete"
 
@@ -311,6 +310,6 @@ virtual_loss_coefficient = "float"
 moving_average_build = "float"
 moving_average_cap = "float"
 backpropagation_puct_threshold = "float"
-syzygy_path = "string"
+syzygy = "string"
 
 ###############################################################################

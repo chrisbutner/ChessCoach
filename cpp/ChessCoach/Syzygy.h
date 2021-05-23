@@ -30,6 +30,7 @@ class Syzygy
 {
 public:
 
+    static void Reload();
     static bool ProbeTablebasesAtRoot(SelfPlayGame& game);
     static bool ProbeDtzAtRoot(SelfPlayGame& game);
     static bool ProbeWdlAtRoot(SelfPlayGame& game);
