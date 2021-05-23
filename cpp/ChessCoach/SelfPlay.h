@@ -328,6 +328,7 @@ public:
     void LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
     void LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
 
+    int ChooseSimulationLimit();
     void ClearGame(int index);
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
@@ -341,7 +342,7 @@ public:
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(INetwork* network, int index);
     void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
-    bool RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+    bool RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, int& mctsSimulationLimit,
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
     Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
     void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
@@ -397,6 +398,7 @@ private:
     std::vector<SelfPlayGame> _scratchGames;
     std::vector<std::chrono::time_point<std::chrono::high_resolution_clock>> _gameStarts;
     std::vector<int> _mctsSimulations;
+    std::vector<int> _mctsSimulationLimits;
     std::vector<std::vector<WeightedNode>> _searchPaths;
     std::vector<PredictionCacheChunk*> _cacheStores;
 

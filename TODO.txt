@@ -1,14 +1,12 @@
 Training
-- try fpu-weight instead of forced playouts - use weight = 1 or 2 instead of 0 for root children during self-play
-	- find some easy sacrifice + win positions, make sure it gets multiple visits instead of 1 and stopping with various noise
-		-  rn3rk1/5ppp/p3pn2/1bpq4/8/2PB3P/5PP1/QN1R2K1 w - - 0 20
-	- still need to prune though or no?
-- add back forced playouts + pruning? or add 8x virtual virtual loss during self-play?
-- after plateauing - try teacher-only prediction w/ SWA again (conditional config if it works)
-- full run - 1/N positions using K nodes (e.g. 1/20, 50k) - acts like auxiliary head at low loss weight, points good direction
-	- need to emulate parallelism/vloss/wideband for the 50k, or 1*1 okay?
 - full run - 15% chance to syzygy probe root or WDL deeper during self-play - acts like auxiliary head at low loss weight, points good direction
 - full run - add repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
+- instead of Optimizer.iterations, make subset/full share optimizer, save/load optimizer weights, validate .iterations before training
+
+Training - final run
+- use student prediction the whole way this time, up to 2.8m steps, see if it hits 3.3k STS rating
+- copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
+- if same take original else teacher-only up to 5.6m
 
 Commentary #3
 - need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
@@ -82,7 +80,6 @@ Bugs
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
 
 Code quality
-- instead of Optimizer.iterations, make subset/full share optimizer, save/load optimizer weights, validate .iterations before training
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - fix _ in network names - split on final _

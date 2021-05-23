@@ -87,6 +87,8 @@ struct SelfPlayConfig
     int NumSampingMoves;
     int MaxMoves;
     int NumSimulations;
+    int DeepSimulationsCount;
+    float DeepSimulationsProportion;
 
     float RootDirichletAlpha;
     float RootExplorationFraction;

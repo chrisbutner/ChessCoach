@@ -927,6 +927,7 @@ SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int g
     , _scratchGames(gameCount)
     , _gameStarts(gameCount)
     , _mctsSimulations(gameCount, 0)
+    , _mctsSimulationLimits(gameCount, 0)
     , _searchPaths(gameCount)
     , _cacheStores(gameCount)
     , _searchState(searchState)
@@ -1018,11 +1019,18 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
     Finalize();
 }
 
+int SelfPlayWorker::ChooseSimulationLimit()
+{
+    return (Random::InProportion(Config::Network.SelfPlay.DeepSimulationsProportion) ?
+        Config::Network.SelfPlay.DeepSimulationsCount : Config::Network.SelfPlay.NumSimulations);
+}
+
 void SelfPlayWorker::ClearGame(int index)
 {
     _states[index] = SelfPlayState::Working;
     _gameStarts[index] = std::chrono::high_resolution_clock::now();
     _mctsSimulations[index] = 0;
+    _mctsSimulationLimits[index] = ChooseSimulationLimit();
     _searchPaths[index].clear();
     _cacheStores[index] = nullptr;
 }
@@ -1283,7 +1291,8 @@ void SelfPlayWorker::Play(int index)
     while (!IsTerminal(game))
     {
         Node* root = game.Root();
-        const bool mctsFinished = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index], _searchPaths[index], _cacheStores[index]);
+        const bool mctsFinished = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index],
+            _mctsSimulationLimits[index], _searchPaths[index], _cacheStores[index]);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             return;
@@ -1335,19 +1344,18 @@ void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* /
     std::fill(policiesFlat, policiesFlat + policyCount, 0.f);
 }
 
-bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation,
+bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, int& mctsSimulationLimit,
     std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore)
 {
     // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
     // We need to break out and check for PV changes, search stopping, etc. However, need to keep number
     // high enough to get good speed-up from prediction cache hits. Go with 1000 for now.
-    int numSimulations = Config::Network.SelfPlay.NumSimulations;
     if (game.TryHard())
     {
         mctsSimulation = 0;
-        numSimulations = 1000;
+        mctsSimulationLimit = 1000;
     }
-    for (; mctsSimulation < numSimulations; mctsSimulation++)
+    for (; mctsSimulation < mctsSimulationLimit; mctsSimulation++)
     {
         if (state == SelfPlayState::Working)
         {
@@ -1460,8 +1468,9 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
         }
     }
 
-    // Self-play resets the simulation count here only.
+    // Self-play resets the simulation count/limit here between moves within a game.
     mctsSimulation = 0;
+    mctsSimulationLimit = ChooseSimulationLimit();
     return true;
 }
 
@@ -2517,7 +2526,7 @@ void SelfPlayWorker::SearchPlay()
 {
     for (int i = 0; i < _games.size(); i++)
     {
-        RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _searchPaths[i], _cacheStores[i]);
+        RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _mctsSimulationLimits[i], _searchPaths[i], _cacheStores[i]);
     }
 }
 
