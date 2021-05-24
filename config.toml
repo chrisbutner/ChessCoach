@@ -195,8 +195,9 @@ prediction_batch_size = 512
 num_sampling_moves = 30
 max_moves = 512
 num_simulations = 800
-deep_simulations_count = 10_000 # Combination increases self-play work by 57.5%
+deep_simulations_count = 10_000 # Combination increases self-play work by 57.5%.
 deep_simulations_proportion = 0.05
+syzygy_probe_proportion = 0.15 # Used for both root WDL+DTZ and leaf WDL probes.
 
 root_dirichlet_alpha = 0.3
 root_exploration_fraction = 0.25

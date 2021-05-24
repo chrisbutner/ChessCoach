@@ -2,7 +2,6 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (c) 2013 Ronald de Man
   Copyright (C) 2016-2020 Marco Costalba, Lucas Braesch
-  Copyright (C) 2021 Chris Butner
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -37,11 +36,6 @@
 
 #include "SelfPlay.h"
 
-namespace Tablebases
-{
-    extern int Cardinality;
-}
-
 void Syzygy::Reload()
 {
     Tablebases::init(Config::Misc.Paths_Syzygy);
@@ -52,9 +46,9 @@ bool Syzygy::ProbeTablebasesAtRoot(SelfPlayGame& game)
     bool RootInTB = false;
     bool dtz_available = true;
     const Position& position = game.GetPosition();
-    Tablebases::Cardinality = Tablebases::MaxCardinality;
+    game.TablebaseCardinality() = Tablebases::MaxCardinality;
 
-    if (Tablebases::Cardinality && (Tablebases::Cardinality >= position.count<ALL_PIECES>()) && !position.can_castle(ANY_CASTLING))
+    if (game.TablebaseCardinality() && (game.TablebaseCardinality() >= position.count<ALL_PIECES>()) && !position.can_castle(ANY_CASTLING))
     {
         // Rank moves using DTZ tables
         RootInTB = ProbeDtzAtRoot(game);
@@ -72,7 +66,7 @@ bool Syzygy::ProbeTablebasesAtRoot(SelfPlayGame& game)
         // Probe during search only if DTZ is not available.
         if (dtz_available)
         {
-            Tablebases::Cardinality = 0;
+            game.TablebaseCardinality() = 0;
         }
     }
     else
@@ -252,8 +246,8 @@ bool Syzygy::ProbeWdl(SelfPlayGame& game, bool isSearchRoot)
     // on this node during the root probe. Since this will happen so rarely, and only cause a small number of duplicate
     // probes at the start of search, with no harm done, don't waste any runtime checking for the case.
     if (!(!isSearchRoot &&
-        Tablebases::Cardinality &&
-        Tablebases::Cardinality >= position.count<ALL_PIECES>() &&
+        game.TablebaseCardinality() &&
+        game.TablebaseCardinality() >= position.count<ALL_PIECES>() &&
         (position.rule50_count() == 0) &&
         !position.can_castle(ANY_CASTLING)))
     {

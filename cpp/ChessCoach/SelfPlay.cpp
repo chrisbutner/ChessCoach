@@ -344,31 +344,34 @@ SelfPlayGame::SelfPlayGame()
     , _image(nullptr)
     , _value(nullptr)
     , _policy(nullptr)
+    , _tablebaseCardinality(nullptr)
     , _searchRootPly(Ply())
     , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }
 
-SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
+SelfPlayGame::SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy, int* tablebaseCardinality)
     : Game()
     , _root(new Node())
     , _tryHard(false)
     , _image(image)
     , _value(value)
     , _policy(policy)
+    , _tablebaseCardinality(tablebaseCardinality)
     , _searchRootPly(Ply())
     , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
 }
 
 SelfPlayGame::SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard,
-    INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy)
+    INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy, int* tablebaseCardinality)
     : Game(fen, moves)
     , _root(new Node())
     , _tryHard(tryHard)
     , _image(image)
     , _value(value)
     , _policy(policy)
+    , _tablebaseCardinality(tablebaseCardinality)
     , _searchRootPly(Ply()) // Important for this to be FEN ply + moves.size() when searching positions.
     , _result(CHESSCOACH_VALUE_UNINITIALIZED)
 {
@@ -381,6 +384,7 @@ SelfPlayGame::SelfPlayGame(const SelfPlayGame& other)
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
+    , _tablebaseCardinality(other._tablebaseCardinality)
     , _searchRootPly(other.Ply()) // Scratch games during MCTS need to snap off higher search roots.
     , _result(other._result)
 {
@@ -398,6 +402,7 @@ SelfPlayGame& SelfPlayGame::operator=(const SelfPlayGame& other)
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
+    _tablebaseCardinality = other._tablebaseCardinality;
     _searchRootPly = other.Ply(); // Scratch games during MCTS need to snap off higher search roots.
     _result = other._result;
 
@@ -411,6 +416,7 @@ SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
     , _image(other._image)
     , _value(other._value)
     , _policy(other._policy)
+    , _tablebaseCardinality(other._tablebaseCardinality)
     , _searchRootPly(other._searchRootPly)
     , _mctsValues(std::move(other._mctsValues))
     , _childVisits(std::move(other._childVisits))
@@ -433,6 +439,7 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
     _image = other._image;
     _value = other._value;
     _policy = other._policy;
+    _tablebaseCardinality = other._tablebaseCardinality;
     _searchRootPly = other._searchRootPly;
     _mctsValues = std::move(other._mctsValues);
     _childVisits = std::move(other._childVisits);
@@ -697,7 +704,7 @@ float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*&
 
     // Probe endgame tablebases for a WDL score for the parent.
     // No need to update "value" here for a successful probe: handled generally in Backpropagate().
-    if (Syzygy::ProbeWdl(*this, isSearchRoot))
+    if (ShouldProbeTablebases() && Syzygy::ProbeWdl(*this, isSearchRoot))
     {
         searchState->tablebaseHitCount.fetch_add(1, std::memory_order_relaxed);
     }
@@ -891,6 +898,18 @@ void SelfPlayGame::UpdateSearchRootPly()
     _searchRootPly = Ply();
 }
 
+// Always probe when available for search/UCI.
+// Only probe a small proportion of the time during self-play, to act more like an auxiliary head with low loss weight.
+bool SelfPlayGame::ShouldProbeTablebases()
+{
+    return (TryHard() || Random::InProportion(Config::Network.SelfPlay.SyzygyProbeProportion));
+}
+
+int& SelfPlayGame::TablebaseCardinality()
+{
+    return *_tablebaseCardinality;
+}
+
 Move SelfPlayGame::ParseSan(const std::string& san)
 {
     return Pgn::ParseSan(_position, san);
@@ -923,6 +942,7 @@ SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int g
     , _images(gameCount)
     , _values(gameCount)
     , _policies(gameCount)
+    , _tablebaseCardinalities(gameCount)
     , _games(gameCount)
     , _scratchGames(gameCount)
     , _gameStarts(gameCount)
@@ -1038,13 +1058,13 @@ void SelfPlayWorker::ClearGame(int index)
 void SelfPlayWorker::SetUpGame(int index)
 {
     ClearGame(index);
-    _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index]);
+    _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index], &_tablebaseCardinalities[index]);
 }
 
 void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard)
 {
     ClearGame(index);
-    _games[index] = SelfPlayGame(fen, moves, tryHard, &_images[index], &_values[index], &_policies[index]);
+    _games[index] = SelfPlayGame(fen, moves, tryHard, &_images[index], &_values[index], &_policies[index], &_tablebaseCardinalities[index]);
 }
 
 void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset)
@@ -1536,7 +1556,7 @@ void SelfPlayWorker::PrepareExpandedRoot(SelfPlayGame& game)
     // When there are too many pieces at the root to probe endgame tablebases, we can still try
     // to probe individual leaf positions when they reach few enough pieces. We only probe win/draw/loss (WDL)
     // "at zero", when progress has just been made (pawn move or capture). Accurate search is still very necessary.
-    if (Syzygy::ProbeTablebasesAtRoot(game))
+    if (game.ShouldProbeTablebases() && Syzygy::ProbeTablebasesAtRoot(game))
     {
         // In addition to setting tablebase ranks, which we use even before proven mate categories for move selection,
         // we just updated root child value: not just FPU, but bounded value for nodes with existing valueWeight too.

@@ -54,12 +54,13 @@ TEST(Network, Policy)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
-    std::vector<INetwork::InputPlanes> images(Config::Network.SelfPlay.PredictionBatchSize);
-    std::vector<float> values(Config::Network.SelfPlay.PredictionBatchSize);
-    std::vector<INetwork::OutputPlanes> policies(Config::Network.SelfPlay.PredictionBatchSize);
+    INetwork::InputPlanes image;
+    float networkValue;
+    INetwork::OutputPlanes policy;
+    int tablebaseCardinality;
 
     SelfPlayWorker dummyWorker(nullptr /* storage */, nullptr /* searchState */, 0 /* gameCount */);
-    SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {}, false /* tryHard */, &images[0], &values[0], &policies[0]);
+    SelfPlayGame game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {}, false /* tryHard */, &image, &networkValue, &policy, &tablebaseCardinality);
     
     MoveList legalMoves = MoveList<LEGAL>(game.GetPosition());
     const int legalMoveCount = static_cast<int>(legalMoves.size());
@@ -153,7 +154,7 @@ TEST(Network, CompressDecompress)
     chessCoach.Initialize();
 
     SelfPlayWorker dummyWorker(nullptr /* storage */, nullptr /* searchState */, 0 /* gameCount */);
-    SelfPlayGame game(nullptr, nullptr, nullptr);
+    SelfPlayGame game(nullptr, nullptr, nullptr, nullptr); // Use constructor that sets up a Node root.
 
     // Play some moves, generating mostly different policy distributions for each move.
     const std::vector<Move> moves =
@@ -234,7 +235,7 @@ TEST(Network, CompressDecompressSparse)
     chessCoach.Initialize();
 
     SelfPlayWorker dummyWorker(nullptr /* storage */, nullptr /* searchState */, 0 /* gameCount */);
-    SelfPlayGame game(nullptr, nullptr, nullptr);
+    SelfPlayGame game(nullptr, nullptr, nullptr, nullptr); // Use constructor that sets up a Node root.
 
     // Play some moves, generating mostly different policy distributions for each move.
     const std::vector<Move> moves =
@@ -418,14 +419,14 @@ TEST(Network, EvaluationColorSymmetry)
 
     std::array<SelfPlayGame, COLOR_NB> asymmetricGames =
     {
-        SelfPlayGame(Config::StartingPosition, {}, false /* tryHard */, nullptr, nullptr, nullptr),
-        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 b - - 0 1", {}, false /* tryHard */, nullptr, nullptr, nullptr),
+        SelfPlayGame(Game::StartingPosition, {}, false /* tryHard */, nullptr, nullptr, nullptr, nullptr),
+        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 b - - 0 1", {}, false /* tryHard */, nullptr, nullptr, nullptr, nullptr),
     };
 
     std::array<SelfPlayGame, COLOR_NB> symmetricGames =
     {
-        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 w - - 0 1", {}, false /* tryHard */, nullptr, nullptr, &policies[WHITE][0]),
-        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 b - - 0 1", {}, false /* tryHard */, nullptr, nullptr, &policies[BLACK][0]),
+        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 w - - 0 1", {}, false /* tryHard */, nullptr, nullptr, &policies[WHITE][0], nullptr),
+        SelfPlayGame("r1q2rk1/1P3ppp/p2bp3/2Np2N1/2nP2n1/P2BP3/1p3PPP/R1Q2RK1 b - - 0 1", {}, false /* tryHard */, nullptr, nullptr, &policies[BLACK][0], nullptr),
     };
 
     for (Color toPlay : { WHITE, BLACK })
@@ -442,7 +443,7 @@ TEST(Network, EvaluationColorSymmetry)
     std::unique_ptr<INetwork> network(chessCoach.CreateNetwork());
 
     // Evaluate an asymmetric position as a sanity check.
-    SelfPlayGame game2(nullptr, nullptr, nullptr);
+    SelfPlayGame game2(nullptr, nullptr, nullptr, nullptr);
     for (Color toPlay : { WHITE, BLACK })
     {
         EXPECT_EQ(images[toPlay][0][0], 0UL);

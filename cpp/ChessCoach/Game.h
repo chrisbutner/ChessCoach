@@ -30,6 +30,8 @@ class Game
 {
 public:
 
+    static constexpr const char StartingPosition[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
     static const size_t BlockSizeBytes = 64 * 1024 * 1024; // 64 MiB
     thread_local static PoolAllocator<StateInfo, BlockSizeBytes> StateAllocator;
 

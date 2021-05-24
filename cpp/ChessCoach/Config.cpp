@@ -296,6 +296,7 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<int>(selfPlay.NumSimulations, config, "num_simulations");
     policy.template Parse<int>(selfPlay.DeepSimulationsCount, config, "deep_simulations_count");
     policy.template Parse<float>(selfPlay.DeepSimulationsProportion, config, "deep_simulations_proportion");
+    policy.template Parse<float>(selfPlay.SyzygyProbeProportion, config, "syzygy_probe_proportion");
 
     policy.template Parse<float>(selfPlay.RootDirichletAlpha, config, "root_dirichlet_alpha");
     policy.template Parse<float>(selfPlay.RootExplorationFraction, config, "root_exploration_fraction");

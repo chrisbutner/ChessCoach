@@ -69,7 +69,7 @@ private:
     bool _guiLaunched = false;
     bool _isNewGame = true;
     bool _positionUpdated = true;
-    std::string _positionFen = Config::StartingPosition;
+    std::string _positionFen = Game::StartingPosition;
     std::vector<Move> _positionMoves = {};
     std::ofstream _commandLog;
     std::vector<CommandHandlerEntry> _commandHandlers;
@@ -391,7 +391,7 @@ void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
     // Use this as a signal not to reuse the current MCTS tree, even for a compatible position.
     _isNewGame = true;
     _positionUpdated = true;
-    _positionFen = Config::StartingPosition;
+    _positionFen = Game::StartingPosition;
     _positionMoves.clear();
 
     // Also clear the prediction cache, for repeatability/consistency during analysis.
@@ -425,7 +425,7 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
     else
     {
         // Instead of "fen" we got "startpos" or something invalid.
-        _positionFen = Config::StartingPosition;
+        _positionFen = Game::StartingPosition;
         while ((commands >> token) && (token != "moves"))
         {
         }

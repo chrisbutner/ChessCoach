@@ -11,5 +11,5 @@ thread_local std::default_random_engine Random::Engine(
 
 bool Random::InProportion(float proportion)
 {
-    return (std::uniform_real_distribution<>(0.f, 1.f)(Engine) < proportion);
+    return ((proportion > 0.f) && (std::uniform_real_distribution<>(0.f, 1.f)(Engine) < proportion));
 }

@@ -217,8 +217,9 @@ class SelfPlayGame : public Game
 public:
 
     SelfPlayGame();
-    SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
-    SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard, INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy);
+    SelfPlayGame(INetwork::InputPlanes* image, float* value, INetwork::OutputPlanes* policy, int* tablebaseCardinality);
+    SelfPlayGame(const std::string& fen, const std::vector<Move>& moves, bool tryHard, INetwork::InputPlanes* image,
+        float* value, INetwork::OutputPlanes* policy, int* tablebaseCardinality);
 
     SelfPlayGame(const SelfPlayGame& other);
     SelfPlayGame& operator=(const SelfPlayGame& other);
@@ -247,6 +248,8 @@ public:
     void PruneAll();
     void AddExplorationNoise();
     void UpdateSearchRootPly();
+    bool ShouldProbeTablebases();
+    int& TablebaseCardinality();
 
     Move ParseSan(const std::string& san);
 
@@ -265,6 +268,7 @@ private:
     INetwork::InputPlanes* _image;
     float* _value;
     INetwork::OutputPlanes* _policy;
+    int* _tablebaseCardinality;
     int _searchRootPly;
 
     // Stored history and statistics.
@@ -393,6 +397,7 @@ private:
     std::vector<INetwork::InputPlanes> _images;
     std::vector<float> _values;
     std::vector<INetwork::OutputPlanes> _policies;
+    std::vector<int> _tablebaseCardinalities;
 
     std::vector<SelfPlayGame> _games;
     std::vector<SelfPlayGame> _scratchGames;

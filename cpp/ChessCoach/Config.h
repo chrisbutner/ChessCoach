@@ -89,6 +89,7 @@ struct SelfPlayConfig
     int NumSimulations;
     int DeepSimulationsCount;
     float DeepSimulationsProportion;
+    float SyzygyProbeProportion;
 
     float RootDirichletAlpha;
     float RootExplorationFraction;
@@ -158,10 +159,6 @@ struct MiscConfig
 
 class Config
 {
-public:
-
-    static constexpr const char StartingPosition[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
 public:
 
     static NetworkConfig Network;

@@ -2,7 +2,6 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (c) 2013 Ronald de Man
   Copyright (C) 2016-2020 Marco Costalba, Lucas Braesch
-  Copyright (C) 2021 Chris Butner
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,12 +31,12 @@ public:
 
     static void Reload();
     static bool ProbeTablebasesAtRoot(SelfPlayGame& game);
-    static bool ProbeDtzAtRoot(SelfPlayGame& game);
-    static bool ProbeWdlAtRoot(SelfPlayGame& game);
     static bool ProbeWdl(SelfPlayGame& game, bool isSearchRoot);
 
 private:
 
+    static bool ProbeDtzAtRoot(SelfPlayGame& game);
+    static bool ProbeWdlAtRoot(SelfPlayGame& game);
     static void UpdateRootChildValue(Node* node);
 };
 

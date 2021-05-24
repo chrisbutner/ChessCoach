@@ -58,7 +58,7 @@ std::tuple<int, int, int, int> Pgn::ParsePgn(std::istream& content, bool allowNo
 
         StateListPtr positionStates(new std::deque<StateInfo>(1));
         Position position;
-        position.set(Config::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
+        position.set(Game::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
         std::vector<uint16_t> moves;
         SavedCommentary commentary;
         if (!ParseMoves(content, positionStates, position, moves, commentary, result, false /* inVariation */))
@@ -185,7 +185,7 @@ void Pgn::ParseHeader(std::istream& content, bool& fenGameInOut, float& resultOu
     if (header.compare(0, fenHeader.size(), fenHeader) == 0)
     {
         // Some PGNs include the starting position as a FEN header, which is pretty confusing.
-        if (header.compare(fenValueOffset, std::size(Config::StartingPosition) - 1, Config::StartingPosition) != 0)
+        if (header.compare(fenValueOffset, std::size(Game::StartingPosition) - 1, Game::StartingPosition) != 0)
         {
             fenGameInOut = true;
         }
@@ -754,7 +754,7 @@ void Pgn::GeneratePgn(std::ostream& content, const SavedGame& game)
 
     StateListPtr positionStates(new std::deque<StateInfo>(1));
     Position position;
-    position.set(Config::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
+    position.set(Game::StartingPosition, false /* isChess960 */, &positionStates->back(), Threads.main());
 
     for (int i = 0; i < game.moveCount; i++)
     {

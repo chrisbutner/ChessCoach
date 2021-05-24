@@ -375,7 +375,7 @@ TEST(Mcts, SamplingSelfPlay)
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     SelfPlayGame* game;
-    selfPlayWorker.SetUpGame(0, Config::StartingPosition, {}, false /* tryHard */); // SamplingSelfPlay means tryHard is false.
+    selfPlayWorker.SetUpGame(0, Game::StartingPosition, {}, false /* tryHard */); // SamplingSelfPlay means tryHard is false.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up visit counts for four moves.
@@ -420,7 +420,7 @@ TEST(Mcts, SamplingUci)
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     SelfPlayGame* game;
-    selfPlayWorker.SetUpGame(0, Config::StartingPosition, {}, true /* tryHard */); // SamplingUci means tryHard is true.
+    selfPlayWorker.SetUpGame(0, Game::StartingPosition, {}, true /* tryHard */); // SamplingUci means tryHard is true.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up visit counts for four moves.

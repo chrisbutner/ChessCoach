@@ -58,7 +58,7 @@ Game::Game()
     , _currentState(AllocateState())
     , _moves()
 {
-    _position.set(Config::StartingPosition, false /* isChess960 */, _currentState, Threads.main());
+    _position.set(StartingPosition, false /* isChess960 */, _currentState, Threads.main());
 }
 
 Game::Game(const std::string& fen, const std::vector<Move>& moves)
