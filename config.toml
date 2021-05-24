@@ -4,12 +4,12 @@
 
 [network]
 
-network_name = "selfplay8a"
+network_name = "selfplay9"
 role = "train|play"
 
 [[networks]]
 
-    name = "selfplay8a"
+    name = "selfplay9a"
 
     [networks.training]
 
@@ -26,7 +26,7 @@ role = "train|play"
         { stage = "strength_test", target = "teacher" },
     ]
 
-    games_path_training = "Games/Fresh4"
+    games_path_training = "Games/Fresh5"
 
     [networks.self_play]
 
@@ -34,7 +34,7 @@ role = "train|play"
 
 [[networks]]
 
-    name = "selfplay8"
+    name = "selfplay9"
 
     [networks.training]
 
@@ -54,7 +54,7 @@ role = "train|play"
         { stage = "strength_test", target = "student" },
     ]
 
-    games_path_training = "Games/Fresh4"
+    games_path_training = "Games/Fresh5"
 
 [[networks]]
 
@@ -195,7 +195,7 @@ prediction_batch_size = 512
 num_sampling_moves = 30
 max_moves = 512
 num_simulations = 800
-deep_simulations_count = 10_000 # Combination increases self-play work by 57.5%.
+deep_simulations_count = 10_000 # (10k/0.05) combination increases self-play work by 57.5%.
 deep_simulations_proportion = 0.05
 syzygy_probe_proportion = 0.15 # Used for both root WDL+DTZ and leaf WDL probes.
 
@@ -275,7 +275,7 @@ epd_nodes = 0
 epd_failure_nodes = 10_000_000
 epd_position_limit = 10
 
-# Elo metric is calculated relative to baseline (Stockfish limited to 2500 Elo, calibrated using 1 thread).
+# Elo metric is calculated relative to baseline (Stockfish 13 NNUE with 1 thread and 512 MiB hash).
 tournament_games = 10
 tournament_movetime_milliseconds = 1000
 

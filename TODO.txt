@@ -1,6 +1,3 @@
-Training
-- instead of Optimizer.iterations, make subset/full share optimizer, save/load optimizer weights, validate .iterations before training
-
 Training - final run
 - use student prediction the whole way this time, up to 2.8m steps, see if it hits 3.3k STS rating
 - copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
@@ -120,8 +117,6 @@ Won't do
 	- prioritize trainer over players, cannibalize
 	- try delays rather than broken marker for tpus in case of temporary failures, throttling
 - cyclic learning rate and/or fast-SWA (too much complexity too late)
-- parameter optimization
-	- categorical parameters
 - performance
 	- TF profiling - just live with what we have, v3-8 alpha TPUs decent as-is, not worth investment until more stable tooling, not using C++ inference anyway
 	- use hard-elimination to deallocate sub-trees while searching
