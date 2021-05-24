@@ -18,15 +18,6 @@ class CommentaryDatasetOptions:
 
 class DatasetBuilder:
 
-  # Input and output plane details, duplicated from "Network.h"
-  input_previous_position_count = 7
-  input_previous_position_plus_current_count = input_previous_position_count + 1
-  input_piece_planes_per_position = 12
-  input_auxiliary_plane_count = 5
-  input_compressed_planes_per_position = input_piece_planes_per_position + input_auxiliary_plane_count
-  output_planes_shape = [73, 8, 8]
-  output_planes_flat_shape = [73 * 8 * 8]
-
   # Chunk parameters
   compression_type = "ZLIB"
   chunk_read_buffer_size = 8 * 1024 * 1024
@@ -39,14 +30,14 @@ class DatasetBuilder:
   feature_map = {
     "result": tf.io.FixedLenFeature([], tf.float32),
     "mcts_values": tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
-    "image_pieces_auxiliary": tf.io.FixedLenSequenceFeature([input_compressed_planes_per_position], tf.int64, allow_missing=True),
+    "image_pieces_auxiliary": tf.io.FixedLenSequenceFeature([ModelBuilder.input_compressed_planes_per_position], tf.int64, allow_missing=True),
     "policy_row_lengths": tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
     "policy_indices": tf.io.FixedLenSequenceFeature([], tf.int64, allow_missing=True),
     "policy_values": tf.io.FixedLenSequenceFeature([], tf.float32, allow_missing=True),
   }
 
   commentary_feature_map = {
-    "images": tf.io.FixedLenSequenceFeature([101], tf.int64, allow_missing=True),
+    "images": tf.io.FixedLenSequenceFeature([ModelBuilder.input_planes_count], tf.int64, allow_missing=True),
     "comments": tf.io.FixedLenSequenceFeature([], tf.string, allow_missing=True),
   }
 
@@ -59,29 +50,30 @@ class DatasetBuilder:
     return tf.where(indices % 2 == 0, result, self.flip_value(result))
 
   def decompress_images(self, image_pieces_auxiliary, indices):
-    # Slice out piece and auxiliary planes.
-    image_pieces = image_pieces_auxiliary[:, :self.input_piece_planes_per_position]
-    image_auxiliary = image_pieces_auxiliary[:, self.input_piece_planes_per_position:]
+    # Slice out piece/repetition and auxiliary planes.
+    image_pieces_and_repetitions = image_pieces_auxiliary[:, :ModelBuilder.input_piece_and_repetition_planes_per_position]
+    image_auxiliary = image_pieces_auxiliary[:, ModelBuilder.input_piece_and_repetition_planes_per_position:]
 
     # Saturate the first position back for the 7 non-existent history positions.
     # Since we know that it's the starting position for training data, no need to flip perspective per position (no-op).
     paddings = [1, 2, 4]
-    assert sum(paddings) == self.input_previous_position_count
+    assert sum(paddings) == ModelBuilder.input_previous_position_count
     for pad in paddings:
-      image_pieces = tf.pad(image_pieces, [[pad, 0], [0, 0]], mode="SYMMETRIC")
+      image_pieces_and_repetitions = tf.pad(image_pieces_and_repetitions, [[pad, 0], [0, 0]], mode="SYMMETRIC")
 
     # Take a slice of the last N positions' piece planes and concatenate this position's auxiliary planes.
-    gathered_pieces = tf.map_fn(lambda x: image_pieces[x:x + self.input_previous_position_plus_current_count], indices)
-    gathered_pieces = tf.reshape(gathered_pieces, [-1, self.input_previous_position_plus_current_count * self.input_piece_planes_per_position])
+    gathered_pieces_and_repetitions = tf.map_fn(lambda x: image_pieces_and_repetitions[x:x + ModelBuilder.input_previous_position_plus_current_count], indices)
+    gathered_pieces_and_repetitions = tf.reshape(gathered_pieces_and_repetitions,
+      [-1, ModelBuilder.input_previous_position_plus_current_count * ModelBuilder.input_piece_and_repetition_planes_per_position])
     gathered_auxiliary = tf.gather(image_auxiliary, indices)
-    images = tf.concat([gathered_pieces, gathered_auxiliary], axis=1)
+    images = tf.concat([gathered_pieces_and_repetitions, gathered_auxiliary], axis=1)
     return images
 
   def scatter_policy(self, indices_values):
     indices, values = indices_values
     indices = tf.expand_dims(indices, 1)
-    policy = tf.scatter_nd(indices, values, self.output_planes_flat_shape)
-    policy = tf.reshape(policy, self.output_planes_shape)
+    policy = tf.scatter_nd(indices, values, ModelBuilder.output_planes_flat_shape)
+    policy = tf.reshape(policy, ModelBuilder.output_planes_shape)
     return policy
 
   def decompress_policies(self, policy_row_lengths, policy_indices, policy_values, indices):

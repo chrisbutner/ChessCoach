@@ -515,7 +515,7 @@ void PythonNetwork::DebugDecompress(int positionCount, int policySize, float* re
     PyObject* pythonResult = PyArray_SimpleNewFromData(0, 0, NPY_FLOAT32, result);
     PyAssert(pythonResult);
 
-    npy_intp imagePiecesAuxiliaryDims[2]{ positionCount, InputPiecePlanesPerPosition + InputAuxiliaryPlaneCount };
+    npy_intp imagePiecesAuxiliaryDims[2]{ positionCount, InputPieceAndRepetitionPlanesPerPosition + InputAuxiliaryPlaneCount };
     PyObject* pythonImagePiecesAuxiliary = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imagePiecesAuxiliaryDims), imagePiecesAuxiliaryDims, NPY_INT64, imagePiecesAuxiliary);
     PyAssert(pythonImagePiecesAuxiliary);

@@ -145,7 +145,7 @@ public:
     Move ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces);
     Move ApplyMoveGuess(float result, const std::map<Move, float>& policy);
     bool IsDrawByNoProgressOrThreefoldRepetition() const;
-    bool PiecesMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;
+    bool PiecesAndRepetitionsMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;
     int Ply() const;
     Key GenerateImageKey(bool tryHard);
     void GenerateImage(INetwork::InputPlanes& imageOut);
@@ -168,7 +168,7 @@ private:
     friend class HistoryWalker;
 
     void Free();
-    void GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const;
+    void GeneratePieceAndRepetitionPlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const;
     void FillPlane(INetwork::PackedPlane& plane, bool value) const;
     Key Rotate(Key key, unsigned int distance) const;
 

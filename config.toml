@@ -88,7 +88,7 @@ role = "train|play"
     [networks.training]
 
     num_games = 2_000_000
-    window_size = 2_000_000
+    steps = 256_000
 
     value_loss_weight = 0.1
     mcts_value_loss_weight = 0.015

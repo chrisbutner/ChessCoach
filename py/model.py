@@ -5,9 +5,20 @@ import os
 
 class ModelBuilder:
   
+  # Input and output plane details, duplicated from "Network.h"
   board_side = 8
-  input_planes_count = 101
+  input_previous_position_count = 7
+  input_previous_position_plus_current_count = input_previous_position_count + 1
+  input_piece_planes_per_position = 12
+  input_repetition_planes_per_position = 1
+  input_piece_and_repetition_planes_per_position = input_piece_planes_per_position + input_repetition_planes_per_position
+  input_auxiliary_plane_count = 5
+  input_compressed_planes_per_position = input_piece_and_repetition_planes_per_position + input_auxiliary_plane_count
+  input_planes_count = (input_previous_position_plus_current_count * input_piece_and_repetition_planes_per_position) + input_auxiliary_plane_count
   output_planes_count = 73
+  output_planes_shape = [output_planes_count, board_side, board_side]
+  output_planes_flat_shape = [output_planes_count * board_side * board_side]
+  
   residual_count = 19
   filter_count = 256
   dense_count = 256
@@ -120,11 +131,11 @@ class ModelBuilder:
     
     input = tf.keras.layers.Input(shape=(self.input_planes_count), dtype=tf.int64, name=self.input_name)
 
-    # Unpack bit-planes of (batch, 101) int64 to (batch, 101, 8, 8) float32.
+    # Unpack bit-planes of (batch, 109) int64 to (batch, 109, 8, 8) float32.
     # However, the final plane is a special case, not to be bit-unpacked, but instead interpreted as an integer
     # to be normalized via the no-progress saturation count (99).
     standard_planes = self.unpack_planes(input[:, :-1])
-    special_planes = tf.cast(input[:, -1:], tf.float32)[:, :, tf.newaxis, tf.newaxis] / tf.fill([1, self.board_side, self.board_side], self.no_progress_saturation_count)
+    special_planes = tf.cast(input[:, -1:], tf.float32)[:, :, tf.newaxis, tf.newaxis] / tf.fill([1, 1, self.board_side, self.board_side], self.no_progress_saturation_count)
     planes = tf.concat([standard_planes, special_planes], axis=1)
 
     # Stem

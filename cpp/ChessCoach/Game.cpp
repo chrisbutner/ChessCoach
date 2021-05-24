@@ -164,13 +164,13 @@ Move Game::ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces)
 {
     StateInfo state;
     const MoveList legalMoves = MoveList<LEGAL>(_position);
-    INetwork::PackedPlane checkPieces[INetwork::InputPiecePlanesPerPosition];
+    INetwork::PackedPlane checkPieces[INetwork::InputPieceAndRepetitionPlanesPerPosition];
 
     for (const Move move : legalMoves)
     {
         _position.do_move(move, state);
-        GeneratePiecePlanes(checkPieces, 0, _position, _position.side_to_move());
-        if (PiecesMatch(checkPieces, resultingPieces))
+        GeneratePieceAndRepetitionPlanes(checkPieces, 0, _position, _position.side_to_move());
+        if (PiecesAndRepetitionsMatch(checkPieces, resultingPieces))
         {
             _position.undo_move(move);
             ApplyMove(move);
@@ -241,9 +241,9 @@ bool Game::IsDrawByNoProgressOrThreefoldRepetition() const
         (stateInfo->repetition < 0);
 }
 
-bool Game::PiecesMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const
+bool Game::PiecesAndRepetitionsMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const
 {
-    for (int i = 0; i < INetwork::InputPiecePlanesPerPosition; i++)
+    for (int i = 0; i < INetwork::InputPieceAndRepetitionPlanesPerPosition; i++)
     {
         if (a[i] != b[i])
         {
@@ -319,33 +319,33 @@ void Game::GenerateImage(INetwork::PackedPlane* imageOut)
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = ToPlay();
 
-    // Add last 7 positions' pieces + 1 current position's pieces, planes 0-95.
+    // Add last 7 positions' pieces and repetitions + 1 current position's pieces and repetitions, planes 0-103.
     // If any history positions are missing, saturate at the earliest history/current position.
     assert(nextPlane == 0);
     HistoryWalker<INetwork::InputPreviousPositionCount> history(this, INetwork::InputPreviousPositionCount);
     while (history.Next())
     {
-        GeneratePiecePlanes(imageOut, nextPlane, _position, history.Perspective());
-        nextPlane += INetwork::InputPiecePlanesPerPosition;
+        GeneratePieceAndRepetitionPlanes(imageOut, nextPlane, _position, history.Perspective());
+        nextPlane += INetwork::InputPieceAndRepetitionPlanesPerPosition;
     }
 
-    // Castling planes 96-99
-    assert(nextPlane == 96);
+    // Castling planes 104-107
+    assert(nextPlane == 104);
     FillPlane(imageOut[nextPlane++], _position.can_castle(toPlay & KING_SIDE));
     FillPlane(imageOut[nextPlane++], _position.can_castle(toPlay & QUEEN_SIDE));
     FillPlane(imageOut[nextPlane++], _position.can_castle(~toPlay & KING_SIDE));
     FillPlane(imageOut[nextPlane++], _position.can_castle(~toPlay & QUEEN_SIDE));
 
-    // No-progress plane 100
+    // No-progress plane 108
     // This is a special case, not to be bit-unpacked, but instead interpreted as an integer
     // to be normalized via the no-progress saturation count (99).
-    assert(nextPlane == 100);
+    assert(nextPlane == 108);
     imageOut[nextPlane++] = _position.rule50_count();
 
     static_assert(INetwork::InputPreviousPositionCount == 7);
-    static_assert(INetwork::InputPiecePlanesPerPosition == 12);
+    static_assert(INetwork::InputPieceAndRepetitionPlanesPerPosition == 13);
     static_assert(INetwork::InputAuxiliaryPlaneCount == 5);
-    static_assert(INetwork::InputPlaneCount == 101);
+    static_assert(INetwork::InputPlaneCount == 109);
     assert(nextPlane == INetwork::InputPlaneCount);
 }
 
@@ -356,23 +356,23 @@ void Game::GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::P
     // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
     const Color toPlay = ToPlay();
 
-    // Add current position's pieces, planes 84-95 (becoming future positions' planes 72-83, 60-71, etc.).
-    GeneratePiecePlanes(piecesOut, nextPieces, _position, toPlay);
-    nextPieces += INetwork::InputPiecePlanesPerPosition;
+    // Add current position's pieces and repetitions, planes 91-103 (becoming future positions' planes 78-90, 65-77, etc.).
+    GeneratePieceAndRepetitionPlanes(piecesOut, nextPieces, _position, toPlay);
+    nextPieces += INetwork::InputPieceAndRepetitionPlanesPerPosition;
 
-    // Castling planes 96-99
+    // Castling planes 104-107
     int nextAuxiliary = 0;
     FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(toPlay & KING_SIDE));
     FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(toPlay & QUEEN_SIDE));
     FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(~toPlay & KING_SIDE));
     FillPlane(auxiliaryOut[nextAuxiliary++], _position.can_castle(~toPlay & QUEEN_SIDE));
 
-    // No-progress plane 100
+    // No-progress plane 108
     // This is a special case, not to be bit-unpacked, but instead interpreted as an integer
     // to be normalized via the no-progress saturation count (99).
     auxiliaryOut[nextAuxiliary++] = _position.rule50_count();
 
-    assert(nextPieces == INetwork::InputPiecePlanesPerPosition);
+    assert(nextPieces == INetwork::InputPieceAndRepetitionPlanesPerPosition);
     assert(nextAuxiliary == INetwork::InputAuxiliaryPlaneCount);
 }
 
@@ -472,7 +472,7 @@ void Game::Free()
     // Nodes are freed outside of Game objects because they outlive the games through MCTS tree reuse.
 }
 
-void Game::GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const
+void Game::GeneratePieceAndRepetitionPlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const
 {
     // If it's black perspective, flip the board and flip colors.
     imageOut[planeOffset + 0] = position.pieces(perspective, PAWN);
@@ -489,11 +489,17 @@ void Game::GeneratePiecePlanes(INetwork::PackedPlane* imageOut, int planeOffset,
     imageOut[planeOffset + 10] = position.pieces(~perspective, QUEEN);
     imageOut[planeOffset + 11] = position.pieces(~perspective, KING);
 
-    static_assert(INetwork::InputPiecePlanesPerPosition == 12);
+    // No need to flip repetitions. Encode first time (1-repetition) as all zeros, second time (2-repetition) as all ones.
+    // There should be no need to encode a 3-repetition because we don't predict for terminals (represented as negative "StateInfo::repetition").
+    assert(position.state_info()->repetition >= 0);
+    FillPlane(imageOut[planeOffset + 12], (position.state_info()->repetition != 0));
+
+    static_assert(INetwork::InputPieceAndRepetitionPlanesPerPosition == 13);
 
     // Piece colors are already conditionally flipped via perspective/~perspective ordering. Flip all vertically if BLACK to play.
     if (perspective == BLACK)
     {
+        // Only iterate over the piece planes: no need to flip repetitions.
         for (int i = planeOffset; i < planeOffset + INetwork::InputPiecePlanesPerPosition; i++)
         {
             imageOut[i] = FlipBoard(imageOut[i]);

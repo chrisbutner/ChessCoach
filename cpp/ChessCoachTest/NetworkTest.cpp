@@ -122,10 +122,10 @@ TEST(Network, ImagePieceHistoryPlanes)
 
     Game game("3rkb1r/p2nqppp/5n2/1B2p1B1/4P3/1Q6/PPP2PPP/2KR3R w k - 3 13", {});
 
-    const int fourthFinalHistoryPlanes = (INetwork::InputPreviousPositionCount - 4) * INetwork::InputPiecePlanesPerPosition;
-    const int secondFinalHistoryPlanes = (INetwork::InputPreviousPositionCount - 2) * INetwork::InputPiecePlanesPerPosition;
-    const int finalHistoryPlanes = (INetwork::InputPreviousPositionCount - 1) * INetwork::InputPiecePlanesPerPosition;
-    const int currentPositionPlanes = INetwork::InputPreviousPositionCount * INetwork::InputPiecePlanesPerPosition;
+    const int fourthFinalHistoryPlanes = (INetwork::InputPreviousPositionCount - 4) * INetwork::InputPieceAndRepetitionPlanesPerPosition;
+    const int secondFinalHistoryPlanes = (INetwork::InputPreviousPositionCount - 2) * INetwork::InputPieceAndRepetitionPlanesPerPosition;
+    const int finalHistoryPlanes = (INetwork::InputPreviousPositionCount - 1) * INetwork::InputPieceAndRepetitionPlanesPerPosition;
+    const int currentPositionPlanes = INetwork::InputPreviousPositionCount * INetwork::InputPieceAndRepetitionPlanesPerPosition;
 
     // Ensure that the final history their-pawns plane, flipped, equals the set up position's our-pawns, by saturation + flip.
     std::unique_ptr<INetwork::InputPlanes> image1(std::make_unique<INetwork::InputPlanes>());
@@ -380,6 +380,51 @@ TEST(Network, QueenKnightPlanes)
     EXPECT_EQ(policySums[WHITE], policySums[BLACK]);
 }
 
+TEST(Network, RepetitionPlanes)
+{
+    ChessCoach chessCoach;
+    chessCoach.Initialize();
+
+    SelfPlayWorker dummyWorker(nullptr /* storage */, nullptr /* searchState */, 0 /* gameCount */);
+    SelfPlayGame game(nullptr, nullptr, nullptr, nullptr); // Use constructor that sets up a Node root.
+
+    // Play some moves, generating a 2-repetition in the final 3 positions.
+    const std::vector<Move> moves =
+    {
+        make_move(SQ_B1, SQ_C3), make_move(SQ_B8, SQ_C6),
+        make_move(SQ_C3, SQ_B1), make_move(SQ_C6, SQ_B8),
+        make_move(SQ_B1, SQ_C3), make_move(SQ_B8, SQ_C6),
+    };
+    for (const Move move : moves)
+    {
+        game.ApplyMove(move);
+    }
+
+    // Generate full training tensors and check repetition planes.
+    INetwork::InputPlanes image;
+    game.GenerateImage(image);
+    EXPECT_EQ(image[0 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(false)]);
+    EXPECT_EQ(image[1 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(false)]);
+    EXPECT_EQ(image[2 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(false)]);
+    EXPECT_EQ(image[3 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(false)]);
+    EXPECT_EQ(image[4 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(false)]);
+    EXPECT_EQ(image[5 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(true)]);
+    EXPECT_EQ(image[6 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(true)]);
+    EXPECT_EQ(image[7 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition],
+        Game::FillPlanePacked[static_cast<int>(true)]);
+
+    // Sanity-check.
+    EXPECT_EQ(image[0 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition], 0);
+    EXPECT_NE(image[7 * INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputPiecePlanesPerPosition], 0);
+}
+
 TEST(Network, NullMoveFlip)
 {
     ChessCoach chessCoach;
@@ -396,11 +441,11 @@ TEST(Network, NullMoveFlip)
     game.GenerateImage(image2);
 
     // Expect that the piece planes for the "current" position are identical but flipped.
-    for (int i = 0; i < INetwork::INetwork::InputPiecePlanesPerPosition; i++)
+    for (int i = 0; i < INetwork::INetwork::InputPiecePlanesPerPosition; i++) // Pieces only, not repetitions
     {
-        const int historyPlanes = (INetwork::InputPreviousPositionCount * INetwork::InputPiecePlanesPerPosition);
+        const int historyPlanes = (INetwork::InputPreviousPositionCount * INetwork::InputPieceAndRepetitionPlanesPerPosition); // Striding, include repetitions
         const int ourPieces = (i + historyPlanes);
-        const int theirPieces = (((i + INetwork::INetwork::InputPiecePlanesPerPosition / 2) % INetwork::INetwork::InputPiecePlanesPerPosition) + historyPlanes);
+        const int theirPieces = (((i + INetwork::INetwork::InputPiecePlanesPerPosition / 2) % INetwork::INetwork::InputPiecePlanesPerPosition) + historyPlanes); // Rotation over pieces only, plus stride
         const INetwork::PackedPlane original = image1[ourPieces];
         const INetwork::PackedPlane nullFlipTheirs = Game::FlipBoard(image2[theirPieces]);
         EXPECT_EQ(original, nullFlipTheirs);

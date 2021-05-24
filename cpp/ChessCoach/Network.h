@@ -16,12 +16,14 @@ struct INetwork
 {
     static const int InputPreviousPositionCount = 7;
     static const int InputPiecePlanesPerPosition = 12;
+    static const int InputRepetitionPlanesPerPosition = 1;
+    static const int InputPieceAndRepetitionPlanesPerPosition = (InputPiecePlanesPerPosition + InputRepetitionPlanesPerPosition);
     static const int InputAuxiliaryPlaneCount = 5;
 
     static const int BoardSide = 8;
-    static const int InputPlaneCount = (InputPreviousPositionCount + 1) * (InputPiecePlanesPerPosition) + InputAuxiliaryPlaneCount;
+    static const int InputPlaneCount = (InputPreviousPositionCount + 1) * InputPieceAndRepetitionPlanesPerPosition + InputAuxiliaryPlaneCount;
     static const int OutputPlaneCount = (3 * 3) + (BoardSide * BoardSide); // UnderpromotionPlane + QueenKnightPlane
-    static_assert(InputPlaneCount == 101);
+    static_assert(InputPlaneCount == 109);
     static_assert(OutputPlaneCount == 73);
 
     static const int PlaneFloatCount = BoardSide * BoardSide;

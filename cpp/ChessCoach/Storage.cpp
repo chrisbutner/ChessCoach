@@ -271,7 +271,7 @@ void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex,
     auto& result = features.at("result").float_list().value();
     auto& mctsValues = features.at("mcts_values").float_list().value();
     auto& imagePiecesAuxiliary = features.at("image_pieces_auxiliary").int64_list().value();
-    const int imagePiecesAuxiliaryStride = (INetwork::InputPiecePlanesPerPosition + INetwork::InputAuxiliaryPlaneCount);
+    const int imagePiecesAuxiliaryStride = (INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputAuxiliaryPlaneCount);
     auto& policyRowLengths = features.at("policy_row_lengths").int64_list().value();
     auto& policyIndices = features.at("policy_indices").int64_list().value();
     auto& policyValues = features.at("policy_values").float_list().value();
@@ -396,7 +396,7 @@ void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Exa
     // Policy indices/values are ragged, so reserve for each move.
     auto& imagePiecesAuxiliary = *features["image_pieces_auxiliary"].mutable_int64_list()->mutable_value();
     imagePiecesAuxiliary.Clear();
-    const int imagePiecesAuxiliaryStride = (INetwork::InputPiecePlanesPerPosition + INetwork::InputAuxiliaryPlaneCount);
+    const int imagePiecesAuxiliaryStride = (INetwork::InputPieceAndRepetitionPlanesPerPosition + INetwork::InputAuxiliaryPlaneCount);
     const int imagePiecesAuxiliaryTotalSize = (game.moveCount * imagePiecesAuxiliaryStride);
     imagePiecesAuxiliary.Reserve(imagePiecesAuxiliaryTotalSize);
     imagePiecesAuxiliary.AddNAlreadyReserved(imagePiecesAuxiliaryTotalSize);
@@ -414,7 +414,7 @@ void Storage::PopulateGame(Game scratchGame, const SavedGame& game, message::Exa
     for (int m = 0; m < game.moveCount; m++)
     {
         INetwork::PackedPlane* imagePiecesOut = reinterpret_cast<INetwork::PackedPlane*>(imagePiecesAuxiliary.mutable_data()) + (m * imagePiecesAuxiliaryStride);
-        INetwork::PackedPlane* imageAuxiliaryOut = (imagePiecesOut + INetwork::InputPiecePlanesPerPosition);
+        INetwork::PackedPlane* imageAuxiliaryOut = (imagePiecesOut + INetwork::InputPieceAndRepetitionPlanesPerPosition);
         scratchGame.GenerateImageCompressed(imagePiecesOut, imageAuxiliaryOut);
 
         const int movePolicyIndexCount = static_cast<int>(game.childVisits[m].size());

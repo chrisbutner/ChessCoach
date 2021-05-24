@@ -1,5 +1,4 @@
 Training
-- full run - add repetition plane per history position to NN inputs (0 = 1-rep, 1=2rep)
 - instead of Optimizer.iterations, make subset/full share optimizer, save/load optimizer weights, validate .iterations before training
 
 Training - final run
@@ -93,6 +92,8 @@ Deployment
 - re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
 	- student on GPU, 4*256, teacher/student(which?) on TPU, 16*256 for both
 	- make sure multi-GPU-on-desktop is supported - reevaluate params
+- re-test on fresh VMs
+	- test without any virtual env on windows too, and with non-conda venv
 - installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
 - add windows command line build script, binplace somewhere cleanly
