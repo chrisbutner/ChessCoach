@@ -375,10 +375,11 @@ void ChessCoachTrain::ValidateSchedule(const TrainingState& /* state */)
     {
         if (stage.Stage == StageType_Train)
         {
-            const int positionsPerGame = 135; // Estimate
-            const int totalPositions = (Config::Network.Training.NumGames * positionsPerGame);
-            const float totalSamples = (static_cast<float>(Config::Network.Training.Steps) * Config::Network.Training.BatchSize); // This overflows a 32-bit integer.
-            const float sampleRatio = (totalSamples / totalPositions);
+            // Calculate using floats: need to avoid 32-bit integer overflow, and need to end up with a ratio.
+            const float positionsPerGame = 135.f; // Estimate
+            const float sampleRatio =
+                (static_cast<float>(Config::Network.Training.Steps) * Config::Network.Training.BatchSize) // total samples
+                / (positionsPerGame * Config::Network.Training.NumGames); // total positions
             if (sampleRatio >= 1.f)
             {
                 throw std::invalid_argument("Invalid training schedule; sample ratio is too high; increase num_games and window");
