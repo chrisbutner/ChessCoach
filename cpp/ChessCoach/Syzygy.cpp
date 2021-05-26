@@ -45,12 +45,24 @@ bool Syzygy::ProbeTablebasesAtRoot(SelfPlayGame& game)
 {
     bool RootInTB = false;
     bool dtz_available = true;
+    bool attemptedProbe = false;
     const Position& position = game.GetPosition();
     game.TablebaseCardinality() = Tablebases::MaxCardinality;
 
-    if (game.TablebaseCardinality() && (game.TablebaseCardinality() >= position.count<ALL_PIECES>()) && !position.can_castle(ANY_CASTLING))
+    // "ShouldProbeTablebases" may be non-deterministic for self-play games.
+    // Decide once for each position (here) whether to use tablebases at all, and if not,
+    // clear cardinality so that deeper positions don't probe via "ProbeWdl".
+    if (!game.ShouldProbeTablebases())
+    {
+        game.TablebaseCardinality() = 0;
+    }
+
+    if (game.TablebaseCardinality() &&
+        (game.TablebaseCardinality() >= position.count<ALL_PIECES>()) &&
+        !position.can_castle(ANY_CASTLING))
     {
         // Rank moves using DTZ tables
+        attemptedProbe = true;
         RootInTB = ProbeDtzAtRoot(game);
 
         if (!RootInTB)
@@ -69,7 +81,7 @@ bool Syzygy::ProbeTablebasesAtRoot(SelfPlayGame& game)
             game.TablebaseCardinality() = 0;
         }
     }
-    else
+    else if (attemptedProbe)
     {
         // Clean up if ProbeDtzAtRoot() and ProbeWdlAtRoot() have failed
         for (Node& child : *game.Root())
@@ -245,6 +257,8 @@ bool Syzygy::ProbeWdl(SelfPlayGame& game, bool isSearchRoot)
     // of the search root is a zeroing move, we may proceed to probe WDL here despite having already set score/bound
     // on this node during the root probe. Since this will happen so rarely, and only cause a small number of duplicate
     // probes at the start of search, with no harm done, don't waste any runtime checking for the case.
+    //
+    // No need to check "SelfPlayGame::ShouldProbeTablebases" here: see in "ProbeTablebasesAtRoot".
     if (!(!isSearchRoot &&
         game.TablebaseCardinality() &&
         game.TablebaseCardinality() >= position.count<ALL_PIECES>() &&

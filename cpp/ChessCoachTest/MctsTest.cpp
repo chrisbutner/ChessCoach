@@ -193,16 +193,20 @@ TEST(Mcts, MateComparisons)
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
 
     // Set up nodes from expected worst to best.
-    const int nodeCount = 7;
+    const int nodeCount = 9;
     Node nodes[nodeCount] = {};
-    nodes[0].terminalValue = TerminalValue::OpponentMateIn<2>();
-    nodes[1].terminalValue = TerminalValue::OpponentMateIn<4>();
-    nodes[2].visitCount = 10;
-    nodes[3].terminalValue = TerminalValue::Draw();
-    nodes[3].visitCount = 15;
-    nodes[4].visitCount = 100;
-    nodes[5].terminalValue = TerminalValue::MateIn<3>();
-    nodes[6].terminalValue = TerminalValue::MateIn<1>();
+    nodes[0].terminalValue = TerminalValue::OpponentMateIn<6>();
+    nodes[0].tablebaseRank = -1000;
+    nodes[1].terminalValue = TerminalValue::OpponentMateIn<2>();
+    nodes[2].terminalValue = TerminalValue::OpponentMateIn<4>();
+    nodes[3].visitCount = 10;
+    nodes[4].terminalValue = TerminalValue::Draw();
+    nodes[4].visitCount = 15;
+    nodes[5].visitCount = 100;
+    nodes[6].terminalValue = TerminalValue::MateIn<3>();
+    nodes[7].terminalValue = TerminalValue::MateIn<1>();
+    nodes[8].terminalValue = TerminalValue::MateIn<5>();
+    nodes[8].tablebaseRank = 1000;
 
     // Check all pairs.
     for (int i = 0; i < nodeCount - 1; i++)

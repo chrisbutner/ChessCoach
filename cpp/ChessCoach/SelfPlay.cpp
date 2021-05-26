@@ -704,7 +704,7 @@ float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*&
 
     // Probe endgame tablebases for a WDL score for the parent.
     // No need to update "value" here for a successful probe: handled generally in Backpropagate().
-    if (ShouldProbeTablebases() && Syzygy::ProbeWdl(*this, isSearchRoot))
+    if (Syzygy::ProbeWdl(*this, isSearchRoot))
     {
         searchState->tablebaseHitCount.fetch_add(1, std::memory_order_relaxed);
     }
@@ -1556,7 +1556,7 @@ void SelfPlayWorker::PrepareExpandedRoot(SelfPlayGame& game)
     // When there are too many pieces at the root to probe endgame tablebases, we can still try
     // to probe individual leaf positions when they reach few enough pieces. We only probe win/draw/loss (WDL)
     // "at zero", when progress has just been made (pawn move or capture). Accurate search is still very necessary.
-    if (game.ShouldProbeTablebases() && Syzygy::ProbeTablebasesAtRoot(game))
+    if (Syzygy::ProbeTablebasesAtRoot(game))
     {
         // In addition to setting tablebase ranks, which we use even before proven mate categories for move selection,
         // we just updated root child value: not just FPU, but bounded value for nodes with existing valueWeight too.
