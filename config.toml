@@ -145,7 +145,7 @@ role = "train|play"
 num_games = 44_000_000
 window_size = 1_000_000
 batch_size = 512
-commentary_batch_size = 64
+commentary_batch_size = 512 # Use 64 on GTX 1080.
 steps = 5_600_000 # Equivalent to 700,000 steps of batch size 4096
 warmup_steps = 1000
 pgn_interval = 10000
@@ -189,6 +189,7 @@ network_type = "student"
 # Instead of using the latest weights found for "network_name", use these specific ones; e.g., selfplay6a_001000000.
 network_weights = ""
 
+# Use 4*512 on GTX 1080.
 num_workers = 8
 prediction_batch_size = 512
 
@@ -233,7 +234,8 @@ fraction_remaining = 20
 
 [search]
 
-search_threads = 4
+# Use 4*256 on GTX 1080.
+search_threads = 16
 search_parallelism = 256
 gui_update_interval_nodes = 1000
 
