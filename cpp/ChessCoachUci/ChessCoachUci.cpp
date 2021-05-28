@@ -380,6 +380,10 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
         Syzygy::Reload();
         _syzygyLoaded = true;
     }
+    else if (name == "Hash")
+    {
+        InitializePredictionCache();
+    }
 }
 
 void ChessCoachUci::HandleRegister(std::stringstream& /*commands*/)

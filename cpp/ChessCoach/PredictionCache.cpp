@@ -3,6 +3,8 @@
 #include <iostream>
 #include <cassert>
 
+#include <google/protobuf/stubs/port.h>
+
 #include "PoolAllocator.h"
 
 PredictionCache PredictionCache::Instance;
@@ -137,8 +139,7 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float*
 }
 
 PredictionCache::PredictionCache()
-    : _allocatedRequestGib(0)
-    , _allocatedMinGib(0)
+    : _allocatedSizeMebibytes(0)
     , _chunksPerTable(0)
     , _hitCount(0)
     , _evictionCount(0)
@@ -153,132 +154,98 @@ PredictionCache::~PredictionCache()
     Free();
 }
 
-void PredictionCache::Allocate(int requestGib, int minGib)
+void PredictionCache::Allocate(int sizeMebibytes)
 {
-    // Require <= 256 GiB and a power of two, or zero.
-    requestGib = std::max(requestGib, minGib);
-    if (minGib < 0)
+    // Require non-negative.
+    if (sizeMebibytes < 0)
     {
         throw std::invalid_argument("Negative size");
     }
-    if ((requestGib > MaxTableCount) || (minGib > MaxTableCount))
+
+    // Round down to a power of two or zero, and at most 256 GiB.
+    constexpr const int bytesPerMebibyte = (1024 * 1024);
+    constexpr const int chunksPerMebibyte = (bytesPerMebibyte / static_cast<int>(sizeof(PredictionCacheChunk)));
+    constexpr const int maxMebibytes = (MaxTableCount * MaxChunksPerTable / chunksPerMebibyte);
+    static_assert((bytesPerMebibyte % static_cast<int>(sizeof(PredictionCacheChunk))) == 0);
+    static_assert(maxMebibytes == 256 * 1024);
+    if (sizeMebibytes > 0)
     {
-        static_assert(MaxTableCount == 256);
-        throw std::invalid_argument("Maximum prediction cache size 256 GiB");
-    }
-    if (((requestGib & (requestGib - 1)) != 0) || ((minGib & (minGib - 1)) != 0))
-    {
-        throw std::invalid_argument("Prediction cache size must be a power-of-two GiB or zero");
+        sizeMebibytes = (1 << static_cast<int>(google::protobuf::Bits::Log2FloorNonZero(static_cast<google::protobuf::uint32>(std::min(maxMebibytes, sizeMebibytes)))));
     }
 
     // Do nothing if already identically allocated.
-    if ((requestGib == _allocatedRequestGib) && (minGib == _allocatedMinGib))
+    if (sizeMebibytes == _allocatedSizeMebibytes)
     {
         return;
     }
 
-    // Allocate may be called on an already-allocated prediction cache (with different request/min).
+    // Allocate may be called on an already-allocated prediction cache (with different size).
     Free();
 
-    // Try 1 GiB table allocations, then 512 MiB, 256 MiB, etc. until reaching maximum table count for the requested "requestGb"
-    // (e.g. for 1 GiB prediction cache, minimum table size is 4 MiB; for 8 GiB prediction cache, minimum table size is 32 MiB).
-    // Then, walk the "requestGb" down to "minGb" and repeat the table size walk-down for each size.
-    static_assert(MaxChunksPerTable * sizeof(PredictionCacheChunk) == (1 << 30)); // Our largest tables are 1 GiB.
-    static_assert(((1 << 30) / MaxTableCount) % sizeof(PredictionCacheChunk) == 0); // Our smallest tables still fit a whole number of chunks.
-    int sizeGib = requestGib;
-    int chunksPerTable = MaxChunksPerTable;
-    while (true)
-    {
-        const int tableSizeBytes = chunksPerTable * sizeof(PredictionCacheChunk);
-        const int tableCount = sizeGib * ((1 << 30) / tableSizeBytes);
-
-        if (tableCount > MaxTableCount)
-        {
-            // Walked "chunksPerTable" down to the limit, all failed.
-            if (sizeGib > minGib)
-            {
-                // Reduce the request (still above minimum size) and reset the walk-down.
-                sizeGib >>= 1;
-                chunksPerTable = MaxChunksPerTable;
-                continue;
-            }
-            else
-            {
-                // Can't satisfy minimum size.
-                throw std::runtime_error("Remaining memory is too fragmented to allocate prediction cache: close programs, reduce cache size or reboot");
-            }
-        }
-
-        if (TryAllocate(tableSizeBytes, tableCount, chunksPerTable))
-        {
-            _allocatedRequestGib = requestGib;
-            _allocatedMinGib = minGib;
-            break;
-        }
-
-        chunksPerTable >>= 1;
-    }
-}
-
-bool PredictionCache::TryAllocate(int tableSizeBytes, int tableCount, int chunksPerTable)
-{
+    // Use 1 table until reaching the max table size, then scale out to the max table count.
+    const int chunksTotal = (sizeMebibytes * chunksPerMebibyte);
+    const int chunksPerTable = std::clamp(chunksTotal, 1, MaxChunksPerTable); // Handle ("sizeMebibytes" == 0).
+    const int tableCount = (chunksTotal / chunksPerTable);
+    assert((chunksTotal % chunksPerTable) == 0);
     assert(tableCount <= MaxTableCount);
-    assert(chunksPerTable <= MaxChunksPerTable);
+    assert((tableCount > 1) ? (chunksPerTable == MaxChunksPerTable) : (chunksPerTable <= MaxChunksPerTable));
 
+    // For each table, try allocate with large page support then fall back to a regular allocation.
+    const int tableSizeBytes = (chunksPerTable * sizeof(PredictionCacheChunk));
     _tables.reserve(tableCount);
-
     for (int i = 0; i < tableCount; i++)
     {
-        // Allocate table with large page support.
+        // Try allocate with large page support.
         void* memory = LargePageAllocator::Allocate(tableSizeBytes);
-        if (!memory)
+        if (memory)
         {
-            break;
+            _allocations.push_back(memory);
+        }
+        else
+        {
+            // Fall back to a regular allocation, aligning to the large page size.
+#ifdef CHESSCOACH_WINDOWS
+            memory = ::_aligned_malloc(tableSizeBytes, LargePageAllocator::LargePageMinimum);
+#else
+            memory = std::aligned_alloc(LargePageAllocator::LargePageMinimum, tableSizeBytes);
+#endif
+            if (!memory)
+            {
+                throw std::bad_alloc();
+            }
+            _fallbackAllocations.push_back(memory);
         }
 
         _tables.push_back(reinterpret_cast<PredictionCacheChunk*>(memory));
     }
 
-    // If any allocations failed, free the partial allocations before returning.
-    if (_tables.size() < tableCount)
-    {
-        for (void* memory : _tables)
-        {
-            if (memory)
-            {
-                LargePageAllocator::Free(memory);
-            }
-        }
-        _tables.clear();
-        return false;
-    }
-
     _chunksPerTable = chunksPerTable;
     _entryCapacity = (static_cast<uint64_t>(tableCount) * chunksPerTable * PredictionCacheChunk::EntryCount);
+    _allocatedSizeMebibytes = sizeMebibytes;
 
-#ifdef CHESSCOACH_WINDOWS
-    // Memory is already zero-filled by VirtualAlloc on Windows, so no need to clear chunks.
-#else
-    // Memory comes from std::aligned_alloc in Linux with madvise hint, so no zero-filling guarantees
-    // and may not even be large pages. We can either Clear() or memset, haven't timed them.
-    Clear();
-#endif
-
-    return true;
+    // Technically we don't need to clear on Windows in the case of no fallback allocations,
+    // because VirtualAlloc zero-fills memory, but prefer consistency/simplicity in this case.
+    Clear(); // Depends on "_chunksPerTable" and "_entryCapacity".
 }
 
 void PredictionCache::Free()
 {
-    _allocatedRequestGib = 0;
-    _allocatedMinGib = 0;
+    _allocatedSizeMebibytes = 0;
 
-    for (void* memory : _tables)
+    for (void* memory : _allocations)
     {
-        if (memory)
-        {
-            LargePageAllocator::Free(memory);
-        }
+        LargePageAllocator::Free(memory);
     }
+    for (void* memory : _fallbackAllocations)
+    {
+#ifdef CHESSCOACH_WINDOWS
+        ::_aligned_free(memory);
+#else
+        std::free(memory);
+#endif
+    }
+    _allocations.clear();
+    _fallbackAllocations.clear();
     _tables.clear();
 
     _chunksPerTable = 0;

@@ -133,7 +133,7 @@ void ChessCoach::InitializeChessCoach()
 
 void ChessCoach::InitializePredictionCache()
 {
-    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_RequestGibibytes, Config::Misc.PredictionCache_MinGibibytes);
+    PredictionCache::Instance.Allocate(Config::Misc.PredictionCache_SizeMebibytes);
 }
 
 // Keep Python visibility isolated to the ChessCoach library.

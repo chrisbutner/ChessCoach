@@ -10,7 +10,7 @@
 
 class LargePageAllocator
 {
-private:
+public:
 
     static size_t LargePageMinimum;
 

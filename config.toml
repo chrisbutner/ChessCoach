@@ -223,8 +223,7 @@ wait_for_updated_network = false
 
 [prediction_cache]
 
-request_gibibytes = 8
-min_gibibytes = 1
+Hash = 8192 # Maps to PredictionCache_SizeMebibytes (named to auto-match UCI option).
 max_ply = 30
 
 [time_control]
@@ -305,6 +304,7 @@ network_weights = "string"
 search_threads = "spin"
 search_parallelism = "spin"
 safety_buffer_milliseconds = "spin"
+Hash = "spin"
 linear_exploration_rate = "float"
 linear_exploration_base = "float"
 virtual_loss_coefficient = "float"

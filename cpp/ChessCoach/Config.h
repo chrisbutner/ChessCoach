@@ -121,8 +121,7 @@ struct NetworkConfig
 struct MiscConfig
 {
     // Prediction cache
-    int PredictionCache_RequestGibibytes;
-    int PredictionCache_MinGibibytes;
+    int PredictionCache_SizeMebibytes;
     int PredictionCache_MaxPly;
 
     // Time control
