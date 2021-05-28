@@ -217,7 +217,7 @@ class Network:
   @tf.function
   def tf_predict_commentary(self, device_index, images):
     inputs = dict(inputs=images)
-    outputs = self.models_predict[device_index].commentary(inputs)
+    outputs = self.models_predict[device_index].commentary(inputs) # Doesn't take a "training" argument for now.
     sequences = outputs["outputs"]
     # Can't detokenize here because of https://github.com/tensorflow/tensorflow/issues/47683
     return sequences

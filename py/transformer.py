@@ -38,22 +38,24 @@ from official.nlp.modeling import layers
 from official.nlp.modeling.ops import beam_search
 from official.nlp.transformer import model_utils
 
+# Don't let TensorFlow see the encoder for the purpose of minimizing loss or saving/loading weights via "AutoTrackable".
+# The encoder is just a weightless head to the "full" chess-playing model, so it's saved/loaded separately.
+class EncoderHider:
+
+  def __init__(self, encoder):
+    self.encoder = encoder
+
 class CommentaryModel(tf.keras.Model):
 
   def __init__(self, encoder, decoder, **kwargs):
     super().__init__(**kwargs)
-    self.encoder = encoder
+    self.encoder_hider = EncoderHider(encoder)
     self.decoder = decoder
 
   def call(self, inputs):
-    inputs = {**inputs, "inputs": self.encoder(inputs["inputs"])}
+    # TODO: No backprop into encoder (main model) for now
+    inputs = {**inputs, "inputs": self.encoder_hider.encoder(inputs["inputs"], training=False)}
     return self.decoder(inputs)
-
-  def save_weights(self, filepath, overwrite=True, save_format=None, options=None):
-    self.decoder.save_weights(filepath, overwrite, save_format, options)
-
-  def load_weights(self, filepath, by_name=False, skip_mismatch=False, options=None):
-    return self.decoder.load_weights(filepath, by_name, skip_mismatch, options)
 
 class CommentaryDecoder(tf.keras.Model):
   """Transformer model with Keras.
@@ -161,7 +163,7 @@ class CommentaryDecoder(tf.keras.Model):
     # embedding, positional encoding, attention masking or dropout at this stage.
     # The attention bias tensor is just zeros, with shape compatible with "get_padding_bias".
     encoder_outputs = sources
-    encoder_outputs = tf.stop_gradient(encoder_outputs) # TEMP
+    encoder_outputs = tf.stop_gradient(encoder_outputs) # TODO: No backprop into encoder (main model) for now
     attention_bias = tf.zeros((tf.shape(encoder_outputs)[0], 1, 1, 1), dtype=self._dtype)
 
     if targets is None:
