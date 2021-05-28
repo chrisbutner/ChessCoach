@@ -6,6 +6,7 @@ import socket
 silent = bool(os.environ.get("CHESSCOACH_SILENT"))
 if silent:
   os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+  os.environ["GRPC_VERBOSITY"] = "FATAL"
 
 def log(*args):
   if not silent:
@@ -14,6 +15,8 @@ def log(*args):
     print(*args, flush=True)
 
 import tensorflow as tf
+if silent:
+  tf.get_logger().setLevel("ERROR")
 
 # --- TPU/GPU initialization ---
 
