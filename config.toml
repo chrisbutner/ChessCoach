@@ -4,12 +4,12 @@
 
 [network]
 
-network_name = "selfplay9"
+network_name = "selfplay10"
 role = "train|play"
 
 [[networks]]
 
-    name = "selfplay9a"
+    name = "selfplay10a"
 
     [networks.training]
 
@@ -26,7 +26,7 @@ role = "train|play"
         { stage = "strength_test", target = "teacher" },
     ]
 
-    games_path_training = "Games/Fresh5"
+    games_path_training = "Games/Fresh6"
 
     [networks.self_play]
 
@@ -34,7 +34,7 @@ role = "train|play"
 
 [[networks]]
 
-    name = "selfplay9"
+    name = "selfplay10"
 
     [networks.training]
 
@@ -54,7 +54,7 @@ role = "train|play"
         { stage = "strength_test", target = "student" },
     ]
 
-    games_path_training = "Games/Fresh5"
+    games_path_training = "Games/Fresh6"
 
 [[networks]]
 
