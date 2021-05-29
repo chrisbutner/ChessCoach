@@ -200,7 +200,12 @@ std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, In
     std::vector<std::string> comments(batchSize);
     for (int i = 0; i < batchSize; i++)
     {
-        comments[i] = reinterpret_cast<const char*>(PyArray_GETPTR1(pythonCommentsArray, i));
+        PyObject* pythonComment = *reinterpret_cast<PyObject**>(PyArray_GETPTR1(pythonCommentsArray, i));
+        PyBytes_Check(pythonComment);
+
+        const Py_ssize_t size = PyBytes_GET_SIZE(pythonComment);
+        const char* data = PyBytes_AS_STRING(pythonComment);
+        comments[i] = std::string(data, size);
     }
 
     Py_DECREF(result);
