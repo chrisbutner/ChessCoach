@@ -41,6 +41,12 @@ class DatasetBuilder:
     "comments": tf.io.FixedLenSequenceFeature([], tf.string, allow_missing=True),
   }
 
+  def disable_sharding(self, dataset):
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+    dataset = dataset.with_options(options)
+    return dataset
+
   # Values are (-1, 0, 1) in Python/TensorFlow, (0, 0.5, 1) in C++/MCTS.
   def flip_value(self, value):
     return -value
@@ -214,8 +220,9 @@ class DatasetBuilder:
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
 
-    # Prefetch batches.
+    # Prefetch batches and disable sharding.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = self.disable_sharding(dataset)
     return dataset
 
   def parse_commentary_record(self, record, tokenizer, options):
@@ -300,6 +307,7 @@ class DatasetBuilder:
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
 
-    # Prefetch batches.
+    # Prefetch batches and disable sharding.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = self.disable_sharding(dataset)
     return dataset
