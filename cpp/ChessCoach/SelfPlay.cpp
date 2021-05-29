@@ -1041,8 +1041,7 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
 
 int SelfPlayWorker::ChooseSimulationLimit()
 {
-    return (Random::InProportion(Config::Network.SelfPlay.DeepSimulationsProportion) ?
-        Config::Network.SelfPlay.DeepSimulationsCount : Config::Network.SelfPlay.NumSimulations);
+    return Config::Network.SelfPlay.NumSimulations;
 }
 
 void SelfPlayWorker::ClearGame(int index)
@@ -1396,9 +1395,14 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
             // so that the side-effects - children - are visible here.
             while (scratchGame.Root()->expansion.load(std::memory_order_acquire) == Expansion::Expanded)
             {
+                // Force playouts during training only, at the root only.
+                const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
+                WeightedNode selected = forcePlayouts ?
+                    PuctContext(_searchState, scratchGame.Root()).SelectChild<true>() :
+                    PuctContext(_searchState, scratchGame.Root()).SelectChild<false>();
+
                 // If we can't select a child it's because parallel MCTS is already expanding all
                 // children. Give up on this one until next iteration.
-                WeightedNode selected = PuctContext(_searchState, scratchGame.Root()).SelectChild();
                 if (!selected.node)
                 {
                     assert(game.TryHard());
@@ -1676,6 +1680,7 @@ PuctContext::PuctContext(const SearchState* searchState, Node* parent)
 
 // It's possible because of nodes marked off-limits via "expanding"
 // that this method cannot select a child, instead returning NONE/nullptr.
+template <bool ForcePlayouts>
 WeightedNode PuctContext::SelectChild() const
 {
     float maxAzPuct = -std::numeric_limits<float>::infinity();
@@ -1690,7 +1695,7 @@ WeightedNode PuctContext::SelectChild() const
     for (Node& child : *_parent)
     {
         const float childVirtualExploration = VirtualExploration(&child);
-        const float azPuct = CalculateAzPuctScore(&child, childVirtualExploration);
+        const float azPuct = CalculateAzPuctScore<ForcePlayouts>(&child, childVirtualExploration);
         maxAzPuct = std::max(maxAzPuct, azPuct);
         ScoredNodes.emplace_back(&child, azPuct, childVirtualExploration);
     }
@@ -1725,8 +1730,19 @@ WeightedNode PuctContext::SelectChild() const
 }
 
 // AZ-PUCT is the AlphaZero Predictor-Upper Confidence bound applied to Trees (with a mate-term modification and virtual exploration/loss).
+template <bool ForcePlayouts>
 float PuctContext::CalculateAzPuctScore(const Node* child, float childVirtualExploration) const
 {
+    // We force playouts only during training, so we don't care about virtual loss or exploration issues
+    // that would otherwise occur when returning a constant infinity.
+    if constexpr (ForcePlayouts)
+    {
+        if (childVirtualExploration < std::floor(std::sqrt(2.f * child->prior * _parentVirtualExploration)))
+        {
+            return std::numeric_limits<float>::infinity();
+        }
+    }
+
     // Calculate the exploration rate, which is multiplied by (a) the prior to incentivize exploration,
     // and (b) a mate-in-N lookup to incentivize sufficient exploitation of forced mates, dependent on depth.
     // Include "visitingCount" to help parallel searches diverge ("virtual exploration").
@@ -1752,8 +1768,8 @@ float PuctContext::CalculateSblePuctScore(float azPuctScore, float childVirtualE
 
 float PuctContext::CalculatePuctScoreAdHoc(const Node* child) const
 {
-    // AZ-PUCT makes the most sense to display.
-    return CalculateAzPuctScore(child, VirtualExploration(child));
+    // AZ-PUCT with no forced playouts makes the most sense to display.
+    return CalculateAzPuctScore<false>(child, VirtualExploration(child));
 }
 
 float PuctContext::VirtualExploration(const Node* node) const

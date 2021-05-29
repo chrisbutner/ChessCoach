@@ -196,8 +196,6 @@ prediction_batch_size = 512
 num_sampling_moves = 30
 max_moves = 512
 num_simulations = 800
-deep_simulations_count = 10_000 # (10k/0.05) combination increases self-play work by 57.5%.
-deep_simulations_proportion = 0.05
 syzygy_probe_proportion = 0.15 # Used for both root WDL+DTZ and leaf WDL probes.
 
 root_dirichlet_alpha = 0.3
@@ -207,7 +205,7 @@ exploration_rate_base = 19652.0
 exploration_rate_init = 1.25
 
 linear_exploration_rate = 200.0
-linear_exploration_base = 10000.0 # Should roughly equal "deep_simulations_count" for reasonable exploration and policy target shape.
+linear_exploration_base = 40000.0
 virtual_loss_coefficient = 0.25
 moving_average_build = 0.95
 moving_average_cap = 1500.0

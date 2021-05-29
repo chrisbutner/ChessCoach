@@ -167,6 +167,7 @@ class PuctContext
 public:
 
     PuctContext(const SearchState* searchState, Node* parent);
+    template <bool ForcePlayouts>
     WeightedNode SelectChild() const;
     float CalculatePuctScoreAdHoc(const Node* child) const;
 
@@ -176,6 +177,7 @@ private:
 
 private:
 
+    template <bool ForcePlayouts>
     float CalculateAzPuctScore(const Node* child, float childVirtualExploration) const;
     float CalculateSblePuctScore(float azPuctScore, float childVirtualExploration) const;
     float VirtualExploration(const Node* node) const;
