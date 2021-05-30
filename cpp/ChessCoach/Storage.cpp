@@ -12,7 +12,9 @@
 #include <google/protobuf/io/gzip_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #pragma warning(disable:4100) // Ignore unused args in generated code
+#pragma warning(disable:4127) // Ignore const-per-architecture warning
 #include <protobuf/ChessCoach.pb.h>
+#pragma warning(disable:4127) // Ignore const-per-architecture warning
 #pragma warning(default:4100) // Ignore unused args in generated code
 
 #include <crc32c/include/crc32c/crc32c.h>
@@ -520,23 +522,11 @@ std::filesystem::path Storage::MakeLocalPath(const std::filesystem::path& root, 
     return rooted;
 }
 
-void Storage::SaveCommentary(const std::filesystem::path& path, const std::vector<SavedGame>& games,
+void Storage::SaveCommentary(CommentarySaveContext& saveContext, const std::vector<SavedGame>& games,
     std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary) const
 {
-    // Compress the TFRecord file using zlib.
-    PosixFile file(path, true /* write */);
-    google::protobuf::io::FileOutputStream wrapped(file.FileDescriptor());
-    google::protobuf::io::GzipOutputStream::Options zipOptions{};
-    zipOptions.format = google::protobuf::io::GzipOutputStream::ZLIB;
-    google::protobuf::io::GzipOutputStream zip(&wrapped, zipOptions);
-
-    // Write a single "tf.train.Example" protobuf for all images/comments as a TFRecord.
-    message::Example store;
-    std::string buffer;
-    auto& features = *store.mutable_features()->mutable_feature();
-    auto& images = *features["images"].mutable_int64_list()->mutable_value();
-    auto& comments = *features["comments"].mutable_bytes_list()->mutable_value();
-    const int imageStride = INetwork::InputPlaneCount;
+    // Only let one thread contribute to the shared save context at once.
+    std::lock_guard lock(saveContext.mutex);
 
     const Preprocessor preprocessor;
 
@@ -560,9 +550,16 @@ void Storage::SaveCommentary(const std::filesystem::path& path, const std::vecto
             preprocessor.PreprocessComment(comment.comment);
             if (!comment.comment.empty())
             {
+                // Write a single "tf.train.Example" protobuf for all images/comments as a TFRecord.
+                // Choose whether to add to training or validation.
+                CommentaryRecordType& recordType = saveContext.ChooseRecordType();
+                auto& features = *recordType.record->mutable_features()->mutable_feature();
+                auto& images = *features["images"].mutable_int64_list()->mutable_value();
+                auto& comments = *features["comments"].mutable_bytes_list()->mutable_value();
+                const int imageStride = INetwork::InputPlaneCount;
+
                 // Update vocabulary.
-                vocabulary.commentCount++;
-                vocabulary.vocabulary.insert(comment.comment);
+                vocabulary.vocabulary.push_back(comment.comment);
 
                 // Write the comment directly (don't touch "comment.comment" after this).
                 comments.Add(std::move(comment.comment));
@@ -592,12 +589,56 @@ void Storage::SaveCommentary(const std::filesystem::path& path, const std::vecto
                     variation.ApplyMoveMaybeNull(Move(move));
                 }
 
-                // Write the full image: no compression for commentary because of branching variation structure.
+                // Generate the full image: no compression for commentary because of branching variation structure.
                 variation.GenerateImage(imageOut);
+
+                // Write the record if full.
+                if (comments.size() >= CommentarySaveContext::PositionsPerRecord)
+                {
+                    WriteCommentary(recordType);
+                }
             }
         }
     }
+}
+
+void Storage::WriteRemainingCommentary(CommentarySaveContext& saveContext) const
+{
+    // Should only be one caller, but fence vs. most recent other.
+    std::lock_guard lock(saveContext.mutex);
+
+    for (CommentaryRecordType& recordType : saveContext.recordTypes)
+    {
+        if (recordType.record->has_features())
+        {
+            WriteCommentary(recordType);
+        }
+    }
+}
+
+void Storage::WriteCommentary(CommentaryRecordType& recordType) const
+{
+    // Generate a path.
+    const std::filesystem::path path = (recordType.directory / GenerateSimpleChunkFilename(++recordType.latestRecordNumber));
+
+    // Compress the TFRecord file using zlib.
+    PosixFile file(path, true /* write */);
+    google::protobuf::io::FileOutputStream wrapped(file.FileDescriptor());
+    google::protobuf::io::GzipOutputStream::Options zipOptions{};
+    zipOptions.format = google::protobuf::io::GzipOutputStream::ZLIB;
+    google::protobuf::io::GzipOutputStream zip(&wrapped, zipOptions);
 
     // Write the "tf.train.Example" protobuf.
-    WriteTfRecord(zip, buffer, store);
+    std::string buffer;
+    WriteTfRecord(zip, buffer, *recordType.record);
+
+    // Clear the record, ready to build up again.
+    recordType.record->Clear();
 }
+
+CommentaryRecordType& CommentarySaveContext::ChooseRecordType()
+{
+    std::discrete_distribution distribution(recordWeights.begin(), recordWeights.end());
+    return recordTypes[distribution(Random::Engine)];
+}
+

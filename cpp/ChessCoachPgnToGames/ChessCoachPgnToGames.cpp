@@ -7,6 +7,12 @@
 #include <atomic>
 #include <deque>
 
+#pragma warning(disable:4100) // Ignore unused args in generated code
+#pragma warning(disable:4127) // Ignore const-per-architecture warning
+#include <protobuf/ChessCoach.pb.h>
+#pragma warning(disable:4127) // Ignore const-per-architecture warning
+#pragma warning(default:4100) // Ignore unused args in generated code
+
 #include <Stockfish/position.h>
 #include <tclap/CmdLine.h>
 
@@ -23,7 +29,7 @@ class ChessCoachPgnToGames : public ChessCoach
 public:
 
     ChessCoachPgnToGames(const std::filesystem::path& inputDirectory, const std::filesystem::path& outputDirectory,
-        int threadCount, bool commentary);
+        int threadCount, bool commentary, float commentaryValidationSplit);
 
     void InitializeLight();
     void FinalizeLight();
@@ -31,7 +37,7 @@ public:
 
 private:
 
-    void ConvertPgns();
+    void ConvertPgns(const Storage& storage);
     void SaveChunk(const Storage& storage, std::vector<SavedGame>& games,
         std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary);
 
@@ -41,6 +47,7 @@ private:
     std::filesystem::path _outputDirectory;
     int _threadCount;
     bool _commentary;
+    float _commentaryValidationSplit;
 
     std::mutex _pgnQueueMutex;
     std::queue<std::filesystem::path> _pgnQueue;
@@ -51,6 +58,7 @@ private:
     std::atomic_int _totalFileCount;
     std::atomic_int _totalGameCount;
 
+    CommentarySaveContext _commentarySaveContext;
     std::deque<Vocabulary> _vocabularies;
 };
 
@@ -60,6 +68,7 @@ int main(int argc, char* argv[])
     std::string outputDirectory;
     int threadCount;
     bool commentary;
+    float commentaryValidationSplit;
 
     try
     {
@@ -69,8 +78,10 @@ int main(int argc, char* argv[])
         TCLAP::ValueArg<std::string> outputDirectoryArg("o", "output", "Output directory where game files should be placed", true /* req */, "", "string");
         TCLAP::ValueArg<int> threadCountArg("t", "threads", "Number of threads to use (0 = autodetect)", false /* req */, 0, "number");
         TCLAP::SwitchArg commentaryArg("c", "commentary", "Parse commentary/variations and output comments", false, nullptr);
+        TCLAP::ValueArg<float> commentaryValidationSplitArg("v", "validation", "Weight of validation split; e.g. 0.05", false /* req */, 0.05f, "number");
 
         // Usage/help seems to reverse this order.
+        cmd.add(commentaryValidationSplitArg);
         cmd.add(commentaryArg);
         cmd.add(threadCountArg);
         cmd.add(outputDirectoryArg);
@@ -82,6 +93,7 @@ int main(int argc, char* argv[])
         outputDirectory = outputDirectoryArg.getValue();
         threadCount = threadCountArg.getValue();
         commentary = commentaryArg.getValue();
+        commentaryValidationSplit = commentaryValidationSplitArg.getValue();
         
     }
     catch (TCLAP::ArgException& e)
@@ -90,7 +102,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    ChessCoachPgnToGames pgnToGames(inputDirectory, outputDirectory, threadCount, commentary);
+    ChessCoachPgnToGames pgnToGames(inputDirectory, outputDirectory, threadCount, commentary, commentaryValidationSplit);
 
     pgnToGames.PrintExceptions();
     pgnToGames.InitializeLight();
@@ -103,11 +115,12 @@ int main(int argc, char* argv[])
 }
 
 ChessCoachPgnToGames::ChessCoachPgnToGames(const std::filesystem::path& inputDirectory,
-    const std::filesystem::path& outputDirectory, int threadCount, bool commentary)
+    const std::filesystem::path& outputDirectory, int threadCount, bool commentary, float commentaryValidationSplit)
     : _inputDirectory(inputDirectory)
     , _outputDirectory(outputDirectory)
     , _threadCount(threadCount)
     , _commentary(commentary)
+    , _commentaryValidationSplit(commentaryValidationSplit)
     , _latestGamesNumber(0)
     , _totalFileCount(0)
     , _totalGameCount(0)
@@ -131,13 +144,33 @@ void ChessCoachPgnToGames::FinalizeLight()
 
 void ChessCoachPgnToGames::ConvertAll()
 {
+    const Storage storage;
+
     const auto start = std::chrono::high_resolution_clock::now();
     std::vector<std::thread> threads;
+
+    // Create the output directory if it does not exist.
+    std::filesystem::create_directories(_outputDirectory);
+
+    // Prepare commentary.
+    if (_commentary)
+    {
+        _commentarySaveContext.recordTypes.push_back({ _outputDirectory / "Training", std::make_unique<message::Example>(), {} });
+        _commentarySaveContext.recordTypes.push_back({ _outputDirectory / "Validation", std::make_unique<message::Example>(), {} });
+
+        _commentarySaveContext.recordWeights.push_back(1.f - _commentaryValidationSplit);
+        _commentarySaveContext.recordWeights.push_back(_commentaryValidationSplit);
+
+        for (CommentaryRecordType& recordType : _commentarySaveContext.recordTypes)
+        {
+            std::filesystem::create_directories(recordType.directory);
+        }
+    }
 
     // Start the converter threads.
     for (int i = 0; i < _threadCount; i++)
     {
-        threads.emplace_back(&ChessCoachPgnToGames::ConvertPgns, this);
+        threads.emplace_back(&ChessCoachPgnToGames::ConvertPgns, this, std::ref(storage));
     }
 
     // Distribute PGN paths.
@@ -170,13 +203,16 @@ void ChessCoachPgnToGames::ConvertAll()
 
     if (_commentary)
     {
-        // Combine vocabulary from threads.
-        Vocabulary vocabulary{};
+        // Commentary isn't immediately written to disk, just when it fills "PositionsPerRecord", so write out any remainder now.
+        storage.WriteRemainingCommentary(_commentarySaveContext);
+
+        // Combine vocabulary from threads and sort.
+        Vocabulary vocabulary;
         for (Vocabulary& workerVocabulary : _vocabularies)
         {
-            vocabulary.commentCount += workerVocabulary.commentCount;
-            vocabulary.vocabulary.merge(std::move(workerVocabulary.vocabulary));
+            std::move(workerVocabulary.vocabulary.begin(), workerVocabulary.vocabulary.end(), std::back_inserter(vocabulary.vocabulary));
         }
+        std::sort(vocabulary.vocabulary.begin(), vocabulary.vocabulary.end());
 
         // Write out the vocabulary document.
         const std::filesystem::path vocabularyPath = (_outputDirectory / Config::Network.Training.VocabularyFilename);
@@ -185,9 +221,7 @@ void ChessCoachPgnToGames::ConvertAll()
         {
             vocabularyFile << comment << std::endl;
         }
-
-        std::cout << "Wrote " << vocabulary.commentCount << " move comments, "
-            << vocabulary.vocabulary.size() << " unique" << std::endl;
+        std::cout << "Wrote " << vocabulary.vocabulary.size() << " move comments" << std::endl;
     }
 
     const float secondsTaken = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - start).count();
@@ -197,9 +231,8 @@ void ChessCoachPgnToGames::ConvertAll()
     std::cout << "(" << secondsTaken << " seconds total, " << filesPerSecond << " files per second, " << gamesPerSecond << " games per second)" << std::endl;
 }
 
-void ChessCoachPgnToGames::ConvertPgns()
+void ChessCoachPgnToGames::ConvertPgns(const Storage& storage)
 {
-    const Storage storage;
     std::vector<SavedGame> games;
     std::vector<SavedCommentary> gameCommentary;
     const bool allowNoResult = _commentary;
@@ -269,13 +302,13 @@ void ChessCoachPgnToGames::ConvertPgns()
 void ChessCoachPgnToGames::SaveChunk(const Storage& storage, std::vector<SavedGame>& games,
     std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary)
 {
-    const std::filesystem::path gamePath = (_outputDirectory / storage.GenerateSimpleChunkFilename(++_latestGamesNumber));
     if (_commentary)
     {
-        storage.SaveCommentary(gamePath, games, gameCommentary, vocabulary);
+        storage.SaveCommentary(_commentarySaveContext, games, gameCommentary, vocabulary);
     }
     else
     {
+        const std::filesystem::path gamePath = (_outputDirectory / storage.GenerateSimpleChunkFilename(++_latestGamesNumber));
         storage.SaveChunk(gamePath, games);
     }
     games.clear();

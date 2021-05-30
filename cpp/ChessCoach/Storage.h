@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <vector>
 #include <atomic>
+#include <mutex>
 
 #include "Network.h"
 #include "Game.h"
@@ -23,6 +24,30 @@ namespace message {
     class Example;
 }
 
+struct CommentaryRecordType
+{
+    std::filesystem::path directory;
+    std::unique_ptr<message::Example> record;
+    int latestRecordNumber = 0;
+};
+
+struct CommentarySaveContext
+{
+public:
+
+    constexpr static const int PositionsPerRecord = 100000;
+
+public:
+
+    CommentaryRecordType& ChooseRecordType();
+
+public:
+
+    std::mutex mutex;
+    std::vector<CommentaryRecordType> recordTypes;
+    std::vector<float> recordWeights;
+};
+
 class Storage
 {
 public:
@@ -34,8 +59,9 @@ public:
     std::filesystem::path LocalLogPath() const;
 
     void SaveChunk(const std::filesystem::path& path, const std::vector<SavedGame>& games) const;
-    void SaveCommentary(const std::filesystem::path& path, const std::vector<SavedGame>& games,
+    void SaveCommentary(CommentarySaveContext& saveContext, const std::vector<SavedGame>& games,
         std::vector<SavedCommentary>& gameCommentary, Vocabulary& vocabulary) const;
+    void WriteRemainingCommentary(CommentarySaveContext& saveContext) const;
     std::string GenerateSimpleChunkFilename(int chunkNumber) const;
 
     void LoadGameFromChunk(const std::string& chunkContents, int gameIndex, SavedGame* gameOut);
@@ -52,6 +78,7 @@ private:
     static uint32_t MaskCrc32cForTfRecord(uint32_t crc32c);
     bool SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) const;
     std::filesystem::path MakeLocalPath(const std::filesystem::path& root, const std::filesystem::path& path);
+    void WriteCommentary(CommentaryRecordType& recordType) const;
 
     template <typename T>
     bool Read(google::protobuf::io::ZeroCopyInputStream& stream, T& value) const;

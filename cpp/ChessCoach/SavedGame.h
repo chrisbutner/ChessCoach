@@ -36,8 +36,7 @@ struct SavedCommentary
 
 struct Vocabulary
 {
-    int commentCount;
-    std::set<std::string> vocabulary;
+    std::vector<std::string> vocabulary;
 };
 
 #endif // _SAVEDGAME_H_

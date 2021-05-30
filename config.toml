@@ -121,6 +121,10 @@ role = "train|play"
     steps = [0] #[0, 800_000, 2_400_000, 4_000_000]
     rates = [2e-2] #[2e-2, 2e-3, 2e-4, 2e-5]
 
+    [networks.self_play]
+
+    network_type = "teacher"
+
 [[networks]]
 
     name = "benchmark1"
