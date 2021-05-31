@@ -172,8 +172,7 @@ swa_batchnorm_steps = 4000 # Becomes 500 actual steps on TPU. With default 0.99 
 vocabulary_filename = "vocabulary.txt"
 games_path_training = "Games/Training"
 games_path_validation = "Games/Validation"
-commentary_path_training = "Commentary/Supervised"
-commentary_path_validation = ""
+commentary_path = "Commentary"
 wait_milliseconds = 300_000 # Check on Google Storage every 5 minutes when waiting for other machines.
 stages = []
 

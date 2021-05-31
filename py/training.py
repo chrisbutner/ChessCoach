@@ -57,7 +57,8 @@ class Trainer:
     self.datasets = datasets
     self.data_glob_training = self.config.join(self.config.training["games_path_training"], "*.chunk")
     self.data_glob_validation = self.config.join(self.config.training["games_path_validation"], "*.chunk")
-    self.data_glob_commentary = self.config.join(self.config.training["commentary_path_training"], "*.chunk")
+    self.data_glob_commentary_training = self.config.join(self.config.training["commentary_path"], "Training", "*.chunk")
+    self.data_glob_commentary_validation = self.config.join(self.config.training["commentary_path"], "Validation", "*.chunk")
 
     self.per_replica_batch_size = self.config.training["batch_size"]
     self.global_batch_size = self.per_replica_batch_size * self.device_count
@@ -162,8 +163,10 @@ class Trainer:
 
     # Set up data pipelines.
     tokenizer = network.ensure_tokenizer(network.models_train)
-    data_commentary_training = self.datasets.build_commentary_dataset(
-      self.data_glob_commentary, tokenizer, self.global_batch_size_commentary, ModelBuilder.transformer_max_length)
+    data_commentary_training = self.datasets.build_commentary_training_dataset(
+      self.data_glob_commentary_training, tokenizer, self.global_batch_size_commentary, ModelBuilder.transformer_max_length)
+    data_commentary_validation = self.datasets.build_commentary_validation_dataset(
+      self.data_glob_commentary_validation, tokenizer, self.global_batch_size_commentary, ModelBuilder.transformer_max_length)
 
     # Work out steps and intervals. Use the validation interval as an epoch to match fit()'s model.
     validation_interval = self.config.training["validation_interval"]
@@ -185,6 +188,8 @@ class Trainer:
     # Train.
     log_callback = CommentaryLogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)
     model.fit(data_commentary_training, verbose=0, callbacks=[log_callback],
+      # Even though the commentary validation set doesn't repeat, "validation_steps" is required when using "steps_per_execution", so conservatively guess.
+      validation_data=data_commentary_validation, validation_steps=10, validation_freq=1,
       steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
 
   def log_scalars(self, network, step, names, values):
@@ -347,7 +352,9 @@ class CommentaryLogCallback(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs=None):
     effective_step = (epoch + 1) * self.validation_interval
     training_losses = self.map_losses(logs, "")
+    validation_losses = self.map_losses(logs, "val_")
     self.log_training_commentary("training", self.training_writer, effective_step, training_losses)
+    self.log_training_commentary("validation", self.validation_writer, effective_step, validation_losses)
 
   def map_losses(self, logs, prefix):
     return [
@@ -355,7 +362,7 @@ class CommentaryLogCallback(tf.keras.callbacks.Callback):
     ]
 
   def log_training_commentary(self, type, writer, step, losses):
-    self.log(f"Loss: {losses[0]:.4f}")
+    self.log(f"Loss: {losses[0]:.4f} ({type})")
     with writer.as_default():
       tf.summary.experimental.set_step(step)
       self.log_loss_commentary(losses)

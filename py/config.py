@@ -55,8 +55,7 @@ class Config:
     self.data_root = self.determine_data_root()
     self.training["games_path_training"] = self.make_dir_path(self.training["games_path_training"])
     self.training["games_path_validation"] = self.make_dir_path(self.training["games_path_validation"])
-    self.training["commentary_path_training"] = self.make_dir_path(self.training["commentary_path_training"])
-    self.training["commentary_path_validation"] = self.make_dir_path(self.training["commentary_path_validation"])
+    self.training["commentary_path"] = self.make_dir_path(self.training["commentary_path"])
     for key, value in self.misc["paths"].items():
       if not key.startswith("tpu") and not key.startswith("strength_test"):
         self.misc["paths"][key] = self.make_dir_path(value)

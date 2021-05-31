@@ -278,8 +278,7 @@ void ParseTraining(TrainingConfig& training, const TomlValue& config, const Poli
     policy.template Parse<std::string>(training.VocabularyFilename, config, "vocabulary_filename");
     policy.template Parse<std::string>(training.GamesPathTraining, config, "games_path_training");
     policy.template Parse<std::string>(training.GamesPathValidation, config, "games_path_validation");
-    policy.template Parse<std::string>(training.CommentaryPathTraining, config, "commentary_path_training");
-    policy.template Parse<std::string>(training.CommentaryPathValidation, config, "commentary_path_validation");
+    policy.template Parse<std::string>(training.CommentaryPath, config, "commentary_path");
 }
 
 template <typename Policy>

@@ -47,6 +47,12 @@ class DatasetBuilder:
     dataset = dataset.with_options(options)
     return dataset
 
+  def use_data_sharding(self, dataset):
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    dataset = dataset.with_options(options)
+    return dataset
+
   # Values are (-1, 0, 1) in Python/TensorFlow, (0, 0.5, 1) in C++/MCTS.
   def flip_value(self, value):
     return -value
@@ -281,7 +287,7 @@ class DatasetBuilder:
     sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
     return self.build_dataset(sources, options)
 
-  def build_commentary_dataset(self, glob, tokenizer, global_batch_size, maximum_sequence_length):
+  def build_commentary_training_dataset(self, glob, tokenizer, global_batch_size, maximum_sequence_length):
     options = CommentaryDatasetOptions(global_batch_size, maximum_sequence_length)
 
     # Grab chunk filenames.
@@ -294,15 +300,16 @@ class DatasetBuilder:
     # Repeat chunk loading.
     dataset = dataset.repeat()
 
-    # Parse commentary in parallel, cycling through all chunks (~40).
+    # Parse commentary in parallel, cycling through all chunks (~9).
     # Autotune isn't sufficient to keep the GPU/TPU loaded via disk/storage: experimentally 4/8 seem best.
     cycle_length = len(filenames)
     num_parallel_calls = min(8 if self.config.is_tpu else 4, cycle_length)
     dataset = dataset.interleave(lambda x: self.parse_commentary(x, tokenizer, options), cycle_length=cycle_length,
-     num_parallel_calls=num_parallel_calls, deterministic=False)
+     num_parallel_calls=num_parallel_calls, deterministic=False) # deterministic=False
 
-    # Shuffle images/comments. Roughly ~1m right now, just shuffle all/most.
-    dataset = dataset.shuffle(2**20, reshuffle_each_iteration=True)
+    # Shuffle images/comments. Just use the main model's training shuffle size.
+    position_shuffle_size = self.config.training["dataset_shuffle_positions_training"]
+    dataset = dataset.shuffle(position_shuffle_size, reshuffle_each_iteration=True)
 
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
@@ -310,4 +317,28 @@ class DatasetBuilder:
     # Prefetch batches and disable sharding.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     dataset = self.disable_sharding(dataset)
+    return dataset
+
+  def build_commentary_validation_dataset(self, glob, tokenizer, global_batch_size, maximum_sequence_length):
+    options = CommentaryDatasetOptions(global_batch_size, maximum_sequence_length)
+
+    # Grab chunk filenames.
+    filenames = tf.io.gfile.glob(glob)
+
+    # Iterate over chunks deterministically, without repeating.
+    dataset = tf.data.Dataset.from_tensor_slices(filenames)
+
+    # Parse commentary in parallel, deterministically, cycling through all chunks (~1).
+    # Autotune isn't sufficient to keep the GPU/TPU loaded via disk/storage: experimentally 4/8 seem best.
+    cycle_length = len(filenames)
+    num_parallel_calls = min(8 if self.config.is_tpu else 4, cycle_length)
+    dataset = dataset.interleave(lambda x: self.parse_commentary(x, tokenizer, options), cycle_length=cycle_length,
+     num_parallel_calls=num_parallel_calls, deterministic=True) # deterministic=True
+
+    # Batch to the global size.
+    dataset = dataset.batch(options.global_batch_size)
+
+    # Prefetch batches and use DATA sharding.
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = self.use_data_sharding(dataset)
     return dataset
