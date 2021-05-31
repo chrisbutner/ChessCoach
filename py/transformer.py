@@ -35,7 +35,7 @@ from tensorflow.python.keras import backend as K
 from official.modeling import tf_utils
 from official.nlp import keras_nlp
 from official.nlp.modeling import layers
-from official.nlp.modeling.ops import beam_search
+from official.nlp.modeling.ops import sampling_module
 from official.nlp.transformer import model_utils
 
 # Don't let TensorFlow see the encoder for the purpose of minimizing loss or saving/loading weights via "AutoTrackable".
@@ -77,8 +77,8 @@ class CommentaryDecoder(tf.keras.Model):
                dropout_rate,
                padded_decode=False,
                extra_decode_length=0,
-               beam_size=4,
-               alpha=0.6,
+               sample_temperature=1.0,
+               top_p=0.9,
                dtype=tf.float32,
                **kwargs):
     """Initialize layers to build Transformer model.
@@ -91,8 +91,8 @@ class CommentaryDecoder(tf.keras.Model):
         False, max_sequence_length padding is not used.
       decode_max_length: maximum number of steps to decode a sequence.
       extra_decode_length: Beam search will run extra steps to decode.
-      beam_size: Number of beams for beam search
-      alpha: The strength of length normalization for beam search.
+      sample_temperature: (Added for nucleus sampling (top-p))
+      top_p: (Added for nucleus sampling (top-p))
       decoder_layer: An initialized decoder layer.
       dtype: float dtype.
       eos_id: Id of end of sentence token.
@@ -105,8 +105,8 @@ class CommentaryDecoder(tf.keras.Model):
     self._padded_decode = padded_decode
     self._decode_max_length = decode_max_length
     self._extra_decode_length = extra_decode_length
-    self._beam_size = beam_size
-    self._alpha = alpha
+    self._sample_temperature = sample_temperature
+    self._top_p = top_p
     self._dtype = dtype
     self._eos_id = eos_id
     self.embedding_lookup = keras_nlp.layers.OnDeviceEmbedding(
@@ -206,22 +206,22 @@ class CommentaryDecoder(tf.keras.Model):
       cache["encoder_outputs"] = encoder_outputs
       cache["encoder_decoder_attention_bias"] = encoder_decoder_attention_bias
 
-      # Use beam search to find the top beam_size sequences and scores.
-      decoded_ids, scores = beam_search.sequence_beam_search(
-          symbols_to_logits_fn=symbols_to_logits_fn,
-          initial_ids=initial_ids,
-          initial_cache=cache,
-          vocab_size=self._vocab_size,
-          beam_size=self._beam_size,
-          alpha=self._alpha,
-          max_decode_length=max_decode_length,
-          eos_id=self._eos_id,
-          padded_decode=self._padded_decode,
-          dtype=self._dtype)
+      # Use nucleus sampling (top-p) to sample sequences and scores.
+      sampling = sampling_module.SamplingModule(
+        length_normalization_fn=None,
+        dtype=tf.float32,
+        symbols_to_logits_fn=symbols_to_logits_fn,
+        vocab_size=self._vocab_size,
+        max_decode_length=max_decode_length,
+        eos_id=self._eos_id,
+        sample_temperature=self._sample_temperature,
+        top_p=self._top_p,
+        padded_decode=self._padded_decode,
+        enable_greedy=False)
+      decoded_ids, scores = sampling.generate(initial_ids=initial_ids, initial_cache=cache)
 
-      # Get the top sequence for each batch element
-      top_decoded_ids = decoded_ids[:, 0, 1:]
-      top_scores = scores[:, 0]
+      top_decoded_ids = decoded_ids[:, 1:] # These used to take beam [0], just keeping names.
+      top_scores = scores # These used to take beam [0], just keeping names.
 
       return {"outputs": top_decoded_ids, "scores": top_scores}
 
@@ -273,15 +273,14 @@ class CommentaryDecoder(tf.keras.Model):
       """Generate logits for next potential IDs.
 
       Args:
-        ids: Current decoded sequences. int tensor with shape [batch_size *
-          beam_size, i + 1].
+        ids: Current decoded sequences. int tensor with shape [batch_size, i + 1].
         i: Loop index.
         cache: dictionary of values storing the encoder output, encoder-decoder
           attention bias, and previous decoder attention values.
 
       Returns:
         Tuple of
-          (logits with shape [batch_size * beam_size, vocab_size],
+          (logits with shape [batch_size, vocab_size],
            updated cache values)
       """
       # Set decoder input to the last generated IDs

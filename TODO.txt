@@ -3,32 +3,31 @@ Training - final run
 - copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
 - if same take original else teacher-only up to 5.6m
 
-Commentary #3
-- need fix for tensorflow_text on alpha TPU VMs - lazy-import for now
-- remove dropout for now - can slowly add back decoder-only - may need to avoid it for highly discrete board squares in the encoder sequence
-- investigate inference problems locally (initial code is stashed)
+Commentary basics
+- try backprop into encoder
 - build small manual test set for commentary inference
-- may need to increase maximum sequence length, with sub-word tokenization
-- maybe backprop into encoder (sometimes? always?)
-- compare interleaving with main model training vs. "at the end"
-- compare adam and sgd-momentum for commentary
-	- try varying warmup steps
-	- try flip to pre-LN, get rid of warmup everywhere: https://openreview.net/pdf?id=B1x8anVFPr
 - review/tune commentary quality
-- compare beam and top-k
-	- look back through my notes, was pretty pessimistic about beam based on articles a few months back
 
-Commentary #4
-- try pre or post-processing with GPT-2
-- try data augmentation using BERT: https://www.researchgate.net/publication/343958685_Text_Augmentation_Using_BERT_for_Image_Captioning
-- maybe shrink model if still not enough data
+Commentary training
+- cyclic learning rate
+	- range test with Adam - choose min - find max
+	- choose 2-10 epoch step size (NMT paper uses 4.5), half triangle width
+	- implement LearningRateSchedule
+	- if not using CLR, need to try different warmup lengths
+- compare interleaving options
+	- interleaving, if no strength loss/commentary good enough
+	- at the end, without encoder backprop
+	- at the end, with encoder backprop, completely separate model
+- re-read "learning without forgetting"
 
-Commentary #5
-- for interleaving regular/commentary training - read up on "learning without forgetting"
-- basic - does the encoder need an extra dense+relu layer after the tower/reshape?
-	- basically 256->512 embedding rather than categorical->512 embedding
-- try encode before-and-after positions (no flip?) - comment on the move, not the position
-	- yes, image takes last N positions, but network is trained to evaluate the position, not the delta
+Commentary quality
+- vary top_p value
+- vary temperature
+- vary dropout
+- try/vary length normalization
+- try postprocessing, e.g. predict N, choose first above grammar threshold
+- try 2x encoding - full 109-plane image at position before/after move - concat to 128*256 post-encoder input sequence
+- try additional features/planes - e.g. side to move, move just played/squares involved
 
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
@@ -75,8 +74,10 @@ UCI
 Bugs
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
+- fix any "current directory" use, especially on windows - add abstraction layer to module-finding call - e.g. for en dictionary, config
 
 Code quality
+- need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - fix _ in network names - split on final _

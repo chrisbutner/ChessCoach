@@ -409,8 +409,6 @@ void ChessCoachUci::HandleUciNewGame(std::stringstream& /*commands*/)
 void ChessCoachUci::HandlePosition(std::stringstream& commands)
 {
     std::string token;
-    StateListPtr positionStates(new std::deque<StateInfo>(1));
-    Position position;
 
     _positionUpdated = true;
     _positionFen.clear();
@@ -435,18 +433,18 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
         }
     }
 
-    position.set(_positionFen, false /* isChess960 */, &positionStates->back(), Threads.main());
+    Game game(_positionFen, {});
 
     // If "moves" wasn't seen then we already consumed the rest of the line.
     while (commands >> token)
     {
-        const Move move = UCI::to_move(position, token);
+        const Move move = UCI::to_move(game.GetPosition(), token);
         if (move == MOVE_NONE)
         {
             break;
         }
 
-        position.do_move(move, positionStates->emplace_back());
+        game.ApplyMove(move);
 
         _positionMoves.push_back(move);
     }
@@ -504,19 +502,13 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         else if (token == "searchmoves")
         {
             // Set up the last "position" specified to give proper context to the "searchmoves".
-            Position position;
-            StateListPtr positionStates(new std::deque<StateInfo>(1));
-            position.set(_positionFen, false /* isChess960 */, &positionStates->back(), Threads.main());
-            for (Move move : _positionMoves)
-            {
-                position.do_move(move, positionStates->emplace_back());
-            }
+            Game game(_positionFen, _positionMoves);
 
             // Unlike in "position ... moves ...", these moves don't depend on each other, so it's okay
             // to skip over any invalid/illegal moves and keep parsing.
             while (commands >> token)
             {
-                const Move move = UCI::to_move(position, token);
+                const Move move = UCI::to_move(game.GetPosition(), token);
                 if (move != MOVE_NONE)
                 {
                     searchMoves.push_back(move);
@@ -657,6 +649,12 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
                     << std::endl;
             }
         }
+    }
+    else if (token == "fen")
+    {
+        // Convert the last "position" specified to a standalone FEN.
+        const std::string fen = Game(_positionFen, _positionMoves).GetPosition().fen();
+        std::cout << fen << std::endl;
     }
 }
 
