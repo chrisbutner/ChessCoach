@@ -4,12 +4,12 @@
 
 [network]
 
-network_name = "selfplay10"
+network_name = "selfplay10a"
 role = "train|play"
 
 [[networks]]
 
-    name = "selfplay10a"
+    name = "selfplay10b"
 
     [networks.training]
 
@@ -34,7 +34,7 @@ role = "train|play"
 
 [[networks]]
 
-    name = "selfplay10"
+    name = "selfplay10a"
 
     [networks.training]
 
@@ -179,7 +179,7 @@ stages = []
 [training.learning_rate_schedule]
 
 steps = [0, 800_000, 2_400_000, 4_000_000] # Equivalent to 100,000, 300,000, 500,000 with batch size 4096
-rates = [2.5e-2, 2.5e-3, 2.5e-4, 2.5e-5] # Multiplied by device_count
+rates = [2.0e-2, 2.5e-3, 2.5e-4, 2.5e-5] # Multiplied by device_count
 
 [training.commentary_learning_rate_schedule]
 
