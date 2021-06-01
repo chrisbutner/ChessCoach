@@ -23,8 +23,10 @@ struct INetwork
     static const int BoardSide = 8;
     static const int InputPlaneCount = (InputPreviousPositionCount + 1) * InputPieceAndRepetitionPlanesPerPosition + InputAuxiliaryPlaneCount;
     static const int OutputPlaneCount = (3 * 3) + (BoardSide * BoardSide); // UnderpromotionPlane + QueenKnightPlane
+    static const int CommentaryInputPlaneCount = ((2 * InputPlaneCount) + 1);
     static_assert(InputPlaneCount == 109);
     static_assert(OutputPlaneCount == 73);
+    static_assert(CommentaryInputPlaneCount == 219);
 
     static const int PlaneFloatCount = BoardSide * BoardSide;
     static const int OutputPlanesFloatCount = PlaneFloatCount * OutputPlaneCount;
@@ -34,6 +36,7 @@ struct INetwork
     using Plane = std::array<std::array<float, BoardSide>, BoardSide>;
     using InputPlanes = std::array<PackedPlane, InputPlaneCount>;
     using OutputPlanes = std::array<Plane, OutputPlaneCount>;
+    using CommentaryInputPlanes = std::array<PackedPlane, CommentaryInputPlaneCount>;
 
     // Useful for serialization into others' data structures.
     using PlanesPointer = float(*)[BoardSide][BoardSide];
@@ -87,7 +90,7 @@ struct INetwork
     virtual ~INetwork() {};
 
     virtual PredictionStatus PredictBatch(NetworkType networkType, int batchSize, InputPlanes* images, float* values, OutputPlanes* policies) = 0;
-    virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, InputPlanes* images) = 0;
+    virtual std::vector<std::string> PredictCommentaryBatch(int batchSize, CommentaryInputPlanes* images) = 0;
     virtual void Train(NetworkType networkType, int step, int checkpoint) = 0;
     virtual void TrainCommentary(int step, int checkpoint) = 0;
     virtual void LogScalars(NetworkType networkType, int step, const std::vector<std::string> names, float* values) = 0;

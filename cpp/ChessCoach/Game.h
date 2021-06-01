@@ -151,6 +151,8 @@ public:
     void GenerateImage(INetwork::InputPlanes& imageOut);
     void GenerateImage(INetwork::PackedPlane* imageOut);
     void GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::PackedPlane* auxiliaryOut) const;
+    void GenerateCommentaryImage(INetwork::CommentaryInputPlanes& imageOut);
+    void GenerateCommentaryImage(INetwork::PackedPlane* imageOut);
     float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
     float& PolicyValue(INetwork::PlanesPointerFlat policyInOut, Move move) const;
     float& PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const;

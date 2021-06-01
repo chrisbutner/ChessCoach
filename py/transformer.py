@@ -53,8 +53,24 @@ class CommentaryModel(tf.keras.Model):
     self.decoder = decoder
 
   def call(self, inputs):
-    # TODO: No backprop into encoder (main model) for now
-    inputs = {**inputs, "inputs": self.encoder_hider.encoder(inputs["inputs"], training=False)}
+    # Just eat the circular import.
+    from model import ModelBuilder
+    # Expect (batch, 219 = 109 + 109 + 1) int64.
+    images = inputs["inputs"]
+    # Reshape (batch, 2 * 109) int64 to (2 * batch, 109) int64.
+    # Encode (2 * batch, 109) int64 to (2 * batch, 64, 256) float32.
+    # Reshape (2 * batch, 64, 256) float32 to (batch, 2 * 64, 256) float32.
+    before_and_after = tf.reshape(images[:, :2 * ModelBuilder.input_planes_count], [-1, ModelBuilder.input_planes_count])
+    before_and_after = self.encoder_hider.encoder(before_and_after, training=False) # TODO: No backprop into encoder (main model) for now
+    before_and_after = tf.reshape(before_and_after, [-1, 2 * ModelBuilder.board_side * ModelBuilder.board_side, ModelBuilder.filter_count])
+    # Expand (batch, 1) int64 to (batch, 1, 256) of all ones or all zeros.
+    side_to_move = tf.cast(images[:, -1:], tf.bool)
+    side_to_move = tf.cast(side_to_move, tf.float32)
+    side_to_move = tf.tile(side_to_move[:, :, tf.newaxis], [1, 1, ModelBuilder.filter_count])
+    # Concatenate encoder outputs to (batch, 129, 256) float32.
+    encoder_outputs = tf.concat([before_and_after, side_to_move], axis=1)
+    # Decode.
+    inputs = {**inputs, "inputs": encoder_outputs }
     return self.decoder(inputs)
 
 class CommentaryDecoder(tf.keras.Model):

@@ -376,6 +376,51 @@ void Game::GenerateImageCompressed(INetwork::PackedPlane* piecesOut, INetwork::P
     assert(nextAuxiliary == INetwork::InputAuxiliaryPlaneCount);
 }
 
+void Game::GenerateCommentaryImage(INetwork::CommentaryInputPlanes& imageOut)
+{
+    GenerateCommentaryImage(imageOut.data());
+}
+
+void Game::GenerateCommentaryImage(INetwork::PackedPlane* imageOut)
+{
+    // We need to provide positions before and after the move to comment on. This seems strange at first
+    // because the image for a position includes history planes, but we provide the *output* of the
+    // chess-playing model to the commentary decoder, not the *input*. Because of this, history information
+    // may be consumed/lost. As an example, to decide whether a move was a blunder, we need to estimate the chance to win
+    // at the previous and current positions, but the chess-playing model only returns one value for the current position,
+    // at the head of the model.
+    //
+    // This is tricky: we need to nest HistoryWalker use, since "GenerateImage" uses one internally.
+    // - HistoryWalker refers to Game::_position->current_state() rather than Game::_currentState, which makes this work.
+    // - We just need to pop the latest off Game::_moves when using the outer HistoryWalker, since the inner HistoryWalker will refer to it.
+    HistoryWalker<INetwork::InputPreviousPositionCount> previousPositionOuterWalker(this, 1);
+
+    // Write a full image for the previous position.
+    previousPositionOuterWalker.Next(); // Expect "true".
+    Move latestMove = MOVE_NONE;
+    if (!_moves.empty())
+    {
+        latestMove = _moves.back();
+        _moves.pop_back();
+    }
+    GenerateImage(imageOut + 0);
+    if (latestMove != MOVE_NONE)
+    {
+        _moves.push_back(latestMove);
+    }
+
+    // Write a full image for the current position.
+    previousPositionOuterWalker.Next(); // Expect "true".
+    GenerateImage(imageOut + INetwork::InputPlaneCount);
+    previousPositionOuterWalker.Next(); // Expect "false".
+
+    // Write a plane representing the side to move. The chess-playing model doesn't need this, but the commentary decoder does
+    // in order to differentiate e.g. "white" vs. "black" and "e7" vs. "e2".
+    FillPlane(imageOut[2 * INetwork::InputPlaneCount], ToPlay() == BLACK);
+
+    static_assert(INetwork::CommentaryInputPlaneCount == 2 * INetwork::InputPlaneCount + 1);
+}
+
 float& Game::PolicyValue(INetwork::OutputPlanes& policyInOut, Move move) const
 {
     return PolicyValue(reinterpret_cast<INetwork::PlanesPointer>(policyInOut.data()), move);

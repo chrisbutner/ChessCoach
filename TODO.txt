@@ -7,7 +7,6 @@ Commentary basics
 - try backprop into encoder
 - review/tune commentary quality
 - filter out http:, https:, .com/
-- add side-to-play info
 
 Commentary training
 - cyclic learning rate
@@ -27,8 +26,6 @@ Commentary quality
 - vary dropout
 - try/vary length normalization
 - try postprocessing, e.g. predict N, choose first above grammar threshold
-- try 2x encoding - full 109-plane image at position before/after move - concat to 128*256 post-encoder input sequence
-- try additional features/planes - e.g. side to move, move just played/squares involved
 
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear

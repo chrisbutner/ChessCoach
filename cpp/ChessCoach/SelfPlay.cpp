@@ -2568,7 +2568,9 @@ void SelfPlayWorker::SearchPlay()
 
 void SelfPlayWorker::CommentOnPosition(INetwork* network)
 {
-    _games[0].GenerateImage(_images[0]);
-    const std::vector<std::string> comments = network->PredictCommentaryBatch(1, _images.data());
+    std::unique_ptr<INetwork::CommentaryInputPlanes> image(std::make_unique<INetwork::CommentaryInputPlanes>());
+
+    _games[0].GenerateCommentaryImage(image->data());
+    const std::vector<std::string> comments = network->PredictCommentaryBatch(1, image.get());
     std::cout << comments[0] << std::endl;
 }

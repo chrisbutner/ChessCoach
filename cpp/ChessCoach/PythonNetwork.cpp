@@ -180,12 +180,12 @@ PredictionStatus PythonNetwork::PredictBatch(NetworkType networkType, int batchS
     return status;
 }
 
-std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, InputPlanes* images)
+std::vector<std::string> PythonNetwork::PredictCommentaryBatch(int batchSize, CommentaryInputPlanes* images)
 {
     PythonContext context;
 
     // Make the predict call.
-    npy_intp imageDims[2]{ batchSize, InputPlaneCount };
+    npy_intp imageDims[2]{ batchSize, CommentaryInputPlaneCount };
     PyObject* pythonImages = PyArray_SimpleNewFromData(
         Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64, images);
     PyAssert(pythonImages);

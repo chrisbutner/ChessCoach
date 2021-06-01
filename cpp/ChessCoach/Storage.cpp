@@ -556,7 +556,7 @@ void Storage::SaveCommentary(CommentarySaveContext& saveContext, const std::vect
                 auto& features = *recordType.record->mutable_features()->mutable_feature();
                 auto& images = *features["images"].mutable_int64_list()->mutable_value();
                 auto& comments = *features["comments"].mutable_bytes_list()->mutable_value();
-                const int imageStride = INetwork::InputPlaneCount;
+                const int commentaryImageStride = INetwork::CommentaryInputPlaneCount;
 
                 // Update vocabulary.
                 vocabulary.vocabulary.push_back(comment.comment);
@@ -566,9 +566,9 @@ void Storage::SaveCommentary(CommentarySaveContext& saveContext, const std::vect
 
                 // Prepare the image for writing.
                 const int imageSizeOld = images.size();
-                const int imageSizeNew = (imageSizeOld + imageStride);
+                const int imageSizeNew = (imageSizeOld + commentaryImageStride);
                 images.Reserve(imageSizeNew);
-                images.AddNAlreadyReserved(imageStride);
+                images.AddNAlreadyReserved(commentaryImageStride);
                 INetwork::PackedPlane* imageOut = (reinterpret_cast<INetwork::PackedPlane*>(images.mutable_data()) + imageSizeOld);
 
                 // Find the position for the chosen comment and populate the image.
@@ -590,7 +590,7 @@ void Storage::SaveCommentary(CommentarySaveContext& saveContext, const std::vect
                 }
 
                 // Generate the full image: no compression for commentary because of branching variation structure.
-                variation.GenerateImage(imageOut);
+                variation.GenerateCommentaryImage(imageOut);
 
                 // Write the record if full.
                 if (comments.size() >= CommentarySaveContext::PositionsPerRecord)

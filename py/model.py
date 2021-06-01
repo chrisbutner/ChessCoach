@@ -16,6 +16,7 @@ class ModelBuilder:
   input_compressed_planes_per_position = input_piece_and_repetition_planes_per_position + input_auxiliary_plane_count
   input_planes_count = (input_previous_position_plus_current_count * input_piece_and_repetition_planes_per_position) + input_auxiliary_plane_count
   output_planes_count = 73
+  commentary_input_planes_count = ((2 * input_planes_count) + 1)
   output_planes_shape = [output_planes_count, board_side, board_side]
   output_planes_flat_shape = [output_planes_count * board_side * board_side]
   
@@ -198,7 +199,7 @@ class ModelBuilder:
     def prime(inputs):
       commentary_model(inputs)
     inputs = dict(
-      inputs=tf.ones((config.training["commentary_batch_size"], self.input_planes_count), tf.int64),
+      inputs=tf.ones((config.training["commentary_batch_size"], self.commentary_input_planes_count), tf.int64),
       targets=tf.ones((config.training["commentary_batch_size"], self.transformer_max_length), tf.int32))
     if strategy:
       strategy.run(prime, args=(inputs,))

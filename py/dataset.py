@@ -37,7 +37,7 @@ class DatasetBuilder:
   }
 
   commentary_feature_map = {
-    "images": tf.io.FixedLenSequenceFeature([ModelBuilder.input_planes_count], tf.int64, allow_missing=True),
+    "images": tf.io.FixedLenSequenceFeature([ModelBuilder.commentary_input_planes_count], tf.int64, allow_missing=True),
     "comments": tf.io.FixedLenSequenceFeature([], tf.string, allow_missing=True),
   }
 
