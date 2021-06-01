@@ -96,15 +96,16 @@ async def handle(message):
       requested_game = message.get("game")
       requested_position = message.get("position")
       await show_position(requested_game, requested_position)
+  elif message["type"] == "commentary_request":
+    if gui_mode == "pull":
+      await comment_on_position()
+  elif message["type"] == "commentary_suite_request":
+    if gui_mode == "pull":
+      await run_commentary_suite()
   elif message["type"] == "line":
     if gui_mode == "push":
       line = message.get("line")
       show_line(line)
-  elif message["type"] == "commentary_request":
-    fen = message.get("fen")
-    await comment_on_position(fen)
-  elif message["type"] == "commentary_suite_request":
-    await run_commentary_suite()
 
 # ----- Game and position data -----
 
@@ -176,9 +177,9 @@ async def show_position(requested_game, requested_position):
 def show_line(line):
   chesscoach.show_line(line.encode("utf-8"))
 
-async def comment_on_position(fen):
+async def comment_on_position():
   # Generate input planes in C++ and predict commentary.
-  image = chesscoach.generate_image(fen.encode("utf-8"))
+  image = chesscoach.generate_commentary_image_for_position(Position.position)
   variety_count = 5
   batch = tf.tile(image[None, :], [variety_count, 1])
   commentary = network.predict_commentary_batch(batch)
@@ -192,22 +193,19 @@ async def comment_on_position(fen):
 async def run_commentary_suite():
   # Grab suite positions and baselines, generate input planes in C++ and predict commentary.
   suite = suites.commentary
-  afters = [item["after"] for item in suite]
-  baselines = [item["baseline"] for item in suite]
-  images = np.array([chesscoach.generate_image(after.encode("utf-8")) for after in afters])
+  images = np.array([chesscoach.generate_commentary_image_for_fens(item["before"].encode("utf-8"), item["after"].encode("utf-8")) for item in suite])
   suite_count = len(suite)
   variety_count = 5
   batch = tf.tile(images[None, :, :], [variety_count, 1, 1])
   batch = tf.transpose(batch, [1, 0, 2])
-  batch = tf.reshape(batch, [suite_count * variety_count, ModelBuilder.input_planes_count])
+  batch = tf.reshape(batch, [suite_count * variety_count, ModelBuilder.commentary_input_planes_count])
   commentary = network.predict_commentary_batch(batch)
   commentary = np.reshape(commentary, [suite_count, variety_count]).tolist()
 
   # Send to JS.
   await send(json.dumps({
     "type": "commentary_suite_response",
-    "fens": afters,
-    "baselines": baselines,
+    "items": suite,
     "commentary": [[comment.decode("utf-8") for comment in comments] for comments in commentary],
   }))
 

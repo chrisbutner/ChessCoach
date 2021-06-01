@@ -66,3 +66,7 @@ input[type=range] {
 #commentary {
     width: 695px;
 }
+
+#requestCommentary, #commentarySuite {
+    display: none;
+}

@@ -24,7 +24,8 @@ private:
     static PyObject* LoadPosition(PyObject* self, PyObject* args);
     static PyObject* ShowLine(PyObject* self, PyObject* args);
     static PyObject* EvaluateParameters(PyObject* self, PyObject* args);
-    static PyObject* GenerateImage(PyObject* self, PyObject* args);
+    static PyObject* GenerateCommentaryImageForFens(PyObject* self, PyObject* args);
+    static PyObject* GenerateCommentaryImageForPosition(PyObject* self, PyObject* args);
 
 public:
 

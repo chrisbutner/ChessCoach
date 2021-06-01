@@ -91,7 +91,6 @@
     function requestCommentary() {
         socket.send(JSON.stringify({
             type: "commentary_request",
-            fen: data.fen,
         }));
     }
 
@@ -115,6 +114,9 @@
         if (game_count > 0) {
             requestPosition();
         }
+
+        // We can show the "Suite" button permanently in GUI/pull mode.
+        document.getElementById("commentarySuite").style.display = "inline";
     }
 
     function handleTrainingData(trainingData) {
@@ -145,6 +147,9 @@
         }
 
         overlaysHighlightAll();
+
+        // Rendering a position hides the "Comment" button, but we can show it for training data.
+        document.getElementById("requestCommentary").style.display = "inline";
     }
 
     function handleUciData(uciData) {
@@ -193,8 +198,9 @@
         clearHighlights();
 
         // Fill in the info section with commentary suite outputs.
-        const suite_count = commentary.commentary.length;
-        for (let i = 0; i < suite_count; i++) {
+        const suiteCount = commentary.items.length;
+        for (let i = 0; i < suiteCount; i++) {
+            const item = commentary.items[i];
             info.appendChild(document.createElement("hr"));
 
             const fenLine = document.createElement("div");
@@ -202,17 +208,17 @@
             fenPre.innerText = "FEN: ";
             const fenLink = document.createElement("a");
             fenLink.href = "javascript:void(0)";
-            const fen = commentary.fens[i];
+            const fen = item.after;
             fenLink.innerText = fen;
             fenLink.addEventListener("click", (e) => {
-                renderPosition(fen);
+                renderSuiteItem(item);
             });
             fenLine.appendChild(fenPre);
             fenLine.appendChild(fenLink);
             info.appendChild(fenLine);
 
             const baseline = document.createElement("div");
-            baseline.innerText = `Baseline: ${commentary.baselines[i]}`;
+            baseline.innerText = `Baseline: ${item.baseline}`;
             baseline.style.fontWeight = "bold";
             info.appendChild(baseline);
 
@@ -233,9 +239,23 @@
         info.style.overflow = "auto";
 
         // Render the first position.
-        if (suite_count) {
-            renderPosition(commentary.fens[0]);
+        if (suiteCount) {
+            renderSuiteItem(commentary.items[0]);
         }
+    }
+
+    function renderSuiteItem(item) {
+        fen = item.after;
+        data = {
+            fen: fen,
+            policy: [{
+                from: item.from,
+                to: item.to,
+                target: 0.9,
+            }],
+        };
+        renderPosition(fen);
+        overlaysHighlightAll();
     }
 
     function renderUciData() {
@@ -259,7 +279,12 @@
 
     function renderPosition(fen) {
         board.position(fen);
+
+        // Previous commentary may be stale.
         document.getElementById("commentary").textContent = "";
+
+        // There may not be a correct way to comment on this position; e.g. if it's display-only from a suite item.
+        document.getElementById("requestCommentary").style.display = "none";
     }
 
     const config = {

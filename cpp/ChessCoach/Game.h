@@ -143,6 +143,7 @@ public:
     void ApplyMove(Move move);
     void ApplyMoveMaybeNull(Move move);
     Move ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces);
+    Move ApplyMoveInfer(const std::string& resultingFen);
     Move ApplyMoveGuess(float result, const std::map<Move, float>& policy);
     bool IsDrawByNoProgressOrThreefoldRepetition() const;
     bool PiecesAndRepetitionsMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;

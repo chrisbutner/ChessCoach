@@ -181,6 +181,29 @@ Move Game::ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces)
     throw std::runtime_error("Impossible to reach provided position via legal move");
 }
 
+Move Game::ApplyMoveInfer(const std::string& resultingFen)
+{
+    // When considering legal moves, it's enough to compare the presence of a piece on each square.
+    // If one matches, none of the others can.
+    const Game resulting(resultingFen, {});
+    const Bitboard resultingPieces = resulting.GetPosition().pieces();
+
+    StateInfo state;
+    const MoveList legalMoves = MoveList<LEGAL>(_position);
+    for (const Move move : legalMoves)
+    {
+        _position.do_move(move, state);
+        if (_position.pieces() == resultingPieces)
+        {
+            _position.undo_move(move);
+            ApplyMove(move);
+            return move;
+        }
+        _position.undo_move(move);
+    }
+    throw std::runtime_error("Impossible to reach provided position via legal move");
+}
+
 Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
 {
     // Walk through legal moves from highest policy value to lowest and pick the first one that matches the game result.

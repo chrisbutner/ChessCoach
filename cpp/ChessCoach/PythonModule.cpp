@@ -14,7 +14,8 @@ PyMethodDef PythonModule::ChessCoachMethods[] = {
     { "load_position",  PythonModule::LoadPosition, METH_VARARGS, nullptr },
     { "show_line",  PythonModule::ShowLine, METH_VARARGS, nullptr },
     { "evaluate_parameters",  PythonModule::EvaluateParameters, METH_VARARGS, nullptr },
-    { "generate_image",  PythonModule::GenerateImage, METH_VARARGS, nullptr },
+    { "generate_commentary_image_for_fens",  PythonModule::GenerateCommentaryImageForFens, METH_VARARGS, nullptr },
+    { "generate_commentary_image_for_position",  PythonModule::GenerateCommentaryImageForPosition, METH_VARARGS, nullptr },
     { nullptr, nullptr, 0, nullptr }
 };
 
@@ -247,23 +248,30 @@ PyObject* PythonModule::EvaluateParameters(PyObject*/* self*/, PyObject* args)
     return PyFloat_FromDouble(evaluationScore);
 }
 
-PyObject* PythonModule::GenerateImage(PyObject*/* self*/, PyObject* args)
+PyObject* PythonModule::GenerateCommentaryImageForFens(PyObject*/* self*/, PyObject* args)
 {
-    PyObject* pythonFen;
+    PyObject* pythonFenBefore;
+    PyObject* pythonFenAfter;
 
-    if (!PyArg_UnpackTuple(args, "generate_image", 1, 1, &pythonFen) ||
-        !pythonFen ||
-        !PyBytes_Check(pythonFen))
+    if (!PyArg_UnpackTuple(args, "generate_commentary_image_for_fens", 2, 2, &pythonFenBefore, &pythonFenAfter) ||
+        !pythonFenBefore ||
+        !pythonFenAfter ||
+        !PyBytes_Check(pythonFenBefore) ||
+        !PyBytes_Check(pythonFenAfter))
     {
-        PyErr_SetString(PyExc_TypeError, "Expected 1 arg: fen");
+        PyErr_SetString(PyExc_TypeError, "Expected 2 args: fenBefore, fenAfter");
         return nullptr;
     }
 
-    const Py_ssize_t size = PyBytes_GET_SIZE(pythonFen);
-    const char* data = PyBytes_AS_STRING(pythonFen);
-    std::string fen(data, size);
+    const Py_ssize_t sizeBefore = PyBytes_GET_SIZE(pythonFenBefore);
+    const char* dataBefore = PyBytes_AS_STRING(pythonFenBefore);
+    std::string fenBefore(dataBefore, sizeBefore);
 
-    npy_intp imageDims[1]{ INetwork::InputPlaneCount };
+    const Py_ssize_t sizeAfter = PyBytes_GET_SIZE(pythonFenAfter);
+    const char* dataAfter = PyBytes_AS_STRING(pythonFenAfter);
+    std::string fenAfter(dataAfter, sizeAfter);
+
+    npy_intp imageDims[1]{ INetwork::CommentaryInputPlaneCount };
     PyObject* pythonImage = PyArray_SimpleNew(Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64);
     PyArrayObject* pythonImageArray = reinterpret_cast<PyArrayObject*>(pythonImage);
     INetwork::PackedPlane* pythonImageArrayPtr = reinterpret_cast<INetwork::PackedPlane*>(PyArray_DATA(pythonImageArray));
@@ -271,8 +279,56 @@ PyObject* PythonModule::GenerateImage(PyObject*/* self*/, PyObject* args)
     {
         NonPythonContext context;
 
-        Game game(fen, {});
-        game.GenerateImage(pythonImageArrayPtr);
+        Game game(fenBefore, {});
+        game.ApplyMoveInfer(fenAfter);
+        game.GenerateCommentaryImage(pythonImageArrayPtr);
+    }
+
+    return pythonImage;
+}
+
+// Relies on "LoadChunk" and "LoadGame" having been called previously.
+PyObject* PythonModule::GenerateCommentaryImageForPosition(PyObject*/* self*/, PyObject* args)
+{
+    PyObject* pythonPosition;
+
+    if (!PyArg_UnpackTuple(args, "generate_commentary_image_for_position", 1, 1, &pythonPosition) ||
+        !pythonPosition ||
+        !PyLong_Check(pythonPosition))
+    {
+        PyErr_SetString(PyExc_TypeError, "Expected 1 arg: position");
+        return nullptr;
+    }
+
+    // Allow Python-style "-1" for the final position, etc.
+    const SavedGame& savedGame = Instance()._game;
+    int position = PyLong_AsLong(pythonPosition);
+    if (position < 0)
+    {
+        position += savedGame.moveCount;
+    }
+    if ((position < 0) || (position >= savedGame.moveCount))
+    {
+        PyErr_SetString(PyExc_ValueError, "Invalid position");
+        return nullptr;
+    }
+
+    npy_intp imageDims[1]{ INetwork::CommentaryInputPlaneCount };
+    PyObject* pythonImage = PyArray_SimpleNew(Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64);
+    PyArrayObject* pythonImageArray = reinterpret_cast<PyArrayObject*>(pythonImage);
+    INetwork::PackedPlane* pythonImageArrayPtr = reinterpret_cast<INetwork::PackedPlane*>(PyArray_DATA(pythonImageArray));
+
+    {
+        NonPythonContext context;
+
+        // Reach the requested position.
+        Game game;
+        for (int i = 0; i < position; i++)
+        {
+            game.ApplyMove(Move(savedGame.moves[i]));
+        }
+
+        game.GenerateCommentaryImage(pythonImageArrayPtr);
     }
 
     return pythonImage;
