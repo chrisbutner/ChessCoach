@@ -142,6 +142,15 @@ bool Preprocessor::IsBadComment(const std::string& comment) const
         return true;
     }
 
+    // Throw away jarring URLs (don't worry about case, not seeing anything that crazy).
+    // Some casual .coms may remain, but they're a bit more conversational.
+    if ((comment.find("http://") != std::string::npos) ||
+        (comment.find("https://") != std::string::npos) ||
+        (comment.find(".com/") != std::string::npos))
+    {
+        return true;
+    }
+
     // Throw away pointless references, quizes, etc.
     if ((comment.find("details you can see") != std::string::npos) ||
         (comment.find("details, you can see") != std::string::npos) ||
