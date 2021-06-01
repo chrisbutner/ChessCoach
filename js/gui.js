@@ -23,11 +23,15 @@
     }
 
     function overlaysHighlightMove(move) {
+        clearHighlights();
+        highlight(overlays[move.from], move.target);
+        highlight(overlays[move.to], move.target);
+    }
+
+    function clearHighlights() {
         for (const overlay of Object.values(overlays)) {
             overlay.style.backgroundColor = null;
         }
-        highlight(overlays[move.from], move.target);
-        highlight(overlays[move.to], move.target);
     }
 
     function clearMoves(example) {
@@ -76,12 +80,25 @@
         socket.send(JSON.stringify({
             type: "line",
             line: line,
-        }))
+        }));
     }
 
     function showLineAddSan(san) {
         line = (data.line ? data.line + " " + san : san);
         showLine(line);
+    }
+
+    function requestCommentary() {
+        socket.send(JSON.stringify({
+            type: "commentary_request",
+            fen: data.fen,
+        }));
+    }
+
+    function runCommentarySuite() {
+        socket.send(JSON.stringify({
+            type: "commentary_suite_request",
+        }));
     }
 
     function requestPosition() {
@@ -108,7 +125,7 @@
         game = data.game;
         position_count = data.position_count;
         position = data.position;
-        board.position(data.fen);
+        renderPosition(data.fen);
 
         displayGame = (game + 1).toString();
         displayPosition = (position + 1).toString();
@@ -157,8 +174,72 @@
         }
     }
 
+    function handleCommentary(commentary) {
+        element = document.getElementById("commentary");
+        element.textContent = "";
+        const list = document.createElement("ul");
+        for (const comment of commentary.commentary) {
+            const line = document.createElement("li");
+            line.textContent = comment;
+            list.appendChild(line);
+        }
+        element.appendChild(list);
+    }
+
+    function handleCommentarySuite(commentary) {
+        // Wipe out the whole info section and clear highlights.
+        info = document.getElementById("info");
+        info.textContent = "";
+        clearHighlights();
+
+        // Fill in the info section with commentary suite outputs.
+        const suite_count = commentary.commentary.length;
+        for (let i = 0; i < suite_count; i++) {
+            info.appendChild(document.createElement("hr"));
+
+            const fenLine = document.createElement("div");
+            const fenPre = document.createElement("span");
+            fenPre.innerText = "FEN: ";
+            const fenLink = document.createElement("a");
+            fenLink.href = "javascript:void(0)";
+            const fen = commentary.fens[i];
+            fenLink.innerText = fen;
+            fenLink.addEventListener("click", (e) => {
+                renderPosition(fen);
+            });
+            fenLine.appendChild(fenPre);
+            fenLine.appendChild(fenLink);
+            info.appendChild(fenLine);
+
+            const baseline = document.createElement("div");
+            baseline.innerText = `Baseline: ${commentary.baselines[i]}`;
+            baseline.style.fontWeight = "bold";
+            info.appendChild(baseline);
+
+            const list = document.createElement("ul");
+            for (const comment of commentary.commentary[i]) {
+                const commentLine = document.createElement("li");
+                commentLine.innerText = comment;
+                list.appendChild(commentLine);
+            }
+            list.style.margin = "5px 0px";
+            info.appendChild(list);
+        }
+        info.appendChild(document.createElement("hr"));
+
+        // Hack the info section into commentary suite mode.
+        info.style.width = "800px";
+        info.style.height = "900px";
+        info.style.overflow = "auto";
+
+        // Render the first position.
+        if (suite_count) {
+            renderPosition(commentary.fens[0]);
+        }
+    }
+
     function renderUciData() {
-        board.position(data.fen);
+        renderPosition(data.fen);
 
         document.getElementById("fen").textContent = data.fen;
         document.getElementById("line").textContent = data.line || "(home)";
@@ -174,6 +255,11 @@
         }
 
         overlaysHighlightAll();
+    }
+
+    function renderPosition(fen) {
+        board.position(fen);
+        document.getElementById("commentary").textContent = "";
     }
 
     const config = {
@@ -213,6 +299,8 @@
         "initialize": handleInitialize,
         "training_data": handleTrainingData,
         "uci_data": handleUciData,
+        "commentary_response": handleCommentary,
+        "commentary_suite_response": handleCommentarySuite,
     };
 
     const socket = new WebSocket("ws://localhost:8001/");
@@ -329,5 +417,13 @@
 
     document.getElementById("lineHome").addEventListener("click", () => {
         showLine("");
+    });
+
+    document.getElementById("requestCommentary").addEventListener("click", () => {
+        requestCommentary();
+    });
+
+    document.getElementById("commentarySuite").addEventListener("click", () => {
+        runCommentarySuite();
     });
 })();

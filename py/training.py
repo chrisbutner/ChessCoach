@@ -362,6 +362,9 @@ class CommentaryLogCallback(tf.keras.callbacks.Callback):
     ]
 
   def log_training_commentary(self, type, writer, step, losses):
+    # Fail-fast for NaNs.
+    if math.isnan(losses[0]):
+      raise ValueError("NaN encountered in training/validation losses")
     self.log(f"Loss: {losses[0]:.4f} ({type})")
     with writer.as_default():
       tf.summary.experimental.set_step(step)

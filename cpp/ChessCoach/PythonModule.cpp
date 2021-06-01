@@ -14,6 +14,7 @@ PyMethodDef PythonModule::ChessCoachMethods[] = {
     { "load_position",  PythonModule::LoadPosition, METH_VARARGS, nullptr },
     { "show_line",  PythonModule::ShowLine, METH_VARARGS, nullptr },
     { "evaluate_parameters",  PythonModule::EvaluateParameters, METH_VARARGS, nullptr },
+    { "generate_image",  PythonModule::GenerateImage, METH_VARARGS, nullptr },
     { nullptr, nullptr, 0, nullptr }
 };
 
@@ -39,9 +40,8 @@ PythonModule& PythonModule::Instance()
     return instance;
 }
 
-PyObject* PythonModule::LoadChunk(PyObject* self, PyObject* args)
+PyObject* PythonModule::LoadChunk(PyObject*/* self*/, PyObject* args)
 {
-    (void)self;
     PyObject* pythonBytes;
 
     if (!PyArg_UnpackTuple(args, "load_chunk", 1, 1, &pythonBytes) ||
@@ -60,9 +60,8 @@ PyObject* PythonModule::LoadChunk(PyObject* self, PyObject* args)
     Py_RETURN_NONE;
 }
 
-PyObject* PythonModule::LoadGame(PyObject* self, PyObject* args)
+PyObject* PythonModule::LoadGame(PyObject*/* self*/, PyObject* args)
 {
-    (void)self;
     PyObject* pythonGameInChunk;
 
     if (!PyArg_UnpackTuple(args, "load_game", 1, 1, &pythonGameInChunk) ||
@@ -97,9 +96,8 @@ PyObject* PythonModule::LoadGame(PyObject* self, PyObject* args)
     return pythonTuple;
 }
 
-PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
+PyObject* PythonModule::LoadPosition(PyObject*/* self*/, PyObject* args)
 {
-    (void)self;
     PyObject* pythonPosition;
 
     if (!PyArg_UnpackTuple(args, "load_position", 1, 1, &pythonPosition) ||
@@ -174,9 +172,8 @@ PyObject* PythonModule::LoadPosition(PyObject* self, PyObject* args)
     return pythonTuple;
 }
 
-PyObject* PythonModule::ShowLine(PyObject* self, PyObject* args)
+PyObject* PythonModule::ShowLine(PyObject*/* self*/, PyObject* args)
 {
-    (void)self;
     PyObject* pythonLine;
 
     if (!PyArg_UnpackTuple(args, "load_position", 1, 1, &pythonLine) ||
@@ -200,9 +197,8 @@ PyObject* PythonModule::ShowLine(PyObject* self, PyObject* args)
     Py_RETURN_NONE;
 }
 
-PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
+PyObject* PythonModule::EvaluateParameters(PyObject*/* self*/, PyObject* args)
 {
-    (void)self;
     PyObject* pythonNames;
     PyObject* pythonValues;
     std::map<std::string, float> parameters;
@@ -249,4 +245,35 @@ PyObject* PythonModule::EvaluateParameters(PyObject* self, PyObject* args)
 
     // Return a scalar.
     return PyFloat_FromDouble(evaluationScore);
+}
+
+PyObject* PythonModule::GenerateImage(PyObject*/* self*/, PyObject* args)
+{
+    PyObject* pythonFen;
+
+    if (!PyArg_UnpackTuple(args, "generate_image", 1, 1, &pythonFen) ||
+        !pythonFen ||
+        !PyBytes_Check(pythonFen))
+    {
+        PyErr_SetString(PyExc_TypeError, "Expected 1 arg: fen");
+        return nullptr;
+    }
+
+    const Py_ssize_t size = PyBytes_GET_SIZE(pythonFen);
+    const char* data = PyBytes_AS_STRING(pythonFen);
+    std::string fen(data, size);
+
+    npy_intp imageDims[1]{ INetwork::InputPlaneCount };
+    PyObject* pythonImage = PyArray_SimpleNew(Py_ARRAY_LENGTH(imageDims), imageDims, NPY_INT64);
+    PyArrayObject* pythonImageArray = reinterpret_cast<PyArrayObject*>(pythonImage);
+    INetwork::PackedPlane* pythonImageArrayPtr = reinterpret_cast<INetwork::PackedPlane*>(PyArray_DATA(pythonImageArray));
+
+    {
+        NonPythonContext context;
+
+        Game game(fen, {});
+        game.GenerateImage(pythonImageArrayPtr);
+    }
+
+    return pythonImage;
 }

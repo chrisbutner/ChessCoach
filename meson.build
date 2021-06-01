@@ -306,6 +306,7 @@ python_sources = [
   'py/model.py',
   'py/network.py',
   'py/optimization.py',
+  'py/suites.py',
   'py/tokenization.py',
   'py/training.py',
   'py/transformer.py',

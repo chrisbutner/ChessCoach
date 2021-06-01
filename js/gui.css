@@ -1,7 +1,11 @@
-﻿#board {
+﻿#boardColumn {
     display: inline-block;
     vertical-align: top;
     width: 800px;
+}
+
+#board {
+    width: 100%;
 }
 
 #info {
@@ -47,4 +51,18 @@ input[type=range] {
 
 #trainingControls, #uciControls {
     display: none;
+}
+
+#commentaryControls, #commentary {
+    display: inline-block;
+    vertical-align: top;
+    margin-top: 10px;
+}
+
+#commentaryControls {
+    width: 100px;
+}
+
+#commentary {
+    width: 695px;
 }

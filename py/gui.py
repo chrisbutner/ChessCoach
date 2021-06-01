@@ -8,12 +8,17 @@ import asyncio
 import json
 import logging
 import os
-import network
+
 import tensorflow as tf
+import numpy as np
+
 try:
   import chesscoach # See PythonModule.cpp
 except:
   pass
+import network
+import suites
+from model import ModelBuilder
 
 # ----- WebSockets -----
 
@@ -95,6 +100,11 @@ async def handle(message):
     if gui_mode == "push":
       line = message.get("line")
       show_line(line)
+  elif message["type"] == "commentary_request":
+    fen = message.get("fen")
+    await comment_on_position(fen)
+  elif message["type"] == "commentary_suite_request":
+    await run_commentary_suite()
 
 # ----- Game and position data -----
 
@@ -166,6 +176,41 @@ async def show_position(requested_game, requested_position):
 def show_line(line):
   chesscoach.show_line(line.encode("utf-8"))
 
+async def comment_on_position(fen):
+  # Generate input planes in C++ and predict commentary.
+  image = chesscoach.generate_image(fen.encode("utf-8"))
+  variety_count = 5
+  batch = tf.tile(image[None, :], [variety_count, 1])
+  commentary = network.predict_commentary_batch(batch)
+
+  # Send to JS.
+  await send(json.dumps({
+    "type": "commentary_response",
+    "commentary": [comment.decode("utf-8") for comment in commentary],
+  }))
+
+async def run_commentary_suite():
+  # Grab suite positions and baselines, generate input planes in C++ and predict commentary.
+  suite = suites.commentary
+  afters = [item["after"] for item in suite]
+  baselines = [item["baseline"] for item in suite]
+  images = np.array([chesscoach.generate_image(after.encode("utf-8")) for after in afters])
+  suite_count = len(suite)
+  variety_count = 5
+  batch = tf.tile(images[None, :, :], [variety_count, 1, 1])
+  batch = tf.transpose(batch, [1, 0, 2])
+  batch = tf.reshape(batch, [suite_count * variety_count, ModelBuilder.input_planes_count])
+  commentary = network.predict_commentary_batch(batch)
+  commentary = np.reshape(commentary, [suite_count, variety_count]).tolist()
+
+  # Send to JS.
+  await send(json.dumps({
+    "type": "commentary_suite_response",
+    "fens": afters,
+    "baselines": baselines,
+    "commentary": [[comment.decode("utf-8") for comment in comments] for comments in commentary],
+  }))
+
 # ----- API -----
 
 def launch(mode):
@@ -187,6 +232,8 @@ def update(fen, line, node_count, evaluation, principle_variation, sans, froms, 
       "prior": round(float(prior), 6), "value": round(float(value), 6), "puct": round(float(puct), 6), "visits": int(visits), "weight": int(weight), "up_weight": int(up_weight)}
       for (san, move_from, move_to, target, prior, value, puct, visits, weight, up_weight) in zip(sans, froms, tos, targets, priors, values, puct, visits, weights, up_weights)],
   }))
+
+# -----
 
 # Example training data format (pull mode):
 #
