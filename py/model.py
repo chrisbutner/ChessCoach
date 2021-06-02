@@ -187,6 +187,7 @@ class ModelBuilder:
       decoder_layer=decoder_layer,
       eos_id=eos_id,
       decode_max_length=self.transformer_max_length,
+      encoder_width=self.filter_count,
       embedding_width=self.transformer_filters,
       dropout_rate=self.transformer_dropout_rate,
       padded_decode=config.is_tpu,

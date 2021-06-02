@@ -1,3 +1,7 @@
+Training - runs
+- try forced playouts + pruning once more
+- remove forced playouts code if not using
+
 Training - final run
 - use student prediction the whole way this time, up to 2.8m steps, see if it hits 3.3k STS rating
 - copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
@@ -6,7 +10,6 @@ Training - final run
 Commentary basics
 - try backprop into encoder
 - review/tune commentary quality
-- filter out http:, https:, .com/
 
 Commentary training
 - cyclic learning rate
@@ -21,6 +24,7 @@ Commentary training
 - re-read "learning without forgetting"
 
 Commentary quality
+- vary vocabulary size (8k->16k/32k)
 - vary top_p value
 - vary temperature
 - vary dropout

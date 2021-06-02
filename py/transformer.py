@@ -28,8 +28,6 @@
 # masks), so heavier changes were needed inside call().
 #
 
-import math
-
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from official.modeling import tf_utils
@@ -88,6 +86,7 @@ class CommentaryDecoder(tf.keras.Model):
                decoder_layer,
                eos_id,
                decode_max_length,
+               encoder_width,
                embedding_width,
                dropout_rate,
                padded_decode=False,
@@ -100,6 +99,7 @@ class CommentaryDecoder(tf.keras.Model):
 
     Args:
       vocab_size: Size of vocabulary.
+      encoder_width: Depth of provided encoder outputs (Added)
       embedding_width: Size of hidden layer for embedding.
       dropout_rate: Dropout probability.
       padded_decode: Whether to max_sequence_length padding is used. If set
@@ -115,6 +115,7 @@ class CommentaryDecoder(tf.keras.Model):
     """
     super().__init__(**kwargs)
     self._vocab_size = vocab_size
+    self._encoder_width = encoder_width
     self._embedding_width = embedding_width
     self._dropout_rate = dropout_rate
     self._padded_decode = padded_decode
@@ -131,6 +132,8 @@ class CommentaryDecoder(tf.keras.Model):
             mean=0., stddev=self._embedding_width**-0.5),
         scale_factor=self._embedding_width**0.5)
     self.decoder_layer = decoder_layer
+    self.encoder_outputs_position_encoding = layers.RelativePositionEmbedding(
+        hidden_size=self._encoder_width)
     self.position_embedding = layers.RelativePositionEmbedding(
         hidden_size=self._embedding_width)
     self.decoder_dropout = tf.keras.layers.Dropout(rate=self._dropout_rate)
@@ -175,11 +178,20 @@ class CommentaryDecoder(tf.keras.Model):
     targets = inputs.get("targets", None)
 
     # cbutner: Encoder output is provided directly and fixed length, so no need for
-    # embedding, positional encoding, attention masking or dropout at this stage.
+    # embedding, positional encoding for embedding, attention masking or dropout at this stage.
     # The attention bias tensor is just zeros, with shape compatible with "get_padding_bias".
     encoder_outputs = sources
-    encoder_outputs = tf.stop_gradient(encoder_outputs) # TODO: No backprop into encoder (main model) for now
     attention_bias = tf.zeros((tf.shape(encoder_outputs)[0], 1, 1, 1), dtype=self._dtype)
+
+    # However, do apply a position encoding to the provided encoder outputs to differentiate
+    # the "before" position (64 elements) from the "after" position (64 elements) and the
+    # side to move (1 element).
+    #
+    # This will be at the main model encoder depth though, 256, rather than at the transformer
+    # depth, 512. The key/query/value calculations expand the 256 to 512.
+    encoder_outputs_position_encoding = self.encoder_outputs_position_encoding(encoder_outputs)
+    encoder_outputs_position_encoding = tf.cast(encoder_outputs_position_encoding, encoder_outputs.dtype)
+    encoder_outputs = encoder_outputs + encoder_outputs_position_encoding
 
     if targets is None:
       encoder_decoder_attention_bias = attention_bias
