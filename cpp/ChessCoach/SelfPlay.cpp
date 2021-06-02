@@ -898,11 +898,10 @@ void SelfPlayGame::UpdateSearchRootPly()
     _searchRootPly = Ply();
 }
 
-// Always probe when available for search/UCI.
-// Only probe a small proportion of the time during self-play, to act more like an auxiliary head with low loss weight.
+// Only probe for search/UCI, not during self-play.
 bool SelfPlayGame::ShouldProbeTablebases()
 {
-    return (TryHard() || Random::InProportion(Config::Network.SelfPlay.SyzygyProbeProportion));
+    return TryHard();
 }
 
 int& SelfPlayGame::TablebaseCardinality()
@@ -1398,7 +1397,7 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
                 // Force playouts during training only, at the root only.
                 const bool forcePlayouts = (!game.TryHard() && (scratchGame.Root() == game.Root()));
                 WeightedNode selected = forcePlayouts ?
-                    PuctContext(_searchState, scratchGame.Root()).SelectChild<true>() :
+                    PuctContext(_searchState, scratchGame.Root()).SelectChild<false>() : // Off for now
                     PuctContext(_searchState, scratchGame.Root()).SelectChild<false>();
 
                 // If we can't select a child it's because parallel MCTS is already expanding all

@@ -4,12 +4,12 @@
 
 [network]
 
-network_name = "selfplay10a"
+network_name = "selfplay11"
 role = "train|play"
 
 [[networks]]
 
-    name = "selfplay10b"
+    name = "selfplay11z"
 
     [networks.training]
 
@@ -26,7 +26,7 @@ role = "train|play"
         { stage = "strength_test", target = "teacher" },
     ]
 
-    games_path_training = "Games/Fresh6"
+    games_path_training = "Games/Fresh7"
 
     [networks.self_play]
 
@@ -34,7 +34,7 @@ role = "train|play"
 
 [[networks]]
 
-    name = "selfplay10a"
+    name = "selfplay11"
 
     [networks.training]
 
@@ -54,7 +54,7 @@ role = "train|play"
         { stage = "strength_test", target = "student" },
     ]
 
-    games_path_training = "Games/Fresh6"
+    games_path_training = "Games/Fresh7"
 
 [[networks]]
 
@@ -199,7 +199,6 @@ prediction_batch_size = 512
 num_sampling_moves = 30
 max_moves = 512
 num_simulations = 800
-syzygy_probe_proportion = 0.15 # Used for both root WDL+DTZ and leaf WDL probes.
 
 root_dirichlet_alpha = 0.3
 root_exploration_fraction = 0.25

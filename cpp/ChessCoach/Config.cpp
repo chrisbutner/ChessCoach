@@ -293,7 +293,6 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<int>(selfPlay.NumSampingMoves, config, "num_sampling_moves");
     policy.template Parse<int>(selfPlay.MaxMoves, config, "max_moves");
     policy.template Parse<int>(selfPlay.NumSimulations, config, "num_simulations");
-    policy.template Parse<float>(selfPlay.SyzygyProbeProportion, config, "syzygy_probe_proportion");
 
     policy.template Parse<float>(selfPlay.RootDirichletAlpha, config, "root_dirichlet_alpha");
     policy.template Parse<float>(selfPlay.RootExplorationFraction, config, "root_exploration_fraction");

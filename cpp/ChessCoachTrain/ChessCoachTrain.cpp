@@ -77,12 +77,6 @@ void ChessCoachTrain::TrainChessCoach()
     // Initialize storage for training and take care of any game/chunk housekeeping from previous runs.
     storage.InitializeLocalGamesChunks(network.get());
 
-    // Initialize Syzygy endgame tablebases if needed.
-    if (Config::Network.SelfPlay.SyzygyProbeProportion > 0.f)
-    {
-        Syzygy::Reload();
-    }
-
     // Start self-play worker threads.
     WorkerGroup workerGroup;
     workerGroup.Initialize(network.get(), &storage, Config::Network.SelfPlay.PredictionNetworkType, Config::Network.SelfPlay.NumWorkers,

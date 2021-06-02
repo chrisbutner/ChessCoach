@@ -86,7 +86,6 @@ struct SelfPlayConfig
     int NumSampingMoves;
     int MaxMoves;
     int NumSimulations;
-    float SyzygyProbeProportion;
 
     float RootDirichletAlpha;
     float RootExplorationFraction;
