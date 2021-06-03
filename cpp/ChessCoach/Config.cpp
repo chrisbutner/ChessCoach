@@ -318,6 +318,7 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
 {
     const auto& predictionCache = toml::find_or(config, "prediction_cache", {});
     policy.template Parse<int>(misc.PredictionCache_SizeMebibytes, predictionCache, "Hash");
+    policy.template Parse<int>(misc.PredictionCache_MaxPly, predictionCache, "max_ply");
 
     const auto& timeControl = toml::find_or(config, "time_control", {});
     policy.template Parse<int>(misc.TimeControl_SafetyBufferMilliseconds, timeControl, "safety_buffer_milliseconds");
