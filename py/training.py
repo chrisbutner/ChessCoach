@@ -38,6 +38,8 @@ def make_transformer_loss():
   import transformer
   vocabulary_size = ModelBuilder.transformer_vocabulary_size
   def transformer_loss(y_true, y_pred):
+    # This is still a per-replica section, so it's too early to do masking/reducing. Instead,
+    # return directly and use sample weights, as described inside "transformer.padded_cross_entropy_loss".
     return transformer.padded_cross_entropy_loss(y_pred, y_true, transformer_label_smoothing, vocabulary_size)
   return transformer_loss
 

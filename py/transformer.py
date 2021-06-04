@@ -403,5 +403,14 @@ def padded_cross_entropy_loss(logits, labels, smoothing, vocab_size):
       * low_confidence * tf.math.log(low_confidence + 1e-20))
   xentropy -= normalizing_constant
 
+  # cbutner: We now have "xentropy" as a mean logit loss per sequence.
+  # The "custom training loop" way to proceed is to return (xentropy * weights)
+  # and (weights), sum each of those across the *global batch* (not per-replica),
+  # then divide them.
+  #
+  # However, we can get away with using Model.fit() and avoiding a custom loop by
+  # just returning (xentropy * weights) here, letting the built-in reduction average them,
+  # and for each training example using a sample weight equal to the masked sequence length
+  # divided by the mean masked sequence length for the *global batch*.
   weights = tf.cast(tf.not_equal(labels, 0), tf.float32)
-  return xentropy * weights, weights
+  return (xentropy * weights)

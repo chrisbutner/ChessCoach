@@ -287,6 +287,14 @@ class DatasetBuilder:
     sources = [self.build_dataset_source(glob, window=None, options=options) for glob in globs]
     return self.build_dataset(sources, options)
 
+  # Add sample weights to reduce loss correctly over all logits in the global batch, despite varying sequence lengths.
+  # See comment in "padded_cross_entropy_loss" in "transformer.py" for details.
+  def add_commentary_sample_weights(self, dictionary, comments):
+    weights = tf.cast(tf.not_equal(comments, 0), tf.float32)
+    masked_sequence_lengths = tf.reduce_sum(weights, 1)
+    sample_weights = masked_sequence_lengths / tf.reduce_mean(masked_sequence_lengths)
+    return (dictionary, comments, sample_weights)
+
   def build_commentary_training_dataset(self, glob, tokenizer, global_batch_size, maximum_sequence_length):
     options = CommentaryDatasetOptions(global_batch_size, maximum_sequence_length)
 
@@ -314,6 +322,9 @@ class DatasetBuilder:
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
 
+    # Add sample weights to reduce loss correctly over all logits in the global batch, despite varying sequence lengths.
+    dataset = dataset.map(self.add_commentary_sample_weights)
+
     # Prefetch batches and disable sharding.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     dataset = self.disable_sharding(dataset)
@@ -337,6 +348,9 @@ class DatasetBuilder:
 
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
+
+    # Add sample weights to reduce loss correctly over all logits in the global batch, despite varying sequence lengths.
+    dataset = dataset.map(self.add_commentary_sample_weights)
 
     # Prefetch batches and use DATA sharding.
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
