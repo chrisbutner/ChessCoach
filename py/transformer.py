@@ -50,16 +50,23 @@ class CommentaryModel(tf.keras.Model):
     self.encoder_hider = EncoderHider(encoder)
     self.decoder = decoder
 
-  # Tried encoding once with a double-sized batch instead of twice with single, but it failed to compile on TPU.
+  # Trade off time/space with two encodes rather than reshaping the 2x into batch
+  # (we're at the limit of compiled size/memory use on TPU with current batch size).
+  #
+  # During training we're not backpropagating into the encoder, so always use "training=False"
+  # (e.g. use moving averages for batch normalization), and stop gradients.
+  #
+  # Using the "EncoderHider" also prevents any warnings about missing gradients,
+  # and simplifies saving and loading of weights (vs., e.g., overriding and delegating to the decoder).
   def call(self, inputs):
     # Just eat the circular import.
     from model import ModelBuilder
     # Expect (batch, 219 = 109 + 109 + 1) int64.
     images = inputs["inputs"]
     # Encode (batch, 109) int64 to (batch, 64, 256) float32 for the "before"/"previous" position.
-    before = self.encoder_hider.encoder(images[:, 0:ModelBuilder.input_planes_count], training=False) # TODO: No backprop into encoder (main model) for now
+    before = self.encoder_hider.encoder(images[:, 0:ModelBuilder.input_planes_count], training=False)
     # Encode (batch, 109) int64 to (batch, 64, 256) float32 for the "after"/"current" position.
-    after = self.encoder_hider.encoder(images[:, ModelBuilder.input_planes_count:2*ModelBuilder.input_planes_count], training=False) # TODO: No backprop into encoder (main model) for now
+    after = self.encoder_hider.encoder(images[:, ModelBuilder.input_planes_count:2*ModelBuilder.input_planes_count], training=False)
     # Expand (batch, 1) int64 to (batch, 1, 256) of all ones or all zeros.
     side_to_move = tf.cast(images[:, -1:], tf.bool)
     side_to_move = tf.cast(side_to_move, tf.float32)
@@ -181,6 +188,7 @@ class CommentaryDecoder(tf.keras.Model):
     # embedding, positional encoding for embedding, attention masking or dropout at this stage.
     # The attention bias tensor is just zeros, with shape compatible with "get_padding_bias".
     encoder_outputs = sources
+    encoder_outputs = tf.stop_gradient(encoder_outputs) # See "CommentaryModel.call".
     attention_bias = tf.zeros((tf.shape(encoder_outputs)[0], 1, 1, 1), dtype=self._dtype)
 
     # However, do apply a position encoding to the provided encoder outputs to differentiate
