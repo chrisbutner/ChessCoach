@@ -1,35 +1,24 @@
-Training - runs
-- try forced playouts + pruning once more
-- remove forced playouts code if not using
-
 Training - final run
 - use student prediction the whole way this time, up to 2.8m steps, see if it hits 3.3k STS rating
 - copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
 - if same take original else teacher-only up to 5.6m
 
-Commentary basics
-- try backprop into encoder
-- review/tune commentary quality
-
 Commentary training
+- vary vocabulary size (8k->16k/32k)
+- vary dropout
+- no encoder backprop, train at end, so automate network seeding
 - cyclic learning rate
 	- range test with Adam - choose min - find max
 	- choose 2-10 epoch step size (NMT paper uses 4.5), half triangle width
 	- implement LearningRateSchedule
 	- if not using CLR, need to try different warmup lengths
-- compare interleaving options
-	- interleaving, if no strength loss/commentary good enough
-	- at the end, without encoder backprop
-	- at the end, with encoder backprop, completely separate model
-- re-read "learning without forgetting"
 
 Commentary quality
-- vary vocabulary size (8k->16k/32k)
 - vary top_p value
 - vary temperature
-- vary dropout
 - try/vary length normalization
 - try postprocessing, e.g. predict N, choose first above grammar threshold
+- try shoot rays, choose best (value here minus average value at neighbors) - pseudonegative-style boundary, relevancy
 
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
@@ -73,6 +62,12 @@ UCI
 - set prediction cache size (hash size) by MiB - more consistent with other engines, already mostly supported
 - cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
 
+GPU/multi-GPU
+- check out cloud multi-GPU options and set up/optimize (mirrored training + self-play + UCI)
+- re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
+	- student on GPU, 4*256, teacher/student(which?) on TPU, 16*256 for both
+	- make sure multi-GPU-on-desktop is supported - reevaluate params
+
 Bugs
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
@@ -89,9 +84,6 @@ Code quality
 - consolidate exception types in C++ and Python
 
 Deployment
-- re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
-	- student on GPU, 4*256, teacher/student(which?) on TPU, 16*256 for both
-	- make sure multi-GPU-on-desktop is supported - reevaluate params
 - re-test on fresh VMs
 	- test without any virtual env on windows too, and with non-conda venv
 - installers, instructions, progress indicators, error handling, etc.
