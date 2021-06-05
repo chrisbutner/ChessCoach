@@ -422,3 +422,7 @@ def padded_cross_entropy_loss(logits, labels, smoothing, vocab_size):
   # divided by the mean masked sequence length for the *global batch*.
   weights = tf.cast(tf.not_equal(labels, 0), tf.float32)
   return (xentropy * weights)
+
+# Shim "sample_top_k" to work around https://github.com/tensorflow/models/issues/10032 on TPU.
+original_sample_top_k = sampling_module.sample_top_k
+sampling_module.sample_top_k = lambda logits, top_k: original_sample_top_k(logits, tf.math.maximum(1, top_k))
