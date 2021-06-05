@@ -142,33 +142,54 @@ bool Preprocessor::IsBadComment(const std::string& comment) const
         return true;
     }
 
-    // Throw away jarring URLs (don't worry about case, not seeing anything that crazy).
-    // Some casual .coms may remain, but they're a bit more conversational.
-    if ((comment.find("http://") != std::string::npos) ||
-        (comment.find("https://") != std::string::npos) ||
-        (comment.find(".com/") != std::string::npos))
+    const std::vector<std::string> badSubstrings =
     {
-        return true;
-    }
+        // Throw away jarring URLs (don't worry about case, not seeing anything that crazy).
+        // Some casual .coms may remain, but they're a bit more conversational.
+        "http://",
+        "https://",
+        ".com/",
 
-    // Throw away pointless references, quizes, etc.
-    if ((comment.find("details you can see") != std::string::npos) ||
-        (comment.find("details, you can see") != std::string::npos) ||
-        (comment.find("information you can see") != std::string::npos) ||
-        (comment.find("information, you can see") != std::string::npos) ||
-        (comment.find("details see the notes") != std::string::npos) ||
-        (comment.find("can see my comments") != std::string::npos) ||
-        (comment.find("can find in annotations") != std::string::npos) ||
-        (comment.find("can find in my annotations") != std::string::npos) ||
-        (comment.find("can see annotations") != std::string::npos) ||
-        (comment.find("can see comments") != std::string::npos) ||
-        (comment.find("can see my annotations") != std::string::npos) ||
-        (comment.find("can see my comments") != std::string::npos) ||
-        (comment.find("[% tqu") != std::string::npos) ||
-        (comment.find("[%tqu") != std::string::npos) ||
-        (comment.find("converted with error") != std::string::npos))
+        // Throw away self-promotion.
+        "star system",
+        "star rating",
+        "rating system",
+        "rate and comment",
+        "comment and rate",
+        "rate this annotation",
+        "leave a comment",
+        "drop a comment",
+        "please rate",
+        "Please rate",
+        "please comment",
+        "Please comment",
+        "R&C",
+        "r&c",
+        "appreciated",
+
+        // Throw away pointless references, quizes, etc.
+        "details you can see",
+        "details, you can see",
+        "information you can see",
+        "information, you can see",
+        "details see the notes",
+        "can see my comments",
+        "can find in annotations",
+        "can find in my annotations",
+        "can see annotations",
+        "can see comments",
+        "can see my annotations",
+        "can see my comments",
+        "[% tqu",
+        "[%tqu",
+        "converted with error",
+    };
+    for (const std::string& substring : badSubstrings)
     {
-        return true;
+        if (comment.find(substring) != std::string::npos)
+        {
+            return true;
+        }
     }
 
     return false;
