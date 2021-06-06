@@ -43,6 +43,10 @@ def make_transformer_loss():
     return transformer.padded_cross_entropy_loss(y_pred, y_true, transformer_label_smoothing, vocabulary_size)
   return transformer_loss
 
+def current_learning_rate(model, last=False):
+  iterations = model.optimizer.iterations - 1 if last else model.optimizer.iterations
+  return model.optimizer.learning_rate(iterations) if callable(model.optimizer.learning_rate) else model.optimizer.learning_rate
+
 class Trainer:
 
   def __init__(self, networks, tpu_strategy, devices, datasets):
@@ -149,11 +153,11 @@ class Trainer:
     # Prepare learning rate schedule.
     model.optimizer.iterations.assign(initial_epoch * steps_per_epoch, read_value=False)
     if log:
-      learning_rate = model.optimizer.learning_rate(model.optimizer.iterations) if callable(model.optimizer.learning_rate) else model.optimizer.learning_rate
+      learning_rate = current_learning_rate(model)
       self.log("Learning rate:", learning_rate.numpy().item())
 
     # Train.
-    callbacks = [LogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)] if log else []
+    callbacks = [LogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, validation_interval)] if log else []
     model.fit(data_training, verbose=0, callbacks=callbacks,
       validation_data=data_validation, validation_steps=1, validation_freq=1,
       steps_per_epoch=steps_per_epoch, initial_epoch=initial_epoch, epochs=epochs)
@@ -184,11 +188,11 @@ class Trainer:
 
     # Prepare learning rate schedule.
     model.optimizer.iterations.assign(initial_epoch * steps_per_epoch, read_value=False)
-    learning_rate = model.optimizer.learning_rate(model.optimizer.iterations) if callable(model.optimizer.learning_rate) else model.optimizer.learning_rate
+    learning_rate = current_learning_rate(model)
     self.log("Learning rate:", learning_rate.numpy().item())
 
     # Train.
-    log_callback = CommentaryLogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, model, validation_interval)
+    log_callback = CommentaryLogCallback(self.config, self.log, network.tensorboard_writer_training, network.tensorboard_writer_validation, validation_interval)
     model.fit(data_commentary_training, verbose=0, callbacks=[log_callback],
       # Even though the commentary validation set doesn't repeat, "validation_steps" is required when using "steps_per_execution", so conservatively guess.
       validation_data=data_commentary_validation, validation_steps=10, validation_freq=1,
@@ -285,12 +289,11 @@ class RollingDataset(tf.data.Dataset):
 
 class LogCallback(tf.keras.callbacks.Callback):
 
-  def __init__(self, config, log, training_writer, validation_writer, model, validation_interval):
+  def __init__(self, config, log, training_writer, validation_writer, validation_interval):
     self.config = config
     self.log = log
     self.training_writer = training_writer
     self.validation_writer = validation_writer
-    self.model = model
     self.validation_interval = validation_interval
 
   def on_epoch_end(self, epoch, logs=None):
@@ -318,7 +321,8 @@ class LogCallback(tf.keras.callbacks.Callback):
     with writer.as_default():
       tf.summary.experimental.set_step(step)
       self.log_loss_accuracy(losses)
-      self.log_weights(self.model)
+      self.log_weights()
+      self.log_parameters()
       writer.flush()
 
   def log_loss_accuracy(self, losses):
@@ -335,20 +339,24 @@ class LogCallback(tf.keras.callbacks.Callback):
     with tf.name_scope("accuracy"):
       tf.summary.scalar("policy accuracy", losses[4])
 
-  def log_weights(self, model):
-    for layer in model.layers:
+  def log_weights(self):
+    for layer in self.model.layers:
       for weight in layer.weights:
         weight_name = weight.name.replace(':', '_')
         tf.summary.histogram(weight_name, weight)
 
+  def log_parameters(self):
+    learning_rate = current_learning_rate(self.model, last=True)
+    with tf.name_scope("parameters"):
+      tf.summary.scalar("learning rate", learning_rate)
+
 class CommentaryLogCallback(tf.keras.callbacks.Callback):
 
-  def __init__(self, config, log, training_writer, validation_writer, model, validation_interval):
+  def __init__(self, config, log, training_writer, validation_writer, validation_interval):
     self.config = config
     self.log = log
     self.training_writer = training_writer
     self.validation_writer = validation_writer
-    self.model = model
     self.validation_interval = validation_interval
 
   def on_epoch_end(self, epoch, logs=None):
@@ -371,15 +379,21 @@ class CommentaryLogCallback(tf.keras.callbacks.Callback):
     with writer.as_default():
       tf.summary.experimental.set_step(step)
       self.log_loss_commentary(losses)
-      self.log_weights(self.model)
+      self.log_weights()
+      self.log_parameters()
       writer.flush()
 
   def log_loss_commentary(self, losses):
     with tf.name_scope("loss"):
       tf.summary.scalar("commentary loss", losses[0])
 
-  def log_weights(self, model):
-    for layer in model.layers:
+  def log_weights(self):
+    for layer in self.model.layers:
       for weight in layer.weights:
         weight_name = weight.name.replace(':', '_')
         tf.summary.histogram(weight_name, weight)
+
+  def log_parameters(self):
+    learning_rate = current_learning_rate(self.model, last=True)
+    with tf.name_scope("parameters"):
+      tf.summary.scalar("commentary learning rate", learning_rate)
