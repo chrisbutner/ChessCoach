@@ -30,7 +30,7 @@ class ModelBuilder:
   transformer_filters = 512
   transformer_heads = 8
   transformer_feedforward = 2048
-  transformer_dropout_rate = 0.1
+  transformer_dropout_rate = 0.2
   transformer_vocabulary_size = 8000
   transformer_max_length = 128
 
