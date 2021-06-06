@@ -4,21 +4,11 @@ Training - final run
 - if same take original else teacher-only up to 5.6m
 
 Commentary training
-- vary vocabulary size (8k->16k/32k)
-- vary dropout
-- no encoder backprop, train at end, so automate network seeding
-- cyclic learning rate
-	- range test with Adam - choose min - find max
-	- choose 2-10 epoch step size (NMT paper uses 4.5), half triangle width
-	- implement LearningRateSchedule
-	- if not using CLR, need to try different warmup lengths
+- compare with shelved double-encode (may need another range test)
 
 Commentary quality
 - vary top_p value
 - vary temperature
-- try/vary length normalization
-- try postprocessing, e.g. predict N, choose first above grammar threshold
-- try shoot rays, choose best (value here minus average value at neighbors) - pseudonegative-style boundary, relevancy
 
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear

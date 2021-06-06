@@ -116,11 +116,6 @@ role = "train|play"
         { stage = "save", target = "teacher" },
     ]
 
-    [networks.training.commentary_learning_rate_schedule]
-
-    steps = [0] #[0, 800_000, 2_400_000, 4_000_000]
-    rates = [2e-2] #[2e-2, 2e-3, 2e-4, 2e-5]
-
     [networks.self_play]
 
     network_type = "teacher"
@@ -152,15 +147,18 @@ batch_size = 512
 commentary_batch_size = 512 # Use 64 on GTX 1080.
 steps = 5_600_000 # Equivalent to 700,000 steps of batch size 4096
 warmup_steps = 1000
-pgn_interval = 10000
+pgn_interval = 10_000
 validation_interval = 2000
-checkpoint_interval = 10000
-strength_test_interval = 40000
+checkpoint_interval = 10_000
+strength_test_interval = 40_000
 steps_per_execution = 50
 value_loss_weight = 1.0
 mcts_value_loss_weight = 0.15
 policy_loss_weight = 1.0
 momentum = 0.9
+commentary_learning_rate_min = 1e-5 # Not multiplied by device count: range-test on each environment
+commentary_learning_rate_max = 1e-3 # Not multiplied by device count: range-test on each environment
+commentary_cyclic_step_size = 20_000 # Half of the cycle length
 dataset_shuffle_positions_training = 524_288 # 2^19 (~9.5 GiB, 19568 bytes payload per position)
 dataset_shuffle_positions_validation = 4096 # 2^12
 dataset_keep_game_proportion = 0.2
@@ -180,11 +178,6 @@ stages = []
 
 steps = [0, 800_000, 2_400_000, 4_000_000] # Equivalent to 100,000, 300,000, 500,000 with batch size 4096
 rates = [2.0e-2, 2.5e-3, 2.5e-4, 2.5e-5] # Multiplied by device_count
-
-[training.commentary_learning_rate_schedule]
-
-steps = [0] #[0, 800_000, 2_400_000, 4_000_000] # Equivalent to 100,000, 300,000, 500,000 with batch size 4096
-rates = [2e-4] #[2e-4, 2e-5, 2e-6, 2e-7] # Multiplied by device_count
 
 [self_play]
 

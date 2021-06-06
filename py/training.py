@@ -79,8 +79,16 @@ class Trainer:
     else:
       self.strategy = tf.distribute.get_strategy()
 
-  def get_learning_rate(self, schedule):
+  def get_learning_rate(self):
+    schedule = self.config.training["learning_rate_schedule"]
     return Schedule(schedule["steps"], schedule["rates"], self.config.training["warmup_steps"], self.device_count)
+
+  def get_commentary_learning_rate(self):
+    return CommentarySchedule(
+      self.config.training["commentary_learning_rate_min"],
+      self.config.training["commentary_learning_rate_max"],
+      self.config.training["commentary_cyclic_step_size"],
+      self.device_count)
 
   # The teacher network trains directly on supervised labels.
   def compile_teacher(self, model, learning_rate=None):
@@ -93,7 +101,7 @@ class Trainer:
 
   def compile(self, model, policy_loss, policy_accuracy, learning_rate=None):
     if learning_rate is None:
-      learning_rate = self.get_learning_rate(self.config.training["learning_rate_schedule"])
+      learning_rate = self.get_learning_rate()
     optimizer = tf.keras.optimizers.SGD(
       learning_rate=learning_rate,
       momentum=self.config.training["momentum"])
@@ -103,9 +111,7 @@ class Trainer:
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights, metrics=metrics, steps_per_execution=self.config.training["steps_per_execution"])
 
   def compile_commentary(self, model):
-    optimizer = tf.keras.optimizers.SGD(
-      learning_rate=self.get_learning_rate(self.config.training["commentary_learning_rate_schedule"]),
-      momentum=self.config.training["momentum"])
+    optimizer = tf.keras.optimizers.Adam(learning_rate=self.get_commentary_learning_rate())
     loss = make_transformer_loss()
     model.compile(optimizer=optimizer, loss=loss, steps_per_execution=self.config.training["steps_per_execution"])
 
@@ -267,6 +273,24 @@ class Schedule(tf.keras.optimizers.schedules.PiecewiseConstantDecay):
     if self.warmup_steps:
       value *= tf.cast(tf.clip_by_value(step / self.warmup_steps, 0.0, 1.0), tf.float32)
     return value
+
+# Use cyclic learning rate schedule from https://arxiv.org/pdf/2004.02401.pdf
+class CommentarySchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+
+  # Step size is half the cycle length (half the width of the triangle).
+  def __init__(self, learning_rate_min, learning_rate_max, step_size, device_count):
+    # Keras sees step numbers for global batches in Model.fit() (e.g. steps_per_epoch has a divide-by-device_count),
+    # not the per-replica batches our config is based on, so adjust the boundaries here correspondingly.
+    self.step_size = tf.constant((step_size / device_count), tf.float32)
+    self.learning_rate_min = tf.constant(learning_rate_min, tf.float32)
+    self.learning_rate_max = tf.constant(learning_rate_max, tf.float32)
+
+  def __call__(self, step):
+    step = tf.cast(step, tf.float32)
+    cycle_length = (2 * self.step_size)
+    step_in_cycle = (step % cycle_length) # In [0, cycle_length)
+    fraction_from_mid = (tf.math.abs(step_in_cycle - self.step_size) / self.step_size) # In [0, 1]
+    return (self.learning_rate_max - fraction_from_mid * (self.learning_rate_max - self.learning_rate_min))
 
 class RollingDataset(tf.data.Dataset):
 
