@@ -53,7 +53,7 @@ std::filesystem::path Platform::GetExecutableDirectory()
     GetModuleFileNameA(NULL, path, MAX_PATH);
     return std::filesystem::path(path).parent_path();
 #else
-    throw std::exception("Not implemented");
+    throw std::logic_error("Not implemented");
 #endif
 }
 
