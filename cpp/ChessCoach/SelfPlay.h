@@ -235,7 +235,8 @@ public:
     bool TryHard() const;
     void ApplyMoveWithRoot(Move move, Node* newRoot);
     void ApplyMoveWithRootAndExpansion(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker);
-    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot);
+    float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState,
+        bool isSearchRoot, bool generateUniformPredictions);
     float FinishExpanding(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot, int moveCount, float value);
     void Expand(int moveCount, float firstPlayUrgency);
     bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
@@ -394,6 +395,7 @@ private:
 
     Storage* _storage;
 
+    bool _generateUniformPredictions;
     std::vector<SelfPlayState> _states;
     std::vector<INetwork::InputPlanes> _images;
     std::vector<float> _values;

@@ -509,7 +509,8 @@ bool SelfPlayGame::TakeExpansionOwnership(Node* node)
     return node->expansion.compare_exchange_strong(expected, Expansion::Expanding, std::memory_order_relaxed);
 }
 
-float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot)
+float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState,
+    bool isSearchRoot, bool generateUniformPredictions)
 {
     Node* root = _root;
 
@@ -620,11 +621,13 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         // to evict less. However, in search (TryHard) it's better to keep everything recent.
         cacheStore = nullptr;
         float cachedValue = std::numeric_limits<float>::quiet_NaN();
-        _imageKey = GenerateImageKey(TryHard());
         bool hitCached = false;
-        if ((workingMoveCount <= PredictionCacheEntry::MaxMoveCount) &&
+        if (!generateUniformPredictions &&
+            (workingMoveCount <= PredictionCacheEntry::MaxMoveCount) &&
             (TryHard() || (Ply() <= Config::Misc.PredictionCache_MaxPly)))
         {
+            // Note that "_imageKey" may be stale whenever "cacheStore" is null.
+            _imageKey = GenerateImageKey(TryHard());
             hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, workingMoveCount,
                 &cacheStore, &cachedValue, _cachedPriors.data());
         }
@@ -634,9 +637,17 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         }
 
         // Prepare for a prediction from the network.
-        GenerateImage(*_image);
+        //
+        // If we're generating uniform predictions, there's no GPU work to do, so just continue onward.
+        // (the "prediction" doesn't vary and was already generated when starting this round of self-play).
+        // This has the side-effect of each thread just looping over just one game, rather than "prediction_batch_size",
+        // which should be more efficient and avoid skewing towards shorter game lengths when stopping early.
         state = SelfPlayState::WaitingForPrediction;
-        return std::numeric_limits<float>::quiet_NaN();
+        if (!generateUniformPredictions)
+        {
+            GenerateImage(*_image);
+            return std::numeric_limits<float>::quiet_NaN();
+        }
     }
 
     // Received a prediction from the network. WaitingForPrediction implies that we have expansion ownership.
@@ -934,6 +945,7 @@ void SearchState::Reset(const TimeControl& setTimeControl)
 
 SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int gameCount)
     : _storage(storage)
+    , _generateUniformPredictions(false)
     , _states(gameCount)
     , _images(gameCount)
     , _values(gameCount)
@@ -974,14 +986,16 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
     while (workCoordinator->WaitForWorkItems())
     {
         // Generate uniform predictions for the first network (rather than use random weights).
-        const bool uniform = workCoordinator->GenerateUniformPredictions();
-        if (uniform)
+        _generateUniformPredictions = workCoordinator->GenerateUniformPredictions();
+        if (_generateUniformPredictions)
         {
+            // Uniform predictions only need to be set up in memory once while active.
             std::cout << "Generating uniform network predictions until trained" << std::endl;
+            PredictBatchUniform(static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
         }
 
         // Warm up the GIL and predictions.
-        if (!uniform)
+        if (!_generateUniformPredictions)
         {
             const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, 1);
             if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
@@ -1023,11 +1037,7 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
             }
 
             // GPU work
-            if (uniform)
-            {
-                PredictBatchUniform(static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
-            }
-            else
+            if (!_generateUniformPredictions)
             {
                 const PredictionStatus status = network->PredictBatch(networkType, static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
                 if ((status & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
@@ -1429,7 +1439,7 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
         // because beyond trivially cached terminal evaluations, both depend on move generation.
         const bool wasImmediateMate = (scratchGame.Root()->terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>());
         const bool isSearchRoot = (game.Root() == scratchGame.Root());
-        float value = scratchGame.ExpandAndEvaluate(state, cacheStore, _searchState, isSearchRoot);
+        float value = scratchGame.ExpandAndEvaluate(state, cacheStore, _searchState, isSearchRoot, _generateUniformPredictions);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             // Wait for network evaluation/priors to come back.

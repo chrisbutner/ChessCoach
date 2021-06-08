@@ -60,9 +60,6 @@ GPU/multi-GPU
 	- student on GPU, 4*256, teacher/student(which?) on TPU, 16*256 for both
 	- make sure multi-GPU-on-desktop is supported - reevaluate params
 
-Bugs
-- shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
-
 Code quality
 - need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
 - modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
