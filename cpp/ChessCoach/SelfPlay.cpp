@@ -420,7 +420,6 @@ SelfPlayGame::SelfPlayGame(SelfPlayGame&& other) noexcept
     , _searchRootPly(other._searchRootPly)
     , _mctsValues(std::move(other._mctsValues))
     , _childVisits(std::move(other._childVisits))
-    , _history(std::move(other._history))
     , _result(other._result)
 {
     assert(&other != this);
@@ -443,7 +442,6 @@ SelfPlayGame& SelfPlayGame::operator=(SelfPlayGame&& other) noexcept
     _searchRootPly = other._searchRootPly;
     _mctsValues = std::move(other._mctsValues);
     _childVisits = std::move(other._childVisits);
-    _history = std::move(other._history);
     _result = other._result;
 
     other._root = nullptr;
@@ -491,10 +489,9 @@ void SelfPlayGame::ApplyMoveWithRoot(Move move, Node* newRoot)
     // Don't prepare an expanded root here because this is a common path; e.g. for scratch games also.
 }
 
-void SelfPlayGame::ApplyMoveWithRootAndHistory(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker)
+void SelfPlayGame::ApplyMoveWithRootAndExpansion(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker)
 {
     ApplyMoveWithRoot(move, newRoot);
-    _history.push_back(move);
 
     // If this new root is already expanded then we won't hit the "isSearchRoot" expansion in "RunMcts", so perform necessary preparations.
     assert(!TryHard());
@@ -816,7 +813,7 @@ void SelfPlayGame::Complete()
 
 SavedGame SelfPlayGame::Save() const
 {
-    return SavedGame(Result(), _history, _mctsValues, _childVisits);
+    return SavedGame(Result(), _moves, _mctsValues, _childVisits);
 }
 
 void SelfPlayGame::PruneExcept(Node* root, Node*& except)
@@ -1323,7 +1320,7 @@ void SelfPlayWorker::Play(int index)
         assert(mctsFinished);
         assert(selected != nullptr);
         game.StoreSearchStatistics();
-        game.ApplyMoveWithRootAndHistory(Move(selected->move), selected, *this);
+        game.ApplyMoveWithRootAndExpansion(Move(selected->move), selected, *this);
         game.PruneExcept(root, selected /* == game.Root() */);
         // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
         _searchState->principleVariationChanged.store(true, std::memory_order_release); // First move in PV is now gone.

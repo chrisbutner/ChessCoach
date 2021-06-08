@@ -234,7 +234,7 @@ public:
 
     bool TryHard() const;
     void ApplyMoveWithRoot(Move move, Node* newRoot);
-    void ApplyMoveWithRootAndHistory(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker);
+    void ApplyMoveWithRootAndExpansion(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot);
     float FinishExpanding(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot, int moveCount, float value);
     void Expand(int moveCount, float firstPlayUrgency);
@@ -275,7 +275,6 @@ private:
     // Only used for real games, so no need to copy, but may make sense for primitives.
     std::vector<float> _mctsValues;
     std::vector<std::map<Move, float>> _childVisits;
-    std::vector<Move> _history;
     float _result;
 
     // Coroutine state.

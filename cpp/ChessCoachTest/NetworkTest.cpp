@@ -46,7 +46,7 @@ void ApplyMoveExpandWithPattern(SelfPlayWorker& selfPlayWorker, SelfPlayGame& ga
     Node* previousRoot = game.Root();
     game.Root()->bestChild = moveNode;
     game.StoreSearchStatistics();
-    game.ApplyMoveWithRootAndHistory(move, moveNode, selfPlayWorker);
+    game.ApplyMoveWithRootAndExpansion(move, moveNode, selfPlayWorker);
     game.PruneExcept(previousRoot, moveNode);
 }
 TEST(Network, Policy)
@@ -85,7 +85,7 @@ TEST(Network, Policy)
     Node* previousRoot = game.Root();
     game.Root()->bestChild = selected;
     game.StoreSearchStatistics();
-    game.ApplyMoveWithRootAndHistory(firstMove, selected, dummyWorker);
+    game.ApplyMoveWithRootAndExpansion(firstMove, selected, dummyWorker);
     game.PruneExcept(previousRoot, selected);
     game.Complete();
     std::unique_ptr<INetwork::OutputPlanes> labels(std::make_unique<INetwork::OutputPlanes>());
