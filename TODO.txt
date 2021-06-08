@@ -62,7 +62,6 @@ GPU/multi-GPU
 
 Code quality
 - need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
-- modify config.toml directly in sub-dockerfiles, don't rebuild/reinstall
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
 - fix _ in network names - split on final _
 - privatize C++ methods (got too python-brained)

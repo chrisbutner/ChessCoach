@@ -29,6 +29,6 @@ RUN pip3 install setuptools toml
 
 COPY . /chesscoach
 RUN /chesscoach/build.sh release install && \
-  rm -r /chesscoach/build
+  rm -r /chesscoach
 
 ENV PYTHONUNBUFFERED=1
