@@ -11,7 +11,7 @@ import tensorflow as tf
 
 alpha_config = {
   "quota": {
-    "tpu": 25,
+    "tpu": 50,
     "pod": 2,
   },
 }
@@ -32,25 +32,25 @@ tpu_configs = {
 }
 
 deployment_configs = {
-  "selfplay6": {
+  "selfplay": {
     "roles": {
       "train": {
         "count": 1,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-train:selfplay11_v24",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-train:selfplay11_v25",
         "on_error": "dmesg",
       },
       "play": {
-        "count": 22,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay11_v24",
+        "count": 47,
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay11_v25",
         "on_error": "dmesg",
       },
     },
   },
-  "selfplay6_pods": {
+  "selfplay_pods": {
     "roles": {
       "play": {
         "count": 8,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay11_v24",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-play:selfplay11_v25",
         "on_error": "dmesg",
       },
     },

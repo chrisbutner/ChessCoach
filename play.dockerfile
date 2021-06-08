@@ -4,7 +4,6 @@ FROM eu.gcr.io/${PROJECT_ID}/chesscoach-base:${BASE_TAG}
 ARG NETWORK
 
 # Playing machine should only "play".
-# Ubuntu 18.04: include user-installed meson in PATH.
 RUN sed -i -e "s/^network_name.*=.*\".*\"/network_name = \"${NETWORK}\"/" \
   -e "s/role.*=.*\".*\"/role = \"play\"/" \
   /usr/local/share/ChessCoach/config.toml
