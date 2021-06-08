@@ -16,6 +16,7 @@ public:
     static std::filesystem::path InstallationScriptPath();
     static std::filesystem::path InstallationDataPath();
     static std::filesystem::path UserDataPath();
+    static std::filesystem::path GetExecutableDirectory();
 
     static std::string GetEnvironmentVariable(const char* name);
     static void SetEnvironmentVariable(const char* name, const char* value);

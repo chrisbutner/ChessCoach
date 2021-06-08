@@ -17,13 +17,16 @@ class Config:
     self.path = posixpath if is_tpu else os.path
     self.join = self.path.join
     
+    py_path = os.path.dirname(os.path.abspath(__file__))
     try:
-      config = toml.load("config.toml")
+      # Slightly less risk to try this first on Windows before parent directory.
+      config = toml.load(self.join(py_path, "config.toml")) # Windows, via C++
     except:
       try:
-        config = toml.load("../config.toml")
+        # Running source directly in Python. Prefer this more specific path even if also installed on Linux.
+        config = toml.load(self.join(py_path, "..", "config.toml"))
       except:
-        config = toml.load("/usr/local/share/ChessCoach/config.toml")
+        config = toml.load("/usr/local/share/ChessCoach/config.toml") # Linux, via C++
 
     self.network_name = config["network"]["network_name"]
     assert self.network_name

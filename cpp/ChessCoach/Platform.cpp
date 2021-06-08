@@ -6,6 +6,9 @@
 
 #ifdef CHESSCOACH_WINDOWS
 #include <io.h>
+#include <Windows.h> // Required for <libloaderapi.h> for GetModuleFileNameA
+#undef GetEnvironmentVariable
+#undef SetEnvironmentVariable
 #else
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -16,7 +19,7 @@
 std::filesystem::path Platform::InstallationScriptPath()
 {
 #ifdef CHESSCOACH_WINDOWS
-    return std::filesystem::current_path();
+    return GetExecutableDirectory();
 #else
     return "/usr/local/bin/ChessCoach";
 #endif
@@ -25,7 +28,7 @@ std::filesystem::path Platform::InstallationScriptPath()
 std::filesystem::path Platform::InstallationDataPath()
 {
 #ifdef CHESSCOACH_WINDOWS
-    return std::filesystem::current_path();
+    return GetExecutableDirectory();
 #else
     return "/usr/local/share/ChessCoach";
 #endif
@@ -40,6 +43,17 @@ std::filesystem::path Platform::UserDataPath()
     return !xdgDataHome.empty() ?
         (std::filesystem::path(xdgDataHome) / "ChessCoach") :
         (std::filesystem::path(GetEnvironmentVariable("HOME")) / ".local/share/ChessCoach");
+#endif
+}
+
+std::filesystem::path Platform::GetExecutableDirectory()
+{
+#ifdef CHESSCOACH_WINDOWS
+    CHAR path[MAX_PATH];
+    GetModuleFileNameA(NULL, path, MAX_PATH);
+    return std::filesystem::path(path).parent_path();
+#else
+    throw std::exception("Not implemented");
 #endif
 }
 

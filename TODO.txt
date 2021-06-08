@@ -4,6 +4,8 @@ Training - final run
 - if same take original else teacher-only up to 5.6m
 
 Commentary training
+- update training data for new filter after comparisons finished, sync tokenizer
+- choose commentary_steps config to stop after
 - compare with shelved double-encode (may need another range test)
 
 Commentary quality
@@ -61,7 +63,6 @@ GPU/multi-GPU
 Bugs
 - SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
-- fix any "current directory" use, especially on windows - add abstraction layer to module-finding call - e.g. for en dictionary, config
 
 Code quality
 - need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
