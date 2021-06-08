@@ -48,10 +48,8 @@ PUCT - later
 UCI
 - manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
 	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
-- tail Backpropagate into BackpropagateVisitsOnly
 - workaround for .exe vs. non in ChessBase - can we probe for virtuals and activate before initializing python?
 - spin option min/max
-- set prediction cache size (hash size) by MiB - more consistent with other engines, already mostly supported
 - cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
 
 GPU/multi-GPU
@@ -63,10 +61,8 @@ GPU/multi-GPU
 Code quality
 - need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
 - copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
-- fix _ in network names - split on final _
 - privatize C++ methods (got too python-brained)
 - check for any unnecessary move constructors
-- StrengthTestNetwork (naming)
 - consolidate exception types in C++ and Python
 
 Deployment

@@ -1786,57 +1786,71 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
     Node* previous = nullptr;
     for (int i = static_cast<int>(searchPath.size()) - 1; i >= 0; i--)
     {
+        if (!weight)
+        {
+            BackpropagateVisitsOnly(searchPath, i);
+            return;
+        }
+
         Node* node = searchPath[i].node;
         node->visitingCount.fetch_sub(1, std::memory_order_relaxed);
         node->visitCount.fetch_add(1, std::memory_order_relaxed);
-        if (weight)
+         
+        // If this node has a tablebase score/bound set then we know we can achieve at least/exactly/at most that,
+        // so backpropagate the bounded value up the tree.
+        //
+        // Also, if this node has a tablebase score/bound set and we picked a sub-par exploration-only node down below
+        // (i.e. weight is now zero, and we didn't reach this point), we could restart the weight chain, since we know
+        // that the bounded value accurately represents the node. However, this has performance impact, and may not be necessary.
+        value = node->TablebaseBoundedValue(value);
+
+        const int newWeight = node->SampleValue(movingAverageBuild, movingAverageCap, value);
+        if (previous)
         {
-            // If this node has a tablebase score/bound set then we know we can achieve at least/exactly/at most that,
-            // so backpropagate the bounded value up the tree.
-            //
-            // Also, if this node has a tablebase score/bound set and we picked a sub-par exploration-only node down below
-            // (i.e. weight is now zero, and we didn't reach this point), we could restart the weight chain, since we know
-            // that the bounded value accurately represents the node. However, this has performance impact, and may not be necessary.
-            value = node->TablebaseBoundedValue(value);
+            previous->upWeight.fetch_add(1, std::memory_order_relaxed);
+        }
 
-            const int newWeight = node->SampleValue(movingAverageBuild, movingAverageCap, value);
-            if (previous)
+        // Implement "draw-sibling-FPU":
+        //
+        // When a leaf node is first visited and the value is an exact draw, update the first-play urgency (FPU)
+        // of the draw's siblings to the root's value (flipped if necessary), so that if a player has a winning position,
+        // they are not forced to keep visiting and backpropagating a draw that was encountered by surprise with a high prior.
+        // This removes the need for flood protection in small sub-trees, and solves more problems in practice.
+        //
+        // There are two potential issues with this logic:
+        // - The neural network evaluation or quantized prediction cache evaluation may exactly equal a draw score.
+        //   This is unfortunate, but only results in a small slow-down for the initial visits to siblings with
+        //   sufficient exploration incentive.
+        // - If another thread just backpropagated into a sibling with an exact loss score as its first (few) sample(s)
+        //   then we may clobber the actual weighted average, because we can only CAS against one variable. This could be
+        //   dangerous, delaying future visits to the win potentially for a long time, but should be exceedingly rare.
+        if ((newWeight == 1) && (value == CHESSCOACH_VALUE_DRAW) && (i == static_cast<int>(searchPath.size()) - 1) && (i > 0))
+        {
+            // Iterate over siblings.
+            for (Node& child : *searchPath[i - 1].node)
             {
-                previous->upWeight.fetch_add(1, std::memory_order_relaxed);
-            }
-
-            // Implement "draw-sibling-FPU":
-            //
-            // When a leaf node is first visited and the value is an exact draw, update the first-play urgency (FPU)
-            // of the draw's siblings to the root's value (flipped if necessary), so that if a player has a winning position,
-            // they are not forced to keep visiting and backpropagating a draw that was encountered by surprise with a high prior.
-            // This removes the need for flood protection in small sub-trees, and solves more problems in practice.
-            //
-            // There are two potential issues with this logic:
-            // - The neural network evaluation or quantized prediction cache evaluation may exactly equal a draw score.
-            //   This is unfortunate, but only results in a small slow-down for the initial visits to siblings with
-            //   sufficient exploration incentive.
-            // - If another thread just backpropagated into a sibling with an exact loss score as its first (few) sample(s)
-            //   then we may clobber the actual weighted average, because we can only CAS against one variable. This could be
-            //   dangerous, delaying future visits to the win potentially for a long time, but should be exceedingly rare.
-            if ((newWeight == 1) && (value == CHESSCOACH_VALUE_DRAW) && (i == static_cast<int>(searchPath.size()) - 1) && (i > 0))
-            {
-                // Iterate over siblings.
-                for (Node& child : *searchPath[i - 1].node)
+                if (child.valueWeight.load(std::memory_order_relaxed) == 0)
                 {
-                    if (child.valueWeight.load(std::memory_order_relaxed) == 0)
-                    {
-                        float expected = CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT;
-                        child.valueAverage.compare_exchange_strong(expected, rootValue, std::memory_order_relaxed);
-                    }
+                    float expected = CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT;
+                    child.valueAverage.compare_exchange_strong(expected, rootValue, std::memory_order_relaxed);
                 }
             }
         }
         value = Game::FlipValue(value);
 
-        // Weights are always 0 or 1 with current SBLE-PUCT.
-        weight = std::min(weight, static_cast<int>(searchPath[i].weight));
+        // Weights are always 0 or 1 with current SBLE-PUCT. We already checked the current weight, so no need for "std::min".
+        weight = searchPath[i].weight;
         previous = node;
+    }
+}
+
+void SelfPlayWorker::BackpropagateVisitsOnly(std::vector<WeightedNode>& searchPath, int index)
+{
+    for (; index >= 0; index--)
+    {
+        Node* node = searchPath[index].node;
+        node->visitingCount.fetch_sub(1, std::memory_order_relaxed);
+        node->visitCount.fetch_add(1, std::memory_order_relaxed);
     }
 }
 

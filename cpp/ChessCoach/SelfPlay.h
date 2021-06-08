@@ -350,6 +350,7 @@ public:
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
     Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
     void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
+    void BackpropagateVisitsOnly(std::vector<WeightedNode>& searchPath, int index);
     void BackpropagateMate(const std::vector<WeightedNode>& searchPath);
     void FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* node);
     void UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath);
