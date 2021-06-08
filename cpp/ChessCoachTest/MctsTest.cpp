@@ -497,10 +497,14 @@ TEST(Mcts, PrepareExpandedRoot)
     bool coverageB = false;
     bool coverageC = false;
     int lastPly = 0;
-    while ((*state != SelfPlayState::Finished) && (lastPly < 10))
+    while (lastPly < 10)
     {
         // CPU work
         selfPlayWorker.Play(index);
+        if (*state == SelfPlayState::Finished)
+        {
+            break;
+        }
 
         if ((game->Ply() > lastPly) && game->Root()->IsExpanded())
         {
