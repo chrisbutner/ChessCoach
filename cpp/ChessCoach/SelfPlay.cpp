@@ -939,8 +939,8 @@ SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int g
     , _values(gameCount)
     , _policies(gameCount)
     , _tablebaseCardinalities(gameCount)
-    , _games(gameCount)
-    , _scratchGames(gameCount)
+    , _games(0) // Allocate pooled StateInfos on the worker thread.
+    , _scratchGames(0) // Allocate pooled StateInfos on the worker thread.
     , _gameStarts(gameCount)
     , _mctsSimulations(gameCount, 0)
     , _mctsSimulationLimits(gameCount, 0)
@@ -948,6 +948,15 @@ SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int g
     , _cacheStores(gameCount)
     , _searchState(searchState)
 {
+}
+
+void SelfPlayWorker::Initialize()
+{
+    // Allocate pooled StateInfos on the worker thread.
+    assert(_games.empty());
+    assert(_scratchGames.empty());
+    _games.resize(_states.size());
+    _scratchGames.resize(_states.size());
 }
 
 void SelfPlayWorker::Finalize()
@@ -959,6 +968,8 @@ void SelfPlayWorker::Finalize()
 
 void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool /* primary */)
 {
+    Initialize();
+
     // Wait until games are required.
     while (workCoordinator->WaitForWorkItems())
     {
@@ -2051,6 +2062,8 @@ void SelfPlayWorker::DebugResetGame(int index)
 
 void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary)
 {
+    Initialize();
+
     // Warm up the GIL and predictions.
     WarmUpPredictions(network, networkType, 1);
 
@@ -2095,6 +2108,8 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
 
 void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary)
 {
+    Initialize();
+
     // Warm up the GIL and predictions.
     WarmUpPredictions(network, networkType, 1);
 

@@ -61,7 +61,6 @@ GPU/multi-GPU
 	- make sure multi-GPU-on-desktop is supported - reevaluate params
 
 Bugs
-- SelfPlayWorker objects are created on the main thread and use its StateInfo in Game::Game(), then the worker thread steals in Free
 - shouldn't use prediction cache with uniform predictions (CPU) - ugly to plumb
 
 Code quality

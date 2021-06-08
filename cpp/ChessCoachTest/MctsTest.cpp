@@ -132,6 +132,7 @@ TEST(Mcts, StateLeaks)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
 
     // Allocations are only tracked with DEBUG.
 #ifdef _DEBUG
@@ -159,6 +160,7 @@ TEST(Mcts, PrincipleVariation)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
 
     int latestNodeCount = 0;
     std::vector<Node*> latestPrincipleVariation;
@@ -191,6 +193,7 @@ TEST(Mcts, MateComparisons)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
 
     // Set up nodes from expected worst to best.
     const int nodeCount = 9;
@@ -230,6 +233,7 @@ TEST(Mcts, MateProving)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0);
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -309,6 +313,7 @@ TEST(Mcts, TwofoldRepetition)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0);
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -378,6 +383,7 @@ TEST(Mcts, SamplingSelfPlay)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0, Game::StartingPosition, {}, false /* tryHard */); // SamplingSelfPlay means tryHard is false.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -423,6 +429,7 @@ TEST(Mcts, SamplingUci)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
     SelfPlayGame* game;
     selfPlayWorker.SetUpGame(0, Game::StartingPosition, {}, true /* tryHard */); // SamplingUci means tryHard is true.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
@@ -476,6 +483,7 @@ TEST(Mcts, PrepareExpandedRoot)
 
     SearchState searchState{};
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
+    selfPlayWorker.Initialize();
     
     const int index = 0;
     SelfPlayGame* game;

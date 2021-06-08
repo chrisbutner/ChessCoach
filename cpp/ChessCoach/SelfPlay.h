@@ -371,6 +371,8 @@ public:
         int moveTimeMs, int nodes, int failureNodes, int positionLimit,
         std::function<void(const std::string&, const std::string&, const std::string&, int, int, int)> progress);
 
+    void Initialize();
+
 private:
 
     void Finalize();

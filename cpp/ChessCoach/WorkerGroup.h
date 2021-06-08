@@ -18,6 +18,7 @@ public:
     {
         workCoordinator.reset(new WorkCoordinator(workerCount));
         controllerWorker.reset(new SelfPlayWorker(storage, &searchState, 1 /* gameCount */));
+        controllerWorker->Initialize();
         for (int i = 0; i < workerCount; i++)
         {
             const bool primary = (i == 0);
