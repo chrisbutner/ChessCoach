@@ -191,6 +191,8 @@ class ModelBuilder:
       embedding_width=self.transformer_filters,
       dropout_rate=self.transformer_dropout_rate,
       padded_decode=config.is_tpu,
+      sample_temperature=config.misc["commentary"]["temperature"],
+      top_p=config.misc["commentary"]["top_p"],
     )
     commentary_model = transformer.CommentaryModel(commentary_encoder, commentary_decoder)
 

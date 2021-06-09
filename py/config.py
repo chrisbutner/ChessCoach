@@ -49,6 +49,7 @@ class Config:
     
     # Make some miscellaneous config available.
     self.misc = {
+      "commentary": config["commentary"],
       "paths": config["paths"],
       "storage": config["storage"],
       "optimization": config["optimization"],

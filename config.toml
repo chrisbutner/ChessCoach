@@ -58,28 +58,21 @@ role = "train|play"
 
 [[networks]]
 
-    name = "chesscoach1"
+    name = "commentary1"
     
     [networks.training]
 
     stages = [
-        # Self-play
-        { stage = "play" },
-
-        # Train commentary and self-play, teacher
+        # Train commentary, teacher
         { stage = "train_commentary", target = "teacher" },
-        { stage = "train", target = "teacher" },
         { stage = "save", target = "teacher" },
-
-        # Distill self-play to student
-        { stage = "train", target = "student" },
-        { stage = "save", target = "student" },
-        { stage = "save_swa", target = "student" },
-
-        # Strength test (STS rating)
-        { stage = "strength_test", target = "teacher" },
-        { stage = "strength_test", target = "student" },
     ]
+
+    steps = 400_000 # Equivalent to 50,000 steps of batch size 4096
+
+    [networks.self_play]
+
+    network_type = "teacher"
 
 [[networks]]
 
@@ -91,7 +84,7 @@ role = "train|play"
     steps = 256_000
 
     value_loss_weight = 0.1
-    mcts_value_loss_weight = 0.015
+    mcts_value_loss_weight = 0.0
 
     stages = [
         # Train supervised, teacher
@@ -103,22 +96,6 @@ role = "train|play"
     ]
 
     games_path_training = "Games/Supervised"
-
-[[networks]]
-
-    name = "commentary1"
-    
-    [networks.training]
-
-    stages = [
-        # Train commentary, teacher
-        { stage = "train_commentary", target = "teacher" },
-        { stage = "save", target = "teacher" },
-    ]
-
-    [networks.self_play]
-
-    network_type = "teacher"
 
 [[networks]]
 
@@ -231,6 +208,11 @@ fraction_remaining = 20
 search_threads = 16
 search_parallelism = 256
 gui_update_interval_nodes = 1000
+
+[commentary]
+
+top_p = 0.1
+temperature = 1.5
 
 [storage]
 

@@ -3,15 +3,6 @@ Training - final run
 - copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
 - if same take original else teacher-only up to 5.6m
 
-Commentary training
-- update training data for new filter after comparisons finished, sync tokenizer
-- choose commentary_steps config to stop after
-- compare with shelved double-encode (may need another range test)
-
-Commentary quality
-- vary top_p value
-- vary temperature
-
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
 	- 3qkb1r/3n1ppp/R1Npp3/6P1/QPr2P2/2P5/7P/4R1K1 b k - 2 27 - need Rxc6, avoid Qc8

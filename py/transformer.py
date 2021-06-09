@@ -96,10 +96,10 @@ class CommentaryDecoder(tf.keras.Model):
                encoder_width,
                embedding_width,
                dropout_rate,
-               padded_decode=False,
+               padded_decode,
+               sample_temperature,
+               top_p,
                extra_decode_length=0,
-               sample_temperature=1.0,
-               top_p=0.9,
                dtype=tf.float32,
                **kwargs):
     """Initialize layers to build Transformer model.
