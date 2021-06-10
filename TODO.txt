@@ -1,7 +1,13 @@
+Next
+- manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
+	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
+- workaround for .exe vs. non in ChessBase - can we probe for virtuals and activate before initializing python?
+- distributed optimization - allow for faster optimization on cluster (batched ask/tell) and TPU vs. TPU comparisons on cluster via UCI proxy
+
 Training - final run
 - use student prediction the whole way this time, up to 2.8m steps, see if it hits 3.3k STS rating
 - copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
-- if same take original else teacher-only up to 5.6m
+- if same take original else teacher-only up to 5.6m (run SWA/strength tests on original)
 
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
@@ -19,29 +25,14 @@ PUCT - medium confidence
 	- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing - decay
 		- could be mate-in-N or syzygy lower bound or just really high value threshold? only 1 killer move, best
 		- could implement simply using FPU-weight
-- think of ways to catch up visits when suddenly finding value at very high nodes
-	- some kind of high-trust/verification PUCT saturation calc?
-	- backpropagate more than 1 weight/visit per, for high overall visits + deep leaf?
 - work on making more progress in endgames - may be worse now with higher NPS from cache-as-TT
 	- 8/8/8/4ppk1/8/8/6K1/8 b - - 0 84
 
-PUCT - finishing
-- ablate PUCT terms, trim down to just parallelism/mate improvements, confidently measure what helps
-- need long long search time parameter optimization for 1.25+ constant, e.g. applying similar to new terms
-- try UCI move diversity again, maybe visit% threshold param, maybe first N moves param, optimize
-
-PUCT - later
-- try use saturation point of visits/ucb to extend 800 simulations or UCI time control if visits would exceed current best
-	- could this also be used earlier during search, backpropagate up a pending/bounty value via separate field to be replaced
-	  by actual backprops - set it up when saturation point would take from below 1st to 1st in visits
-- add move diversity temperature to mini-tournament optimization (may need lots of data, maybe soft-finish other params first)
-
-UCI
-- manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
-	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
-- workaround for .exe vs. non in ChessBase - can we probe for virtuals and activate before initializing python?
-- spin option min/max
-- cache-as-TT - do we add repetition state (1-rep vs. 2-rep) and/or no-progress count for current position (bucketed?)?
+Optimization
+- A/B-test cache-as-TT with/without repetition state and/or no-progress count (bucketed?)
+- long optimization, tournament mode, 30s per move (needs distributed) - include cpuct
+- final optimization with just move diversity parameters (consider adding visit%/upweight% threshold) - 30s per move
+- deep tournaments, calculate ratings vs. various engines, CC with AZ-PUCT, etc., with various time controls - keep PGNs
 
 GPU/multi-GPU
 - check out cloud multi-GPU options and set up/optimize (mirrored training + self-play + UCI)
@@ -65,8 +56,8 @@ Deployment
 
 Publishing
 - write-ups
-- final network weights, optimization run (30s move tournament mode)
-- website - game-in-10, one at a time, people can watch, comments shown for each move
+- final network weights
+- bot or website - game-in-10, one at a time, people can watch, comments shown for each move
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)

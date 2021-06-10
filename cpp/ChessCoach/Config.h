@@ -114,6 +114,13 @@ struct NetworkConfig
     SelfPlayConfig SelfPlay;
 };
 
+struct UciOptionConfig
+{
+    std::string Type;
+    int Min;
+    int Max;
+};
+
 struct MiscConfig
 {
     // Prediction cache
@@ -149,7 +156,7 @@ struct MiscConfig
     int Optimization_EpdPositionLimit;
 
     // UCI options
-    std::map<std::string, std::string> UciOptions;
+    std::map<std::string, UciOptionConfig> UciOptions;
 };
 
 class Config

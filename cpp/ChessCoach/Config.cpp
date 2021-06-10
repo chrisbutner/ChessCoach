@@ -90,7 +90,25 @@ struct from<StageConfig>
         return stageConfig;
     }
 };
-}
+
+template<>
+struct from<UciOptionConfig>
+{
+    static UciOptionConfig from_toml(const TomlValue& config)
+    {
+        UciOptionConfig uciOptionCOnfig;
+
+        // Required (find)
+        uciOptionCOnfig.Type = toml::find<std::string>(config, "type");
+
+        // Optional (find_or)
+        uciOptionCOnfig.Min = toml::find_or<int>(config, "min", 0);
+        uciOptionCOnfig.Max = toml::find_or<int>(config, "max", 0);
+
+        return uciOptionCOnfig;
+    }
+};
+} // namespace toml
 
 struct DefaultPolicy
 {
@@ -349,7 +367,7 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     policy.template Parse<int>(misc.Optimization_EpdPositionLimit, optimization, "epd_position_limit");
 
     // Using https://github.com/ToruNiina/toml11#converting-a-table
-    policy.template Parse<std::map<std::string, std::string>>(misc.UciOptions, config, "uci_options");
+    policy.template Parse<std::map<std::string, UciOptionConfig>>(misc.UciOptions, config, "uci_options");
 }
 
 NetworkConfig Config::Network;

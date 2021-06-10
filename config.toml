@@ -276,18 +276,18 @@ backpropagation_puct_threshold = '(0.0, 0.25)'
 
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # NOTE: Some options can only be set before initialization; e.g., search threads and parallelism.
-network_type = "string"
-network_weights = "string"
-search_threads = "spin"
-search_parallelism = "spin"
-safety_buffer_milliseconds = "spin"
-Hash = "spin"
-linear_exploration_rate = "float"
-linear_exploration_base = "float"
-virtual_loss_coefficient = "float"
-moving_average_build = "float"
-moving_average_cap = "float"
-backpropagation_puct_threshold = "float"
-syzygy = "string"
+network_type = { type = "string" }
+network_weights = { type = "string" }
+search_threads = { type = "spin", min = 1, max = 256 }
+search_parallelism = { type = "spin", min = 1, max = 4096 }
+safety_buffer_milliseconds = { type = "spin", min = 0, max = 1000 }
+Hash = { type = "spin", min = 0, max = 262_144 }
+linear_exploration_rate = { type = "float" }
+linear_exploration_base = { type = "float" }
+virtual_loss_coefficient = { type = "float" }
+moving_average_build = { type = "float" }
+moving_average_cap = { type = "float" }
+backpropagation_puct_threshold = { type = "float" }
+syzygy = { type = "string" }
 
 ###############################################################################

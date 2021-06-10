@@ -190,28 +190,28 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
     std::map<std::string, float> floatOptions;
     std::map<std::string, std::string> stringOptions;
     std::map<std::string, bool> boolOptions;
-    for (const auto& [name, type] : Config::Misc.UciOptions)
+    for (const auto& [name, option] : Config::Misc.UciOptions)
     {
         // TODO: Need to handle min/max for spin types
-        if (type == OptionTypeSpin)
+        if (option.Type == OptionTypeSpin)
         {
             intOptions[name] = 0;
         }
-        else if (type == OptionTypeFloat)
+        else if (option.Type == OptionTypeFloat)
         {
             floatOptions[name] = 0.f;
         }
-        else if (type == OptionTypeString)
+        else if (option.Type == OptionTypeString)
         {
             stringOptions[name] = "";
         }
-        else if (type == OptionTypeCheck)
+        else if (option.Type == OptionTypeCheck)
         {
             boolOptions[name] = false;
         }
         else
         {
-            throw std::runtime_error("Unsupported UCI option type: " + type + " (" + name + ")");
+            throw std::runtime_error("Unsupported UCI option type: " + option.Type + " (" + name + ")");
         }
     }
     Config::LookUp(intOptions, floatOptions, stringOptions, boolOptions);
@@ -221,7 +221,8 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
         "id author C. Butner\n";
     for (const auto& [name, value] : intOptions)
     {
-        std::cout << "option name " << name << " type spin default " << value << "\n";
+        std::cout << "option name " << name << " type spin default " << value
+            << " min " << Config::Misc.UciOptions[name].Min << " max " << Config::Misc.UciOptions[name].Max << "\n";
     }
     for (const auto& [name, value] : floatOptions)
     {
@@ -317,7 +318,7 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
         std::cout << "info string Unknown option name" << std::endl;
         return;
     }
-    if (match->second == OptionTypeSpin)
+    if (match->second.Type == OptionTypeSpin)
     {
         int intValue = 0;
         if (!(commands >> intValue))
@@ -325,9 +326,19 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
             std::cout << "info string Invalid spin value" << std::endl;
             return;
         }
+        else if (intValue < match->second.Min)
+        {
+            std::cout << "info string Invalid spin value: " << intValue << " is below minimum of " << match->second.Min << std::endl;
+            return;
+        }
+        else if (intValue > match->second.Max)
+        {
+            std::cout << "info string Invalid spin value: " << intValue << " is above maximum of " << match->second.Max << std::endl;
+            return;
+        }
         Config::Update({ { name, intValue } }, {},  {}, {});
     }
-    else if (match->second == OptionTypeFloat)
+    else if (match->second.Type == OptionTypeFloat)
     {
         float floatValue = 0.f;
         if (!(commands >> floatValue))
@@ -337,7 +348,7 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
         }
         Config::Update({}, { { name, floatValue } }, {}, {});
     }
-    else if (match->second == OptionTypeString)
+    else if (match->second.Type == OptionTypeString)
     {
         std::string stringValue;
         while (commands >> token)
@@ -354,7 +365,7 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
         }
         Config::Update({}, {}, { { name, stringValue } }, {});
     }
-    else if (match->second == OptionTypeCheck)
+    else if (match->second.Type == OptionTypeCheck)
     {
         std::string stringValue;
         if (!(commands >> stringValue) || !((stringValue == "true") || (stringValue == "false")))
@@ -366,7 +377,7 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
     }
     else
     {
-        throw std::runtime_error("Unsupported UCI option type: " + match->second + " (" + name + ")");
+        throw std::runtime_error("Unsupported UCI option type: " + match->second.Type + " (" + name + ")");
     }
 
     // Handle custom updates.
