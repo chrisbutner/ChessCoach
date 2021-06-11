@@ -1,7 +1,7 @@
 project('ChessCoach', 'cpp', version: '0.9.0', license: 'GPL3',
   default_options: [
     'cpp_std=c++17',
-	'werror=true',
+    'werror=true',
   ])
 
 if get_option('buildtype') == 'release'
@@ -9,7 +9,9 @@ if get_option('buildtype') == 'release'
   add_project_arguments(compiler.get_supported_arguments(['-march=native', '-O2', '-DNDEBUG', '-flto']), language: 'cpp')
 endif
 
-add_project_arguments('-lstdc++fs', '-msse4.2', language: 'cpp')
+# Support C++17 on GCC8, faster CRC32C and faster Stockfish (no prefetch though: we don't use their transposition table).
+add_project_arguments('-lstdc++fs', '-msse', '-msse2', '-msse3', '-msse4.1', '-msse4.2', '-mavx2', '-mpopcnt', '-mbmi2',
+  '-DNO_PREFETCH', '-DUSE_POPCNT', '-DUSE_PEXT', '-DIS_64BIT', language: 'cpp')
 add_project_link_arguments('-lstdc++fs', language: 'cpp')
 
 # Rely on MSVC's less pedantic signed/unsigned checking, e.g. around loop indices.

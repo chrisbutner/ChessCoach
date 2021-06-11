@@ -1,0 +1,7 @@
+<Project>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>NO_PREFETCH;USE_POPCNT;USE_PEXT;IS_64BIT</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

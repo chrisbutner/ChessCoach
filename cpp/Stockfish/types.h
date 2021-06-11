@@ -62,7 +62,11 @@
 
 #if defined(_WIN64) && defined(_MSC_VER) // No Makefile used
 #  include <intrin.h> // Microsoft header for _BitScanForward64()
+// cbutner-start
+#ifndef IS_64BIT
 #  define IS_64BIT
+#endif
+// cbutner-finish
 #endif
 
 #if defined(USE_POPCNT) && (defined(__INTEL_COMPILER) || defined(_MSC_VER))
