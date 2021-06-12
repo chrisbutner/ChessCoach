@@ -328,9 +328,9 @@ public:
     SelfPlayWorker(SelfPlayWorker&& other) = delete;
     SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
 
-    void LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
-    void LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
-    void LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary);
+    void LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
+    void LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
+    void LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
 
     int ChooseSimulationLimit();
     void ClearGame(int index);
@@ -347,7 +347,7 @@ public:
     void SaveToStorageAndLog(INetwork* network, int index);
     void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
     bool RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, int& mctsSimulationLimit,
-        std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore);
+        std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore, bool finishOnly);
     Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
     void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
     void BackpropagateVisitsOnly(std::vector<WeightedNode>& searchPath, int index);
@@ -380,14 +380,14 @@ private:
     void Finalize();
     void FailNode(std::vector<WeightedNode>& searchPath);
 
-    void FinishMcts();
+    void FinalizeMcts();
     void OnSearchFinished();
     void CheckPrincipleVariation();
     void CheckUpdateGui(INetwork* network, bool forceUpdate);
     void CheckTimeControl(WorkCoordinator* workCoordinator);
     void PrintPrincipleVariation(bool searchFinished);
     void SearchInitialize(const SelfPlayGame* position);
-    void SearchPlay();
+    bool SearchPlay(int threadIndex);
 
     std::tuple<Move, int, int> StrengthTestPosition(WorkCoordinator* workCoordinator, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes);
     std::pair<int, int> JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes);
@@ -412,6 +412,8 @@ private:
     std::vector<PredictionCacheChunk*> _cacheStores;
 
     SearchState* _searchState;
+
+    int _currentParallelism;
 };
 
 #endif // _SELFPLAY_H_

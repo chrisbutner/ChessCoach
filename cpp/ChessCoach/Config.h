@@ -134,6 +134,9 @@ struct MiscConfig
     // Search
     int Search_SearchThreads;
     int Search_SearchParallelism;
+    int Search_SlowstartNodes;
+    int Search_SlowstartThreads;
+    int Search_SlowstartParallelism;
     int Search_GuiUpdateIntervalNodes;
 
     // Storage

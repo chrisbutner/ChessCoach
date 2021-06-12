@@ -1,13 +1,9 @@
 Next
-- manually dig into/debug STS strength drop with higher parallelism (1*16 vs. 2*256)
-	- maybe enforce a threshold from 1st parallel PUCT to Nth after virtual losses - if too much lower, don't backprop
-- workaround for .exe vs. non in ChessBase - can we probe for virtuals and activate before initializing python?
 - distributed optimization - allow for faster optimization on cluster (batched ask/tell) and TPU vs. TPU comparisons on cluster via UCI proxy
 
 Training - final run
-- use student prediction the whole way this time, up to 2.8m steps, see if it hits 3.3k STS rating
-- copy network/games up to 800k steps to 9a or w/e and start a teacher-only/SWA prediction run from there up to 2.8m steps
-- if same take original else teacher-only up to 5.6m (run SWA/strength tests on original)
+- compare selfplay11/selfplay11a with tournaments (not just STS)
+- take best of selfplay11/selfplay11a from 3.6m up to 5.6m (run SWA/strength tests on selfplay11 teacher)
 
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
@@ -29,6 +25,7 @@ PUCT - medium confidence
 	- 8/8/8/4ppk1/8/8/6K1/8 b - - 0 84
 
 Optimization
+- A/B-test threads/parallelism, and slowstart settings
 - A/B-test cache-as-TT with/without repetition state and/or no-progress count (bucketed?)
 - long optimization, tournament mode, 30s per move (needs distributed) - include cpuct
 - final optimization with just move diversity parameters (consider adding visit%/upweight% threshold) - 30s per move

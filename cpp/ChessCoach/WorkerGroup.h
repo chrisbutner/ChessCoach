@@ -21,9 +21,8 @@ public:
         controllerWorker->Initialize();
         for (int i = 0; i < workerCount; i++)
         {
-            const bool primary = (i == 0);
             selfPlayWorkers.emplace_back(new SelfPlayWorker(storage, &searchState, workerParallelism));
-            selfPlayThreads.emplace_back(workerLoop, selfPlayWorkers[i].get(), workCoordinator.get(), network, networkType, primary);
+            selfPlayThreads.emplace_back(workerLoop, selfPlayWorkers[i].get(), workCoordinator.get(), network, networkType, i);
         }
     }
 

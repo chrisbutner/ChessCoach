@@ -36,19 +36,19 @@ WorkCoordinator::WorkCoordinator(int workerCount)
 void WorkCoordinator::OnWorkItemCompleted()
 {
     // This may go below zero, which is fine for our use.
-    --_workItemsRemaining;
+    _workItemsRemaining.fetch_sub(1, std::memory_order_relaxed);
 }
 
 bool WorkCoordinator::AllWorkItemsCompleted()
 {
-    return (_workItemsRemaining <= 0);
+    return (_workItemsRemaining.load(std::memory_order_relaxed) <= 0);
 }
 
 void WorkCoordinator::ResetWorkItemsRemaining(int workItemsRemaining)
 {
     std::lock_guard lock(_mutex);
 
-    _workItemsRemaining = workItemsRemaining;
+    _workItemsRemaining.store(workItemsRemaining, std::memory_order_relaxed);
 
     if (CheckWorkItemsExist())
     {
@@ -106,7 +106,7 @@ bool WorkCoordinator::WaitForWorkers(int timeoutMilliseconds)
 
 bool WorkCoordinator::CheckWorkItemsExist()
 {
-    return (_workItemsRemaining > 0);
+    return !AllWorkItemsCompleted();
 }
 
 bool WorkCoordinator::CheckWorkersReady()

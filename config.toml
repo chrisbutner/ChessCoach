@@ -205,8 +205,11 @@ fraction_remaining = 20
 [search]
 
 # Use 4*256 on GTX 1080.
-search_threads = 16
+search_threads = 8
 search_parallelism = 256
+slowstart_nodes = 1024
+slowstart_threads = 1
+slowstart_parallelism = 32
 gui_update_interval_nodes = 1000
 
 [commentary]

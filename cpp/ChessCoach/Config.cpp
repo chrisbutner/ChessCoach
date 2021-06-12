@@ -96,16 +96,16 @@ struct from<UciOptionConfig>
 {
     static UciOptionConfig from_toml(const TomlValue& config)
     {
-        UciOptionConfig uciOptionCOnfig;
+        UciOptionConfig uciOptionConfig;
 
         // Required (find)
-        uciOptionCOnfig.Type = toml::find<std::string>(config, "type");
+        uciOptionConfig.Type = toml::find<std::string>(config, "type");
 
         // Optional (find_or)
-        uciOptionCOnfig.Min = toml::find_or<int>(config, "min", 0);
-        uciOptionCOnfig.Max = toml::find_or<int>(config, "max", 0);
+        uciOptionConfig.Min = toml::find_or<int>(config, "min", 0);
+        uciOptionConfig.Max = toml::find_or<int>(config, "max", 0);
 
-        return uciOptionCOnfig;
+        return uciOptionConfig;
     }
 };
 } // namespace toml
@@ -345,6 +345,9 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     const auto& search = toml::find_or(config, "search", {});
     policy.template Parse<int>(misc.Search_SearchThreads, search, "search_threads");
     policy.template Parse<int>(misc.Search_SearchParallelism, search, "search_parallelism");
+    policy.template Parse<int>(misc.Search_SlowstartNodes, search, "slowstart_nodes");
+    policy.template Parse<int>(misc.Search_SlowstartThreads, search, "slowstart_threads");
+    policy.template Parse<int>(misc.Search_SlowstartParallelism, search, "slowstart_parallelism");
     policy.template Parse<int>(misc.Search_GuiUpdateIntervalNodes, search, "gui_update_interval_nodes");
 
     const auto& storage = toml::find_or(config, "storage", {});

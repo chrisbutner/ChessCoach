@@ -342,13 +342,10 @@ void ChessCoachTrain::StageStrengthTest(const TrainingState& state)
     }
 
     // Start up a fresh worker group to avoid disturbing paused self-play games.
-    // Use 1*16 parallelism for STS for now for consistency/comparability with results from earlier training runs,
-    // since higher parallelism causes large score/rating drop in the 200 ms STS budget (still needs investigation).
-    const int stsThreads = 1;
-    const int stsParallelism = 16;
+    // Use search threads/parallelism rather than self-play threads/parallelism.
     WorkerGroup strengthTestWorkerGroup;
     strengthTestWorkerGroup.Initialize(state.network, state.storage, state.Stage().Target,
-        stsThreads, stsParallelism, &SelfPlayWorker::LoopStrengthTest);
+        Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
 
     // Strength-test the network.
     strengthTestWorkerGroup.controllerWorker->StrengthTestNetwork(

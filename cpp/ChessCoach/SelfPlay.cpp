@@ -959,6 +959,7 @@ SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int g
     , _searchPaths(gameCount)
     , _cacheStores(gameCount)
     , _searchState(searchState)
+    , _currentParallelism(0)
 {
 }
 
@@ -978,7 +979,7 @@ void SelfPlayWorker::Finalize()
     _games.clear();
 }
 
-void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool /* primary */)
+void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int /* threadIndex */)
 {
     Initialize();
 
@@ -1328,7 +1329,7 @@ void SelfPlayWorker::Play(int index)
     {
         Node* root = game.Root();
         const bool mctsFinished = RunMcts(game, _scratchGames[index], _states[index], _mctsSimulations[index],
-            _mctsSimulationLimits[index], _searchPaths[index], _cacheStores[index]);
+            _mctsSimulationLimits[index], _searchPaths[index], _cacheStores[index], false /* finishOnly */);
         if (state == SelfPlayState::WaitingForPrediction)
         {
             return;
@@ -1381,7 +1382,7 @@ void SelfPlayWorker::PredictBatchUniform(int batchSize, INetwork::InputPlanes* /
 }
 
 bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, int& mctsSimulationLimit,
-    std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore)
+    std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore, bool finishOnly)
 {
     // Don't get stuck in here forever during search (TryHard) looping on cache hits or terminal nodes.
     // We need to break out and check for PV changes, search stopping, etc. However, need to keep number
@@ -1395,6 +1396,13 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
     {
         if (state == SelfPlayState::Working)
         {
+            // When parallel games are used to search a position during UCI or strength testing, it's best to
+            // redeem knowledge from nodes that were waiting on a network prediction before selecting new ones.
+            if (finishOnly)
+            {
+                return false;
+            }
+
             // MCTS tree parallelism - enabled when searching, not when training - needs some guidance
             // to avoid repeating the same deterministic child selections:
             // - Avoid branches + leaves by incrementing "visitingCount" while selecting a search path,
@@ -2084,8 +2092,9 @@ void SelfPlayWorker::DebugResetGame(int index)
     _scratchGames[index] = SelfPlayGame();
 }
 
-void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary)
+void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex)
 {
+    const bool primary = (threadIndex == 0);
     Initialize();
 
     // Warm up the GIL and predictions.
@@ -2102,8 +2111,14 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
         // Search until stopped.
         while (!workCoordinator->AllWorkItemsCompleted())
         {
-            SearchPlay();
-            network->PredictBatch(networkType, static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
+            // CPU work
+            if (!SearchPlay(threadIndex))
+            {
+                continue;
+            }
+
+            // GPU work
+            network->PredictBatch(networkType, _currentParallelism, _images.data(), _values.data(), _policies.data());
 
             // Only the primary worker does housekeeping.
             if (primary)
@@ -2117,7 +2132,7 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
         }
 
         // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
-        FinishMcts();
+        FinalizeMcts();
 
         // Only the primary worker does housekeeping.
         if (primary)
@@ -2130,8 +2145,9 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
     Finalize();
 }
 
-void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, bool primary)
+void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex)
 {
+    const bool primary = (threadIndex == 0);
     Initialize();
 
     // Warm up the GIL and predictions.
@@ -2148,8 +2164,14 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
         // Search until stopped.
         while (!workCoordinator->AllWorkItemsCompleted())
         {
-            SearchPlay();
-            network->PredictBatch(networkType, static_cast<int>(_images.size()), _images.data(), _values.data(), _policies.data());
+            // CPU work
+            if (!SearchPlay(threadIndex))
+            {
+                continue;
+            }
+
+            // GPU work
+            network->PredictBatch(networkType, _currentParallelism, _images.data(), _values.data(), _policies.data());
 
             // Only the primary worker does housekeeping.
             if (primary)
@@ -2171,10 +2193,47 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
         }
 
         // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
-        FinishMcts();
+        FinalizeMcts();
     }
 
     Finalize();
+}
+
+bool SelfPlayWorker::SearchPlay(int threadIndex)
+{
+    // Finish off MCTS for any nodes that were waiting on a network prediction by expanding, backpropagating, etc.,
+    // across all parallel games. This gives us maximum knowledge for the selection of new nodes.
+    for (int i = 0; i < _currentParallelism; i++)
+    {
+        RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _mctsSimulationLimits[i], _searchPaths[i], _cacheStores[i], true /* finishOnly */);
+    }
+
+    // Get maximum throughput in tiny time controls and avoid misshapen MCTS trees by limiting parallelism
+    // early on and not flooding nodes into a small tree ("slowstart" feature). This could also be implemented
+    // throughout the tree (see in "PuctContext::SelectChild"), but it doesn't seem to help so far.
+    const int nodeCount = _games[0].Root()->visitCount.load(std::memory_order_relaxed); // Requires "RunMcts" with "finishOnly" to have just run.
+    int parallelism = static_cast<int>(_games.size());
+    if (nodeCount < Config::Misc.Search_SlowstartNodes)
+    {
+        // This thread may not be needed yet.
+        if (threadIndex >= Config::Misc.Search_SlowstartThreads)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1)); // ~1-15 milliseconds
+            return false;
+        }
+
+        // This thread is needed, but limit parallelism.
+        parallelism = std::min(parallelism, Config::Misc.Search_SlowstartParallelism);
+    }
+
+    // Now we can select new nodes based on latest knowledge and chosen parallelism. Cache hits and terminals can still be finished and keep looping.
+    _currentParallelism = parallelism;
+    for (int i = 0; i < parallelism; i++)
+    {
+        RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _mctsSimulationLimits[i], _searchPaths[i], _cacheStores[i], false /* finishOnly */);
+    }
+    
+    return true;
 }
 
 // Predicting a batch will trigger the following:
@@ -2218,7 +2277,7 @@ void SelfPlayWorker::SearchUpdatePosition(const std::string& fen, const std::vec
     _searchState->positionMoves = moves; // Copy
 }
 
-void SelfPlayWorker::FinishMcts()
+void SelfPlayWorker::FinalizeMcts()
 {
     // We may reuse this search tree on the next UCI search if the position is compatible, and likely have
     // node visits and expansions in flight that we just interrupted, so fix everything up.
@@ -2567,20 +2626,13 @@ void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
 void SelfPlayWorker::SearchInitialize(const SelfPlayGame* position)
 {
     // Set up parallelism. Make N games share a tree but have their own image/value/policy slots.
+    _currentParallelism = 0;
     for (int i = 0; i < _games.size(); i++)
     {
         ClearGame(i);
         _states[i] = _states[0];
         _gameStarts[i] = _gameStarts[0];
         _games[i] = position->SpawnShadow(&_images[i], &_values[i], &_policies[i]);
-    }
-}
-
-void SelfPlayWorker::SearchPlay()
-{
-    for (int i = 0; i < _games.size(); i++)
-    {
-        RunMcts(_games[i], _scratchGames[i], _states[i], _mctsSimulations[i], _mctsSimulationLimits[i], _searchPaths[i], _cacheStores[i]);
     }
 }
 
