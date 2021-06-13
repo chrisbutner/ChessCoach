@@ -8,7 +8,7 @@ cutechess-cli \
 	-engine name=Stockfish_13 cmd=tools/deb/stockfish_13_linux_x64_bmi2/stockfish_13_linux_x64_bmi2 \
 		option.Threads=4 \
 	-engine name=ChessCoach cmd=ChessCoachUci \
-	-each proto=uci st=1 timemargin=1000 \
+	-each proto=uci tc=60+0.6 timemargin=5000 \
 	-games 2 \
 	-pgnout "${CHESSCOACH_DATA}/tournament.pgn" \
 	-recover

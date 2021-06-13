@@ -1206,15 +1206,6 @@ std::tuple<int, int, int, int> SelfPlayWorker::StrengthTestEpd(WorkCoordinator* 
     int positions = 0;
     int totalNodesRequired = 0;
 
-    // A safety buffer is required under UCI to avoid losing on time, but when strength testing it skews results,
-    // especially for tests with short times like the Strategy Test Suite (STS).
-    if (Config::Misc.TimeControl_SafetyBufferMilliseconds > 0)
-    {
-        // This should be safe because strength tests don't run in UCI processes.
-        std::cout << "Changing 'safety_buffer_milliseconds' from " << Config::Misc.TimeControl_SafetyBufferMilliseconds << " to 0 for the lifetime of this process because of a strength test." << std::endl;
-        Config::Misc.TimeControl_SafetyBufferMilliseconds = 0;
-    }
-
     // Make sure that the prediction cache is clear, for consistent results.
     // It would be better to clear before every position in the EPD, but too slow.
     PredictionCache::Instance.Clear();
@@ -2493,7 +2484,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
     // Specified think time can stop the search.
     if (_searchState->timeControl.moveTimeMs > 0)
     {
-        const int64_t timeAllowed = (_searchState->timeControl.moveTimeMs - Config::Misc.TimeControl_SafetyBufferMilliseconds);
+        const int64_t timeAllowed = _searchState->timeControl.moveTimeMs;
         if (searchTimeMs >= timeAllowed)
         {
             workCoordinator->OnWorkItemCompleted();

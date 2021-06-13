@@ -12,7 +12,7 @@ cutechess-cli \
 		option.UCI_LimitStrength=true \
 		option.UCI_Elo=2850 \
 	-engine name=ChessCoach cmd=ChessCoachUci \
-	-each proto=uci tc=40/5:00 timemargin=1000 \
+	-each proto=uci tc=600+6 timemargin=5000 \
 	-games 4 \
 	-pgnout "${CHESSCOACH_DATA}/tournament.pgn" \
 	-recover

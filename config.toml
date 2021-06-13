@@ -256,7 +256,7 @@ epd_position_limit = 10
 
 # Elo metric is calculated relative to baseline (Stockfish 13 NNUE with 1 thread and 512 MiB hash).
 tournament_games = 10
-tournament_movetime_milliseconds = 1000
+tournament_time_control = "60+0.6" # 60+0.6 fast (1.8 min each for 80 moves), 600+6 medium (18 min each), 1200+12 slow (36 min each)
 
 [optimization.parameters]
 

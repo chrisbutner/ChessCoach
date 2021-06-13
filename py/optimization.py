@@ -118,14 +118,14 @@ class Session:
     stockfish_options = "option.Threads=1 options.Hash=512"
 
     tournament_games = self.config.misc["optimization"]["tournament_games"]
-    seconds_per_move = self.config.misc["optimization"]["tournament_movetime_milliseconds"] / 1000.0
+    time_control = self.config.misc["optimization"]["tournament_time_control"]
     
     # Run the mini-tournament and generate optimization.pgn.
     command = f"cutechess-cli -engine name={name_optimize} cmd=ChessCoachUci "
     for name, value in zip(names, values):
       command += f"option.{name}={value} "
     command += f"-engine name={name_baseline} cmd={stockfish_command} {stockfish_options} "
-    command += f"-each proto=uci st={seconds_per_move} timemargin=1000 dir=\"{os.getcwd()}\" "
+    command += f"-each proto=uci tc={time_control} timemargin=5000 dir=\"{os.getcwd()}\" "
     command += f"-games {tournament_games} -pgnout \"{self.tournament_pgn_path}\""
     subprocess.run(command, stdin=subprocess.DEVNULL, shell=True)
 
