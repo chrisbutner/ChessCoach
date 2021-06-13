@@ -55,6 +55,15 @@ deployment_configs = {
       },
     },
   },
+  "uci_proxy": {
+    "roles": {
+      "play": {
+        "count": 56,
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-proxy:selfplay11_v27",
+        "on_error": "dmesg",
+      },
+    },
+  },
 }
 
 IMAGE_PREFIX = "eu.gcr.io/chesscoach/"

@@ -312,6 +312,8 @@ python_sources = [
   'py/tokenization.py',
   'py/training.py',
   'py/transformer.py',
+  'py/uci_proxy_client.py',
+  'py/uci_proxy_server.py',
   ]
 
 # Access by Platform::InstallationScriptPath()

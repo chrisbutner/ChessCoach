@@ -7,3 +7,4 @@ source docker-build.sh
 docker push $BASE
 docker push $TRAIN
 docker push $PLAY
+docker push $PROXY
