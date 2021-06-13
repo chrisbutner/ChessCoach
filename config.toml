@@ -45,6 +45,7 @@ role = "train|play"
         # Train self-play, teacher then distill
         { stage = "train", target = "teacher" },
         { stage = "save", target = "teacher" },
+        { stage = "save_swa", target = "teacher" },
         { stage = "train", target = "student" },
         { stage = "save", target = "student" },
         { stage = "save_swa", target = "student" },
