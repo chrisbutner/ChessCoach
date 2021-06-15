@@ -162,6 +162,8 @@ public:
     void GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIndices, const float* policyValues, INetwork::OutputPlanes& policyOut);
     const Position& GetPosition() const;
     Position& GetPosition();
+    const std::vector<Move>& Moves() const;
+    std::vector<Move>& Moves();
 
     inline Position& DebugPosition() { return _position; }
 

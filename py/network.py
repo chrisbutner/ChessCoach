@@ -623,6 +623,14 @@ def optimize_parameters():
   import optimization
   optimization.optimize_parameters(config)
 
+def run_bot():
+  import lichessbot
+  lichessbot.run()
+
+def play_bot_move(game_id, move):
+  import lichessbot
+  lichessbot.play_move(game_id, move)
+
 # --- Initialize ---
 
 # Build the device mapping safely.

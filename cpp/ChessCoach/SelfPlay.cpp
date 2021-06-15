@@ -2185,6 +2185,18 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
 
         // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
         FinalizeMcts();
+
+        // Only the primary worker does housekeeping.
+        if (primary)
+        {
+            // Report the best move to bot code in Python.
+            if (!_searchState->botGameId.empty() && !_searchState->timeControl.infinite)
+            {
+                const Node* bestMove = SelectMove(_games[0], true /* allowDiversity */);
+                const std::string& bestMoveUci = UCI::move(Move(bestMove->move), false /* chess960 */);
+                network->PlayBotMove(_searchState->botGameId, bestMoveUci);
+            }
+        }
     }
 
     Finalize();
@@ -2497,7 +2509,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
 
     // Game clock can stop the search. Use a simple strategy like AlphaZero for now.
     const Color toPlay = _games[0].ToPlay();
-    const int64_t totalTimeAllowed = (_searchState->timeControl.timeRemainingMs[toPlay] + _searchState->timeControl.incrementMs[toPlay]);
+    const int64_t totalTimeAllowed = (_searchState->timeControl.timeRemainingMs[toPlay]);
     if (totalTimeAllowed > 0)
     {
         int fraction = Config::Misc.TimeControl_FractionOfRemaining;
@@ -2507,8 +2519,11 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
             fraction = std::min(fraction, _searchState->timeControl.movesToGo);
         }
         const int64_t timeAllowed =
-            (_searchState->timeControl.timeRemainingMs[toPlay] / fraction)
-            + _searchState->timeControl.incrementMs[toPlay]
+            std::min(
+                std::max(
+                    (_searchState->timeControl.timeRemainingMs[toPlay] / fraction), // Generally use a fraction of remaining time.
+                    _searchState->timeControl.incrementMs[toPlay]), // But use at least the increment.
+                _searchState->timeControl.timeRemainingMs[toPlay]) // But definitely use at most the remaining time (if there's a bug).
             - Config::Misc.TimeControl_SafetyBufferMilliseconds;
         if (searchTimeMs >= timeAllowed)
         {

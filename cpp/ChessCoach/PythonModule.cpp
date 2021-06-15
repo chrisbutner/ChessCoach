@@ -1,10 +1,13 @@
 #include "PythonModule.h"
 
+#include <sstream>
+#include <iomanip>
+#include <vector>
+
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
-#include <sstream>
-#include <iomanip>
+#include <Stockfish/uci.h>
 
 #include "Pgn.h"
 
@@ -16,6 +19,7 @@ PyMethodDef PythonModule::ChessCoachMethods[] = {
     { "evaluate_parameters",  PythonModule::EvaluateParameters, METH_VARARGS, nullptr },
     { "generate_commentary_image_for_fens",  PythonModule::GenerateCommentaryImageForFens, METH_VARARGS, nullptr },
     { "generate_commentary_image_for_position",  PythonModule::GenerateCommentaryImageForPosition, METH_VARARGS, nullptr },
+    { "bot_search",  PythonModule::BotSearch, METH_VARARGS, nullptr },
     { nullptr, nullptr, 0, nullptr }
 };
 
@@ -192,7 +196,8 @@ PyObject* PythonModule::ShowLine(PyObject*/* self*/, PyObject* args)
     {
         NonPythonContext context;
 
-        Instance().worker->GuiShowLine(Instance().network, line);
+        assert(Instance().workerGroup);
+        Instance().workerGroup->controllerWorker->GuiShowLine(Instance().network, line);
     }
 
     Py_RETURN_NONE;
@@ -228,8 +233,9 @@ PyObject* PythonModule::EvaluateParameters(PyObject*/* self*/, PyObject* args)
         // Propagate the provided parameters through Config and UCI search code.
         Config::Update({} /* intUpdates */, parameters /* floatUpdates */, {} /* stringUpdates */, {} /* boolUpdates */);
 
-        // Set up worker threads (threads/parallelism may be parameters).
+        // Set up worker threads (threads/parallelism may be parameters, so we can't use a long-lived WorkerGroup).
         assert(Instance().network);
+        assert(!Instance().workerGroup);
         WorkerGroup workerGroup;
         workerGroup.Initialize(Instance().network, nullptr /* storage */, Config::Network.SelfPlay.PredictionNetworkType,
             Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
@@ -332,4 +338,159 @@ PyObject* PythonModule::GenerateCommentaryImageForPosition(PyObject*/* self*/, P
     }
 
     return pythonImage;
+}
+
+PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
+{
+    PyObject* pythonGameId;
+    PyObject* pythonFen;
+    PyObject* pythonMoves;
+    PyObject* pythonBotSide;
+    PyObject* pythonLimitSeconds;
+    PyObject* pythonWtime;
+    PyObject* pythonBtime;
+    PyObject* pythonWinc;
+    PyObject* pythonBinc;
+
+    if (!PyArg_UnpackTuple(args, "bot_search", 9, 9, &pythonGameId, &pythonFen, &pythonMoves, &pythonBotSide, &pythonLimitSeconds,
+        &pythonWtime, &pythonBtime, &pythonWinc, &pythonBinc) ||
+        !pythonFen || !pythonMoves || !pythonBotSide || !pythonLimitSeconds || !pythonWtime || !pythonBtime || !pythonWinc || !pythonBinc ||
+        !PyBytes_Check(pythonGameId) || !PyBytes_Check(pythonFen) || !PyBytes_Check(pythonMoves) || !PyLong_Check(pythonBotSide) || !PyLong_Check(pythonLimitSeconds) ||
+        !PyLong_Check(pythonWtime) || !PyLong_Check(pythonBtime) || !PyLong_Check(pythonWinc) || !PyLong_Check(pythonBinc))
+    {
+        PyErr_SetString(PyExc_TypeError, "Expected 9 args: game_id, fen, moves, bot_side, limit_seconds, wtime, btime, winc, binc");
+        return nullptr;
+    }
+
+    const Py_ssize_t sizeGameId = PyBytes_GET_SIZE(pythonGameId);
+    const char* dataGameId = PyBytes_AS_STRING(pythonGameId);
+    std::string gameId(dataGameId, sizeGameId);
+
+    const Py_ssize_t sizeFen = PyBytes_GET_SIZE(pythonFen);
+    const char* dataFen = PyBytes_AS_STRING(pythonFen);
+    std::string fen(dataFen, sizeFen);
+
+    const Py_ssize_t sizeMoves = PyBytes_GET_SIZE(pythonMoves);
+    const char* dataMoves = PyBytes_AS_STRING(pythonMoves);
+    std::string moves(dataMoves, sizeMoves);
+
+    const Color botSide = Color(PyLong_AsLong(pythonBotSide));
+    const int limitSeconds = PyLong_AsLong(pythonLimitSeconds);
+    const int wtime = PyLong_AsLong(pythonWtime);
+    const int btime = PyLong_AsLong(pythonBtime);
+    const int winc = PyLong_AsLong(pythonWinc);
+    const int binc = PyLong_AsLong(pythonBinc);
+
+    std::string status;
+    int ply;
+    std::string san;
+    std::vector<std::string> comments;
+
+    {
+        NonPythonContext context;
+
+        assert(Instance().network);
+        assert(Instance().workerGroup);
+
+        // Stop and ready workers.
+        Instance().workerGroup->workCoordinator->ResetWorkItemsRemaining(0);
+        Instance().workerGroup->workCoordinator->WaitForWorkers();
+
+        // If there's no game ID then we just needed to stop any search/ponder in progress.
+        if (gameId.empty())
+        {
+            Py_RETURN_NONE;
+        }
+
+        // Set up the position and parse moves. Also generate a commentary image while we have the game set up.
+        const std::string& actualFen = ((fen == "startpos") ? Game::StartingPosition : fen);
+        std::vector<Move> parsedMoves;
+        Game game(actualFen, {});
+        std::stringstream uciMoves(moves);
+        std::string token;
+        while (uciMoves >> token)
+        {
+            const Move move = UCI::to_move(game.GetPosition(), token);
+            if (move == MOVE_NONE)
+            {
+                break;
+            }
+            game.ApplyMove(move);
+        }
+        std::unique_ptr<INetwork::CommentaryInputPlanes> commentaryImage(std::make_unique<INetwork::CommentaryInputPlanes>());
+        game.GenerateCommentaryImage(commentaryImage->data());
+        parsedMoves = std::move(game.Moves());
+
+        // Propagate the position.
+        Instance().workerGroup->controllerWorker->SearchUpdatePosition(actualFen, parsedMoves, false /* forceNewPosition */);
+
+        // Check whether to search or ponder and set up time control.
+        const bool search = (game.ToPlay() == botSide);
+        TimeControl timeControl = {};
+        if (search)
+        {
+            timeControl.timeRemainingMs[WHITE] = wtime;
+            timeControl.timeRemainingMs[BLACK] = btime;
+            timeControl.incrementMs[WHITE] = winc;
+            timeControl.incrementMs[BLACK] = binc;
+
+            // It's best to override limits via wtime/btime still so that elimination and safety buffer continue to work.
+            if (limitSeconds)
+            {
+                const int64_t limitRemainingMs = (Config::Misc.TimeControl_FractionOfRemaining * static_cast<int64_t>(limitSeconds) * 1000);
+                timeControl.timeRemainingMs[WHITE] = std::min(timeControl.timeRemainingMs[WHITE], limitRemainingMs);
+                timeControl.timeRemainingMs[BLACK] = std::min(timeControl.timeRemainingMs[BLACK], limitRemainingMs);
+            }
+
+            status = "searching";
+        }
+        else
+        {
+            // Opponent's move, so "ponder".
+            timeControl.infinite = true;
+            status = "pondering";
+        }
+        Instance().workerGroup->searchState.Reset(timeControl);
+        Instance().workerGroup->searchState.botGameId = gameId;
+
+        // Comment on the position and return the last SAN, as long as there's been at least one move,
+        // since the encoder is trained with before-and-after positions.
+        //
+        // It's important to do this before waking up search workers so that this call can
+        // return to Python quickly. Assume that the additional bot safety buffer covers the time needed.
+        //
+        // This acquires a "PythonContext" in the PythonNetwork call, so make it here in the
+        // "NonPythonContext" so we that don't over-release (even though it's GIL-inefficient).
+        ply = game.Ply();
+        if (!parsedMoves.empty())
+        {
+            Position& position = game.GetPosition();
+            const Move lastMove = parsedMoves.back();
+            position.undo_move(lastMove);
+            san = Pgn::San(position, lastMove, true /* showCheckmate */);
+            comments = Instance().network->PredictCommentaryBatch(1, commentaryImage.get());
+        }
+
+        // Start searching/pondering, but don't wait for workers.
+        // Return to the bot loop in Python and let the primary search worker
+        // send the best move asynchronously (like UCI "bestmove" to stdout).
+        Instance().workerGroup->workCoordinator->ResetWorkItemsRemaining(1);
+    }
+
+    // Pack and return a 4-tuple.
+    PyObject* pythonStatus = PyUnicode_FromStringAndSize(status.data(), status.length());
+    PyObject* pythonPly = PyLong_FromLong(ply);
+    PyObject* pythonSan = (!san.empty()
+        ? PyUnicode_FromStringAndSize(san.data(), san.length())
+        : (Py_INCREF(Py_None), Py_None));
+    PyObject* pythonComment = (!comments.empty()
+        ? PyUnicode_FromStringAndSize(comments[0].data(), comments[0].length())
+        : (Py_INCREF(Py_None), Py_None));
+    PyObject* pythonTuple = PyTuple_Pack(4, pythonStatus, pythonPly, pythonSan, pythonComment);
+    PythonNetwork::PyAssert(pythonTuple);
+    Py_DECREF(pythonStatus);
+    Py_DECREF(pythonPly);
+    Py_DECREF(pythonSan);
+    Py_DECREF(pythonComment);
+    return pythonTuple;
 }

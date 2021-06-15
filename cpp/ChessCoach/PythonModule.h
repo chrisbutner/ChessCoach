@@ -26,12 +26,13 @@ private:
     static PyObject* EvaluateParameters(PyObject* self, PyObject* args);
     static PyObject* GenerateCommentaryImageForFens(PyObject* self, PyObject* args);
     static PyObject* GenerateCommentaryImageForPosition(PyObject* self, PyObject* args);
+    static PyObject* BotSearch(PyObject* self, PyObject* args);
 
 public:
 
     INetwork* network = nullptr;
     Storage* storage = nullptr;
-    SelfPlayWorker* worker = nullptr;
+    WorkerGroup* workerGroup = nullptr;
 
 private:
 

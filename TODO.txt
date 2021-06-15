@@ -1,3 +1,10 @@
+Bot
+- challenge others after idle time
+- conversation handling
+- implement piece odds
+
+Debug material blunders
+
 Next
 - distributed optimization - allow for faster optimization on cluster (batched ask/tell) and TPU vs. TPU comparisons on cluster via UCI proxy
 
@@ -54,7 +61,6 @@ Deployment
 Publishing
 - write-ups
 - final network weights
-- bot or website - game-in-10, one at a time, people can watch, comments shown for each move
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)

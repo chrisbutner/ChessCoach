@@ -292,6 +292,7 @@ struct SearchState
 
     // Controller + primary worker
     bool gui;
+    std::string botGameId;
     std::string positionFen;
     std::vector<Move> positionMoves;
     std::vector<Move> searchMoves; // Not *necessarily* the primary worker, but only the first worker to expand the root.

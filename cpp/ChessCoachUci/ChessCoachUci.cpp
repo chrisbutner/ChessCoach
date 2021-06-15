@@ -456,9 +456,8 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
         }
 
         game.ApplyMove(move);
-
-        _positionMoves.push_back(move);
     }
+    _positionMoves = std::move(game.Moves());
 
     // It's only safe to update the controller worker's game/position while search is stopped,
     // because it involves pruning the shared Node tree. To keep this thread responsive, only
@@ -689,7 +688,7 @@ void ChessCoachUci::InitializeWorkers()
         Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
 
     // Let the GUI call back in to show requested lines.
-    InitializePythonModule(nullptr /* storage */, _network.get(), _workerGroup.controllerWorker.get());
+    InitializePythonModule(nullptr /* storage */, _network.get(), &_workerGroup);
 
     // Initialize tablebases if never done.
     if (!_syzygyLoaded)

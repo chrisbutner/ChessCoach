@@ -2,6 +2,7 @@
 #define _CHESSCOACH_H_
 
 #include "Network.h"
+#include "WorkerGroup.h"
 
 class Storage;
 class SelfPlayWorker;
@@ -22,7 +23,7 @@ protected:
     void InitializeStockfish();
     void InitializeChessCoach();
     void InitializePredictionCache();
-    void InitializePythonModule(Storage* storage, INetwork* network, SelfPlayWorker* worker);
+    void InitializePythonModule(Storage* storage, INetwork* network, WorkerGroup* workerGroup);
 
     void FinalizePython();
     void FinalizeStockfish();

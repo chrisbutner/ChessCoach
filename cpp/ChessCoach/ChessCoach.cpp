@@ -137,11 +137,11 @@ void ChessCoach::InitializePredictionCache()
 }
 
 // Keep Python visibility isolated to the ChessCoach library.
-void ChessCoach::InitializePythonModule(Storage* storage, INetwork* network, SelfPlayWorker* worker)
+void ChessCoach::InitializePythonModule(Storage* storage, INetwork* network, WorkerGroup* workerGroup)
 {
     PythonModule::Instance().storage = storage;
     PythonModule::Instance().network = network;
-    PythonModule::Instance().worker = worker;
+    PythonModule::Instance().workerGroup = workerGroup;
 }
 
 void ChessCoach::FinalizePython()

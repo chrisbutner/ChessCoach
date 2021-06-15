@@ -74,6 +74,8 @@ public:
         int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, int decompressPositionsModulus,
         InputPlanes* imagesOut, float* valuesOut, OutputPlanes* policiesOut);
     virtual void OptimizeParameters();
+    virtual void RunBot();
+    virtual void PlayBotMove(const std::string& gameId, const std::string& move);
 
 private:
 
@@ -97,6 +99,8 @@ private:
     PyObject* _updateGuiFunction;
     PyObject* _debugDecompressFunction;
     PyObject* _optimizeParametersFunction;
+    PyObject* _runBotFunction;
+    PyObject* _playBotMoveFunction;
 };
 
 #endif // _PYTHONNETWORK_H_

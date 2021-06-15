@@ -521,6 +521,16 @@ Position& Game::GetPosition()
     return _position;
 }
 
+const std::vector<Move>& Game::Moves() const
+{
+    return _moves;
+}
+
+std::vector<Move>& Game::Moves()
+{
+    return _moves;
+}
+
 void Game::Free()
 {
     // Delete any states allocated purely in this game branch, but not any in the parent

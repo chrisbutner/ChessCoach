@@ -167,6 +167,22 @@ chesscoachuci = executable(
   )
 
 ###############################################################################
+# ChessCoachBot
+###############################################################################
+
+chesscoachbot_sources = [
+  'cpp/ChessCoachBot/ChessCoachBot.cpp',
+  ]
+
+chesscoachbot = executable(
+  'ChessCoachBot',
+  chesscoachbot_sources,
+  include_directories: cpp_includes,
+  link_with: [chesscoach, chesscoachprotobuf, stockfish, hunspell, crc32c],
+  install: true,
+  )
+
+###############################################################################
 # ChessCoachPgnToGames
 ###############################################################################
 
@@ -305,6 +321,7 @@ python_sources = [
   'py/config.py',
   'py/dataset.py',
   'py/gui.py',
+  'py/lichessbot.py',
   'py/model.py',
   'py/network.py',
   'py/optimization.py',

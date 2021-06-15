@@ -79,6 +79,8 @@ PythonNetwork::PythonNetwork()
     _updateGuiFunction = LoadFunction(module, "update_gui");
     _debugDecompressFunction = LoadFunction(module, "debug_decompress");
     _optimizeParametersFunction = LoadFunction(module, "optimize_parameters");
+    _runBotFunction = LoadFunction(module, "run_bot");
+    _playBotMoveFunction = LoadFunction(module, "play_bot_move");
 
     Py_DECREF(module);
     Py_DECREF(pythonPath);
@@ -105,6 +107,8 @@ PythonNetwork::~PythonNetwork()
         return;
     }
 
+    Py_XDECREF(_playBotMoveFunction);
+    Py_XDECREF(_runBotFunction);
     Py_XDECREF(_optimizeParametersFunction);
     Py_XDECREF(_debugDecompressFunction);
     Py_XDECREF(_fileExistsFunction);
@@ -602,6 +606,34 @@ void PythonNetwork::OptimizeParameters()
     PyAssert(result);
 
     Py_DECREF(result);
+}
+
+void PythonNetwork::RunBot()
+{
+    PythonContext context;
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_runBotFunction, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+}
+
+void PythonNetwork::PlayBotMove(const std::string& gameId, const std::string& move)
+{
+    PythonContext context;
+
+    PyObject* pythonGameId = PyUnicode_FromStringAndSize(gameId.data(), gameId.size());
+    PyAssert(pythonGameId);
+
+    PyObject* pythonMove = PyUnicode_FromStringAndSize(move.data(), move.size());
+    PyAssert(pythonMove);
+
+    PyObject* result = PyObject_CallFunctionObjArgs(_playBotMoveFunction, pythonGameId, pythonMove, nullptr);
+    PyAssert(result);
+
+    Py_DECREF(result);
+    Py_DECREF(pythonMove);
+    Py_DECREF(pythonGameId);
 }
 
 PyObject* PythonNetwork::LoadFunction(PyObject* module, const char* name)

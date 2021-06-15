@@ -8,7 +8,7 @@ import re
 
 # --- Common ---
 
-api_key = "API_KEY_GOES_HERE"
+api_key = os.environ["SCRAPINGBEE_API_KEY"]
 endpoint = "https://app.scrapingbee.com/api/v1"
 sleep_seconds = 5
 html_cache = "html_cache"
