@@ -100,7 +100,10 @@ class Game:
     self.base_url = base_url
     self.white_starts = self.initial_fen == "startpos" or self.initial_fen.split()[1] == "w"
     self.abort_at = time.time() + 20
+
     self.searching_moves = "(not searching yet)"
+    self.pending_comment = None
+    self.last_comment_time = time.time() - 1000.0
 
   def url(self):
     return urljoin(self.base_url, "{}/{}".format(self.id, self.my_color))
@@ -113,6 +116,18 @@ class Game:
 
   def should_abort_now(self):
     return self.is_abortable() and time.time() > self.abort_at
+
+  # Only allow commenting every 5 seconds.
+  def try_pop_comment(self):
+    comment = self.pending_comment
+    if not comment:
+      return None
+    now = time.time()
+    if (now - self.last_comment_time) < 5.0:
+      return None
+    self.pending_comment = None
+    self.last_comment_time = now
+    return comment
 
   def __str__(self):
     return "{} {} vs {}".format(self.url(), self.perf_name, self.opponent.__str__())
@@ -430,13 +445,17 @@ def loop(li, user_profile):
           game_stream = threading.Thread(target=watch_game_stream, args=[li, game_id, event_queue, user_profile])
           game_stream.start()
 
-      # Handle pings from the control and game streams.
+      # We arrive here after regular, "local" and "ping" events.
+
+      # Handle game upkeep.
       if game and game.should_abort_now():
         print("Aborting {} by lack of activity".format(game.url()))
         try:
           li.abort(game.id)
         except Exception:
           pass
+
+      # Handle control upkeep
       while not games.queue_count and not games.in_progress:
         try:
           challenge = pop_challenge(challenge_queues)
@@ -450,6 +469,21 @@ def loop(li, user_profile):
             print("Skip missing {}".format(challenge))
         except Exception:
           break
+
+      # Send commentary to player and spectator chat (use a separate thread).
+      comment = game and game.try_pop_comment()
+      if comment:
+        max_line = 140
+        lines = textwrap.wrap(comment, width=max_line) if (len(comment) > max_line) else [comment]
+        def comment_sync():
+          try:
+            for room in ["player", "spectator"]:
+              for line in lines:
+                li.chat(game.id, room, line)
+          except Exception:
+            pass
+        comment_async = threading.Thread(target=comment_sync)
+        comment_async.start()
 
 def pop_challenge(challenge_queues):
   for challenge_queue in challenge_queues:
@@ -484,24 +518,15 @@ def on_game_state(li, game):
     game.state["wtime"], game.state["btime"], game.state["winc"], game.state["binc"])
   print(f"*** {status.upper()} *** ply: {ply}, SAN: {san}, comment: {comment}")
 
-  # Send commentary to player and spectator chat.
+  # Store the comment and process it in the main loop (we only comment every 5 seconds).
   assert (ply >= 1) == bool(comment)
   if comment:
     ply_before_move = (ply - 1)
     move_number = ((ply_before_move // 2) + 1)
     suffix = "." if (ply_before_move % 2 == 0) else "..."
-    chat_comment = f'{move_number}{suffix} {san}: "{comment}"'
-    max_line = 140
-    if len(chat_comment) > max_line:
-      lines = textwrap.wrap(chat_comment, width=max_line)
-    else:
-      lines = [chat_comment]
-    for room in ["player", "spectator"]:
-      for line in lines:
-        try:
-          li.chat(game.id, room, line)
-        except Exception:
-          pass
+    game.pending_comment = f'{move_number}{suffix} {san}: "{comment}"'
+  else:
+    game.pending_comment = None
 
 def is_game_over(game):
   return game.state["status"] != "started"
