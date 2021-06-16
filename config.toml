@@ -186,6 +186,7 @@ backpropagation_puct_threshold = 0.98
 elimination_base_exponent = 8 # Start by giving the top 2^8 = 256 children linear exploration incentive, decaying down to 2.
 move_diversity_value_delta_threshold = 0.01
 move_diversity_temperature = 0.0
+move_diversity_plies = 8
 
 wait_for_updated_network = false
 

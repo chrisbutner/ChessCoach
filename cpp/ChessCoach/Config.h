@@ -102,6 +102,7 @@ struct SelfPlayConfig
     int EliminationBaseExponent;
     float MoveDiversityValueDeltaThreshold;
     float MoveDiversityTemperature;
+    int MoveDiversityPlies;
 
     bool WaitForUpdatedNetwork;
 };

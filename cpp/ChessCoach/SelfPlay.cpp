@@ -1621,7 +1621,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         std::discrete_distribution distribution(weights.begin(), weights.end());
         return &game.Root()->children[distribution(Random::Engine)];
     }
-    else if (game.TryHard() && allowDiversity && (game.Ply() < Config::Network.SelfPlay.NumSampingMoves) &&
+    else if (game.TryHard() && allowDiversity && (game.Ply() < Config::Network.SelfPlay.MoveDiversityPlies) &&
         (Config::Network.SelfPlay.MoveDiversityTemperature > 0.f))
     {
         // "When we forced AlphaZero to play with greater diversity (by softmax sampling with a temperature of 10.0 among moves

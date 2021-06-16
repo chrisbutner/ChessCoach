@@ -327,6 +327,7 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<int>(selfPlay.EliminationBaseExponent, config, "elimination_base_exponent");
     policy.template Parse<float>(selfPlay.MoveDiversityValueDeltaThreshold, config, "move_diversity_value_delta_threshold");
     policy.template Parse<float>(selfPlay.MoveDiversityTemperature, config, "move_diversity_temperature");
+    policy.template Parse<int>(selfPlay.MoveDiversityPlies, config, "move_diversity_plies");
 
     policy.template Parse<bool>(selfPlay.WaitForUpdatedNetwork, config, "wait_for_updated_network");
 }
