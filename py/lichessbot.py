@@ -318,17 +318,10 @@ class Conversation:
       self.command(line, game, line.text[1:].lower())
 
   def command(self, line, game, cmd):
-    if cmd == "commands" or cmd == "help" or cmd == "h" or cmd == "?":
-      self.send_reply(line, "Supported commands: !eval, !queue")
-    elif cmd == "eval" and line.room == "spectator":
-      # TODO
-      self.send_reply(line, "Still working on the !eval command")
-    elif cmd == "queue":
-      # TODO
-      self.send_reply(line, "Still working on the !queue command")
+    pass
 
   def send_reply(self, line, reply):
-      self.lichess.chat(self.game.id, line.room, reply)
+    self.lichess.chat(self.game.id, line.room, reply)
 
 # --- Bot ---
 

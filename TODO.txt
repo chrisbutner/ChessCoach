@@ -1,6 +1,5 @@
 Bot
 - challenge others after idle time
-- conversation handling
 - implement piece odds
 
 Debug material blunders
