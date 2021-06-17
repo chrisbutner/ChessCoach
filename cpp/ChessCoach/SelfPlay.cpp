@@ -2522,7 +2522,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
         // Use a fraction of the increment-free remaining time, plus the increment,
         // but definitely use at most the remaining time (if there's a bug).
         const int64_t increment = _searchState->timeControl.incrementMs[toPlay];
-        const int64_t excludingIncrement = std::max(0LL, totalTimeAllowed - increment);
+        const int64_t excludingIncrement = std::max(static_cast<int64_t>(0), totalTimeAllowed - increment);
         const int64_t fractionPlusIncrement = ((excludingIncrement / fraction) + increment);
         const int64_t timeAllowed =
             (std::min(fractionPlusIncrement, totalTimeAllowed)
