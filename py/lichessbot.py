@@ -22,7 +22,22 @@ try:
 except:
   pass
 
+# --- Constants ---
+
+WHITE = 0
+BLACK = 1
+STARTING_POSITION = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
 # --- Data structures ---
+
+class MissingPieces:
+
+  def __init__(self, below_rating, fens):
+    self.below_rating = below_rating
+    self.fens = fens
+
+  def is_supported(self, rating, fen):
+    return (fen in self.fens) and (rating < self.below_rating)
 
 class Challenge:
 
@@ -43,10 +58,42 @@ class Challenge:
     self.challenger_rating = self.challenger_rating_int or "?"
     self.color = event["color"]
 
+    self.initial_fen = event.get("initialFen")
+    self.missing_pieces = [
+      # WHITE is missing pieces.
+      self.set_up_missing_pieces(lambda x: x.upper()),
+      # BLACK is missing pieces.
+      self.set_up_missing_pieces(lambda x: x),
+    ]
+
+  # Opponent must have 2999 rating or below to allow pawn odds, 1499 rating or below to allow queen odds, etc.
+  # Go crazy and allow kingside pieces, any pawn combinations, first move, whatever.
+  def set_up_missing_pieces(self, filter):
+    return [
+        MissingPieces(3000, self.remove_piece(STARTING_POSITION, filter("p"))),
+        MissingPieces(2850, self.remove_two_pieces(STARTING_POSITION, filter("p"))),
+        MissingPieces(2500, self.remove_piece(STARTING_POSITION, filter("n"))),
+        MissingPieces(2500, self.remove_piece(STARTING_POSITION, filter("b"))),
+        MissingPieces(2000, self.remove_piece(STARTING_POSITION, filter("r"))),
+        MissingPieces(1500, self.remove_piece(STARTING_POSITION, filter("q"))),
+      ]
+
+  def remove_piece(self, fen, piece):
+    return set((fen[:i] + "1" + fen[i + 1:]).replace("11", "2") for i, existing in enumerate(fen) if existing == piece)
+
+  def remove_two_pieces(self, fen, piece):
+    all = ([self.remove_piece(removed, piece) for removed in self.remove_piece(fen, piece)])
+    return set([item for sublist in all for item in sublist]) # The set de-duplicates.
+
   def is_supported_variant(self):
-    # TODO: Handle piece odds - simple combos - only play down - base on rating
-    #{{'key': 'fromPosition', 'name': 'From Position', 'short': 'FEN'} ... 'initialFen': '...' }
-    return self.variant == "standard" and self.color == "random"
+    return (
+      # Allow standard chess, but only when the colors are random.
+      (self.variant == "standard" and self.color == "random") or
+      # Allow piece odds, but only when the opponent has all pieces and we're missing some.
+      (self.variant == "fromPosition" and self.color == "white" and
+        any(m.is_supported(self.challenger_rating_int, self.initial_fen) for m in self.missing_pieces[BLACK])) or
+      (self.variant == "fromPosition" and self.color == "black" and
+        any(m.is_supported(self.challenger_rating_int, self.initial_fen) for m in self.missing_pieces[WHITE])))
 
   def is_fast_enough(self):
     return self.speed in ["bullet", "blitz", "rapid"]
@@ -503,7 +550,7 @@ def on_game_state(li, game):
   game_id = game.id.encode("utf-8")
   fen = game.initial_fen.encode("utf-8")
   moves = game.state["moves"].encode("utf-8")
-  bot_side = (0 if game.is_white else 1)
+  bot_side = (WHITE if game.is_white else BLACK)
   limit_seconds = (10 if game.is_abortable() else 0)
   
   # Start the search/ponder.
