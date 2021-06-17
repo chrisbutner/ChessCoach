@@ -2518,13 +2518,15 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
             // If it's 40 moves per 5 min with 2 moves/60 seconds remaining, use 30 seconds.
             fraction = std::min(fraction, _searchState->timeControl.movesToGo);
         }
+
+        // Use a fraction of the increment-free remaining time, plus the increment,
+        // but definitely use at most the remaining time (if there's a bug).
+        const int64_t increment = _searchState->timeControl.incrementMs[toPlay];
+        const int64_t excludingIncrement = std::max(0LL, totalTimeAllowed - increment);
+        const int64_t fractionPlusIncrement = ((excludingIncrement / fraction) + increment);
         const int64_t timeAllowed =
-            std::min(
-                std::max(
-                    (_searchState->timeControl.timeRemainingMs[toPlay] / fraction), // Generally use a fraction of remaining time.
-                    _searchState->timeControl.incrementMs[toPlay]), // But use at least the increment.
-                _searchState->timeControl.timeRemainingMs[toPlay]) // But definitely use at most the remaining time (if there's a bug).
-            - Config::Misc.TimeControl_SafetyBufferMilliseconds;
+            (std::min(fractionPlusIncrement, totalTimeAllowed)
+            - Config::Misc.TimeControl_SafetyBufferMilliseconds);
         if (searchTimeMs >= timeAllowed)
         {
             workCoordinator->OnWorkItemCompleted();
