@@ -411,10 +411,15 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         std::string token;
         while (uciMoves >> token)
         {
-            const Move move = UCI::to_move(game.GetPosition(), token);
+            Move move = UCI::to_move(game.GetPosition(), token);
             if (move == MOVE_NONE)
             {
-                break;
+                // We may get Chess960 castling notation for positions set up with a FEN for material odds.
+                if (token == "e1h1") move = make<CASTLING>(SQ_E1, SQ_H1);
+                else if (token == "e1a1") move = make<CASTLING>(SQ_E1, SQ_A1);
+                else if (token == "e8h8") move = make<CASTLING>(SQ_E8, SQ_H8);
+                else if (token == "e8a8") move = make<CASTLING>(SQ_E8, SQ_A8);
+                else break;
             }
             game.ApplyMove(move);
         }
