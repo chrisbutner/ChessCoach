@@ -342,6 +342,7 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     const auto& timeControl = toml::find_or(config, "time_control", {});
     policy.template Parse<int>(misc.TimeControl_SafetyBufferMilliseconds, timeControl, "safety_buffer_milliseconds");
     policy.template Parse<int>(misc.TimeControl_FractionOfRemaining, timeControl, "fraction_remaining");
+    policy.template Parse<int>(misc.TimeControl_AbsoluteMinimumMilliseconds, timeControl, "absolute_minimum_milliseconds");
 
     const auto& search = toml::find_or(config, "search", {});
     policy.template Parse<int>(misc.Search_SearchThreads, search, "search_threads");

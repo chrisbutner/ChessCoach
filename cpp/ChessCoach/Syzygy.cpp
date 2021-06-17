@@ -245,8 +245,17 @@ void Syzygy::UpdateRootChildValue(Node* node)
 {
     // Update value using the the tablebase score as a bound, regardless of "valueWeight".
     // This sounds bold, but it follows the same logic as in SelfPlayWorker::Backpropagate.
+    // Ignore the existing value for the sake of bounding (e.g. std::max) if it's just FPU (no weight).
     // Note that this is a single-threaded section (see SelfPlayWorker::PrepareExpandedRoot).
-    node->valueAverage.store(node->TablebaseBoundedValue(node->valueAverage.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+    assert(node->tablebaseBound.load(std::memory_order_relaxed) != BOUND_NONE);
+    if (node->valueWeight.load(std::memory_order_relaxed) == 0)
+    {
+        node->valueAverage.store(node->tablebaseScore.load(std::memory_order_relaxed));
+    }
+    else
+    {
+        node->valueAverage.store(node->TablebaseBoundedValue(node->valueAverage.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+    }
 }
 
 bool Syzygy::ProbeWdl(SelfPlayGame& game, bool isSearchRoot)
