@@ -402,7 +402,8 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
             Py_RETURN_NONE;
         }
 
-        // Set up the position and parse moves. Also generate a commentary image while we have the game set up.
+        // Set up the position and parse moves. Also generate a commentary image while we have the game set up,
+        // as long as we have enough think time remaining.
         const std::string& actualFen = ((fen == "startpos") ? Game::StartingPosition : fen);
         std::vector<Move> parsedMoves;
         Game game(actualFen, {});
@@ -417,8 +418,13 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
             }
             game.ApplyMove(move);
         }
-        std::unique_ptr<INetwork::CommentaryInputPlanes> commentaryImage(std::make_unique<INetwork::CommentaryInputPlanes>());
-        game.GenerateCommentaryImage(commentaryImage->data());
+        std::unique_ptr<INetwork::CommentaryInputPlanes> commentaryImage;
+        const int botRemainingMilliseconds = ((botSide == WHITE) ? wtime : btime);
+        if (botRemainingMilliseconds >= Config::Misc.Bot_CommentaryMinimumRemainingMilliseconds)
+        {
+            commentaryImage.reset(new INetwork::CommentaryInputPlanes());
+            game.GenerateCommentaryImage(commentaryImage->data()); // Relies on "game.Moves()", so run before the "std::move"
+        }
         parsedMoves = std::move(game.Moves());
 
         // Propagate the position.
@@ -454,7 +460,8 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         Instance().workerGroup->searchState.botGameId = gameId;
 
         // Comment on the position and return the last SAN, as long as there's been at least one move,
-        // since the encoder is trained with before-and-after positions.
+        // since the encoder is trained with before-and-after positions (and as long as there's enough
+        // think time remaining).
         //
         // It's important to do this before waking up search workers so that this call can
         // return to Python quickly. Assume that the additional bot safety buffer covers the time needed.
@@ -462,7 +469,7 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         // This acquires a "PythonContext" in the PythonNetwork call, so make it here in the
         // "NonPythonContext" so we that don't over-release (even though it's GIL-inefficient).
         ply = game.Ply();
-        if (!parsedMoves.empty())
+        if (!parsedMoves.empty() && commentaryImage)
         {
             Position& position = game.GetPosition();
             const Move lastMove = parsedMoves.back();

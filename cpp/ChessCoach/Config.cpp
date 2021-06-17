@@ -351,6 +351,9 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     policy.template Parse<int>(misc.Search_SlowstartParallelism, search, "slowstart_parallelism");
     policy.template Parse<int>(misc.Search_GuiUpdateIntervalNodes, search, "gui_update_interval_nodes");
 
+    const auto& bot = toml::find_or(config, "bot", {});
+    policy.template Parse<int>(misc.Bot_CommentaryMinimumRemainingMilliseconds, bot, "commentary_minimum_remaining_milliseconds");
+
     const auto& storage = toml::find_or(config, "storage", {});
     policy.template Parse<int>(misc.Storage_GamesPerChunk, storage, "games_per_chunk");
 

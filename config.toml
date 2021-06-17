@@ -219,6 +219,10 @@ gui_update_interval_nodes = 1000
 top_p = 0.1
 temperature = 1.5
 
+[bot]
+
+commentary_minimum_remaining_milliseconds = 5000
+
 [storage]
 
 games_per_chunk = 2000

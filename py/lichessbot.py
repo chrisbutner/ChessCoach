@@ -519,8 +519,8 @@ def on_game_state(li, game):
   print(f"*** {status.upper()} *** ply: {ply}, SAN: {san}, comment: {comment}")
 
   # Store the comment and process it in the main loop (we only comment every 5 seconds).
-  assert (ply >= 1) == bool(comment)
   if comment:
+    assert (ply > 0)
     ply_before_move = (ply - 1)
     move_number = ((ply_before_move // 2) + 1)
     suffix = "." if (ply_before_move % 2 == 0) else "..."

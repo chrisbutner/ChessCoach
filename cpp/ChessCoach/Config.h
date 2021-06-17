@@ -140,6 +140,9 @@ struct MiscConfig
     int Search_SlowstartParallelism;
     int Search_GuiUpdateIntervalNodes;
 
+    // Bot
+    int Bot_CommentaryMinimumRemainingMilliseconds;
+
     // Storage
     int Storage_GamesPerChunk;
     
