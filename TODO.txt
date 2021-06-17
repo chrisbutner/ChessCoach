@@ -1,7 +1,3 @@
-Bot
-- challenge others after idle time
-- implement piece odds
-
 Debug material blunders
 
 Next

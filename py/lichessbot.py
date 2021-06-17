@@ -9,6 +9,7 @@ import json
 import threading
 import queue
 import time
+import random
 import backoff
 import requests
 from requests.exceptions import ChunkedEncodingError, ConnectionError, HTTPError, ReadTimeout
@@ -16,6 +17,8 @@ from urllib3.exceptions import ProtocolError
 from http.client import RemoteDisconnected
 from urllib.parse import urljoin
 import textwrap
+from bs4 import BeautifulSoup
+import numpy as np
 
 try:
   import chesscoach # See PythonModule.cpp
@@ -212,23 +215,33 @@ class ChatLine:
 class Games:
 
   def __init__(self):
-    self.queue_count = 0
+    self.queue = set()
     self.in_progress = {}
+    self.last_finish_time = time.time()
 
-  def enqueue(self):
+  def enqueue(self, id):
     before = self.status()
-    self.queue_count += 1
-    print(f"[Games][Enqueue] {before} -> {self.status()}")
+    self.queue.add(id)
+    print(f"[Games][Enqueue][{id}] {before} -> {self.status()}")
+
+  def dequeue(self, id):
+    before = self.status()
+    try:
+      self.queue.remove(id)
+    except KeyError:
+      print(f"[Games][Dequeue][{id}] Wasn't in queue (no action)")
+      return
+    print(f"[Games][Dequeue][{id}] {before} -> {self.status()}")
 
   def starting(self, id):
     if id in self.in_progress:
       print(f"[Games][Starting][{id}] Already tracked (no action)")
       return
     before = self.status()
-    if self.queue_count <= 0:
-      print(f"[Games][Starting][{id}] Queue count was already zero (no decrement)")
-    else:
-      self.queue_count -= 1
+    try:
+      self.queue.remove(id)
+    except KeyError:
+      print(f"[Games][Starting][{id}] Wasn't in queue")
     self.in_progress[id] = None
     print(f"[Games][Starting][{id}] {before} -> {self.status()}")
 
@@ -245,10 +258,11 @@ class Games:
       return
     before = self.status()
     self.in_progress.pop(id)
+    self.last_finish_time = time.time()
     print(f"[Games][Finished][{id}] {before} -> {self.status()}")
 
   def status(self):
-    return f"(queue_count: {self.queue_count}, in_progress: {self.in_progress})"
+    return f"(queue: {self.queue}, in_progress: {self.in_progress})"
 
 # --- Protocol ---
 
@@ -257,14 +271,16 @@ ENDPOINTS = {
   "playing": "/api/account/playing",
   "stream": "/api/bot/game/stream/{}",
   "stream_event": "/api/stream/event",
+  "bots": "/player/bots",
   "game": "/api/bot/game/{}",
   "move": "/api/bot/game/{}/move/{}",
   "chat": "/api/bot/game/{}/chat",
   "abort": "/api/bot/game/{}/abort",
   "accept": "/api/challenge/{}/accept",
   "decline": "/api/challenge/{}/decline",
+  "challenge": "/api/challenge/{}",
   "upgrade": "/api/bot/account/upgrade",
-  "resign": "/api/bot/game/{}/resign"
+  "resign": "/api/bot/game/{}/resign",
 }
 
 # docs: https://lichess.org/api
@@ -299,10 +315,10 @@ class Lichess:
                         max_time=60,
                         interval=0.1,
                         giveup=is_final)
-  def api_post(self, path, data=None, headers=None):
+  def api_post(self, path, data=None, json=None, headers=None):
     url = urljoin(self.baseUrl, path)
     print(url)
-    response = self.session.post(url, data=data, headers=headers, timeout=2)
+    response = self.session.post(url, data=data, json=json, headers=headers, timeout=2)
     response.raise_for_status()
     return response.json()
 
@@ -317,7 +333,7 @@ class Lichess:
 
   def chat(self, game_id, room, text):
     payload = {'room': room, 'text': text}
-    return self.api_post(ENDPOINTS["chat"].format(game_id), data=payload)
+    return self.api_post(ENDPOINTS["chat"].format(game_id), data=payload, headers={"Content-Type": "application/x-www-form-urlencoded"})
 
   def abort(self, game_id):
     return self.api_post(ENDPOINTS["abort"].format(game_id))
@@ -332,11 +348,20 @@ class Lichess:
     print(url)
     return requests.get(url, headers=self.header, stream=True)
 
+  def get_bots(self):
+    url = urljoin(self.baseUrl, ENDPOINTS["bots"])
+    print(url)
+    return requests.get(url)
+
   def accept_challenge(self, challenge_id):
     return self.api_post(ENDPOINTS["accept"].format(challenge_id))
 
   def decline_challenge(self, challenge_id, reason="generic"):
     return self.api_post(ENDPOINTS["decline"].format(challenge_id), data=f"reason={reason}", headers={"Content-Type": "application/x-www-form-urlencoded"})
+
+  def send_challenge(self, username, clock_limit, clock_increment):
+    payload = { "rated": True, "clock.limit": clock_limit, "clock.increment": clock_increment }
+    return self.api_post(ENDPOINTS["challenge"].format(username), json=payload)
 
   def get_profile(self):
     profile = self.api_get(ENDPOINTS["profile"])
@@ -369,6 +394,103 @@ class Conversation:
 
   def send_reply(self, line, reply):
     self.lichess.chat(self.game.id, line.room, reply)
+
+# --- Sending challenges when idle ---
+
+class OutgoingChallenges:
+
+  idle_seconds_before_send = 60.0
+
+  minimum_best_rating = 2000
+  rating_sample_temperature = 0.1 # About 30x as likely to choose 2700 as 2037, based on a sample of 155 bots.
+
+  time_controls = [
+    (60, 3),
+    (180, 0),
+    (180, 2),
+    (300, 0),
+    (300, 3),
+    (600, 0),
+    (600, 5),
+    (900, 0),
+    (900, 10),
+  ]
+
+  def __init__(self, lichess, games):
+    self.challenges_active = {}
+    self.challenges_declined = set()
+    self.lichess = lichess
+    self.games = games
+    self.rng = np.random.default_rng()
+
+  def upkeep(self):
+    if (not self.games.queue
+        and not self.games.in_progress
+        and not self.challenges_active
+        and time.time() >= self.games.last_finish_time + self.idle_seconds_before_send):
+      key = self.choose()
+      if key:
+        username, (limit, increment) = key
+        try:
+          response = self.lichess.send_challenge(username, limit, increment)
+          id = response["challenge"]["id"]
+          self.challenges_active[id] = key
+          self.games.enqueue(id)
+          print(f"*** OUTGOING CHALLENGE SENT *** with ID {id} to {username} with time control {limit}+{increment}")
+        except Exception:
+          pass
+
+  def game_start(self, id):
+    # Most details are handled elsewhere: we just need to untrack active outgoing challenges.
+    self.challenges_active.pop(id, None)
+
+  def declined(self, event):
+    id = event["challenge"]["id"]
+    self.games.dequeue(id)
+    key = self.challenges_active.pop(id, None)
+    if key:
+      self.challenges_declined.add(key)
+      username, (limit, increment) = key
+      print("*** OUTGOING CHALLENGE DECLINED *** with ID {id} to {username} with time control {limit}+{increment}")
+
+  def sample_users(self):
+    response = self.lichess.get_bots()
+    soup = BeautifulSoup(response.content, "html.parser")
+
+    usernames = []
+    bests = []
+
+    for link, ratings in zip(soup.select(".user-link"), soup.select(".rating")):
+      best = 0
+      for rating in ratings.select("span"):
+        text = rating.get_text().replace("-", "").replace("?", "").strip()
+        if text:
+          best = max(best, int(text))
+      if best >= self.minimum_best_rating:
+        usernames.append(link["href"][3:])
+        bests.append(best)
+
+    if not usernames:
+      return None
+
+    bests = (bests / np.max(bests)) ** (1.0 / self.rating_sample_temperature)
+    bests /= np.sum(bests)
+    
+    return self.rng.choice(usernames, p=bests).item()
+
+  def sample_time_controls(self):
+    return random.choice(self.time_controls)
+
+  def choose(self):
+    for _ in range(0, 10):
+      username = self.sample_users()
+      time_control = self.sample_time_controls()
+      if not username or not time_control:
+        return None
+      key = (username, time_control)
+      if key not in self.challenges_declined:
+        return key      
+    return None
 
 # --- Bot ---
 
@@ -418,6 +540,8 @@ def loop(li, user_profile):
     games = Games()
     game = None
 
+    outgoing_challenges = OutgoingChallenges(li, games)
+
     while True:
 
       event = event_queue.get()
@@ -461,7 +585,9 @@ def loop(li, user_profile):
           on_game_state(li, game)
 
       elif event["type"] == "challenge":
-          challenge = Challenge(event["challenge"])
+        challenge = Challenge(event["challenge"])
+        # We may have sent the challenge.
+        if challenge.challenger_name.lower() != user_profile["username"].lower():
           queue_index, decline_reason = challenge.is_supported()
           if not decline_reason:
             challenge_queues[queue_index].put(challenge)
@@ -472,10 +598,14 @@ def loop(li, user_profile):
             except Exception:
               pass
 
+      elif event["type"] == "challengeDeclined":
+        outgoing_challenges.declined(event)
+
       elif event["type"] == "gameStart":
         game_id = event["game"]["id"]
-        if not games.queue_count and games.in_progress and game_id not in games.in_progress:
-          # We accidentally accepted too many challenges and can't handle this game.
+        outgoing_challenges.game_start(game_id)
+        if games.in_progress and game_id not in games.in_progress:
+          # We accidentally sent or accepted too many challenges and can't handle this game.
           try:
             li.abort(game_id)
           except Exception:
@@ -496,14 +626,14 @@ def loop(li, user_profile):
           pass
 
       # Handle control upkeep
-      while not games.queue_count and not games.in_progress:
+      while not games.queue and not games.in_progress:
         try:
           challenge = pop_challenge(challenge_queues)
           if not challenge:
             break
           print("Accept {}".format(challenge))
           li.accept_challenge(challenge.id)
-          games.enqueue()
+          games.enqueue(challenge.id)
         except (HTTPError, ReadTimeout) as exception:
           if isinstance(exception, HTTPError) and exception.response.status_code == 404:  # ignore missing challenge
             print("Skip missing {}".format(challenge))
@@ -524,6 +654,9 @@ def loop(li, user_profile):
             pass
         comment_async = threading.Thread(target=comment_sync)
         comment_async.start()
+
+      # Send and keep track of outgoing challenges when idle.
+      outgoing_challenges.upkeep()
 
 def pop_challenge(challenge_queues):
   for challenge_queue in challenge_queues:

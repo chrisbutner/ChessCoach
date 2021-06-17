@@ -221,7 +221,7 @@ temperature = 1.5
 
 [bot]
 
-commentary_minimum_remaining_milliseconds = 5000
+commentary_minimum_remaining_milliseconds = 15_000
 
 [storage]
 
