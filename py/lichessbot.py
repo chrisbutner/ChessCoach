@@ -315,10 +315,10 @@ class Lichess:
                         max_time=60,
                         interval=0.1,
                         giveup=is_final)
-  def api_post(self, path, data=None, json=None, headers=None):
+  def api_post(self, path, data=None, headers=None):
     url = urljoin(self.baseUrl, path)
     print(url)
-    response = self.session.post(url, data=data, json=json, headers=headers, timeout=2)
+    response = self.session.post(url, data=data, headers=headers, timeout=2)
     response.raise_for_status()
     return response.json()
 
@@ -333,7 +333,7 @@ class Lichess:
 
   def chat(self, game_id, room, text):
     payload = {'room': room, 'text': text}
-    return self.api_post(ENDPOINTS["chat"].format(game_id), data=payload, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    return self.api_post(ENDPOINTS["chat"].format(game_id), data=payload)
 
   def abort(self, game_id):
     return self.api_post(ENDPOINTS["abort"].format(game_id))
@@ -357,11 +357,11 @@ class Lichess:
     return self.api_post(ENDPOINTS["accept"].format(challenge_id))
 
   def decline_challenge(self, challenge_id, reason="generic"):
-    return self.api_post(ENDPOINTS["decline"].format(challenge_id), data=f"reason={reason}", headers={"Content-Type": "application/x-www-form-urlencoded"})
+    return self.api_post(ENDPOINTS["decline"].format(challenge_id), data=f"reason={reason}")
 
   def send_challenge(self, username, clock_limit, clock_increment):
-    payload = { "rated": True, "clock.limit": clock_limit, "clock.increment": clock_increment }
-    return self.api_post(ENDPOINTS["challenge"].format(username), json=payload)
+    payload = { "rated": "true", "clock.limit": clock_limit, "clock.increment": clock_increment }
+    return self.api_post(ENDPOINTS["challenge"].format(username), data=payload)
 
   def get_profile(self):
     profile = self.api_get(ENDPOINTS["profile"])
@@ -419,6 +419,7 @@ class OutgoingChallenges:
   def __init__(self, lichess, games):
     self.challenges_active = {}
     self.challenges_declined = set()
+    self.challenges_forbidden = set()
     self.lichess = lichess
     self.games = games
     self.rng = np.random.default_rng()
@@ -437,6 +438,13 @@ class OutgoingChallenges:
           self.challenges_active[id] = key
           self.games.enqueue(id)
           print(f"*** OUTGOING CHALLENGE SENT *** with ID {id} to {username} with time control {limit}+{increment}")
+        except HTTPError as e:
+          if e.response.content and (b"does not accept challenges" in e.response.content):
+            print(f"*** {e.response.status_code} ***: {username}: {e.response.content}")
+            self.challenges_forbidden.add(username)
+          if e.response.status_code == 429:
+            print("*** 429 ***")
+            self.games.last_finish_time += 5 * 60
         except Exception:
           pass
 
@@ -461,13 +469,16 @@ class OutgoingChallenges:
     bests = []
 
     for link, ratings in zip(soup.select(".user-link"), soup.select(".rating")):
+      username = link["href"][3:]
+      if username in self.challenges_forbidden:
+        continue
       best = 0
       for rating in ratings.select("span"):
         text = rating.get_text().replace("-", "").replace("?", "").strip()
         if text:
           best = max(best, int(text))
       if best >= self.minimum_best_rating:
-        usernames.append(link["href"][3:])
+        usernames.append(username)
         bests.append(best)
 
     if not usernames:
