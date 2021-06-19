@@ -1,11 +1,14 @@
-Debug material blunders
+Tournaments to decide further training
+- longer time control 11 vs. 11a (3.6m)
+- mix in SF13 and SF13_2850 with 11 and 11a
+- compare 11a over 800k->3.6m (every 400k)
+- compare Arasan21 across all too
 
 Next
 - distributed optimization - allow for faster optimization on cluster (batched ask/tell) and TPU vs. TPU comparisons on cluster via UCI proxy
 
 Training - final run
-- compare selfplay11/selfplay11a with tournaments (not just STS)
-- take best of selfplay11/selfplay11a from 3.6m up to 5.6m (run SWA/strength tests on selfplay11 teacher)
+- take best of selfplay11/selfplay11a from 3.6m up to 5.6m
 
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
@@ -25,6 +28,8 @@ PUCT - medium confidence
 		- could implement simply using FPU-weight
 - work on making more progress in endgames - may be worse now with higher NPS from cache-as-TT
 	- 8/8/8/4ppk1/8/8/6K1/8 b - - 0 84
+- try 6-man syzygy
+- debug material blunders when really winning/losing
 
 Optimization
 - A/B-test threads/parallelism, and slowstart settings
@@ -32,12 +37,6 @@ Optimization
 - long optimization, tournament mode, 30s per move (needs distributed) - include cpuct
 - final optimization with just move diversity parameters (consider adding visit%/upweight% threshold) - 30s per move
 - deep tournaments, calculate ratings vs. various engines, CC with AZ-PUCT, etc., with various time controls - keep PGNs
-
-GPU/multi-GPU
-- check out cloud multi-GPU options and set up/optimize (mirrored training + self-play + UCI)
-- re-test everything on local/GPU and add comments for appropriate config for both (or implement HW-dependent config)
-	- student on GPU, 4*256, teacher/student(which?) on TPU, 16*256 for both
-	- make sure multi-GPU-on-desktop is supported - reevaluate params
 
 Code quality
 - need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed

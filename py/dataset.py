@@ -317,7 +317,8 @@ class DatasetBuilder:
 
     # Shuffle images/comments. Just use the main model's training shuffle size.
     position_shuffle_size = self.config.training["dataset_shuffle_positions_training"]
-    dataset = dataset.shuffle(position_shuffle_size, reshuffle_each_iteration=True)
+    if position_shuffle_size:
+      dataset = dataset.shuffle(position_shuffle_size, reshuffle_each_iteration=True)
 
     # Batch to the global size.
     dataset = dataset.batch(options.global_batch_size)
