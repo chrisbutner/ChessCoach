@@ -187,8 +187,9 @@ class Session:
 
 def optimize_parameters(config=None):
   if not config:
-    # If config is None then we're not allowed to initialize TensorFlow, so just set "is_tpu" for Linux.
-    # It shouldn't matter, since it mostly affects cloud path use, and optimization explicitly uses local paths.
+    # If config is None then we're not allowed to initialize TensorFlow, so just set "is_cloud" False.
+    # It shouldn't matter, since it mostly affects cloud path use, and optimization explicitly uses local paths
+    # regardless of "config.is_cloud" via "make_local_path".
     from config import Config
-    config = Config(is_tpu=(platform.system() != "Windows"))
+    config = Config(is_cloud=False)
   Session(config).run()

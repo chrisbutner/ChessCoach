@@ -22,8 +22,8 @@ if silent:
 
 # Let multiple UCIs run at once in tournaments.
 physical_gpus = tf.config.experimental.list_physical_devices("GPU")
-if physical_gpus:
-  tf.config.experimental.set_memory_growth(physical_gpus[0], True)
+for gpu in physical_gpus:
+  tf.config.experimental.set_memory_growth(gpu, True)
 
 class LocalTPUClusterResolver(
     tf.distribute.cluster_resolver.TPUClusterResolver):
@@ -73,7 +73,7 @@ except:
 
 tpus = tf.config.experimental.list_logical_devices("TPU")
 gpus = tf.config.experimental.list_logical_devices("GPU")
-devices = tpus + gpus
+devices = tpus if tpu_strategy else gpus
 thread_ident_to_index = {}
 
 # --- Now it's safe for further imports ---
@@ -640,7 +640,7 @@ ensure_locks = [threading.RLock() for _ in devices]
 # Only create one TensorFlow/Keras model at a time, even if on different devices.
 model_creation_lock = threading.Lock()
 
-config = Config(bool(tpu_strategy))
+config = Config()
 networks = Networks(config)
 datasets = DatasetBuilder(config)
 trainer = Trainer(networks, tpu_strategy, devices, datasets)
@@ -649,12 +649,12 @@ trainer = Trainer(networks, tpu_strategy, devices, datasets)
 log("################################################################################")
 log("Network:", config.network_name)
 log("Role:", config.role)
+log("Using cloud storage:", config.is_cloud)
 log("Data root:", config.data_root)
 log("Local data root:", config.determine_local_data_root())
-log("Using TPU:", config.is_tpu)
 log(f"TPU devices: {[t.name for t in tpus]}")
 log(f"GPU devices: {[g.name for g in gpus]}")
-log("Training devices:", trainer.device_count)
+log("Training devices:", trainer.device_count, ("TPU(s)" if tpu_strategy else "GPU(s)"))
 log("Per-replica batch size:", trainer.per_replica_batch_size)
 log("Global batch size:", trainer.global_batch_size)
 log("Per-replica batch size (commentary):", trainer.per_replica_batch_size_commentary)

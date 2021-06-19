@@ -207,7 +207,7 @@ class DatasetBuilder:
 
     # Parse chunks in parallel, cycling through as large a number as possible while staying under memory budget.
     # Autotune isn't sufficient to keep the GPU/TPU loaded via disk/storage: experimentally 4/8 seem best.
-    num_parallel_calls = 8 if self.config.is_tpu else 4
+    num_parallel_calls = 8 if self.config.is_cloud else 4
     dataset = dataset.interleave(lambda x: self.parse_chunk(x, options), cycle_length=options.cycle_length,
       num_parallel_calls=num_parallel_calls, deterministic=False)
 
@@ -311,7 +311,7 @@ class DatasetBuilder:
     # Parse commentary in parallel, cycling through all chunks (~9).
     # Autotune isn't sufficient to keep the GPU/TPU loaded via disk/storage: experimentally 4/8 seem best.
     cycle_length = len(filenames)
-    num_parallel_calls = min(8 if self.config.is_tpu else 4, cycle_length)
+    num_parallel_calls = min(8 if self.config.is_cloud else 4, cycle_length)
     dataset = dataset.interleave(lambda x: self.parse_commentary(x, tokenizer, options), cycle_length=cycle_length,
      num_parallel_calls=num_parallel_calls, deterministic=False) # deterministic=False
 
@@ -342,7 +342,7 @@ class DatasetBuilder:
     # Parse commentary in parallel, deterministically, cycling through all chunks (~1).
     # Autotune isn't sufficient to keep the GPU/TPU loaded via disk/storage: experimentally 4/8 seem best.
     cycle_length = len(filenames)
-    num_parallel_calls = min(8 if self.config.is_tpu else 4, cycle_length)
+    num_parallel_calls = min(8 if self.config.is_cloud else 4, cycle_length)
     dataset = dataset.interleave(lambda x: self.parse_commentary(x, tokenizer, options), cycle_length=cycle_length,
      num_parallel_calls=num_parallel_calls, deterministic=True) # deterministic=True
 

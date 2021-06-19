@@ -190,7 +190,7 @@ class ModelBuilder:
       encoder_width=self.filter_count,
       embedding_width=self.transformer_filters,
       dropout_rate=self.transformer_dropout_rate,
-      padded_decode=config.is_tpu,
+      padded_decode=isinstance(strategy, tf.distribute.TPUStrategy),
       sample_temperature=config.misc["commentary"]["temperature"],
       top_p=config.misc["commentary"]["top_p"],
     )

@@ -231,7 +231,9 @@ games_per_chunk = 2000
 [paths]
 
 # With the below config, a network may be saved to "gs://chesscoach-eu/ChessCoach/Networks/network_000001000".
-tpu_data_root = "gs://chesscoach-eu/ChessCoach"
+# If the path can be accessed via tf.io.gfile then ChessCoach will run in a "cloud" configuration.
+# This is currently only supported on Linux, as tf.io.gfile doesn't handle gs:// on Windows.
+cloud_data_root = "gs://chesscoach-eu/ChessCoach"
 
 networks = "Networks"
 tensorboard = "TensorBoard"

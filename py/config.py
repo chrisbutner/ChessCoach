@@ -12,19 +12,18 @@ class PredictionStatus(enum.IntFlag):
 
 class Config:
 
-  def __init__(self, is_tpu):
-    self.is_tpu = is_tpu
-    self.path = posixpath if is_tpu else os.path
-    self.join = self.path.join
-    
+  # Pass is_cloud=True or is_cloud=False to stipulate, or is_cloud=None to auto-detect by importing tensorflow.
+  def __init__(self, is_cloud=None):
+
+    # Parse config.
     py_path = os.path.dirname(os.path.abspath(__file__))
     try:
       # Slightly less risk to try this first on Windows before parent directory.
-      config = toml.load(self.join(py_path, "config.toml")) # Windows, via C++
+      config = toml.load(os.path.join(py_path, "config.toml")) # Windows, via C++
     except:
       try:
         # Running source directly in Python. Prefer this more specific path even if also installed on Linux.
-        config = toml.load(self.join(py_path, "..", "config.toml"))
+        config = toml.load(os.path.join(py_path, "..", "config.toml"))
       except:
         config = toml.load("/usr/local/share/ChessCoach/config.toml") # Linux, via C++
 
@@ -55,6 +54,18 @@ class Config:
       "optimization": config["optimization"],
     }
 
+    # Set "is_cloud", auto-detecting if necessary.
+    if is_cloud is None:
+      import tensorflow as tf
+      try:
+        tf.io.gfile.stat(self.determine_cloud_data_root())
+        is_cloud = True
+      except:
+        is_cloud = False
+    self.is_cloud = is_cloud
+    self.path = posixpath if self.is_cloud else os.path
+    self.join = self.path.join
+
     # Root all paths.
     self.data_root = self.determine_data_root()
     self.training["games_path_training"] = self.make_dir_path(self.training["games_path_training"])
@@ -68,11 +79,13 @@ class Config:
     self.replicate_locally(self.misc["paths"]["syzygy"])
 
   def determine_data_root(self):
-    if self.is_tpu:
-      # Replace tilde with the user's home directory, if present.
-      return self.path.expanduser(self.misc["paths"]["tpu_data_root"])
+    if self.is_cloud:
+      return self.determine_cloud_data_root()
     else:
       return self.determine_local_data_root()
+
+  def determine_cloud_data_root(self):
+    return self.misc["paths"]["tpu_data_root"]
 
   def determine_local_data_root(self):
     if (platform.system() == "Windows"):
@@ -92,11 +105,8 @@ class Config:
   
   def make_path(self, path):
     # These need to be backslashes on Windows for TensorFlow's recursive creation code (tf.summary.create_file_writer).
-    if not self.is_tpu and (platform.system() == "Windows"):
+    if not self.is_cloud and (platform.system() == "Windows"):
       path = path.replace("/", "\\")
-
-    # Just in case this specific path is special-cased as absolute rather than relative, starting with tilde.
-    path = self.path.expanduser(path)
     
     # Root any relative paths at the data root.
     if not self.path.isabs(path):

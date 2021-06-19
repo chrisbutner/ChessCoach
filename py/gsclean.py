@@ -9,7 +9,7 @@ class Cleaner:
 
   def __init__(self, whatif_mode=True):
     self.whatif_mode = whatif_mode
-    self.config = Config(is_tpu=True) # Always set is_tpu=True to get gs:// paths, but do all I/O via gsutil.
+    self.config = Config(is_cloud=True) # Always set is_cloud=True to get gs:// paths, but do all I/O via gsutil.
     self.network_root = self.config.misc["paths"]["networks"]
 
   # A non-zero return code from gsutil is often benign, e.g. no matches found,
