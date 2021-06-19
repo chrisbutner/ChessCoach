@@ -85,7 +85,7 @@ class Config:
       return self.determine_local_data_root()
 
   def determine_cloud_data_root(self):
-    return self.misc["paths"]["tpu_data_root"]
+    return self.misc["paths"]["cloud_data_root"]
 
   def determine_local_data_root(self):
     if (platform.system() == "Windows"):

@@ -1,15 +1,3 @@
-Tournaments to decide further training
-- longer time control 11 vs. 11a (3.6m)
-- mix in SF13 and SF13_2850 with 11 and 11a
-- compare 11a over 800k->3.6m (every 400k)
-- compare Arasan21 across all too
-
-Next
-- distributed optimization - allow for faster optimization on cluster (batched ask/tell) and TPU vs. TPU comparisons on cluster via UCI proxy
-
-Training - final run
-- take best of selfplay11/selfplay11a from 3.6m up to 5.6m
-
 PUCT - medium confidence
 - try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
 	- 3qkb1r/3n1ppp/R1Npp3/6P1/QPr2P2/2P5/7P/4R1K1 b k - 2 27 - need Rxc6, avoid Qc8
@@ -32,6 +20,7 @@ PUCT - medium confidence
 - debug material blunders when really winning/losing
 
 Optimization
+- finish batched/parallelized ask/tell once training finished
 - A/B-test threads/parallelism, and slowstart settings
 - A/B-test cache-as-TT with/without repetition state and/or no-progress count (bucketed?)
 - long optimization, tournament mode, 30s per move (needs distributed) - include cpuct
@@ -52,9 +41,17 @@ Deployment
 - linux unit test script
 - add windows command line build script, binplace somewhere cleanly
 
+Measurements
+- Tournament Elo across training history (teacher/student, all SWA, every 400k)
+- Controlled NPS (fixed movetime, multiple trials) (cache/no, teacher/student, TPU/GPU)
+- Self-play games/hour steady-state (from 10 chunks to 20 chunks or w/e) (cache/no, teacher/student, TPU/GPU)
+- Training time per checkpoint for main model and commentary (TPU/GPU)
+- Test suite results (STS, Arasan21) (teacher/student, TPU/GPU)
+
 Publishing
 - write-ups
 - final network weights
+- datasets? check costs
 
 Won't do
 - TensorRT or TF C++ API (overly complicated setup, especiallly building TF on Windows, embarrassingly bad)
