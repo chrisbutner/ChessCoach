@@ -1,23 +1,8 @@
 PUCT - medium confidence
-- try prior flattening/absolute linear (still respect value) with high nodes again, despite linear
-	- 3qkb1r/3n1ppp/R1Npp3/6P1/QPr2P2/2P5/7P/4R1K1 b k - 2 27 - need Rxc6, avoid Qc8
-	- kr6/ppq3b1/2pNQ1p1/7p/7P/1R4P1/P4PB1/3n2K1 w - - 0 32 - find Rxb7 M10 - gets stuck on Ne8
-	- can also help more backprops go to value rather than value+prior at high node counts
-- try blend in prior softening towards endgame
-	- 8/2Q5/8/2k5/6K1/8/3r4/q7 b - - 38 113 - avoid Kd4 - work around overly sharp priors
-- try scale FPU up over time, gives exhaustive coverage, can use checks/winning captures heuristic and prior to differentiate
-	- try hard exhaustive term (e.g. 1 per child after N visits - maybe M grandparent visits)
-	- 8/8/8/2P3R1/5B2/2rP1p2/p1P1PP2/RnQ1K2k w Q - 5 3 - find M2
+- try prior temperature
+- try killer heuristic for mate-in-N/syzygy lower bound
 - try value stddev
-- last all-out attempt at position #3
-	- try last-value again but scaled down (constant or f(n))
-	- try killer heuristic for mate-in-N only - good examples in Arasan21 position #3 underneath Rf6, have to prove that many moves are losing - decay
-		- could be mate-in-N or syzygy lower bound or just really high value threshold? only 1 killer move, best
-		- could implement simply using FPU-weight
-- work on making more progress in endgames - may be worse now with higher NPS from cache-as-TT
-	- 8/8/8/4ppk1/8/8/6K1/8 b - - 0 84
 - try 6-man syzygy
-- debug material blunders when really winning/losing
 
 Optimization
 - finish batched/parallelized ask/tell once training finished

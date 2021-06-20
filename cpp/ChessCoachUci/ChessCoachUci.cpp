@@ -100,7 +100,6 @@ void ChessCoachUci::Initialize()
     InitializePython();
     InitializeStockfish();
     InitializeChessCoach();
-    InitializePredictionCache();
 
     // Validate config.
     const int totalParallelism = (Config::Misc.Search_SearchThreads * Config::Misc.Search_SearchParallelism);
@@ -686,6 +685,9 @@ void ChessCoachUci::InitializeWorkers()
     InitializeNetwork();
     _workerGroup.Initialize(_network.get(), nullptr /* storage */, Config::Network.SelfPlay.PredictionNetworkType,
         Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
+
+    // Delay initializing the prediction cache until the Hash option is set or isready/go/comment, to keep input responsive early.
+    InitializePredictionCache();
 
     // Let the GUI call back in to show requested lines.
     InitializePythonModule(nullptr /* storage */, _network.get(), &_workerGroup);
