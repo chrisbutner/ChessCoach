@@ -30,6 +30,7 @@ WorkCoordinator::WorkCoordinator(int workerCount)
     , _shutDown(false)
     , _workerCount(workerCount)
     , _workerReadyCount(0)
+    , _generateUniformPredictions(false)
 {
 }
 

@@ -48,7 +48,7 @@ TEST(Game, FlipBoard)
 
     // Flip the board and flip back.
     Game startingPosition;
-    Position& position = startingPosition.DebugPosition();
+    Position& position = startingPosition.GetPosition();
     Bitboard whitePawns = position.pieces(WHITE, PAWN);
     Bitboard flipWhitePawns1 = Game::FlipBoard(whitePawns);
     Bitboard flipWhitePawns2 = Game::FlipBoard(flipWhitePawns1);
@@ -97,21 +97,4 @@ TEST(Game, FlipSpecialMoves)
         EXPECT_EQ(move, Game::FlipMove(WHITE, Game::FlipMove(WHITE, move)));
         EXPECT_EQ(move, Game::FlipMove(BLACK, Game::FlipMove(BLACK, move)));
     }
-}
-
-TEST(Game, InProportion)
-{
-    float proportion = 0.15f;
-    float in = 0;
-    float total = 0;
-    for (int i = 0; i < 1000000; i++)
-    {
-        if (Random::InProportion(proportion))
-        {
-            in++;
-        }
-        total++;
-    }
-
-    EXPECT_NEAR(in / total, proportion, 0.001f);
 }

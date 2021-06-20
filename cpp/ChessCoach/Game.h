@@ -11,20 +11,20 @@
 #include "Network.h"
 #include "PoolAllocator.h"
 
-constexpr const static float CHESSCOACH_VALUE_WIN = 1.0f;
-constexpr const static float CHESSCOACH_VALUE_DRAW = 0.5f;
-constexpr const static float CHESSCOACH_VALUE_LOSS = 0.0f;
-constexpr const static float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
+constexpr static const float CHESSCOACH_VALUE_WIN = 1.0f;
+constexpr static const float CHESSCOACH_VALUE_DRAW = 0.5f;
+constexpr static const float CHESSCOACH_VALUE_LOSS = 0.0f;
+constexpr static const float CHESSCOACH_VALUE_UNINITIALIZED = -1.0f;
 
-constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT = CHESSCOACH_VALUE_LOSS;
-constexpr const static float CHESSCOACH_FIRST_PLAY_URGENCY_ROOT = CHESSCOACH_VALUE_WIN;
+constexpr static const float CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT = CHESSCOACH_VALUE_LOSS;
+constexpr static const float CHESSCOACH_FIRST_PLAY_URGENCY_ROOT = CHESSCOACH_VALUE_WIN;
 
-constexpr const static int CHESSCOACH_CENTIPAWNS_WIN = 12800;
-constexpr const static int CHESSCOACH_CENTIPAWNS_DRAW = 0;
-constexpr const static int CHESSCOACH_CENTIPAWNS_LOSS = -12800;
+constexpr static const int CHESSCOACH_CENTIPAWNS_WIN = 12800;
+constexpr static const int CHESSCOACH_CENTIPAWNS_DRAW = 0;
+constexpr static const int CHESSCOACH_CENTIPAWNS_LOSS = -12800;
 
 // Could choose a smaller quantum for draws because of the non-uniform mapping, but keep it simple for now.
-constexpr const static int CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM = 3;
+constexpr static const int CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM = 3;
 
 class Game
 {
@@ -43,7 +43,7 @@ public:
     constexpr static float CentipawnConversionPhase = 1.5620688421f;
     constexpr static float CentipawnConversionScale = 111.714640912f;
 
-    inline static float CentipawnsToProbability(int centipawns)
+    static inline float CentipawnsToProbability(int centipawns)
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
         const float probability11 = (::atanf(centipawns / CentipawnConversionScale) / CentipawnConversionPhase);
@@ -51,7 +51,7 @@ public:
         return std::clamp(probability01, 0.f, 1.f);
     }
 
-    inline static int ProbabilityToCentipawns(float probability01)
+    static inline int ProbabilityToCentipawns(float probability01)
     {
         // Use lc0 conversion for now (12800 = 1; for Stockfish 10k is found win, 32k is found mate).
         const float probability11 = INetwork::MapProbability01To11(probability01);
@@ -69,7 +69,7 @@ public:
         return Square(static_cast<int>(square) ^ FlipSquareMask[color]);
     }
 
-    static Bitboard FlipBoard(Bitboard board)
+    static inline Bitboard FlipBoard(Bitboard board)
     {
 #ifdef CHESSCOACH_WINDOWS
         return _byteswap_uint64(board);
@@ -96,12 +96,12 @@ public:
             NO_PIECE, W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, NO_PIECE },
     };
 
-    constexpr const static int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
-    constexpr const static int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
+    constexpr static const int FlipMoveMask[COLOR_NB] = { 0, ((SQ_A8 << 6) + static_cast<int>(SQ_A8)) };
+    constexpr static const int FlipSquareMask[COLOR_NB] = { 0, SQ_A8 };
 
-    constexpr const static INetwork::PackedPlane FillPlanePacked[COLOR_NB] = { 0, static_cast<INetwork::PackedPlane>(0xFFFFFFFFFFFFFFFFULL) };
+    constexpr static const INetwork::PackedPlane FillPlanePacked[COLOR_NB] = { 0, static_cast<INetwork::PackedPlane>(0xFFFFFFFFFFFFFFFFULL) };
 
-    const static int NO_PLANE = -1;
+    constexpr static const int NO_PLANE = -1;
 
     // UnderpromotionPlane[Piece - KNIGHT][to - from - NORTH_WEST]
     constexpr static int UnderpromotionPlane[3][3] =
@@ -117,7 +117,7 @@ public:
     constexpr static const int NoProgressSaturationCount = 99;
     static Key PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 
-    constexpr const static char* SquareName[SQUARE_NB] = {
+    constexpr static const char* SquareName[SQUARE_NB] = {
         "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
         "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
         "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3",
@@ -146,7 +146,7 @@ public:
     Move ApplyMoveInfer(const std::string& resultingFen);
     Move ApplyMoveGuess(float result, const std::map<Move, float>& policy);
     bool IsDrawByNoProgressOrThreefoldRepetition() const;
-    bool PiecesAndRepetitionsMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;
+    
     int Ply() const;
     Key GenerateImageKey(bool tryHard);
     void GenerateImage(INetwork::InputPlanes& imageOut);
@@ -165,8 +165,6 @@ public:
     const std::vector<Move>& Moves() const;
     std::vector<Move>& Moves();
 
-    inline Position& DebugPosition() { return _position; }
-
 private:
 
     template <int MaxHistoryMoves>
@@ -176,6 +174,7 @@ private:
     void GeneratePieceAndRepetitionPlanes(INetwork::PackedPlane* imageOut, int planeOffset, const Position& position, Color perspective) const;
     void FillPlane(INetwork::PackedPlane& plane, bool value) const;
     Key Rotate(Key key, unsigned int distance) const;
+    bool PiecesAndRepetitionsMatch(const INetwork::PackedPlane* a, const INetwork::PackedPlane* b) const;
 
 protected:
 

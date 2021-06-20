@@ -237,22 +237,18 @@ public:
     void ApplyMoveWithRootAndExpansion(Move move, Node* newRoot, SelfPlayWorker& selfPlayWorker);
     float ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState,
         bool isSearchRoot, bool generateUniformPredictions);
-    float FinishExpanding(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot, int moveCount, float value);
-    void Expand(int moveCount, float firstPlayUrgency);
-    bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
-    void Softmax(int moveCount, float* distribution) const;
-    float CalculateMctsValue() const;
-    void StoreSearchStatistics();
-    void Complete();
-    SavedGame Save() const;
+
     void PruneExcept(Node* root, Node*& except);
     void PruneAll();
+    Move ParseSan(const std::string& san);
     void AddExplorationNoise();
     void UpdateSearchRootPly();
     bool ShouldProbeTablebases();
     int& TablebaseCardinality();
 
-    Move ParseSan(const std::string& san);
+    void StoreSearchStatistics();
+    void Complete();
+    SavedGame Save() const;
 
     void DebugExpandCanonicalOrdering();
 
@@ -260,6 +256,12 @@ private:
 
     bool TakeExpansionOwnership(Node* node);
     void PruneAllInternal(Node* root);
+    float FinishExpanding(SelfPlayState& state, PredictionCacheChunk*& cacheStore, SearchState* searchState, bool isSearchRoot, int moveCount, float value);
+    void Expand(int moveCount, float firstPlayUrgency);
+
+    bool IsDrawByTwofoldRepetition(int plyToSearchRoot);
+    void Softmax(int moveCount, float* distribution) const;
+    float CalculateMctsValue() const;
 
 private:
 
@@ -329,12 +331,12 @@ public:
     SelfPlayWorker(SelfPlayWorker&& other) = delete;
     SelfPlayWorker& operator=(SelfPlayWorker&& other) = delete;
 
+    void Initialize();
+
     void LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
     void LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
     void LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
 
-    int ChooseSimulationLimit();
-    void ClearGame(int index);
     void SetUpGame(int index);
     void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
     void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset);
@@ -343,38 +345,20 @@ public:
     void SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint);
     void SaveSwaNetwork(INetwork* network, NetworkType networkType, int checkpoint);
     void StrengthTestNetwork(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int checkpoint);
-    void Play(int index);
-    bool IsTerminal(const SelfPlayGame& game) const;
-    void SaveToStorageAndLog(INetwork* network, int index);
-    void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
-    bool RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, int& mctsSimulationLimit,
-        std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore, bool finishOnly);
-    Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
-    void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
-    void BackpropagateVisitsOnly(std::vector<WeightedNode>& searchPath, int index);
     void BackpropagateMate(const std::vector<WeightedNode>& searchPath);
-    void FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* node);
-    void UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath);
-    void ValidatePrincipleVariation(const Node* root);
     bool WorseThan(const Node* lhs, const Node* rhs) const;
-    std::vector<Node*> CollectBestMoves(Node* parent, float valueDeltaThreshold) const;
-    void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
-    void DebugResetGame(int index);
-
-    void UpdateGameForNewSearchRoot(SelfPlayGame& game);
-    void PrepareExpandedRoot(SelfPlayGame& game);
-
     void SearchUpdatePosition(const std::string& fen, const std::vector<Move>& moves, bool forceNewPosition);
     void CommentOnPosition(INetwork* network);
-    PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
-
     void GuiShowLine(INetwork* network, const std::string& line);
-
+    void Play(int index);
+    Node* SelectMove(const SelfPlayGame& game, bool allowDiversity) const;
+    void PrepareExpandedRoot(SelfPlayGame& game);
     std::tuple<int, int, int, int> StrengthTestEpd(WorkCoordinator* workCoordinator, const std::filesystem::path& epdPath,
         int moveTimeMs, int nodes, int failureNodes, int positionLimit,
         std::function<void(const std::string&, const std::string&, const std::string&, int, int, int)> progress);
 
-    void Initialize();
+    void DebugGame(int index, SelfPlayGame** gameOut, SelfPlayState** stateOut, float** valuesOut, INetwork::OutputPlanes** policiesOut);
+    void DebugResetGame(int index);
 
 private:
 
@@ -392,6 +376,24 @@ private:
 
     std::tuple<Move, int, int> StrengthTestPosition(WorkCoordinator* workCoordinator, const StrengthTestSpec& spec, int moveTimeMs, int nodes, int failureNodes);
     std::pair<int, int> JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes);
+
+    int ChooseSimulationLimit();
+    void ClearGame(int index);   
+    bool IsTerminal(const SelfPlayGame& game) const;
+    void SaveToStorageAndLog(INetwork* network, int index);
+    void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
+    bool RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, SelfPlayState& state, int& mctsSimulation, int& mctsSimulationLimit,
+        std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore, bool finishOnly);
+    void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
+    void BackpropagateVisitsOnly(std::vector<WeightedNode>& searchPath, int index);
+    void FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* node);
+    void UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath);
+    void ValidatePrincipleVariation(const Node* root);
+    
+    std::vector<Node*> CollectBestMoves(Node* parent, float valueDeltaThreshold) const;
+
+    void UpdateGameForNewSearchRoot(SelfPlayGame& game);
+    PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);
 
 private:
 

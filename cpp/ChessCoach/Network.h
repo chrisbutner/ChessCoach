@@ -65,7 +65,7 @@ struct INetwork
         return ((probability11 + 1.f) / 2.f);
     }
 
-    inline static void MapProbabilities01To11(size_t count, float* probabilities)
+    static inline void MapProbabilities01To11(size_t count, float* probabilities)
     {
         for (int i = 0; i < count; i++)
         {
@@ -76,7 +76,7 @@ struct INetwork
         }
     }
 
-    inline static void MapProbabilities11To01(size_t count, float* probabilities)
+    static inline void MapProbabilities11To01(size_t count, float* probabilities)
     {
         for (int i = 0; i < count; i++)
         {

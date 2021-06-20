@@ -10,10 +10,6 @@ public:
 
     static std::atomic_uint ThreadSeed;
     thread_local static std::default_random_engine Engine;
-
-public:
-
-    static bool InProportion(float proportion);
 };
 
 #endif // _RANDOM_H_

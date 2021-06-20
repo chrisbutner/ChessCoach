@@ -4,7 +4,7 @@
 #include <string>
 #include <filesystem>
 
-// Treat everything else as Linux + gcc/clang, rather than forcing a failure. If it works, it works.
+// Treat everything else as Linux + gcc, rather than forcing a failure. If it works, it works.
 #ifdef _WIN32
 #define CHESSCOACH_WINDOWS
 #endif

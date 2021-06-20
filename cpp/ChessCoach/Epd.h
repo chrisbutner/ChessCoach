@@ -19,10 +19,10 @@ class Epd
 public:
 
     static std::vector<StrengthTestSpec> ParseEpds(const std::filesystem::path& path);
-    static StrengthTestSpec ParseEpd(const std::string& epd);
 
 private:
 
+    static StrengthTestSpec ParseEpd(const std::string& epd);
     static std::vector<std::string> ReadMoves(std::istream& tokenizer, std::string& token);
     static void Expect(std::istream& tokenizer, const unsigned char expected);
     static bool Find(std::istream& tokenizer, std::string& token, const std::string& find);

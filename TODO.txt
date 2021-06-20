@@ -2,7 +2,6 @@ PUCT - medium confidence
 - try prior temperature
 - try killer heuristic for mate-in-N/syzygy lower bound
 - try value stddev
-- try 6-man syzygy
 
 Optimization
 - finish batched/parallelized ask/tell once training finished
@@ -13,15 +12,13 @@ Optimization
 - deep tournaments, calculate ratings vs. various engines, CC with AZ-PUCT, etc., with various time controls - keep PGNs
 
 Code quality
-- need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
-- copy config.toml from install->user on run (if not present) - optimized for dev iteration atm
-- privatize C++ methods (got too python-brained)
-- check for any unnecessary move constructors
 - consolidate exception types in C++ and Python
 
 Deployment
+- bot - cancel unanswered challenges after a timeout
 - re-test on fresh VMs
 	- test without any virtual env on windows too, and with non-conda venv
+- need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
 - installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
 - add windows command line build script, binplace somewhere cleanly
