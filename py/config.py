@@ -76,7 +76,8 @@ class Config:
         self.misc["paths"][key] = self.make_dir_path(value)
 
     # Copy locally any files that need to be memory-mapped.
-    self.replicate_locally(self.misc["paths"]["syzygy"])
+    if self.is_cloud:
+      self.replicate_locally(self.misc["paths"]["syzygy"])
 
   def determine_data_root(self):
     if self.is_cloud:
