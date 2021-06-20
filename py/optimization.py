@@ -80,9 +80,8 @@ class Session:
       self.log(f'Failure nodes: {config.misc["optimization"]["epd_failure_nodes"]}')
       self.log(f'Position limit: {config.misc["optimization"]["epd_position_limit"]}')
     elif mode == "tournament":
-      self.log(f"Mode: {mode}")
       self.log(f'Games per evaluation: {config.misc["optimization"]["tournament_games"]}')
-      self.log(f'Milliseconds per move: {config.misc["optimization"]["tournament_movetime_milliseconds"]}')
+      self.log(f'Time control: {config.misc["optimization"]["tournament_time_control"]}')
     self.log("Parameters:")
     for name, definition in self.parameters.items():
       self.log(f"{name}: {definition}")
@@ -115,7 +114,7 @@ class Session:
     name_baseline = "Stockfish_Baseline"
 
     stockfish_command = ("stockfish_13_win_x64_bmi2" if platform.system() == "Windows" else "stockfish_13_linux_x64_bmi2")
-    stockfish_options = "option.Threads=1 options.Hash=512"
+    stockfish_options = "option.Threads=1 option.Hash=512"
 
     tournament_games = self.config.misc["optimization"]["tournament_games"]
     time_control = self.config.misc["optimization"]["tournament_time_control"]
