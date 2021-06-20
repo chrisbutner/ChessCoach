@@ -24,7 +24,7 @@ pgn_header = """[Event ""]
 """
 
 # If you'd like to use something other than ScrapingBee, just replace "do_scrape()" with your own implementation,
-# including appropriate JS rendering, ad blocking and rate limiting.
+# including appropriate ad blocking, rate limiting and error handling.
 def do_scrape(url, render_js):
   params = dict(api_key=api_key, url=url, render_js=render_js, block_ads="true")
   while True:
@@ -67,12 +67,12 @@ def write_file(path, content):
     f.write(content)
   os.rename(temporary_path, path)
 
-# --- gameknot.com ---
+# --- Site1 ---
 
-class GameKnot:
+class Site1:
 
-  url_base = "https://gameknot.com/"
-  url_root = "https://gameknot.com/list_annotated.pl?u=all&c=0&sb=0&rm=0&rn=0&rx=9999&sr=0&p=0"
+  url_base = "https://example.com/"
+  url_root = "https://example.com/list_annotated.pl?u=all&c=0&sb=0&rm=0&rn=0&rx=9999&sr=0&p=0"
 
   def find_next_url(self, soup):
     next_url = soup.select("table.paginator a[title='next page']")
@@ -137,12 +137,12 @@ class GameKnot:
       for game_url in games:
         self.scrape_parse_game(game_url)
 
-# --- chessgames.com ---
+# --- Site2 ---
 
-class ChessGamesDotCom:
+class Site2:
 
-  url_base = "https://www.chessgames.com/"
-  url_root = "https://www.chessgames.com/perl/chess.pl?annotated=1"
+  url_base = "https://www.example.com/"
+  url_root = "https://www.example.com/perl/chess.pl?annotated=1"
 
   def find_next_url(self, soup):
     next_url = soup.select("img[src='/chessimages/next.gif']")
@@ -185,12 +185,12 @@ class ChessGamesDotCom:
       for game_url in games:
         self.scrape_parse_game(game_url)
 
-# --- chess.com ---
+# --- Site3 ---
 
-class ChessDotCom:
+class Site3:
 
-  url_base = "https://www.chess.com/"
-  url_root = "https://www.chess.com/news"
+  url_base = "https://www.example.com/"
+  url_root = "https://www.example.com/news"
 
   def has_comments(self, pgn):
     # Ignore games with almost no comments, or with only clock times.
@@ -285,9 +285,9 @@ def combine_split(dir_in, dir_out, split_count):
 print("Working directory:", os.getcwd())
 os.makedirs(html_cache, exist_ok=True)
 os.makedirs(pgn_cache, exist_ok=True)
-#GameKnot().scrape_parse_all_games()
-#ChessGamesDotCom().scrape_parse_all_games()
-#ChessDotCom().scrape_parse_all_games()
+#Site1().scrape_parse_all_games()
+#Site2().scrape_parse_all_games()
+#Site3().scrape_parse_all_games()
 
 # --- Usage ---
 
