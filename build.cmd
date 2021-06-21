@@ -1,6 +1,8 @@
 pushd "%~dp0"
 call activate_virtual_env.cmd
 
+call msbuild.cmd cpp\ChessCoach.sln -t:restore -p:RestorePackagesConfig=true
+if %errorlevel% neq 0 exit /b
 call msbuild.cmd cpp\ChessCoach.sln -t:Stockfish;hunspell;protobuf;crc32c -p:Configuration=Release -p:Platform=x64 -p:PostBuildEventUseInBuild=false -m
 if %errorlevel% neq 0 exit /b
 call msbuild.cmd cpp\ChessCoach.sln -t:ChessCoach -p:Configuration=Release -p:Platform=x64 -p:PostBuildEventUseInBuild=false -m
