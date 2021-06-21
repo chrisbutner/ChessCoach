@@ -18,7 +18,6 @@ Deployment
 - need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
 - installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
-- add windows command line build script, binplace somewhere cleanly
 
 Measurements
 - Tournament Elo across training history (teacher/student, all SWA, every 400k)

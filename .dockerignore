@@ -1,3 +1,4 @@
+.git
 .*
 *.cmd
 *.txt
@@ -7,7 +8,10 @@ Dockerfile
 *.dockerfile
 *.yaml
 *.json
+*.input
+*.pgn
 build
+dist
 data
 protobuf*
 **/.vscode
