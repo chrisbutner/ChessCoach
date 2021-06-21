@@ -28,3 +28,5 @@ gcloud container node-pools create \
     ${CRITICAL_NAME}
 
 kubectl create secret generic ${CREDENTIALS_NAME} --from-file=key.json=${SERVICE_ACCOUNT_KEY_PATH}
+
+popd

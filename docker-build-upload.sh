@@ -8,3 +8,5 @@ docker push $BASE
 docker push $TRAIN
 docker push $PLAY
 docker push $PROXY
+
+popd

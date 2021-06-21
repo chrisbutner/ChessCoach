@@ -72,16 +72,17 @@ void ChessCoach::InitializePython()
         return;
     }
 
-    // Python path/home detection is broken on Windows. Work around it by assuming that we're in an Anaconda environment
-    // on Windows and copying CONDA_PREFIX to PYTHONHOME before initializing Python. There's also "Py_SetPythonHome",
-    // but this is simpler than decoding to a wide string and keeping static storage around.
+    // Python path/home detection is broken on Windows. Work around it by relying on the CHESSCOACH_PYTHONHOME
+    // variable set in "setup.cmd", which will run "activate_virtual_env.cmd" before "where python", and copying this
+    // to PYTHONHOME before initializing Python. There's also "Py_SetPythonHome" but this is simpler than decoding
+    // to a wide string and keeping static storage around.
     const std::string pythonHome = Platform::GetEnvironmentVariable("PYTHONHOME");
     if (pythonHome.empty())
     {
-        const std::string condaPrefix = Platform::GetEnvironmentVariable("CONDA_PREFIX");
-        if (!condaPrefix.empty())
+        const std::string chessCoachPythonHome = Platform::GetEnvironmentVariable("CHESSCOACH_PYTHONHOME");
+        if (!chessCoachPythonHome.empty())
         {
-            Platform::SetEnvironmentVariable("PYTHONHOME", condaPrefix.c_str());
+            Platform::SetEnvironmentVariable("PYTHONHOME", chessCoachPythonHome.c_str());
         }
     }
 

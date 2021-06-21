@@ -25,3 +25,5 @@ docker build -t $BASE --cache-from $BASE -f base.dockerfile $BUILD_ARGS .
 docker build -t $TRAIN --cache-from $TRAIN -f train.dockerfile $BUILD_ARGS .
 docker build -t $PLAY --cache-from $PLAY -f play.dockerfile $BUILD_ARGS .
 docker build -t $PROXY --cache-from $PROXY -f proxy.dockerfile $BUILD_ARGS .
+
+popd

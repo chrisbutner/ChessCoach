@@ -1,5 +1,5 @@
 pushd "%~dp0"
-call conda activate chesscoach
+call activate_virtual_env.cmd
 tools\win\CuteChess\cutechess-cli.exe ^
 	-engine name=ChessCoach cmd=uci.cmd ^
 		option.syzygy_path=C:\syzygy ^

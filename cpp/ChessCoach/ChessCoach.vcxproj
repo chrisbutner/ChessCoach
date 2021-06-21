@@ -100,29 +100,29 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(CHESSCOACH_PYTHONHOME)Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <LibraryPath>$(SolutionDir)Lib\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(CHESSCOACH_PYTHONHOME)Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(CHESSCOACH_PYTHONHOME)Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoOpt|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(CHESSCOACH_PYTHONHOME)Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(CHESSCOACH_PYTHONHOME)Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoOpt|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(USERPROFILE)\Anaconda3\Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir);$(CHESSCOACH_PYTHONHOME)Include;$(SolutionDir)zlib\include;$(SolutionDir)protobuf-3.13.0\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

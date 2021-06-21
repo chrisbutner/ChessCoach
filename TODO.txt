@@ -1,7 +1,6 @@
 PUCT - medium confidence
 - try prior temperature
 - try killer heuristic for mate-in-N/syzygy lower bound
-- try value stddev
 
 Optimization
 - finish batched/parallelized ask/tell once training finished
@@ -13,10 +12,8 @@ Optimization
 
 Deployment
 - bot - cancel unanswered challenges after a timeout
-- re-test on fresh VMs
-	- test without any virtual env on windows too, and with non-conda venv
+- test on fresh linux
 - need to add (tensorflow-text + sentencepiece + tf-models-official) to prepare.sh, etc., once TPU VM fixes are deployed
-- installers, instructions, progress indicators, error handling, etc.
 - linux unit test script
 
 Measurements

@@ -1,5 +1,5 @@
 pushd "%~dp0"
-call conda activate chesscoach
+call activate_virtual_env.cmd
 
 call msbuild.cmd cpp\ChessCoach.sln -t:Stockfish;hunspell;protobuf;crc32c -p:Configuration=Release -p:Platform=x64 -p:PostBuildEventUseInBuild=false -m
 if %errorlevel% neq 0 exit /b

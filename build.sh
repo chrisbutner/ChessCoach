@@ -25,3 +25,5 @@ if [ ! -f ${BUILD_DIRECTORY}/build.ninja ]; then
 fi
 
 ninja -C $BUILD_DIRECTORY "$@"
+
+popd

@@ -5,3 +5,5 @@ pushd "$(dirname "$0")"
 source cluster-common.sh
 
 gcloud container clusters delete ${CLUSTER_NAME}
+
+popd

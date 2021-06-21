@@ -1,4 +1,5 @@
 pushd "%~dp0"
-call conda activate chesscoach
+call activate_virtual_env.cmd
 start cpp\ChessCoach.sln
 code py
+popd
