@@ -210,7 +210,7 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
         }
         else
         {
-            throw std::runtime_error("Unsupported UCI option type: " + option.Type + " (" + name + ")");
+            throw ChessCoachException("Unsupported UCI option type: " + option.Type + " (" + name + ")");
         }
     }
     Config::LookUp(intOptions, floatOptions, stringOptions, boolOptions);
@@ -376,7 +376,7 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
     }
     else
     {
-        throw std::runtime_error("Unsupported UCI option type: " + match->second.Type + " (" + name + ")");
+        throw ChessCoachException("Unsupported UCI option type: " + match->second.Type + " (" + name + ")");
     }
 
     // Handle custom updates.

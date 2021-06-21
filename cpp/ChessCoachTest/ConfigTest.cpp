@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <ChessCoach/Config.h>
+#include <ChessCoach/Platform.h>
 #include <toml11/toml.hpp>
 
 TEST(Config, Basic)
@@ -22,7 +23,7 @@ TEST(Config, ConfigUpdateInt)
     EXPECT_NE(Config::Network.Training.PgnInterval, original);
     EXPECT_EQ(Config::Network.Training.PgnInterval, updated);
 
-    EXPECT_THROW(Config::Update({ { "pgn_intervalz", updated } }, {}, {}, {}), std::runtime_error);
+    EXPECT_THROW(Config::Update({ { "pgn_intervalz", updated } }, {}, {}, {}), ChessCoachException);
 }
 
 TEST(Config, MultipleConfigUpdates)
@@ -60,7 +61,7 @@ TEST(Config, ConfigUpdateFloat)
     EXPECT_NE(Config::Network.SelfPlay.RootDirichletAlpha, original);
     EXPECT_EQ(Config::Network.SelfPlay.RootDirichletAlpha, updated);
 
-    EXPECT_THROW(Config::Update({}, { { "root_dirichlet_alphaz", updated } }, {}, {}), std::runtime_error);
+    EXPECT_THROW(Config::Update({}, { { "root_dirichlet_alphaz", updated } }, {}, {}), ChessCoachException);
 }
 
 TEST(Config, ConfigUpdateString)
@@ -75,7 +76,7 @@ TEST(Config, ConfigUpdateString)
     EXPECT_NE(Config::Network.SelfPlay.NetworkWeights, original);
     EXPECT_EQ(Config::Network.SelfPlay.NetworkWeights, updated);
 
-    EXPECT_THROW(Config::Update({}, {}, { { "network_weightz", updated } }, {}), std::runtime_error);
+    EXPECT_THROW(Config::Update({}, {}, { { "network_weightz", updated } }, {}), ChessCoachException);
 }
 
 TEST(Config, ConfigUpdateBool)
@@ -90,7 +91,7 @@ TEST(Config, ConfigUpdateBool)
     EXPECT_NE(Config::Network.SelfPlay.WaitForUpdatedNetwork, original);
     EXPECT_EQ(Config::Network.SelfPlay.WaitForUpdatedNetwork, updated);
 
-    EXPECT_THROW(Config::Update({}, {}, {}, { { "wait_for_updated_networkz", updated } }), std::runtime_error);
+    EXPECT_THROW(Config::Update({}, {}, {}, { { "wait_for_updated_networkz", updated } }), ChessCoachException);
 }
 
 TEST(Config, Lookups)
@@ -120,8 +121,8 @@ TEST(Config, Lookups)
     std::map<std::string, float> invalid2 = { { "root_dirichlet_alphaz", 0.f } };
     std::map<std::string, std::string> invalid3 = { { "network_weightz", "" } };
     std::map<std::string, bool> invalid4 = { { "wait_for_updated_networkz", false } };
-    EXPECT_THROW(Config::LookUp(invalid1, floats, strings, bools), std::runtime_error);
-    EXPECT_THROW(Config::LookUp(ints, invalid2, strings, bools), std::runtime_error);
-    EXPECT_THROW(Config::LookUp(ints, floats, invalid3, bools), std::runtime_error);
-    EXPECT_THROW(Config::LookUp(ints, floats, strings, invalid4), std::runtime_error);
+    EXPECT_THROW(Config::LookUp(invalid1, floats, strings, bools), ChessCoachException);
+    EXPECT_THROW(Config::LookUp(ints, invalid2, strings, bools), ChessCoachException);
+    EXPECT_THROW(Config::LookUp(ints, floats, invalid3, bools), ChessCoachException);
+    EXPECT_THROW(Config::LookUp(ints, floats, strings, invalid4), ChessCoachException);
 }

@@ -9,6 +9,17 @@
 #define CHESSCOACH_WINDOWS
 #endif
 
+class ChessCoachException : public std::runtime_error
+{
+
+public:
+
+    explicit ChessCoachException(const std::string& message)
+        : std::runtime_error(message)
+    {
+    }
+};
+
 class Platform
 {
 public:

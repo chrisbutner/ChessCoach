@@ -51,7 +51,7 @@ std::vector<Node*> GeneratePrincipleVariation(const SelfPlayWorker& selfPlayWork
             if (child.visitCount > 0)
             {
                 const bool bestIsNotBest = selfPlayWorker.WorseThan(node->bestChild, &child);
-                if (bestIsNotBest) throw std::runtime_error("bestIsNotBest");
+                if (bestIsNotBest) throw ChessCoachException("bestIsNotBest");
             }
         }
         if (node->bestChild)

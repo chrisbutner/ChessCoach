@@ -250,7 +250,7 @@ void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex,
     {
         if (!SkipTfRecord(zip))
         {
-            throw std::runtime_error("Failed to parse chunk");
+            throw ChessCoachException("Failed to parse chunk");
         }
     }
 
@@ -258,14 +258,14 @@ void Storage::LoadGameFromChunk(const std::string& chunkContents, int gameIndex,
     uint64_t payloadLength;
     if (!Read(zip, payloadLength) || !zip.Skip(sizeof(uint32_t)))
     {
-        throw std::runtime_error("Failed to parse chunk");
+        throw ChessCoachException("Failed to parse chunk");
     }
 
     // The game is stored as a TFRecord using zlib.
     message::Example compressedGame;
     if (!compressedGame.MergePartialFromBoundedZeroCopyStream(&zip, static_cast<int>(payloadLength)))
     {
-        throw std::runtime_error("Failed to parse game");
+        throw ChessCoachException("Failed to parse game");
     }
 
     // The first 12 planes of "image_pieces_auxiliary" contain the pieces for each position in the game.

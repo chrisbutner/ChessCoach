@@ -178,7 +178,7 @@ Move Game::ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces)
         }
         _position.undo_move(move);
     }
-    throw std::runtime_error("Impossible to reach provided position via legal move");
+    throw ChessCoachException("Impossible to reach provided position via legal move");
 }
 
 Move Game::ApplyMoveInfer(const std::string& resultingFen)
@@ -201,7 +201,7 @@ Move Game::ApplyMoveInfer(const std::string& resultingFen)
         }
         _position.undo_move(move);
     }
-    throw std::runtime_error("Impossible to reach provided position via legal move");
+    throw ChessCoachException("Impossible to reach provided position via legal move");
 }
 
 Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
@@ -248,7 +248,7 @@ Move Game::ApplyMoveGuess(float result, const std::map<Move, float>& policy)
         return move;
     }
 
-    throw std::runtime_error("No final move is possible in stored game");
+    throw ChessCoachException("No final move is possible in stored game");
 }
 
 // Avoid Position::is_draw because it regenerates legal moves.

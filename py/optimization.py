@@ -11,6 +11,7 @@ from skopt import Optimizer
 from skopt import expected_minimum
 import matplotlib.pyplot as plt
 from skopt.plots import plot_objective
+from config import Config, ChessCoachException
 try:
   import chesscoach # See PythonModule.cpp
 except:
@@ -95,7 +96,7 @@ class Session:
     elif self.config.misc["optimization"]["mode"] == "tournament":
       return self.evaluate_tournament(names, values)
     else:
-      raise Exception("Unexpected optimization mode: expected 'epd' or 'tournament'")
+      raise ChessCoachException("Unexpected optimization mode: expected 'epd' or 'tournament'")
 
   def evaluate_epd(self, names, values):
     names = [name.encode("ascii") for name in names]
@@ -189,6 +190,5 @@ def optimize_parameters(config=None):
     # If config is None then we're not allowed to initialize TensorFlow, so just set "is_cloud" False.
     # It shouldn't matter, since it mostly affects cloud path use, and optimization explicitly uses local paths
     # regardless of "config.is_cloud" via "make_local_path".
-    from config import Config
     config = Config(is_cloud=False)
   Session(config).run()

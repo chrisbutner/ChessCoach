@@ -159,7 +159,7 @@ void PredictionCache::Allocate(int sizeMebibytes)
     // Require non-negative.
     if (sizeMebibytes < 0)
     {
-        throw std::invalid_argument("Negative size");
+        throw ChessCoachException("Negative size");
     }
 
     // Round down to a power of two or zero, and at most 256 GiB.

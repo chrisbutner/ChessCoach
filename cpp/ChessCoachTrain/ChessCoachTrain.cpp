@@ -254,7 +254,7 @@ void ChessCoachTrain::StageTrainCommentary(const TrainingState& state)
 
     // Only the teacher network supports commentary training.
     assert(state.Stage().Target == NetworkType_Teacher);
-    if (state.Stage().Target != NetworkType_Teacher) throw std::runtime_error("Only the teacher network supports commentary training");
+    if (state.Stage().Target != NetworkType_Teacher) throw ChessCoachException("Only the teacher network supports commentary training");
 
     // Train the main model and commentary decoder.
     state.workerGroup->controllerWorker->TrainNetworkWithCommentary(state.network, state.Step(), state.Checkpoint());
@@ -373,7 +373,7 @@ void ChessCoachTrain::ValidateSchedule(const TrainingState& /* state */)
                 / (positionsPerGame * Config::Network.Training.NumGames); // total positions
             if (sampleRatio >= 1.f)
             {
-                throw std::invalid_argument("Invalid training schedule; sample ratio is too high; increase num_games and window");
+                throw ChessCoachException("Invalid training schedule; sample ratio is too high; increase num_games and window");
             }
         }
     }
@@ -464,11 +464,11 @@ bool ChessCoachTrain::IsStageComplete(const TrainingState& state)
     case StageType_Count:
     {
         // Catch unreferenced enums in GCC.
-        throw std::runtime_error("Unexpected: StageType_Count");
+        throw ChessCoachException("Unexpected: StageType_Count");
     }
     }
 
-    throw std::runtime_error("Unexpected StageType");
+    throw ChessCoachException("Unexpected StageType");
 }
 
 Window ChessCoachTrain::CalculateWindow(const TrainingState& state)

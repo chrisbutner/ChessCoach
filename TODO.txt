@@ -11,9 +11,6 @@ Optimization
 - final optimization with just move diversity parameters (consider adding visit%/upweight% threshold) - 30s per move
 - deep tournaments, calculate ratings vs. various engines, CC with AZ-PUCT, etc., with various time controls - keep PGNs
 
-Code quality
-- consolidate exception types in C++ and Python
-
 Deployment
 - bot - cancel unanswered challenges after a timeout
 - re-test on fresh VMs

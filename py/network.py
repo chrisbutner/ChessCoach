@@ -85,7 +85,7 @@ import threading
 import numpy as np
 import functools
 
-from config import Config, PredictionStatus
+from config import Config, PredictionStatus, ChessCoachException
 from model import ModelBuilder
 from training import Trainer, StudentModel
 from dataset import DatasetBuilder
@@ -164,7 +164,7 @@ class ModelPath:
     if other_model_type == "swa" and model_type != "swa":
       return True
     # Can't compare.
-    raise Exception("Can't compare values")
+    raise ChessCoachException("Cannot compare values")
 
 ModelPath.NoPath = ModelPath(None)
 
@@ -249,7 +249,7 @@ class Network:
         full = self.model_builder()
         self.load_weights(full, model_path.path)
       elif not allow_fresh:
-        raise Exception(f"Missing network weights for ({log_device_context}/{self.network_type}/model) at {glob}")
+        raise ChessCoachException(f"Missing network weights for ({log_device_context}/{self.network_type}/model) at {glob}")
       else:
         log(f"Creating new model ({log_device_context}/{self.network_type}/model)")
         full = self.model_builder()
@@ -392,7 +392,7 @@ class Network:
           return
         except:
           pass
-    raise Exception(f"Failed to load weights from: {path}")
+    raise ChessCoachException(f"Failed to load weights from: {path}")
 
   def save(self, checkpoint):
     model_path = self.make_model_path("model", checkpoint)
@@ -556,12 +556,12 @@ def predict_commentary_batch(images):
 
 def train_teacher(step, checkpoint):
   if networks.teacher.network_weights or networks.student.network_weights:
-    raise ValueError("Cannot train with network_weights set")
+    raise ChessCoachException("Cannot train with network_weights set")
   trainer.train(networks.teacher, None, step, checkpoint)
 
 def train_student(step, checkpoint):
   if networks.teacher.network_weights or networks.student.network_weights:
-    raise ValueError("Cannot train with network_weights set")
+    raise ChessCoachException("Cannot train with network_weights set")
   trainer.train(networks.student, networks.teacher, step, checkpoint)
 
 def train_commentary(step, checkpoint):

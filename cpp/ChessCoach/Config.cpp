@@ -414,7 +414,7 @@ void Config::Initialize()
     }
     if (!found)
     {
-        throw std::runtime_error("Network name \"" + Network.Name + "\" not found in config");
+        throw ChessCoachException("Network name \"" + Network.Name + "\" not found in config");
     }
 }
 
@@ -435,28 +435,28 @@ void Config::Update(const std::map<std::string, int>& intUpdates, const std::map
     {
         if (assigned.find(key) == assigned.end())
         {
-            throw std::runtime_error("Failed to update config: " + key);
+            throw ChessCoachException("Failed to update config: " + key);
         }
     }
     for (const auto& [key, value] : floatUpdates)
     {
         if (assigned.find(key) == assigned.end())
         {
-            throw std::runtime_error("Failed to update config: " + key);
+            throw ChessCoachException("Failed to update config: " + key);
         }
     }
     for (const auto& [key, value] : stringUpdates)
     {
         if (assigned.find(key) == assigned.end())
         {
-            throw std::runtime_error("Failed to update config: " + key);
+            throw ChessCoachException("Failed to update config: " + key);
         }
     }
     for (const auto& [key, value] : boolUpdates)
     {
         if (assigned.find(key) == assigned.end())
         {
-            throw std::runtime_error("Failed to update config: " + key);
+            throw ChessCoachException("Failed to update config: " + key);
         }
     }
 }
@@ -478,28 +478,28 @@ void Config::LookUp(std::map<std::string, int>& intLookups, std::map<std::string
     {
         if (found.find(key) == found.end())
         {
-            throw std::runtime_error("Failed to look up: " + key);
+            throw ChessCoachException("Failed to look up: " + key);
         }
     }
     for (const auto& [key, value] : floatLookups)
     {
         if (found.find(key) == found.end())
         {
-            throw std::runtime_error("Failed to look up: " + key);
+            throw ChessCoachException("Failed to look up: " + key);
         }
     }
     for (const auto& [key, value] : stringLookups)
     {
         if (found.find(key) == found.end())
         {
-            throw std::runtime_error("Failed to look up: " + key);
+            throw ChessCoachException("Failed to look up: " + key);
         }
     }
     for (const auto& [key, value] : boolLookups)
     {
         if (found.find(key) == found.end())
         {
-            throw std::runtime_error("Failed to look up: " + key);
+            throw ChessCoachException("Failed to look up: " + key);
         }
     }
 }

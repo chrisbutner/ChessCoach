@@ -60,6 +60,6 @@ void ChessCoachOptimizeParameters::Run()
     }
     else
     {
-        throw std::runtime_error("Unexpected parameter optimization mode (expected 'epd' or 'tournament'): " + Config::Misc.Optimization_Mode);
+        throw ChessCoachException("Unexpected parameter optimization mode (expected 'epd' or 'tournament'): " + Config::Misc.Optimization_Mode);
     }
 }

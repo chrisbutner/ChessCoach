@@ -87,7 +87,7 @@ void ChessCoach::InitializePython()
 
     if (PyImport_AppendInittab(PythonModule::ChessCoachModule.m_name, PythonModule::PyInit_ChessCoachModule) == -1)
     {
-        throw std::runtime_error("Failed to register 'chesscoach' module");
+        throw ChessCoachException("Failed to register 'chesscoach' module");
     }
 
     // Pass initsigs=0 so that Python doesn't take over signal handling.

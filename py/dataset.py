@@ -1,5 +1,6 @@
 import tensorflow as tf
 from model import ModelBuilder
+from config import ChessCoachException
 
 class DatasetOptions:
 
@@ -189,7 +190,7 @@ class DatasetBuilder:
       if len(filenames) < chunks_expected:
         games_found = len(filenames) * self.games_per_chunk
         games_expected = chunks_expected * self.games_per_chunk
-        raise Exception(f"Not enough games found - {games_found} vs. {games_expected} - add a matching 'play' stage before training")
+        raise ChessCoachException(f"Not enough games found - {games_found} vs. {games_expected} - add a matching 'play' stage before training")
 
     # Pick chunk order randomly over the full span of the window.
     dataset = tf.data.Dataset.from_tensor_slices(filenames)

@@ -3,6 +3,7 @@ import math
 import tensorflow as tf
 from tensorflow.keras import backend as K
 from model import ModelBuilder
+from config import ChessCoachException
 
 knowledge_distillation_temperature = 5.0
 knowledge_distillation_teacher_weight = 0.6
@@ -340,7 +341,7 @@ class LogCallback(tf.keras.callbacks.Callback):
   def log_training(self, type, writer, step, losses):
     # Fail-fast for NaNs.
     if math.isnan(losses[0]):
-      raise ValueError("NaN encountered in training/validation losses")
+      raise ChessCoachException("NaN encountered in training/validation losses")
     self.log(f"Loss: {losses[0]:.4f} (V: {losses[1]:.4f}, MV: {losses[2]:.4f}, P: {losses[3]:.4f}), Accuracy (P): {losses[4]:.4f} ({type})")
     with writer.as_default():
       tf.summary.experimental.set_step(step)
@@ -398,7 +399,7 @@ class CommentaryLogCallback(tf.keras.callbacks.Callback):
   def log_training_commentary(self, type, writer, step, losses):
     # Fail-fast for NaNs.
     if math.isnan(losses[0]):
-      raise ValueError("NaN encountered in training/validation losses")
+      raise ChessCoachException("NaN encountered in training/validation losses")
     self.log(f"Loss: {losses[0]:.4f} ({type})")
     with writer.as_default():
       tf.summary.experimental.set_step(step)

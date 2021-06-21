@@ -272,7 +272,7 @@ float Node::TablebaseBoundedValue(float value) const
     case BOUND_EXACT:
         return score;
     default:
-        throw std::runtime_error("Unexpected Bound type");
+        throw ChessCoachException("Unexpected Bound type");
     }
 }
 
