@@ -191,7 +191,6 @@ void ChessCoachUci::HandleUci(std::stringstream& /*commands*/)
     std::map<std::string, bool> boolOptions;
     for (const auto& [name, option] : Config::Misc.UciOptions)
     {
-        // TODO: Need to handle min/max for spin types
         if (option.Type == OptionTypeSpin)
         {
             intOptions[name] = 0;

@@ -10,6 +10,8 @@ for /f "usebackq tokens=*" %%i in (`where.exe python`) do (
 )
 :break
 
-pip install -r requirements.txt
+pip install -U pip
+pip install setuptools
+pip install -r requirements-all.txt
 
 popd

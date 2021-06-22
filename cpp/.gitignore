@@ -1,3 +1,6 @@
+# NuGet packages
+packages/
+
 # Visual Studio
 
 .vs/

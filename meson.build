@@ -1,4 +1,4 @@
-project('ChessCoach', 'cpp', version: '0.9.0', license: 'GPL3',
+project('ChessCoach', 'cpp', version: '1.0.0', license: 'GPL3',
   default_options: [
     'cpp_std=c++17',
     'werror=true',

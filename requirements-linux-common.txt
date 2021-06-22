@@ -1,4 +1,5 @@
-tensorflow==2.5.0
+sentencepiece
+cloud-tpu-client
 toml
 scikit-optimize
 matplotlib

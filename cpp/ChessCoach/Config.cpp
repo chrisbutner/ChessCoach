@@ -383,7 +383,6 @@ MiscConfig Config::Misc;
 
 void Config::Initialize()
 {
-    // TODO: Copy to user location
     const std::filesystem::path configTomlPath = Platform::InstallationDataPath() / "config.toml";
     const TomlValue config = toml::parse<toml::discard_comments, std::map, std::vector>(configTomlPath.string());
 
