@@ -52,11 +52,14 @@ class Storage
 {
 public:
 
+    static std::filesystem::path MakeLocalPath(const std::filesystem::path& path);
+
+public:
+
     Storage();
     void InitializeLocalGamesChunks(INetwork* network);
     int AddTrainingGame(INetwork* network, SavedGame&& game);
     int TrainingGamesToPlay(int trainingChunkCount, int targetGameCount, bool ignoreLocalGames) const;
-    std::filesystem::path LocalLogPath() const;
 
     void SaveChunk(const std::filesystem::path& path, const std::vector<SavedGame>& games) const;
     void SaveCommentary(CommentarySaveContext& saveContext, const std::vector<SavedGame>& games,
@@ -75,9 +78,8 @@ private:
     void ChunkGames(INetwork* network, std::vector<std::filesystem::path>& gamePaths);
     void PopulateGame(Game scratchGame, const SavedGame& game, message::Example& gameOut) const;
     void WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, std::string& buffer, const google::protobuf::Message& message) const;
-    static uint32_t MaskCrc32cForTfRecord(uint32_t crc32c);
+    uint32_t MaskCrc32cForTfRecord(uint32_t crc32c) const;
     bool SkipTfRecord(google::protobuf::io::ZeroCopyInputStream& stream) const;
-    std::filesystem::path MakeLocalPath(const std::filesystem::path& root, const std::filesystem::path& path);
     void WriteCommentary(CommentaryRecordType& recordType) const;
 
     template <typename T>
@@ -97,7 +99,6 @@ private:
     std::atomic_int _sessionChunkCount;
     std::filesystem::path _relativeTrainingGamePath;
     std::filesystem::path _localTrainingGamePath;
-    std::filesystem::path _localLogsPath;
     std::filesystem::path _relativePgnsPath;
 };
 

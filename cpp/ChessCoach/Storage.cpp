@@ -34,16 +34,9 @@ Storage::Storage()
     , _sessionGameCount(0)
     , _sessionChunkCount(0)
 {
-    const std::filesystem::path rootPath = Platform::UserDataPath();
-
     _relativeTrainingGamePath = Config::Network.Training.GamesPathTraining;
-    _localTrainingGamePath = MakeLocalPath(rootPath, _relativeTrainingGamePath);
-    _localLogsPath = MakeLocalPath(rootPath, Config::Misc.Paths_Logs);
+    _localTrainingGamePath = MakeLocalPath(_relativeTrainingGamePath);
     _relativePgnsPath = Config::Misc.Paths_Pgns;
-
-    // Update the Syzygy path in config to the locally-rooted one for use by search and self-play.
-    // This is pretty messy/undiscoverable but simplifies UCI settings code.
-    Config::Misc.Paths_Syzygy = MakeLocalPath(rootPath, Config::Misc.Paths_Syzygy).string();
 }
 
 void Storage::InitializeLocalGamesChunks(INetwork* network)
@@ -490,19 +483,14 @@ void Storage::WriteTfRecord(google::protobuf::io::ZeroCopyOutputStream& stream, 
     epsCopy.Trim(target);
 }
 
-uint32_t Storage::MaskCrc32cForTfRecord(uint32_t crc32c)
+uint32_t Storage::MaskCrc32cForTfRecord(uint32_t crc32c) const
 {
     return ((crc32c >> 15) | (crc32c << 17)) + 0xa282ead8ul;
 }
 
-std::filesystem::path Storage::LocalLogPath() const
-{
-    return _localLogsPath;
-}
-
 // We can only write to local paths from C++ and need to call in to Python to write to gs:// locations
 // when running on Google Cloud with TPUs. That's okay for local gathering/chunking of games, and UCI logging.
-std::filesystem::path Storage::MakeLocalPath(const std::filesystem::path& root, const std::filesystem::path& path)
+std::filesystem::path Storage::MakeLocalPath(const std::filesystem::path& path)
 {
     // Empty paths have special meaning as N/A.
     if (path.empty())
@@ -517,6 +505,7 @@ std::filesystem::path Storage::MakeLocalPath(const std::filesystem::path& root, 
         return path;
     }
 
+    const std::filesystem::path root = Platform::UserDataPath();
     const std::filesystem::path rooted = (root / path);
     std::filesystem::create_directories(rooted);
     return rooted;

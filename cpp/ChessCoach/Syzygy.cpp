@@ -35,10 +35,11 @@
 #include <Stockfish/syzygy/tbprobe.h>
 
 #include "SelfPlay.h"
+#include "Storage.h"
 
 void Syzygy::Reload()
 {
-    Tablebases::init(Config::Misc.Paths_Syzygy);
+    Tablebases::init(Storage::MakeLocalPath(Config::Misc.Paths_Syzygy).string());
 }
 
 bool Syzygy::ProbeTablebasesAtRoot(SelfPlayGame& game)
