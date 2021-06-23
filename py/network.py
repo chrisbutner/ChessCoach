@@ -73,7 +73,8 @@ except:
 
 tpus = tf.config.experimental.list_logical_devices("TPU")
 gpus = tf.config.experimental.list_logical_devices("GPU")
-devices = tpus if tpu_strategy else gpus
+is_tpu = bool(tpu_strategy)
+devices = tpus if is_tpu else gpus
 thread_ident_to_index = {}
 
 # --- Now it's safe for further imports ---
@@ -344,11 +345,11 @@ class Network:
         _, model_path = self.latest_model_path("commentary")
         if model_path:
           log(f"Loading model ({device_index}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
-          models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, strategy=None)
+          models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, is_tpu=is_tpu, strategy=None)
           self.load_weights(models.commentary, model_path.path)
         else:
           log(f"Creating new model ({device_index}/{self.network_type}/commentary)")
-          models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, strategy=None)
+          models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, is_tpu=is_tpu, strategy=None)
 
       return self.models_train.commentary
 
@@ -367,11 +368,13 @@ class Network:
       _, model_path = self.latest_model_path("commentary")
       if model_path:
         log(f"Loading model ({log_device_context}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
-        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full, trainer.strategy)
+        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer,
+          self.models_train.full, is_tpu=is_tpu, strategy=trainer.strategy)
         self.load_weights(self.models_train.commentary, model_path.path)
       else:
         log(f"Creating new model ({log_device_context}/{self.network_type}/commentary)")
-        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer, self.models_train.full, trainer.strategy)
+        self.models_train.commentary = ModelBuilder().build_commentary(self.config, self.models_train.tokenizer,
+          self.models_train.full, is_tpu=is_tpu, strategy=trainer.strategy)
 
     # Compile the commentary model for training.
     self.commentary_training_compiler(self.models_train.commentary)
@@ -654,7 +657,7 @@ log("Data root:", config.data_root)
 log("Local data root:", config.determine_local_data_root())
 log(f"TPU devices: {[t.name for t in tpus]}")
 log(f"GPU devices: {[g.name for g in gpus]}")
-log("Training devices:", trainer.device_count, ("TPU(s)" if tpu_strategy else "GPU(s)"))
+log("Training devices:", trainer.device_count, ("TPU(s)" if is_tpu else "GPU(s)"))
 log("Per-replica batch size:", trainer.per_replica_batch_size)
 log("Global batch size:", trainer.global_batch_size)
 log("Per-replica batch size (commentary):", trainer.per_replica_batch_size_commentary)

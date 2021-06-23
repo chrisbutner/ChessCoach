@@ -169,7 +169,7 @@ class ModelBuilder:
   def subset_commentary_encoder(self, model):
     return type(model)(model.input, model.outputs[3:])
 
-  def build_commentary(self, config, tokenizer, model_full, strategy):
+  def build_commentary(self, config, tokenizer, model_full, is_tpu, strategy):
     import transformer
     from official.nlp.modeling import models
     eos_id = tokenizer.tokenize("").numpy().item()
@@ -190,7 +190,7 @@ class ModelBuilder:
       encoder_width=self.filter_count,
       embedding_width=self.transformer_filters,
       dropout_rate=self.transformer_dropout_rate,
-      padded_decode=isinstance(strategy, tf.distribute.TPUStrategy),
+      padded_decode=is_tpu,
       sample_temperature=config.misc["commentary"]["temperature"],
       top_p=config.misc["commentary"]["top_p"],
     )
