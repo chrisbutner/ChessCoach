@@ -10,7 +10,6 @@ Optimization
 - deep tournaments, calculate ratings vs. various engines, CC with AZ-PUCT, etc., with various time controls - keep PGNs
 
 Deployment
-- bot - cancel unanswered challenges after a timeout
 - need to add alpha version of (tensorflow + tensorflow-text tf-models-official) to instructions once TPU VM fixes are deployed
 
 Measurements

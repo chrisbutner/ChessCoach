@@ -279,6 +279,7 @@ ENDPOINTS = {
   "accept": "/api/challenge/{}/accept",
   "decline": "/api/challenge/{}/decline",
   "challenge": "/api/challenge/{}",
+  "cancel": "/api/challenge/{}/cancel",
   "upgrade": "/api/bot/account/upgrade",
   "resign": "/api/bot/game/{}/resign",
 }
@@ -363,6 +364,9 @@ class Lichess:
     payload = { "rated": "true", "clock.limit": clock_limit, "clock.increment": clock_increment }
     return self.api_post(ENDPOINTS["challenge"].format(username), data=payload)
 
+  def cancel_challenge(self, challenge_id):
+    return self.api_post(ENDPOINTS["cancel"].format(challenge_id))
+
   def get_profile(self):
     profile = self.api_get(ENDPOINTS["profile"])
     return profile
@@ -425,6 +429,7 @@ class OutgoingChallenges:
     self.rng = np.random.default_rng()
 
   def upkeep(self):
+    # Send a new challenge?
     if (not self.games.queue
         and not self.games.in_progress
         and not self.challenges_active
@@ -435,7 +440,8 @@ class OutgoingChallenges:
         try:
           response = self.lichess.send_challenge(username, limit, increment)
           id = response["challenge"]["id"]
-          self.challenges_active[id] = key
+          time_sent = time.time()
+          self.challenges_active[id] = key, time_sent
           self.games.enqueue(id)
           print(f"*** OUTGOING CHALLENGE SENT *** with ID {id} to {username} with time control {limit}+{increment}")
         except HTTPError as e:
@@ -448,6 +454,22 @@ class OutgoingChallenges:
         except Exception:
           pass
 
+    # Cancel an unanswered challenge? (Wait until next upkeep to send another.)
+    now = time.time()
+    remove = []
+    for id, (key, time_sent) in self.challenges_active.items():
+      if (now - time_sent) >= 30:
+        username, (limit, increment) = key
+        try:
+          self.lichess.cancel_challenge(id)
+          print(f"*** CANCELED OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment}")
+        except Exception as e:
+          print(f"*** ABANDONING OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment} (cancel failed)")
+        remove.append(id)
+    for id in remove:
+      self.games.dequeue(id)
+      self.challenges_active.pop(id, None)
+
   def game_start(self, id):
     # Most details are handled elsewhere: we just need to untrack active outgoing challenges.
     self.challenges_active.pop(id, None)
@@ -455,11 +477,12 @@ class OutgoingChallenges:
   def declined(self, event):
     id = event["challenge"]["id"]
     self.games.dequeue(id)
-    key = self.challenges_active.pop(id, None)
-    if key:
+    challenge = self.challenges_active.pop(id, None)
+    if challenge:
+      key, _ = challenge
       self.challenges_declined.add(key)
       username, (limit, increment) = key
-      print("*** OUTGOING CHALLENGE DECLINED *** with ID {id} to {username} with time control {limit}+{increment}")
+      print(f"*** OUTGOING CHALLENGE DECLINED *** with ID {id} to {username} with time control {limit}+{increment}")
 
   def sample_users(self):
     response = self.lichess.get_bots()
