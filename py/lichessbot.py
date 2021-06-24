@@ -167,13 +167,15 @@ class Game:
   def should_abort_now(self):
     return self.is_abortable() and time.time() > self.abort_at
 
-  # Only allow commenting every 5 seconds.
+  # Only allow commenting every 10 seconds, and delay after 429-errors.
   def try_pop_comment(self):
     comment = self.pending_comment
     if not comment:
       return None
     now = time.time()
-    if (now - self.last_comment_time) < 5.0:
+    if (now - self.last_comment_time) < 10.0:
+      return None
+    if not throttle.ready():
       return None
     self.pending_comment = None
     self.last_comment_time = now
@@ -358,7 +360,8 @@ class Lichess:
     return self.api_post(ENDPOINTS["accept"].format(challenge_id))
 
   def decline_challenge(self, challenge_id, reason="generic"):
-    return self.api_post(ENDPOINTS["decline"].format(challenge_id), data=f"reason={reason}")
+    payload = { "reason": reason }
+    return self.api_post(ENDPOINTS["decline"].format(challenge_id), data=payload)
 
   def send_challenge(self, username, clock_limit, clock_increment):
     payload = { "rated": "true", "clock.limit": clock_limit, "clock.increment": clock_increment }
@@ -399,6 +402,24 @@ class Conversation:
   def send_reply(self, line, reply):
     self.lichess.chat(self.game.id, line.room, reply)
 
+class Throttle:
+
+  delay_seconds = 65.0
+
+  def __init__(self):
+    self.lock = threading.Lock()
+    self.ready_time = time.time() - 1000.0
+
+  def on_exception(self, exception):
+    with self.lock:
+      if isinstance(exception, HTTPError) and (exception.response.status_code == 429):
+        print(f"*** 429 *** for {exception.request.url}: delaying optional requests by {self.delay_seconds} seconds")
+        self.ready_time = (time.time() + self.delay_seconds)
+
+  def ready(self):
+    with self.lock:
+      return (time.time() >= self.ready_time)
+
 # --- Sending challenges when idle ---
 
 class OutgoingChallenges:
@@ -429,11 +450,12 @@ class OutgoingChallenges:
     self.rng = np.random.default_rng()
 
   def upkeep(self):
-    # Send a new challenge?
+    # Send a new challenge? (Wait 60 seconds in case players want to challenge us, and delay after 429-errors.)
     if (not self.games.queue
         and not self.games.in_progress
         and not self.challenges_active
-        and time.time() >= self.games.last_finish_time + self.idle_seconds_before_send):
+        and (time.time() >= self.games.last_finish_time + self.idle_seconds_before_send)
+        and throttle.ready()):
       key = self.choose()
       if key:
         username, (limit, increment) = key
@@ -448,9 +470,7 @@ class OutgoingChallenges:
           if e.response.content and (b"does not accept challenges" in e.response.content):
             print(f"*** {e.response.status_code} ***: {username}: {e.response.content}")
             self.challenges_forbidden.add(username)
-          if e.response.status_code == 429:
-            print("*** 429 ***")
-            self.games.last_finish_time += 5 * 60
+          throttle.on_exception(e)
         except Exception:
           pass
 
@@ -464,8 +484,10 @@ class OutgoingChallenges:
           self.lichess.cancel_challenge(id)
           print(f"*** CANCELED OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment}")
         except Exception as e:
+          throttle.on_exception(e)
           print(f"*** ABANDONING OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment} (cancel failed)")
         remove.append(id)
+        self.challenges_forbidden.add(username)
     for id in remove:
       self.games.dequeue(id)
       self.challenges_active.pop(id, None)
@@ -541,7 +563,8 @@ def watch_control_stream(event_queue, li):
       lines = response.iter_lines()
       for line in lines:
         event_queue.put(decode_json(line))
-    except Exception:
+    except Exception as e:
+        throttle.on_exception(e)
         pass
 
 @backoff.on_exception(backoff.expo, BaseException, max_time=600, giveup=is_final)
@@ -559,7 +582,8 @@ def watch_game_stream(li, game_id, event_queue, user_profile):
       event_queue.put(event)
       if watch_game and is_game_over(watch_game):
         break
-    except (HTTPError, ReadTimeout, RemoteDisconnected, ChunkedEncodingError, ConnectionError, ProtocolError):
+    except (HTTPError, ReadTimeout, RemoteDisconnected, ChunkedEncodingError, ConnectionError, ProtocolError) as e:
+      throttle.on_exception(e)
       if game_id not in (ongoing_game["gameId"] for ongoing_game in li.get_ongoing_games()):
         break
       raise
@@ -594,8 +618,8 @@ def loop(li, user_profile):
         if game and game.id == event["id"]:
           try:
             li.make_move(game.id, event["move"])
-          except Exception:
-            pass
+          except Exception as e:
+            throttle.on_exception(e)
 
       elif event["type"] == "gameFull":
         if game:
@@ -629,11 +653,14 @@ def loop(li, user_profile):
             try:
               print("Decline {} for reason '{}'".format(challenge, decline_reason))
               li.decline_challenge(challenge.id, reason=decline_reason)
-            except Exception:
-              pass
+            except Exception as e:
+              throttle.on_exception(e)
 
       elif event["type"] == "challengeDeclined":
-        outgoing_challenges.declined(event)
+        challenge = Challenge(event["challenge"])
+        # We may *not* have sent the challenge.
+        if challenge.challenger_name.lower() == user_profile["username"].lower():
+          outgoing_challenges.declined(event)
 
       elif event["type"] == "gameStart":
         game_id = event["game"]["id"]
@@ -642,8 +669,8 @@ def loop(li, user_profile):
           # We accidentally sent or accepted too many challenges and can't handle this game.
           try:
             li.abort(game_id)
-          except Exception:
-            pass
+          except Exception as e:
+            throttle.on_exception(e)
         else:
           games.starting(game_id)
           game_stream = threading.Thread(target=watch_game_stream, args=[li, game_id, event_queue, user_profile])
@@ -656,8 +683,8 @@ def loop(li, user_profile):
         print("Aborting {} by lack of activity".format(game.url()))
         try:
           li.abort(game.id)
-        except Exception:
-          pass
+        except Exception as e:
+          throttle.on_exception(e)
 
       # Handle control upkeep
       while not games.queue and not games.in_progress:
@@ -671,6 +698,7 @@ def loop(li, user_profile):
         except (HTTPError, ReadTimeout) as exception:
           if isinstance(exception, HTTPError) and exception.response.status_code == 404:  # ignore missing challenge
             print("Skip missing {}".format(challenge))
+          throttle.on_exception(exception)
         except Exception:
           break
 
@@ -681,11 +709,10 @@ def loop(li, user_profile):
         lines = textwrap.wrap(comment, width=max_line) if (len(comment) > max_line) else [comment]
         def comment_sync():
           try:
-            for room in ["player", "spectator"]:
-              for line in lines:
-                li.chat(game.id, room, line)
-          except Exception:
-            pass
+            for line in lines:
+              li.chat(game.id, "spectator", line)
+          except Exception as e:
+            throttle.on_exception(e)
         comment_async = threading.Thread(target=comment_sync)
         comment_async.start()
 
@@ -741,6 +768,7 @@ def is_game_over(game):
 # --- Global state ---
 
 event_queue = queue.Queue()
+throttle = Throttle()
 
 # --- Public API ---
 
