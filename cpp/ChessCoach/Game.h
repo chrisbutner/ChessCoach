@@ -115,6 +115,8 @@ public:
     static int QueenKnightPlane[SQUARE_NB];
 
     constexpr static const int NoProgressSaturationCount = 99;
+
+    static Key PredictionCache_IsRepetition;
     static Key PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 
     constexpr static const char* SquareName[SQUARE_NB] = {

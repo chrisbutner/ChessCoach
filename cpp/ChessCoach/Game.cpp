@@ -5,6 +5,7 @@
 #include "Config.h"
 
 int Game::QueenKnightPlane[SQUARE_NB];
+Key Game::PredictionCache_IsRepetition;
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 thread_local PoolAllocator<StateInfo, Game::BlockSizeBytes> Game::StateAllocator;
 
@@ -47,6 +48,7 @@ void Game::Initialize()
 
     // Set up additional Zobrist hash keys for prediction caching (additional info beyond position).
     PRNG rng(7607098); // Arbitrary seed
+    PredictionCache_IsRepetition = rng.rand<Key>();
     for (int i = 0; i <= NoProgressSaturationCount; i++)
     {
         PredictionCache_NoProgressCount[i] = rng.rand<Key>();
@@ -304,7 +306,7 @@ Key Game::GenerateImageKey(bool tryHard)
         // It's possible that it would also be better to include less or no history in self-play mode, but this would
         // require too much end-to-end testing for our current scope (i.e. from scratch with fresh data each time),
         // so err on the proven side.
-        return _position.key();
+        return (_position.key() ^ ((_position.state_info()->repetition != 0) ? PredictionCache_IsRepetition : 0));
     }
     else
     {
@@ -323,7 +325,7 @@ Key Game::GenerateImageKey(bool tryHard)
         int rotation = 0;
         while (history.Next())
         {
-            key ^= Rotate(_position.key(), rotation++);
+            key ^= Rotate(_position.key() ^ ((_position.state_info()->repetition != 0) ? PredictionCache_IsRepetition : 0), rotation++);
         }
 
         return key;
