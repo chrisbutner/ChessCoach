@@ -342,14 +342,13 @@ class Network:
 
       # Either load from disk, or create new.
       with model_creation_lock:
-        _, model_path = self.latest_model_path("commentary")
+        glob, model_path = self.latest_model_path("commentary")
         if model_path:
           log(f"Loading model ({device_index}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
           models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, is_tpu=is_tpu, strategy=None)
           self.load_weights(models.commentary, model_path.path)
         else:
-          log(f"Creating new model ({device_index}/{self.network_type}/commentary)")
-          models.commentary = ModelBuilder().build_commentary(self.config, models.tokenizer, models.full, is_tpu=is_tpu, strategy=None)
+          raise ChessCoachException(f"Missing network weights for ({device_index}/{self.network_type}/commentary) at {glob}")
 
       return self.models_train.commentary
 
