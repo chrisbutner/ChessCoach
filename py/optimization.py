@@ -1,11 +1,10 @@
-import numpy as np
-np.random.seed(1234)
 import platform
 import os
 import time
-import numpy as np
 import re
 import subprocess
+import threading
+import tempfile
 from ast import literal_eval
 from skopt import Optimizer
 from skopt import expected_minimum
@@ -22,6 +21,7 @@ class Session:
   n_initial_points = 16
   plot_color = "#36393f"
   log_filename = "log.txt"
+  engine_names = ["Optimize", "Baseline"]
 
   def __init__(self, config):
     self.config = config
@@ -29,10 +29,18 @@ class Session:
     self.local_output_child = time.strftime("%Y%m%d-%H%M%S")
     self.local_output_path = config.join(self.local_output_parent, self.local_output_child)
     os.makedirs(self.local_output_path, exist_ok=True)
-    self.tournament_pgn_path = config.join(self.local_output_path, "optimization.pgn")
     self.writer = open(self.config.join(self.local_output_path, self.log_filename), "w")
     self.parameters = self.parse_parameters(config.misc["optimization"]["parameters"])
     self.optimizer = Optimizer(list(self.parameters.values()), n_initial_points=self.n_initial_points, acq_func="EI")
+    self.distributed_ip_addresses = config.misc["optimization"]["distributed_ip_addresses"]
+    if self.distributed_ip_addresses:
+      if self.config.misc["optimization"]["mode"] != "tournament":
+        raise ChessCoachException("Distributed optimization is only implemented for tournament mode")
+      # This can waste hardware if factors don't line up. You could instead find a good GCD with minimal machine waste
+      # and run partial instead of complete mini-tournaments in parallel.
+      self.parallelism = max(1, (len(self.distributed_ip_addresses) // 2) // self.config.misc["optimization"]["tournament_games"])
+    else:
+      self.parallelism = 1
 
   def parse_parameters(self, parameters_raw):
     return dict((name, literal_eval(definition)) for name, definition in parameters_raw.items())
@@ -83,94 +91,172 @@ class Session:
     elif mode == "tournament":
       self.log(f'Games per evaluation: {config.misc["optimization"]["tournament_games"]}')
       self.log(f'Time control: {config.misc["optimization"]["tournament_time_control"]}')
+    self.log("Distributed: " + (f"{len(self.distributed_ip_addresses)} IPs" if self.distributed_ip_addresses else "No"))
     self.log("Parameters:")
     for name, definition in self.parameters.items():
       self.log(f"{name}: {definition}")
     self.log("################################################################################")
 
-  def evaluate(self, point_dict):
-    names = list(point_dict.keys())
-    values = list(point_dict.values())
+  def evaluate(self, point_dicts):
     if self.config.misc["optimization"]["mode"] == "epd":
-      return self.evaluate_epd(names, values)
+      return self.evaluate_epd(point_dicts)
     elif self.config.misc["optimization"]["mode"] == "tournament":
-      return self.evaluate_tournament(names, values)
+      return self.evaluate_tournaments(point_dicts)
     else:
       raise ChessCoachException("Unexpected optimization mode: expected 'epd' or 'tournament'")
 
-  def evaluate_epd(self, names, values):
-    names = [name.encode("ascii") for name in names]
-    values = [float(value) for value in values]
-    return chesscoach.evaluate_parameters(names, values)
+  def evaluate_epd(self, point_dicts):
+    assert len(point_dicts) == 1
+    names = [name.encode("ascii") for name in point_dicts[0].keys()]
+    values = [float(value) for value in point_dicts[0].values()]
+    return [chesscoach.evaluate_parameters(names, values)]
 
-  def evaluate_tournament(self, names, values):
+  def evaluate_tournaments(self, point_dicts):
+    if self.distributed_ip_addresses:
+      # Play UCI proxy against UCI proxy.
+      threads = []
+      results = []
+      ips_per_point = len(self.distributed_ip_addresses) // len(point_dicts)
+      for i, point_dict in enumerate(point_dicts):
+        results.append(None)
+        def evaluate(i):
+          results[i] = self.evaluate_tournament(point_dict, self.distributed_ip_addresses[i * ips_per_point:(i + 1) * ips_per_point])
+        thread = threading.Thread(target=evaluate, args=(i,))
+        thread.start()
+        threads.append(thread)
+      for thread in threads:
+        thread.join()
+      return results
+    else:
+      # Play ChessCoach against Stockfish locally, for TPU compatibility (only one process can grab the accelerators).
+      assert len(point_dicts) == 1
+      return [self.evaluate_tournament(point_dicts[0], None)]
 
-    # Make sure that cutechess-cli doesn't append to an existing pgn.
-    try:
-      os.remove(self.tournament_pgn_path)
-    except:
-      pass
-
-    name_optimize = "ChessCoach_Optimize"
-    name_baseline = "Stockfish_Baseline"
-
-    stockfish_command = ("stockfish_13_win_x64_bmi2" if platform.system() == "Windows" else "stockfish_13_linux_x64_bmi2")
-    stockfish_options = "option.Threads=1 option.Hash=512"
-
+  def evaluate_tournament(self, point_dict, ip_addresses):
     tournament_games = self.config.misc["optimization"]["tournament_games"]
+    if ip_addresses:
+      # Play UCI proxy against UCI proxy.
+      parallel_game_count = (len(ip_addresses) // 2)
+      # Play more games than necessary if numbers don't divide evenly.
+      partial_length = (tournament_games + parallel_game_count - 1) // parallel_game_count
+      threads = []
+      pgn_paths = []
+      for i in range(parallel_game_count):
+        pgn_paths.append(None)
+        def play(i):
+          reverse_sides = ((partial_length * i) % 2 == 1)
+          pgn_paths[i] = self.play_partial_tournament(point_dict, ip_addresses[i * 2:(i + 1) * 2], partial_length, reverse_sides)
+        thread = threading.Thread(target=play, args=(i,))
+        thread.start()
+        threads.append(thread)
+      for thread in threads:
+        thread.join()
+      return self.evaluate_elo(pgn_paths)
+    else:
+      # Play ChessCoach against Stockfish locally, for TPU compatibility (only one process can grab the accelerators).
+      pgn_path = self.play_partial_tournament(point_dict, None, tournament_games, reverse_sides=False)
+      return self.evaluate_elo([pgn_path])
+
+  def play_partial_tournament(self, point_dict, ip_addresses, game_count, reverse_sides):
+    engine_optimization_options = " ".join([f"option.{name}={value}" for name, value in point_dict.items()])
+    if ip_addresses:
+      # Play UCI proxy against UCI proxy.
+      assert len(ip_addresses) == 2
+      python = "python" if platform.system() == "Windows" else "python3"
+      uci_proxy_client = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uci_proxy_client.py")
+      engine_commands = [python, python]
+      engine_arguments = [[uci_proxy_client, ip_address] for ip_address in ip_addresses]
+      engine_options = [engine_optimization_options, ""]
+    else:
+      # Play ChessCoach against Stockfish locally, for TPU compatibility (only one process can grab the accelerators).
+      engine_commands = ["ChessCoachUci", ("stockfish_13_win_x64_bmi2" if platform.system() == "Windows" else "stockfish_13_linux_x64_bmi2")]
+      engine_arguments = [[], []]
+      engine_options = [engine_optimization_options, "option.Threads=1 option.Hash=512"]
+    
+    # Prepare to run the mini-tournament. Use a temporary file as the PGN.
+    with tempfile.NamedTemporaryFile(delete=False) as pgn:
+      pgn_path = pgn.name
     time_control = self.config.misc["optimization"]["tournament_time_control"]
     
-    # Run the mini-tournament and generate optimization.pgn.
-    command = f"cutechess-cli -engine name={name_optimize} cmd=ChessCoachUci "
-    for name, value in zip(names, values):
-      command += f"option.{name}={value} "
-    command += f"-engine name={name_baseline} cmd={stockfish_command} {stockfish_options} "
+    # Run the mini-tournament and generate the PGN.
+    command = "cutechess-cli "
+    for i in range(2):
+      command += f"-engine name={self.engine_names[i]} cmd={engine_commands[i]} "
+      command += "".join([f"arg={arg} " for arg in engine_arguments[i]])
+      command += f"{engine_options[i]} "
     command += f"-each proto=uci tc={time_control} timemargin=5000 dir=\"{os.getcwd()}\" "
-    command += f"-games {tournament_games} -pgnout \"{self.tournament_pgn_path}\""
+    command += f"-games {game_count} -pgnout \"{pgn_path}\" -recover "
+    if reverse_sides:
+      command += "-reverse "
     subprocess.run(command, stdin=subprocess.DEVNULL, shell=True)
+    return pgn_path
 
-    # Process optimization.pgn using bayeselo to get an evaluation score.
+  def evaluate_elo(self, pgn_paths):
+    if len(pgn_paths) == 1:
+      pgn_path = pgn_paths[0]
+    else:
+      with tempfile.NamedTemporaryFile(delete=False) as pgn:
+        pgn_path = pgn.name
+        for partial in pgn_paths:
+          with open(partial, "rb") as file:
+            pgn.write(file.read())
+
+    # Process the combined PGN using bayeselo to get an evaluation score.
     # NOTE: Bayeselo doesn't like quotes around paths.
-    bayeselo_input = f"readpgn {self.tournament_pgn_path}\nelo\nmm\nexactdist\nratings\nx\nx\n".encode("utf-8")
+    bayeselo_input = f"readpgn {pgn_path}\nelo\nmm\nexactdist\nratings\nx\nx\n".encode("utf-8")
     process = subprocess.run("bayeselo", input=bayeselo_input, stdout=subprocess.PIPE, shell=True)
     output = process.stdout.decode("utf-8")
-    elo = int(re.search(f"{name_optimize}\\s+(-?\\d+)\\s", output).group(1))
+    elo = int(re.search(f"{self.engine_names[0]}\\s+(-?\\d+)\\s", output).group(1))
 
     # Minimizing, so negate.
     return -elo
 
-  def tell(self, iteration, point_dict, point, score):
+  def tell(self, starting_iteration, point_dicts, points, scores):
     optimizer = self.optimizer
-    self.log(f"{iteration}: {score} = {point_dict}")
+    iteration = starting_iteration
+    for score, point_dict in zip(scores, point_dicts):
+      self.log(f"{iteration}: {score} = {point_dict}")
+      iteration += 1
     while True:
       try:
-        result = optimizer.tell(point, score)
+        result = optimizer.tell(points, scores)
         break
       except AttributeError:
         # https://github.com/scikit-optimize/scikit-optimize/issues/981
         pass
-    if self.burnt_in(result) and (iteration % self.config.misc["optimization"]["log_interval"] == 0):
+    count_before = (starting_iteration - 1)
+    count_after = (iteration - 1)
+    log_interval = self.config.misc["optimization"]["log_interval"]
+    if self.burnt_in(result) and (count_before // log_interval < count_after // log_interval):
       self.log_results(result)
-    if self.burnt_in(result) and (optimizer.space.n_dims > 1) and (iteration % self.config.misc["optimization"]["plot_interval"] == 0):
-      self.plot_results(iteration, result)
+    plot_interval = self.config.misc["optimization"]["plot_interval"]
+    if self.burnt_in(result) and (optimizer.space.n_dims > 1) and (count_before // plot_interval < count_after // plot_interval):
+      self.plot_results(count_after, result)
 
   def int_or_float(self, text):
     return float(text) if "." in text else int(text)
 
   def resume(self):
-    iteration = 1
+    starting_iteration = 1
+    iteration = starting_iteration
     if self.config.misc["optimization"]["resume_latest"]:
       previous = (d for d in next(os.walk(self.local_output_parent))[1] if (d != self.local_output_child))
       latest = max(previous)
       log_path = self.config.join(self.local_output_parent, latest, self.log_filename)
       self.log(f"Replaying data from {log_path}")
+      point_dicts = []
+      points = []
+      scores = []
       with open(log_path, "r") as reader:
         for line in reader:
           if line.startswith(f"{iteration}:"):
             score, *point = [self.int_or_float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", line)[1:]]
             point_dict = dict(zip(self.parameters.keys(), point))
-            self.tell(iteration, point_dict, point, score)
+            point_dicts.append(point_dict)
+            points.append(point)
+            scores.append(score)
             iteration += 1
+      self.tell(starting_iteration, point_dicts, points, scores)
     self.log("Starting")
     return iteration
 
@@ -179,11 +265,11 @@ class Session:
     self.log_config()
     iteration = self.resume()
     while True:
-      point = optimizer.ask()
-      point_dict = dict(zip(self.parameters.keys(), point))
-      score = self.evaluate(point_dict)
-      self.tell(iteration, point_dict, point, score)
-      iteration += 1
+      points = optimizer.ask(n_points=self.parallelism)
+      point_dicts = [dict(zip(self.parameters.keys(), point)) for point in points]
+      scores = self.evaluate(point_dicts)
+      self.tell(iteration, point_dicts, points, scores)
+      iteration += self.parallelism
 
 def optimize_parameters(config=None):
   if not config:

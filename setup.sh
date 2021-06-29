@@ -28,6 +28,6 @@ sudo ldconfig # refresh shared library cache.
 popd
 
 # Clean up after installing protobuf.
-rm -r protobuf-3.13.0
+rm -r --interactive=never protobuf-3.13.0
 
 popd
