@@ -114,19 +114,24 @@ class Session:
   def evaluate_tournaments(self, point_dicts):
     if self.distributed_ip_addresses:
       # Play UCI proxy against UCI proxy.
-      threads = []
-      results = []
-      ips_per_point = len(self.distributed_ip_addresses) // len(point_dicts)
-      for i, point_dict in enumerate(point_dicts):
-        results.append(None)
-        def evaluate(i):
-          results[i] = self.evaluate_tournament(point_dict, self.distributed_ip_addresses[i * ips_per_point:(i + 1) * ips_per_point])
-        thread = threading.Thread(target=evaluate, args=(i,))
-        thread.start()
-        threads.append(thread)
-      for thread in threads:
-        thread.join()
-      return results
+      while True:
+        threads = []
+        results = []
+        ips_per_point = len(self.distributed_ip_addresses) // len(point_dicts)
+        for i, point_dict in enumerate(point_dicts):
+          results.append(None)
+          def evaluate(i):
+            results[i] = self.evaluate_tournament(point_dict, self.distributed_ip_addresses[i * ips_per_point:(i + 1) * ips_per_point])
+          thread = threading.Thread(target=evaluate, args=(i,))
+          thread.start()
+          threads.append(thread)
+        for thread in threads:
+          thread.join()
+        if any(result is None for result in results):
+          print(f"Parameter evaluation failed: {results}; retrying after 5 minutes")
+          time.sleep(5 * 60)
+          continue
+        return results
     else:
       # Play ChessCoach against Stockfish locally, for TPU compatibility (only one process can grab the accelerators).
       assert len(point_dicts) == 1
@@ -204,11 +209,19 @@ class Session:
     # Process the combined PGN using bayeselo to get an evaluation score.
     # NOTE: Bayeselo doesn't like quotes around paths.
     bayeselo_input = f"readpgn {pgn_path}\nelo\nmm\nexactdist\nratings\nx\nx\n".encode("utf-8")
-    process = subprocess.run("bayeselo", input=bayeselo_input, stdout=subprocess.PIPE, shell=True)
+    process = subprocess.run("bayeselo", input=bayeselo_input, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
     output = process.stdout.decode("utf-8")
-    elo = int(re.search(f"{self.engine_names[0]}\\s+(-?\\d+)\\s", output).group(1))
 
-    # Minimizing, so negate.
+    # Require 80% of games finishing properly.
+    tournament_games = self.config.misc["optimization"]["tournament_games"]
+    loaded_count = int(re.search(f"(\\d+) game\\(s\\) loaded", output).group(1)) # Printed to stderr
+    minimum_count = 0.8 * tournament_games
+    if loaded_count < minimum_count:
+      print(f"Failed to evaluate Elo: {loaded_count} games < {minimum_count} minimum out of {tournament_games}")
+      return None
+
+    # Grab Elo from the output. Minimizing, so negate.
+    elo = int(re.search(f"{self.engine_names[0]}\\s+(-?\\d+)\\s", output).group(1))
     return -elo
 
   def tell(self, starting_iteration, point_dicts, points, scores):

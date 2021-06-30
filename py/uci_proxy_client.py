@@ -13,7 +13,8 @@ def connect(host):
 
 def manage(connection):
   def clean_up():
-    # Romeo and Juliet styles
+    # In contrast to the server, we want the lifetime of the client to match the lifetime of its connection.
+    # However, close() on stdin hangs just like read1() and undoes the daemon workaround, so skip it and just close the connection.
     try:
       connection.shutdown(socket.SHUT_RDWR)
     except:

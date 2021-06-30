@@ -393,6 +393,10 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
     {
         InitializePredictionCache();
     }
+    else if (((name == "search_threads") || (name == "search_parallelism")) && _workerGroup.IsInitialized())
+    {
+        throw ChessCoachException("Threads and parallelism need to be set before readying/searching");
+    }
 }
 
 void ChessCoachUci::HandleRegister(std::stringstream& /*commands*/)
