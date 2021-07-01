@@ -252,7 +252,8 @@ mode = "epd"
 resume_latest = false
 log_interval = 10
 plot_interval = 10
-distributed_ip_addresses = [] # Only supported with "tournament" mode currently.
+distributed_zone = "europe-west4-a"
+distributed_hosts = [] # Only supported with "tournament" mode and alpha TPU VMs/pods currently.
 
 # "Nodes required" metric is the node count when the solution was first hit as the principle variation
 # without later switching away, or "epd_failure_nodes" if the wrong answer was given for "bestmove".

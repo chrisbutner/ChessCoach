@@ -32,14 +32,17 @@ class Session:
     self.writer = open(self.config.join(self.local_output_path, self.log_filename), "w")
     self.parameters = self.parse_parameters(config.misc["optimization"]["parameters"])
     self.optimizer = Optimizer(list(self.parameters.values()), n_initial_points=self.n_initial_points, acq_func="EI")
-    self.distributed_ip_addresses = config.misc["optimization"]["distributed_ip_addresses"]
-    if self.distributed_ip_addresses:
+    self.distributed_hosts = config.misc["optimization"]["distributed_hosts"]
+    if self.distributed_hosts:
       if self.config.misc["optimization"]["mode"] != "tournament":
         raise ChessCoachException("Distributed optimization is only implemented for tournament mode")
       # This can waste hardware if factors don't line up. You could instead find a good GCD with minimal machine waste
       # and run partial instead of complete mini-tournaments in parallel.
-      self.parallelism = max(1, (len(self.distributed_ip_addresses) // 2) // self.config.misc["optimization"]["tournament_games"])
+      ip_addresses = self.get_ip_addresses() # There may be more IP addresses than "hosts"; e.g., with TPU pods we can use multiple workers.
+      self.ip_address_count = len(ip_addresses)
+      self.parallelism = max(1, (self.ip_address_count // 2) // self.config.misc["optimization"]["tournament_games"])
     else:
+      self.ip_address_count = None
       self.parallelism = 1
 
   def parse_parameters(self, parameters_raw):
@@ -91,7 +94,7 @@ class Session:
     elif mode == "tournament":
       self.log(f'Games per evaluation: {config.misc["optimization"]["tournament_games"]}')
       self.log(f'Time control: {config.misc["optimization"]["tournament_time_control"]}')
-    self.log("Distributed: " + (f"{len(self.distributed_ip_addresses)} IPs" if self.distributed_ip_addresses else "No"))
+    self.log("Distributed: " + (f"{self.ip_address_count} IPs" if self.distributed_hosts else "No"))
     self.log("Parameters:")
     for name, definition in self.parameters.items():
       self.log(f"{name}: {definition}")
@@ -111,17 +114,44 @@ class Session:
     values = [float(value) for value in point_dicts[0].values()]
     return [chesscoach.evaluate_parameters(names, values)]
 
+  def get_lookup(self):
+    zone = self.config.misc["optimization"]["distributed_zone"]
+    command = f'gcloud alpha compute tpus tpu-vm list --format="table[no-heading](name,networkEndpoints.ipAddress)" --zone {zone}'
+    process = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=True)
+    output = process.stdout.decode("utf-8")
+    lookup = {}
+    for line in output.splitlines():
+      name, ip_addresses = line.split(None, 1)
+      lookup[name] = literal_eval(ip_addresses)
+    return lookup
+
+  def get_ip_addresses(self):
+    ip_addresses = []
+    while True:
+      lookup = self.get_lookup()
+      for host in self.distributed_hosts:
+        try:
+          ip_addresses += lookup[host]
+        except:
+          print(f"Failed to look up IP address(es) for host '{host}'; retrying after 5 minutes")
+          time.sleep(5 * 60)
+          ip_addresses = []
+          break
+      if ip_addresses:
+        return ip_addresses
+
   def evaluate_tournaments(self, point_dicts):
-    if self.distributed_ip_addresses:
+    if self.distributed_hosts:
       # Play UCI proxy against UCI proxy.
       while True:
         threads = []
         results = []
-        ips_per_point = len(self.distributed_ip_addresses) // len(point_dicts)
+        ip_addresses = self.get_ip_addresses()
+        ips_per_point = len(ip_addresses) // len(point_dicts)
         for i, point_dict in enumerate(point_dicts):
           results.append(None)
           def evaluate(i):
-            results[i] = self.evaluate_tournament(point_dict, self.distributed_ip_addresses[i * ips_per_point:(i + 1) * ips_per_point])
+            results[i] = self.evaluate_tournament(point_dict, ip_addresses[i * ips_per_point:(i + 1) * ips_per_point])
           thread = threading.Thread(target=evaluate, args=(i,))
           thread.start()
           threads.append(thread)
@@ -212,12 +242,11 @@ class Session:
     process = subprocess.run("bayeselo", input=bayeselo_input, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
     output = process.stdout.decode("utf-8")
 
-    # Require 80% of games finishing properly.
+    # Require all games finishing properly (we may still miss some cases where cutechess-cli adjudicates a result).
     tournament_games = self.config.misc["optimization"]["tournament_games"]
     loaded_count = int(re.search(f"(\\d+) game\\(s\\) loaded", output).group(1)) # Printed to stderr
-    minimum_count = 0.8 * tournament_games
-    if loaded_count < minimum_count:
-      print(f"Failed to evaluate Elo: {loaded_count} games < {minimum_count} minimum out of {tournament_games}")
+    if loaded_count < tournament_games:
+      print(f"Failed to evaluate Elo: {loaded_count} games < {tournament_games} required")
       return None
 
     # Grab Elo from the output. Minimizing, so negate.
