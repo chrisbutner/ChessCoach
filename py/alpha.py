@@ -59,7 +59,7 @@ deployment_configs = {
     "roles": {
       "proxy": {
         "count": 40,
-        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-proxy:selfplay11a_v30",
+        "command": "docker run --rm --privileged --network host --mount type=bind,source=/usr/share/tpu,target=/usr/share/tpu --mount type=bind,source=/lib/libtpu.so,target=/lib/libtpu.so eu.gcr.io/chesscoach/chesscoach-proxy:selfplay11a_v31",
         "on_error": "dmesg",
       },
     },

@@ -165,7 +165,7 @@ class Session:
       try:
         connection.settimeout(timeout)
         connection.connect((ip_address, uci_proxy_client.PORT))
-        connection.sendall(b"isready\n")
+        connection.sendall(b"stop\nisready\n")
         output = ""
         while (time.time() - start) < timeout:
           data = connection.recv(uci_proxy_client.BUFFER_SIZE)
