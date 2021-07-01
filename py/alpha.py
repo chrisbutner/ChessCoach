@@ -392,6 +392,30 @@ class AlphaManager:
       self.tick()
       time.sleep(self.wait_seconds)
 
+  def command_launch(self):
+    self.set_up_tpus()
+    self.set_up_deployments()
+    if self.whatif_mode:
+      print("Pass --confirm to actually run \"launch\" command")
+      return
+    print("Command: launch")
+    threads = []
+    def command_launch_impl(deployment, role):
+      if role.tpu is None:
+        role.tpu = self.assign(deployment, role)
+      command = role.command.replace("docker run", "docker run -d")
+      if not self.check(self.run_ssh(role.tpu, command, run_async=False)):
+        print(f"[{role.tpu.worker_name}] Failed to launch")
+        return
+      print(f"[{role.tpu.worker_name}] Launched")
+    for deployment in self.deployments:
+      for role in deployment.roles:
+        thread = threading.Thread(target=command_launch_impl, args=(deployment, role))
+        thread.start()
+        threads.append(thread)
+    for thread in threads:
+      thread.join()
+
   def command_up(self):
     self.set_up_tpus()
     if self.whatif_mode:
@@ -465,9 +489,9 @@ def parse_range(arg):
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Manage Google Cloud alpha TPU VMs")
   parser.add_argument("-n", "--numbers", help="TPU numbers to operate on, base-1, e.g. 5 5-10 5- -10 *", nargs="+", default=[parse_range("*")], type=parse_range)
-  parser.add_argument("-d", "--deployments", help="Deployments to manage", nargs="+")
+  parser.add_argument("-d", "--deployments", help="Deployments to manage or launch", nargs="+")
   parser.add_argument("--confirm", help="Actually run (inverse of what-if mode)", action="store_true")
-  parser.add_argument("command", help="Top-level command to run", choices=["manage", "up", "down"])
+  parser.add_argument("command", help="Top-level command to run", choices=["manage", "launch", "up", "down"])
   args = parser.parse_args()
 
   tpu_ranges = args.numbers
@@ -483,6 +507,8 @@ if __name__ == "__main__":
 
   if args.command == "manage":
     alpha_manager.command_manage()
+  elif args.command == "launch":
+    alpha_manager.command_launch()
   elif args.command == "up":
     alpha_manager.command_up()
   elif args.command == "down":
