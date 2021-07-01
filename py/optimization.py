@@ -5,12 +5,14 @@ import re
 import subprocess
 import threading
 import tempfile
+import socket
 from ast import literal_eval
 from skopt import Optimizer
 from skopt import expected_minimum
 import matplotlib.pyplot as plt
 from skopt.plots import plot_objective
 from config import Config, ChessCoachException
+import uci_proxy_client
 try:
   import chesscoach # See PythonModule.cpp
 except:
@@ -136,9 +138,43 @@ class Session:
           print(f"Failed to look up IP address(es) for host '{host}'; retrying after 5 minutes")
           time.sleep(5 * 60)
           ip_addresses = []
-          break
+          break # break for, continue while
       if ip_addresses:
+        threads = []
+        ready = []
+        for i, ip_address in enumerate(ip_addresses):
+          ready.append(None)
+          def check(i):
+            ready[i] = self.ready_check(ip_address)
+          thread = threading.Thread(target=check, args=(i,))
+          thread.start()
+          threads.append(thread)
+        for thread in threads:
+          thread.join()
+        if any(not r for r in ready):
+          print(f"Failed to ready-check IP address(es): {ready}; retrying after 5 minutes")
+          time.sleep(5 * 60)
+          ip_addresses = []
+          continue # continue while
         return ip_addresses
+
+  def ready_check(self, ip_address):
+    timeout = 120
+    start = time.time()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+      try:
+        connection.settimeout(timeout)
+        connection.connect((ip_address, uci_proxy_client.PORT))
+        connection.sendall(b"isready\n")
+        output = ""
+        while (time.time() - start) < timeout:
+          data = connection.recv(uci_proxy_client.BUFFER_SIZE)
+          output += data.decode("utf-8")
+          if "readyok" in output:
+            return True
+      except:
+        pass
+      return False
 
   def evaluate_tournaments(self, point_dicts):
     if self.distributed_hosts:
@@ -198,9 +234,9 @@ class Session:
       # Play UCI proxy against UCI proxy.
       assert len(ip_addresses) == 2
       python = "python" if platform.system() == "Windows" else "python3"
-      uci_proxy_client = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uci_proxy_client.py")
+      client = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uci_proxy_client.py")
       engine_commands = [python, python]
-      engine_arguments = [[uci_proxy_client, ip_address] for ip_address in ip_addresses]
+      engine_arguments = [[client, ip_address] for ip_address in ip_addresses]
       engine_options = [engine_optimization_options, ""]
     else:
       # Play ChessCoach against Stockfish locally, for TPU compatibility (only one process can grab the accelerators).
