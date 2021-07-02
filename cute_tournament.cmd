@@ -8,7 +8,7 @@ tools\win\CuteChess\cutechess-cli.exe ^
 		option.UCI_LimitStrength=true ^
 		option.UCI_Elo=2850 ^
 	-engine name=ChessCoach cmd=uci.cmd ^
-	-each proto=uci tc=600+6 timemargin=5000 ^
+	-each proto=uci tc=300+3 timemargin=5000 ^
 	-games 4 ^
 	-pgnout "%localappdata%\ChessCoach\tournament.pgn" ^
 	-recover

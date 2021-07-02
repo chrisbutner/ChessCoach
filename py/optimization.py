@@ -256,7 +256,7 @@ class Session:
       command += "".join([f"arg={arg} " for arg in engine_arguments[i]])
       command += f"{engine_options[i]} "
     command += f"-each proto=uci tc={time_control} timemargin=5000 dir=\"{os.getcwd()}\" "
-    command += f"-games {game_count} -pgnout \"{pgn_path}\" -recover "
+    command += f"-games {game_count} -pgnout \"{pgn_path}\" -wait 1000 -recover "
     if reverse_sides:
       command += "-reverse "
     subprocess.run(command, stdin=subprocess.DEVNULL, shell=True)
@@ -295,13 +295,7 @@ class Session:
     for score, point_dict in zip(scores, point_dicts):
       self.log(f"{iteration}: {score} = {point_dict}")
       iteration += 1
-    while True:
-      try:
-        result = optimizer.tell(points, scores)
-        break
-      except AttributeError:
-        # https://github.com/scikit-optimize/scikit-optimize/issues/981
-        pass
+    result = optimizer.tell(points, scores)
     count_before = (starting_iteration - 1)
     count_after = (iteration - 1)
     log_interval = self.config.misc["optimization"]["log_interval"]
@@ -312,7 +306,7 @@ class Session:
       self.plot_results(count_after, result)
 
   def int_or_float(self, text):
-    return float(text) if "." in text else int(text)
+    return float(text) if ("." in text or "e" in text) else int(text)
 
   def resume(self):
     starting_iteration = 1
@@ -328,7 +322,7 @@ class Session:
       with open(log_path, "r") as reader:
         for line in reader:
           if line.startswith(f"{iteration}:"):
-            score, *point = [self.int_or_float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", line)[1:]]
+            score, *point = [self.int_or_float(n) for n in re.findall(r"-?\d[\d\-.e]*", line)[1:]]
             point_dict = dict(zip(self.parameters.keys(), point))
             point_dicts.append(point_dict)
             points.append(point)
