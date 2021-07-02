@@ -12,37 +12,45 @@ def serve(uci_command):
     server_socket.bind((HOST, PORT))
     server_socket.listen(0)
     print(f"Listening on port {PORT}...", flush=True)
+    process = None
     while True:
       connection, _ = server_socket.accept()
-      print("Proxying... ", end="", flush=True)
-      manage(uci_command, connection)
-      print("Done", flush=True)
+      print("Proxying... ", flush=True)
+      if process:
+        clean_up_process(process)
+      process = subprocess.Popen(uci_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+      thread = threading.Thread(target=manage, args=(process, connection))
+      thread.start()
 
-def manage(uci_command, connection):
-  process = subprocess.Popen(uci_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+def clean_up_process(process):
+  try:
+    process.stdin.close()
+  except:
+    pass
+  try:
+    process.stdout.close()
+  except:
+    pass
+  try:
+    process.kill()
+  except:
+    pass
 
+def clean_up_connection(connection):
+  try:
+    connection.shutdown(socket.SHUT_RDWR)
+  except:
+    pass
+  try:
+    connection.close()
+  except:
+    pass
+
+def manage(process, connection):
   def clean_up():
     # Romeo and Juliet styles
-    try:
-      process.stdin.close()
-    except:
-      pass
-    try:
-      process.stdout.close()
-    except:
-      pass
-    try:
-      process.kill()
-    except:
-      pass
-    try:
-      connection.shutdown(socket.SHUT_RDWR)
-    except:
-      pass
-    try:
-      connection.close()
-    except:
-      pass
+    clean_up_process(process)
+    clean_up_connection(connection)
 
   def forward_input():
     try:
@@ -73,6 +81,7 @@ def manage(uci_command, connection):
 
   manage_input.join()
   manage_output.join()
+  print("Done", flush=True)
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Act as a UCI proxy server, listening for UCI proxy clients over TCP")
