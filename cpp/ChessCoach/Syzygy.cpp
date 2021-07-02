@@ -17,7 +17,8 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-// Based on Stockfish tbprobe.cpp, adapted for ChessCoach.
+// Based on Stockfish tbprobe.cpp, adapted for ChessCoach
+// Modifications by Chris Butner, 2021
 
 #include "Syzygy.h"
 

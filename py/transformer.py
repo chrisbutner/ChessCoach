@@ -14,7 +14,7 @@
 #
 ##############################################################################
 #
-# Modifications by Chris Butner, 2021.
+# Modifications by Chris Butner, 2021
 #
 # Based on tensorflow/models/official/nlp/modeling/models/seq2seq_transformer.py
 # and tensorflow/models/official/nlp/tasks/translation.py.

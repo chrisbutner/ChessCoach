@@ -1,22 +1,16 @@
 Finishing training
-- initial small tournament - compare 5.6m to 3.6m, a few others
 - train final commentary
 
 Optimization
-- finish batched/parallelized ask/tell once training finished
-- A/B-test threads/parallelism, and slowstart settings
-- A/B-test cache-as-TT with/without repetition state and/or no-progress count (bucketed?)
 - long optimization, tournament mode, 30s per move (needs distributed) - include cpuct
 - final optimization with just move diversity parameters (consider adding visit%/upweight% threshold) - 30s per move
-- deep tournaments, calculate ratings vs. various engines, CC with AZ-PUCT, etc., with various time controls - keep PGNs
 
 Deployment
-- add license per-file
 - consolidate scripts, clean up root
-- need to add alpha version of (tensorflow + tensorflow-text tf-models-official) to instructions once TPU VM fixes are deployed
 
 Measurements
 - Tournament Elo across training history (teacher/student, all SWA, every 400k)
+- Deep tournaments, calculate ratings vs. various engines, CC with AZ-PUCT, etc., with various time controls - keep PGNs
 - Controlled NPS (fixed movetime, multiple trials) (cache/no, teacher/student, TPU/GPU)
 - Self-play games/hour steady-state (from 10 chunks to 20 chunks or w/e) (cache/no, teacher/student, TPU/GPU)
 - Training time per checkpoint for main model and commentary (TPU/GPU)

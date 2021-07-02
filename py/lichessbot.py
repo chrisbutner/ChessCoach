@@ -1,8 +1,8 @@
 # Based on https://github.com/ShailChoksi/lichess-bot
 #
-# AGPL3 license (see lichess-bot/LICENSE)
+# AGPL3-or-later license (see lichess-bot/LICENSE and https://github.com/ShailChoksi/lichess-bot#license)
 #
-# Modifications by Chris Butner, 2021.
+# Modifications by Chris Butner, 2021
 
 import os
 import json
