@@ -177,6 +177,7 @@ class Session:
   def ready_check(self, ip_address):
     timeout = 120
     start = time.time()
+    ready = False
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
       try:
         connection.settimeout(timeout)
@@ -187,10 +188,17 @@ class Session:
           data = connection.recv(uci_proxy_client.BUFFER_SIZE)
           output += data.decode("utf-8")
           if "readyok" in output:
-            return True
+            ready = True
+            break
       except:
         pass
-      return False
+      try:
+        connection.shutdown(socket.SHUT_RDWR)
+        time.sleep(3.0)
+        connection.close()
+      except:
+        pass
+    return ready
 
   def evaluate_tournaments(self, point_dicts):
     if self.distributed_hosts:
@@ -272,13 +280,22 @@ class Session:
       command += "".join([f"arg={arg} " for arg in engine_arguments[i]])
       command += f"{engine_options[i]} "
     command += f"-each proto=uci tc={time_control} timemargin=5000 dir=\"{os.getcwd()}\" "
-    command += f"-games {game_count} -pgnout \"{pgn_path}\" -wait 1000 -recover "
+    command += f"-games {game_count} -pgnout \"{pgn_path}\" -wait 3000 -recover "
     if reverse_sides:
       command += "-reverse "
-    subprocess.run(command, stdin=subprocess.DEVNULL, shell=True)
+    process = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+
+    # Cutechess-cli happily treats disconnects/stalls as definitive results: throw away the PGN instead.
+    output = process.stdout.decode("utf-8")
+    if "disconnects" in output or "stalls" in output:
+      print("Discarding partial tournament because of disconnects/stalls")
+      return None
     return pgn_path
 
   def evaluate_elo(self, pgn_paths):
+    # Some partial tournaments may have had disconnects/stalls.
+    pgn_paths = [path for path in pgn_paths if path]
+
     if len(pgn_paths) == 1:
       pgn_path = pgn_paths[0]
     else:
