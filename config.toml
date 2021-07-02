@@ -4,33 +4,8 @@
 
 [network]
 
-network_name = "selfplay11a"
+network_name = "selfplay11b"
 role = "train|play"
-
-[[networks]]
-
-    name = "selfplay11a"
-
-    [networks.training]
-
-    stages = [
-        # Self-play
-        { stage = "play" },
-
-        # Train self-play, teacher
-        { stage = "train", target = "teacher" },
-        { stage = "save", target = "teacher" },
-        { stage = "save_swa", target = "teacher" },
-
-        # Strength test (STS rating)
-        { stage = "strength_test", target = "teacher" },
-    ]
-
-    games_path_training = "Games/Fresh7a"
-
-    [networks.self_play]
-
-    network_type = "teacher"
 
 [[networks]]
 
@@ -59,7 +34,36 @@ role = "train|play"
 
 [[networks]]
 
-    name = "commentary1"
+    # To prepare for teacher-only prediction, copy selfplay11_000800000 to selfplay11a_000800000
+    # and copy 800k steps' worth of chunks from Fresh7 to Fresh7a (6286000 games, 3143 chunks).
+    name = "selfplay11a"
+
+    [networks.training]
+
+    stages = [
+        # Self-play
+        { stage = "play" },
+
+        # Train self-play, teacher
+        { stage = "train", target = "teacher" },
+        { stage = "save", target = "teacher" },
+        { stage = "save_swa", target = "teacher" },
+
+        # Strength test (STS rating)
+        { stage = "strength_test", target = "teacher" },
+    ]
+
+    games_path_training = "Games/Fresh7a"
+
+    [networks.self_play]
+
+    network_type = "teacher"
+
+[[networks]]
+
+    # To prepare for commentary training, copy selfplay11a_005600000 to selfplay11b_000000000,
+    # delete teacher/model, and rename teacher/swa to teacher/model.
+    name = "selfplay11b"
     
     [networks.training]
 
