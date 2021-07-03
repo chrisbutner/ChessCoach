@@ -4,11 +4,12 @@
 
 [network]
 
-network_name = "selfplay11b"
+network_name = "chesscoach1"
 role = "train|play"
 
 [[networks]]
 
+    # Generate self-play games using the student network for speed until 800k steps.
     name = "selfplay11"
 
     [networks.training]
@@ -31,6 +32,8 @@ role = "train|play"
     ]
 
     games_path_training = "Games/Fresh7"
+
+    steps = 800_000 # Equivalent to 100,000 steps of batch size 4096
 
 [[networks]]
 
@@ -77,6 +80,25 @@ role = "train|play"
 
     [networks.self_play]
 
+    network_type = "teacher"
+
+[[networks]]
+
+    # To finalize training, copy selfplay11_003600000/student/swa, selfplay11a_005600000/teacher/swa and
+    # selfplay11b_000400000/teacher/commentary into chesscoach1_005600000.
+    name = "chesscoach1"
+
+    [networks.training]
+
+    stages = [
+        # Already trained: just signal loading SWA weights.
+        { stage = "save_swa", target = "teacher" },
+        { stage = "save_swa", target = "student" },
+    ]
+
+    [networks.self_play]
+
+    # Use "student" on GTX 1080 (applies to UCI; teacher is still required for commentary).
     network_type = "teacher"
 
 [[networks]]
