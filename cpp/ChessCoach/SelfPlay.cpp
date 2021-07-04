@@ -1696,8 +1696,10 @@ PuctContext::PuctContext(const SearchState* searchState, Node* parent)
         static_cast<int>(searchState->timeControl.eliminationFraction * Config::Network.SelfPlay.EliminationBaseExponent));
     const int parentVisitCount = std::max(1, _parent->visitCount.load(std::memory_order_relaxed));
     const int rootVisitCount = std::max(parentVisitCount, searchState->timeControl.eliminationRootVisitCount);
-    const int rootVisitAdjusted = std::min((1 << Config::Network.SelfPlay.EliminationBaseExponent),
-        ((1 << eliminationExponent) * rootVisitCount / parentVisitCount));
+    const int rootVisitAdjusted = static_cast<int>(std::min(
+        (static_cast<int64_t>(1) << Config::Network.SelfPlay.EliminationBaseExponent),
+        ((static_cast<int64_t>(1) << eliminationExponent) * static_cast<int64_t>(rootVisitCount) / parentVisitCount)
+        ));
     _eliminationTopCount = std::min(_parent->childCount, rootVisitAdjusted);
 
     // Localize repeatedly-used config.
