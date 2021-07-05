@@ -18,23 +18,31 @@ import socket
 import subprocess
 import threading
 import argparse
+import platform
+import shlex
+import time
 
 HOST = ""
 PORT = 24377
 BUFFER_SIZE = 4096
 
 def serve(uci_command):
+  # Windows doesn't need a split for shell=False.
+  if platform.system() != "Windows":
+    uci_command = shlex.split(uci_command)
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
     server_socket.bind((HOST, PORT))
     server_socket.listen(0)
     print(f"Listening on port {PORT}...", flush=True)
     process = None
+    thread = None
     while True:
       connection, _ = server_socket.accept()
-      print("Proxying... ", flush=True)
-      if process:
+      print("Proxying...", flush=True)
+      if thread:
         clean_up_process(process)
-      process = subprocess.Popen(uci_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        thread.join()
+      process = subprocess.Popen(uci_command, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
       thread = threading.Thread(target=manage, args=(process, connection))
       thread.start()
 
@@ -48,9 +56,18 @@ def clean_up_process(process):
   except:
     pass
   try:
+    # Try to avoid lingering socket bindings (GRPC). This is just a kill() on Windows,
+    # but not doing distributed optimization there right now.
+    process.terminate()
+    time.sleep(10.0)
+  except:
+    pass
+  try:
     process.kill()
   except:
     pass
+  # Try to avoid lingering socket bindings (GRPC), but stay within cutechess-cli timeouts.
+  time.sleep(10.0)
 
 def clean_up_connection(connection):
   try:

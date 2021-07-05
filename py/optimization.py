@@ -144,61 +144,16 @@ class Session:
     return lookup
 
   def get_ip_addresses(self):
-    ip_addresses = []
     while True:
       lookup = self.get_lookup()
-      for host in self.distributed_hosts:
-        try:
+      ip_addresses = []
+      try:
+        for host in self.distributed_hosts:
           ip_addresses += lookup[host]
-        except:
-          print(f"Failed to look up IP address(es) for host '{host}'; retrying after 5 minutes")
-          time.sleep(5 * 60)
-          ip_addresses = []
-          break # break for, continue while
-      if ip_addresses:
-        threads = []
-        ready = []
-        for i, ip_address in enumerate(ip_addresses):
-          ready.append(None)
-          def check(i):
-            ready[i] = self.ready_check(ip_address)
-          thread = threading.Thread(target=check, args=(i,))
-          thread.start()
-          threads.append(thread)
-        for thread in threads:
-          thread.join()
-        if any(not r for r in ready):
-          print(f"Failed to ready-check IP address(es): {ready}; retrying after 5 minutes")
-          time.sleep(5 * 60)
-          ip_addresses = []
-          continue # continue while
         return ip_addresses
-
-  def ready_check(self, ip_address):
-    timeout = 120
-    start = time.time()
-    ready = False
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
-      try:
-        connection.settimeout(timeout)
-        connection.connect((ip_address, uci_proxy_client.PORT))
-        connection.sendall(b"stop\nisready\n")
-        output = ""
-        while (time.time() - start) < timeout:
-          data = connection.recv(uci_proxy_client.BUFFER_SIZE)
-          output += data.decode("utf-8")
-          if "readyok" in output:
-            ready = True
-            break
       except:
-        pass
-      try:
-        connection.shutdown(socket.SHUT_RDWR)
-        time.sleep(3.0)
-        connection.close()
-      except:
-        pass
-    return ready
+        print("Failed to look up IP address(es); retrying after 5 minutes")
+        time.sleep(5 * 60)
 
   def evaluate_tournaments(self, point_dicts):
     if self.distributed_hosts:
@@ -287,6 +242,7 @@ class Session:
 
     # Cutechess-cli happily treats disconnects/stalls as definitive results: throw away the PGN instead.
     output = process.stdout.decode("utf-8")
+    print(output)
     if "disconnects" in output or "stalls" in output:
       print("Discarding partial tournament because of disconnects/stalls")
       return None
@@ -310,6 +266,7 @@ class Session:
     bayeselo_input = f"readpgn {pgn_path}\nelo\nmm\nexactdist\nratings\nx\nx\n".encode("utf-8")
     process = subprocess.run("bayeselo", input=bayeselo_input, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
     output = process.stdout.decode("utf-8")
+    print(output)
 
     # Require all games finishing properly (we may still miss some cases where cutechess-cli adjudicates a result).
     tournament_games = self.config.misc["optimization"]["tournament_games"]
