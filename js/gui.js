@@ -281,7 +281,7 @@
         document.getElementById("line").textContent = data.line || "(home)";
         document.getElementById("nodeCount").textContent = `${data.node_count} nodes`;
         document.getElementById("evaluation").textContent = data.evaluation;
-        document.getElementById("principleVariation").textContent = "Principle variation: " + data.principle_variation;
+        document.getElementById("principalVariation").textContent = "Principal variation: " + data.principal_variation;
 
         data.policy.sort((a, b) => { return b.target - a.target; });
 

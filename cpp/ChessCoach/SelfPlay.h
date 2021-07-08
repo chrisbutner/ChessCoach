@@ -315,7 +315,7 @@ struct SearchState
     std::vector<Move> positionMoves;
     std::vector<Move> searchMoves; // Not *necessarily* the primary worker, but only the first worker to expand the root.
     std::chrono::time_point<std::chrono::high_resolution_clock> searchStart;
-    std::chrono::time_point<std::chrono::high_resolution_clock> lastPrincipleVariationPrint;
+    std::chrono::time_point<std::chrono::high_resolution_clock> lastPrincipalVariationPrint;
     uint16_t lastBestMove;
     int lastBestNodes;
     TimeControl timeControl;
@@ -329,7 +329,7 @@ struct SearchState
     std::atomic_int nodeCount;
     std::atomic_int failedNodeCount;
     std::atomic_int tablebaseHitCount;
-    std::atomic_bool principleVariationChanged;
+    std::atomic_bool principalVariationChanged;
 };
 
 class SelfPlayWorker
@@ -383,10 +383,10 @@ private:
 
     void FinalizeMcts();
     void OnSearchFinished();
-    void CheckPrincipleVariation();
+    void CheckPrincipalVariation();
     void CheckUpdateGui(INetwork* network, bool forceUpdate);
     void CheckTimeControl(WorkCoordinator* workCoordinator);
-    void PrintPrincipleVariation(bool searchFinished);
+    void PrintPrincipalVariation(bool searchFinished);
     void SearchInitialize(const SelfPlayGame* position);
     bool SearchPlay(int threadIndex);
 
@@ -402,9 +402,9 @@ private:
         std::vector<WeightedNode>& searchPath, PredictionCacheChunk*& cacheStore, bool finishOnly);
     void Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue);
     void BackpropagateVisitsOnly(std::vector<WeightedNode>& searchPath, int index);
-    void FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* node);
-    void UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath);
-    void ValidatePrincipleVariation(const Node* root);
+    void FixPrincipalVariation(const std::vector<WeightedNode>& searchPath, Node* node);
+    void UpdatePrincipalVariation(const std::vector<WeightedNode>& searchPath);
+    void ValidatePrincipalVariation(const Node* root);
     
     std::vector<Node*> CollectBestMoves(Node* parent, float valueDeltaThreshold) const;
 

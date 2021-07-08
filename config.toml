@@ -281,7 +281,7 @@ plot_interval = 10
 distributed_zone = "europe-west4-a"
 distributed_hosts = [] # Only supported with "tournament" mode and alpha TPU VMs/pods currently.
 
-# "Nodes required" metric is the node count when the solution was first hit as the principle variation
+# "Nodes required" metric is the node count when the solution was first hit as the principal variation
 # without later switching away, or "epd_failure_nodes" if the wrong answer was given for "bestmove".
 # The first limit of "epd_movetime_milliseconds" and "epd_nodes" hit ends the search for each position,
 # with 0 meaning no limit.

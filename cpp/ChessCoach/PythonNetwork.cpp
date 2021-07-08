@@ -452,7 +452,7 @@ void PythonNetwork::LaunchGui(const std::string& mode)
     Py_DECREF(pythonMode);
 }
 
-void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principleVariation,
+void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principalVariation,
     const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& targets,
     std::vector<float>& priors, std::vector<float>& values, std::vector<float>& puct, std::vector<int>& visits, std::vector<int>& weights, std::vector<int>& upWeights)
 {
@@ -470,8 +470,8 @@ void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, i
     PyObject* pythonEvaluation = PyUnicode_FromStringAndSize(evaluation.data(), evaluation.size());
     PyAssert(pythonEvaluation);
 
-    PyObject* pythonPrincipleVariation = PyUnicode_FromStringAndSize(principleVariation.data(), principleVariation.size());
-    PyAssert(pythonPrincipleVariation);
+    PyObject* pythonPrincipalVariation = PyUnicode_FromStringAndSize(principalVariation.data(), principalVariation.size());
+    PyAssert(pythonPrincipalVariation);
 
     PyObject* pythonSans = PackNumpyStringArray(sans);
     PyObject* pythonFroms = PackNumpyStringArray(froms);
@@ -506,7 +506,7 @@ void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, i
         Py_ARRAY_LENGTH(moveDims), moveDims, NPY_INT32, upWeights.data());
     PythonNetwork::PyAssert(pythonUpWeights);
 
-    PyObject* result = PyObject_CallFunctionObjArgs(_updateGuiFunction, pythonFen, pythonLine, pythonNodeCount, pythonEvaluation, pythonPrincipleVariation,
+    PyObject* result = PyObject_CallFunctionObjArgs(_updateGuiFunction, pythonFen, pythonLine, pythonNodeCount, pythonEvaluation, pythonPrincipalVariation,
         pythonSans, pythonFroms, pythonTos, pythonTargets, pythonPriors, pythonValues, pythonPuct, pythonVisits, pythonWeights, pythonUpWeights, nullptr);
     PyAssert(result);
 
@@ -521,7 +521,7 @@ void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, i
     Py_DECREF(pythonTos);
     Py_DECREF(pythonFroms);
     Py_DECREF(pythonSans);
-    Py_DECREF(pythonPrincipleVariation);
+    Py_DECREF(pythonPrincipalVariation);
     Py_DECREF(pythonEvaluation);
     Py_DECREF(pythonNodeCount);
     Py_DECREF(pythonLine);

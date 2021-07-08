@@ -55,10 +55,10 @@ SelfPlayGame& PlayGame(SelfPlayWorker& selfPlayWorker, std::function<void (SelfP
     }
 }
 
-std::vector<Node*> GeneratePrincipleVariation(const SelfPlayWorker& selfPlayWorker, const SelfPlayGame& game)
+std::vector<Node*> GeneratePrincipalVariation(const SelfPlayWorker& selfPlayWorker, const SelfPlayGame& game)
 {
     Node* node = game.Root();
-    std::vector<Node*> principleVariation;
+    std::vector<Node*> principalVariation;
 
     while (node)
     {
@@ -72,12 +72,12 @@ std::vector<Node*> GeneratePrincipleVariation(const SelfPlayWorker& selfPlayWork
         }
         if (node->bestChild)
         {
-            principleVariation.push_back(node->bestChild);
+            principalVariation.push_back(node->bestChild);
         }
         node = node->bestChild;
     }
 
-    return principleVariation;
+    return principalVariation;
 }
 
 void MockExpand(Node* node, int count)
@@ -169,7 +169,7 @@ TEST(Mcts, StateLeaks)
 #endif
 }
 
-TEST(Mcts, PrincipleVariation)
+TEST(Mcts, PrincipalVariation)
 {
     ChessCoach chessCoach;
     chessCoach.Initialize();
@@ -179,26 +179,26 @@ TEST(Mcts, PrincipleVariation)
     selfPlayWorker.Initialize();
 
     int latestNodeCount = 0;
-    std::vector<Node*> latestPrincipleVariation;
+    std::vector<Node*> latestPrincipalVariation;
     PlayGame(selfPlayWorker, [&](SelfPlayGame& game)
         {
-            std::vector<Node*> principleVariation = GeneratePrincipleVariation(selfPlayWorker, game);
-            if (searchState.principleVariationChanged)
+            std::vector<Node*> principalVariation = GeneratePrincipalVariation(selfPlayWorker, game);
+            if (searchState.principalVariationChanged)
             {
-                // If multiple nodes run, through terminal nodes or cache hits, the principle variation
+                // If multiple nodes run, through terminal nodes or cache hits, the principal variation
                 // may flip back to its previous value and look the same. Just test the single node case.
                 if (searchState.nodeCount == (latestNodeCount + 1))
                 {
-                    EXPECT_NE(principleVariation, latestPrincipleVariation);
+                    EXPECT_NE(principalVariation, latestPrincipalVariation);
                 }
-                searchState.principleVariationChanged = false;
+                searchState.principalVariationChanged = false;
             }
             else
             {
-                EXPECT_EQ(principleVariation, latestPrincipleVariation);
+                EXPECT_EQ(principalVariation, latestPrincipalVariation);
             }
             latestNodeCount = searchState.nodeCount;
-            latestPrincipleVariation = principleVariation;
+            latestPrincipalVariation = principalVariation;
         });
 }
 

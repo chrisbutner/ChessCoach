@@ -139,7 +139,7 @@ float TerminalValue::MateScore(float explorationRate) const
         // to go wide rather than deep and find some paths with value. Adding disincentives (with some
         // variation of inverse exploration rate coefficient) can help exhaustive searches finish in
         // fewer nodes in opponent-mate-in-N trees; however, the calculations slow down the search to
-        // more processing time overall despite fewer nodes, and worse principle variations are preferred
+        // more processing time overall despite fewer nodes, and worse principal variations are preferred
         // before the exhaustive search finishes, because better priors get searched and disincentivized
         // sooner. So, rely on every-other-step mate-in-N incentives to help guide search, and SelectMove
         // preferring slower opponent mates (in the worst case).
@@ -945,7 +945,7 @@ Throttle SelfPlayWorker::PredictionCacheResetThrottle(300 * 1000 /* durationMill
 void SearchState::Reset(const TimeControl& setTimeControl)
 {
     searchStart = std::chrono::high_resolution_clock::now();
-    lastPrincipleVariationPrint = searchStart;
+    lastPrincipalVariationPrint = searchStart;
     lastBestMove = MOVE_NONE;
     lastBestNodes = 0;
     timeControl = setTimeControl;
@@ -956,7 +956,7 @@ void SearchState::Reset(const TimeControl& setTimeControl)
     nodeCount = 0;
     failedNodeCount = 0;
     tablebaseHitCount = 0;
-    principleVariationChanged = false;
+    principalVariationChanged = false;
 }
 
 SelfPlayWorker::SelfPlayWorker(Storage* storage, SearchState* searchState, int gameCount)
@@ -1352,7 +1352,7 @@ void SelfPlayWorker::Play(int index)
         game.ApplyMoveWithRootAndExpansion(Move(selected->move), selected, *this);
         game.PruneExcept(root, selected /* == game.Root() */);
         // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
-        _searchState->principleVariationChanged.store(true, std::memory_order_release); // First move in PV is now gone.
+        _searchState->principalVariationChanged.store(true, std::memory_order_release); // First move in PV is now gone.
     }
 
     // Clean up resources in use and save the result.
@@ -1485,9 +1485,9 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
             BackpropagateMate(searchPath);
         }
 
-        // Adjust best-child pointers (principle variation) now that visits and mates have propagated.
-        UpdatePrincipleVariation(searchPath);
-        ValidatePrincipleVariation(game.Root());
+        // Adjust best-child pointers (principal variation) now that visits and mates have propagated.
+        UpdatePrincipalVariation(searchPath);
+        ValidatePrincipalVariation(game.Root());
 
         // Expanding the search root is a special case. It happens at the very start of a game,
         // and then whenever a previously-unexpanded node is reached as a root (like a 2-repetition,
@@ -1591,10 +1591,10 @@ void SelfPlayWorker::PrepareExpandedRoot(SelfPlayGame& game)
     {
         // In addition to setting tablebase ranks, which we use even before proven mate categories for move selection,
         // we just updated root child value: not just FPU, but bounded value for nodes with existing valueWeight too.
-        // Fix up the principle variation to take all of this into account. This may result in a "bestChild", or
+        // Fix up the principal variation to take all of this into account. This may result in a "bestChild", or
         // collected best children, with zero visits, which needs to be handled carefully.
         _searchState->tablebaseHitCount.fetch_add(game.Root()->childCount, std::memory_order_relaxed);
-        FixPrincipleVariation({ { game.Root(), 0 }, { game.Root(), 0 } }, game.Root());
+        FixPrincipalVariation({ { game.Root(), 0 }, { game.Root(), 0 } }, game.Root());
     }
 }
 
@@ -1898,15 +1898,15 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
                 parent->SetTerminalValue(TerminalValue::OpponentMateIn(newMateN));
 
                 // The parent just became worse, so the grandparent may need a different best-child.
-                // The regular principle variation update isn't sufficient because it assumes that
+                // The regular principal variation update isn't sufficient because it assumes that
                 // the search path can only become better than it was.
                 const int grandparentIndex = (i - 1);
                 if (grandparentIndex >= 0)
                 {
-                    // It's tempting to try validate the principle variation after this fix, but we
+                    // It's tempting to try validate the principal variation after this fix, but we
                     // may still be waiting to update it after backpropagating visit counts and mates.
                     // This is only a local fix that ensures that the overall update will be valid.
-                    FixPrincipleVariation(searchPath, searchPath[grandparentIndex].node);
+                    FixPrincipalVariation(searchPath, searchPath[grandparentIndex].node);
                 }
             }
             else
@@ -1940,7 +1940,7 @@ void SelfPlayWorker::BackpropagateMate(const std::vector<WeightedNode>& searchPa
     }
 }
 
-void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& searchPath, Node* parent)
+void SelfPlayWorker::FixPrincipalVariation(const std::vector<WeightedNode>& searchPath, Node* parent)
 {
     // We may update the best child multiple times in this loop. E.g. just discovered current best loses to mate,
     // then loop through and see 9 visits, then 10 visits, then 11 visits.
@@ -1955,7 +1955,7 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& sear
         }
     }
 
-    // We're updating a best-child, but that only changes the principle variation if this parent was part of it.
+    // We're updating a best-child, but that only changes the principal variation if this parent was part of it.
     if (updateBestChild)
     {
         parent->bestChild.store(parentBestChild, std::memory_order_relaxed);
@@ -1964,7 +1964,7 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& sear
             if (searchPath[i].node == parent)
             {
                 // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
-                _searchState->principleVariationChanged.store(true, std::memory_order_release);
+                _searchState->principalVariationChanged.store(true, std::memory_order_release);
                 break;
             }
             if (searchPath[i].node->bestChild.load(std::memory_order_relaxed) != searchPath[i + 1].node)
@@ -1975,30 +1975,30 @@ void SelfPlayWorker::FixPrincipleVariation(const std::vector<WeightedNode>& sear
     }
 }
 
-void SelfPlayWorker::UpdatePrincipleVariation(const std::vector<WeightedNode>& searchPath)
+void SelfPlayWorker::UpdatePrincipalVariation(const std::vector<WeightedNode>& searchPath)
 {
-    bool isPrincipleVariation = true;
+    bool isPrincipalVariation = true;
     for (int i = 0; i < searchPath.size() - 1; i++)
     {
         if (WorseThan(searchPath[i].node->bestChild.load(std::memory_order_relaxed), searchPath[i + 1].node))
         {
             searchPath[i].node->bestChild.store(searchPath[i + 1].node, std::memory_order_relaxed);
-            if (isPrincipleVariation)
+            if (isPrincipalVariation)
             {
                 // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
-                _searchState->principleVariationChanged.store(true, std::memory_order_release);
+                _searchState->principalVariationChanged.store(true, std::memory_order_release);
             }
         }
         else
         {
-            isPrincipleVariation &= (searchPath[i].node->bestChild.load(std::memory_order_relaxed) == searchPath[i + 1].node);
+            isPrincipalVariation &= (searchPath[i].node->bestChild.load(std::memory_order_relaxed) == searchPath[i + 1].node);
         }
     }
 }
 
-void SelfPlayWorker::ValidatePrincipleVariation(const Node* root)
+void SelfPlayWorker::ValidatePrincipalVariation(const Node* root)
 {
-    // Principle variation may be temporarily invalid from a search thread's perspective when multiple are running.
+    // Principal variation may be temporarily invalid from a search thread's perspective when multiple are running.
     if (_games[0].TryHard() && (Config::Misc.Search_SearchThreads > 1))
     {
         return;
@@ -2132,7 +2132,7 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
             // Only the primary worker does housekeeping.
             if (primary)
             {
-                CheckPrincipleVariation();
+                CheckPrincipalVariation();
 
                 CheckUpdateGui(network, false /* forceUpdate */);
 
@@ -2186,8 +2186,8 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
             if (primary)
             {
                 // Update "lastBestNodes" for strength tests.
-                const bool principleVariationChanged = _searchState->principleVariationChanged.exchange(false, std::memory_order_acquire);
-                if (principleVariationChanged)
+                const bool principalVariationChanged = _searchState->principalVariationChanged.exchange(false, std::memory_order_acquire);
+                if (principalVariationChanged)
                 {
                     const uint16_t newBest = _games[0].Root()->bestChild.load(std::memory_order_relaxed)->move;
                     if (newBest != _searchState->lastBestMove)
@@ -2318,19 +2318,19 @@ void SelfPlayWorker::OnSearchFinished()
 {
     // Print the final PV info and bestmove.
     const Node* bestMove = SelectMove(_games[0], true /* allowDiversity */);
-    PrintPrincipleVariation(true /* searchFinished */);
+    PrintPrincipalVariation(true /* searchFinished */);
     std::cout << "bestmove " << UCI::move(Move(bestMove->move), false /* chess960 */) << std::endl;
 }
 
-void SelfPlayWorker::CheckPrincipleVariation()
+void SelfPlayWorker::CheckPrincipalVariation()
 {
-    // Print principle variation when it changes, or at least every 5 seconds.
+    // Print principal variation when it changes, or at least every 5 seconds.
     // Use acquire-load to synchronize with the release-store of updaters so that side effects - the PV - are visible.
-    const bool principleVariationChanged = _searchState->principleVariationChanged.exchange(false, std::memory_order_acquire);
-    if (principleVariationChanged ||
-        (std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _searchState->lastPrincipleVariationPrint).count() >= 5.f))
+    const bool principalVariationChanged = _searchState->principalVariationChanged.exchange(false, std::memory_order_acquire);
+    if (principalVariationChanged ||
+        (std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - _searchState->lastPrincipalVariationPrint).count() >= 5.f))
     {
-        PrintPrincipleVariation(false /* searchFinished */);
+        PrintPrincipalVariation(false /* searchFinished */);
     }
 }
 
@@ -2348,7 +2348,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             lineGame.ApplyMoveWithRoot(move, lineGame.Root()->Child(move));
         }
 
-        // Wait to update the GUI until a principle variation exists.
+        // Wait to update the GUI until a principal variation exists.
         const Node* root = lineGame.Root();
         const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
         if (!bestChild)
@@ -2373,8 +2373,8 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
                 << " (" << (Game::ProbabilityToCentipawns(pvValue) / 100.f) << " pawns)";
         }
 
-        // Compose a SAN principle variation: more expensive but only used for GUI and only every "Search_GuiUpdateIntervalNodes".
-        std::stringstream principleVariation;
+        // Compose a SAN principal variation: more expensive but only used for GUI and only every "Search_GuiUpdateIntervalNodes".
+        std::stringstream principalVariation;
         SelfPlayGame pvGame = lineGame;
         const Node* pvBestChild = bestChild;
         while (pvBestChild)
@@ -2382,7 +2382,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             const Move move = Move(pvBestChild->move);
             const std::string san = Pgn::San(pvGame.GetPosition(), move,
                 (pvBestChild->terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>()) /* showCheckmate */);
-            principleVariation << san << " ";
+            principalVariation << san << " ";
             pvGame.ApplyMove(move);
             pvBestChild = pvBestChild->bestChild.load(std::memory_order_relaxed);
         }
@@ -2419,7 +2419,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             upWeights.push_back(child.upWeight.load(std::memory_order_relaxed));
         }
 
-        network->UpdateGui(fen, _searchState->guiLine, nodeCount, evaluation.str(), principleVariation.str(),
+        network->UpdateGui(fen, _searchState->guiLine, nodeCount, evaluation.str(), principalVariation.str(),
             sans, froms, tos, targets, priors, values, puct, visits, weights, upWeights);
     }
     _searchState->previousNodeCount = nodeCount;
@@ -2443,7 +2443,7 @@ void SelfPlayWorker::GuiShowLine(INetwork* network, const std::string& line)
         const Move& move = lineMoves.back(); // Reference returned by "emplace_back" may be invalid on MSVC when reallocating.
         lineGame.ApplyMoveWithRoot(move, lineGame.Root()->Child(move));
 
-        // Don't show lines for unexpanded nodes, or nodes with no principle variation.
+        // Don't show lines for unexpanded nodes, or nodes with no principal variation.
         const Node* bestChild = lineGame.Root()->bestChild.load(std::memory_order_relaxed);
         if (!lineGame.Root()->IsExpanded() || !bestChild)
         {
@@ -2461,7 +2461,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
 {
     // Always try to do at least 1-2 simulations so that a "best" move exists.
     // Note that this may not be possible because of a hard "stop" or "position" command,
-    // so SelectMove, PrintPrincipleVariation and OnSearchFinished handle the case of no bestChild.
+    // so SelectMove, PrintPrincipalVariation and OnSearchFinished handle the case of no bestChild.
     const Node* root = _games[0].Root();
     const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
     if (!bestChild)
@@ -2579,10 +2579,10 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
     }
 }
 
-void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
+void SelfPlayWorker::PrintPrincipalVariation(bool searchFinished)
 {
     const Node* root = _games[0].Root();
-    std::vector<Move> principleVariation;
+    std::vector<Move> principalVariation;
 
     const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
     if (!bestChild)
@@ -2602,19 +2602,19 @@ void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
     const Node* pvBestChild = bestChild;
     while (pvBestChild)
     {
-        principleVariation.push_back(Move(pvBestChild->move));
+        principalVariation.push_back(Move(pvBestChild->move));
         pvBestChild = pvBestChild->bestChild.load(std::memory_order_relaxed);
     }
 
     const bool debug = _searchState->debug.load(std::memory_order_relaxed);
     auto now = std::chrono::high_resolution_clock::now();
     const std::chrono::duration sinceSearchStart = (now - _searchState->searchStart);
-    _searchState->lastPrincipleVariationPrint = now;
+    _searchState->lastPrincipalVariationPrint = now;
 
     // Value is from the parent's perspective, so that's already correct for the root perspective
     const int eitherMateN = bestChild->terminalValue.load(std::memory_order_relaxed).EitherMateN();
     const float value = bestChild->Value();
-    const int depth = static_cast<int>(principleVariation.size());
+    const int depth = static_cast<int>(principalVariation.size());
     const int64_t searchTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(sinceSearchStart).count();
     const int nodeCount = _searchState->nodeCount.load(std::memory_order_relaxed);
     const int tablebaseHitCount = _searchState->tablebaseHitCount.load(std::memory_order_relaxed);
@@ -2647,7 +2647,7 @@ void SelfPlayWorker::PrintPrincipleVariation(bool searchFinished)
             << " hashevict " << PredictionCache::Instance.PermilleEvictions();
     }
     std::cout << " pv";
-    for (Move move : principleVariation)
+    for (Move move : principalVariation)
     {
         std::cout << " " << UCI::move(move, false /* chess960 */);
     }
