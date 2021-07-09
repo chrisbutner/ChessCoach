@@ -200,16 +200,15 @@ num_simulations = 800
 root_dirichlet_alpha = 0.3
 root_exploration_fraction = 0.25
 
-exploration_rate_base = 19652.0
-exploration_rate_init = 1.25
-
-linear_exploration_rate = 200.0
-linear_exploration_base = 40000.0
-virtual_loss_coefficient = 0.25
-moving_average_build = 1.0
-moving_average_cap = 50_000.0
-backpropagation_puct_threshold = 0.98
-elimination_base_exponent = 8 # Start by giving the top 2^8 = 256 children linear exploration incentive, decaying down to 2.
+exploration_rate_base = 50000.0
+exploration_rate_init = 2.0
+linear_exploration_rate = 4000.0
+linear_exploration_base = 1400.0
+virtual_loss_coefficient = 0.1
+moving_average_build = 0.9
+moving_average_cap = 1_000_000.0
+backpropagation_puct_threshold = 0.95
+elimination_base_exponent = 4 # Start by giving the top 2^8 = 256 children linear exploration incentive, decaying down to 2^1 = 2.
 move_diversity_value_delta_threshold = 0.01
 move_diversity_temperature = 0.5
 move_diversity_plies = 8
@@ -304,15 +303,15 @@ tournament_time_control = "60+0.6" # 60+0.6 fast (1.8 min each for 80 moves), 30
 # '("small", "medium", "large")'
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # NOTE: Parameters must also be listed under [uci_options] when using mini-tournament-based optimization.
-exploration_rate_base = '(5_000.0, 75_000.0)'
+exploration_rate_base = '(10_000.0, 75_000.0)'
 exploration_rate_init = '(0.75, 3.0)'
-linear_exploration_rate = '(1e2, 1e4, "log-uniform")'
+linear_exploration_rate = '(5e2, 5e3, "log-uniform")'
 linear_exploration_base = '(1e3, 1e6, "log-uniform")'
-virtual_loss_coefficient = '(0.1, 2.0)'
-moving_average_build = '(0.9, 1.0)'
-moving_average_cap = '(1e4, 1e6, "log-uniform")'
-backpropagation_puct_threshold = '(0.75, 1.0)'
-elimination_base_exponent = '(2, 16)'
+virtual_loss_coefficient = '(0.0, 1.0)'
+moving_average_build = '(0.8, 1.0)'
+moving_average_cap = '(1e5, 1e7, "log-uniform")'
+backpropagation_puct_threshold = '(0.9, 1.0)'
+elimination_base_exponent = '(2, 8)'
 
 [uci_options]
 
