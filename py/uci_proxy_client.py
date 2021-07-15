@@ -19,12 +19,12 @@ import threading
 import argparse
 import sys
 
-PORT = 24377
+DEFAULT_PORT = 24377
 BUFFER_SIZE = 4096
 
-def connect(host):
+def connect(host, port):
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
-    connection.connect((host, PORT))
+    connection.connect((host, port))
     manage(connection)
 
 def manage(connection):
@@ -72,6 +72,7 @@ def manage(connection):
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Act as a UCI proxy client")
   parser.add_argument("host", help="UCI proxy server hostname or address")
+  parser.add_argument("port", default=DEFAULT_PORT, type=int, nargs="?", help="port to connect to")
   args = parser.parse_args()
 
-  connect(args.host)
+  connect(args.host, args.port)

@@ -23,17 +23,17 @@ import shlex
 import time
 
 HOST = ""
-PORT = 24377
+DEFAULT_PORT = 24377
 BUFFER_SIZE = 4096
 
-def serve(uci_command):
+def serve(uci_command, port):
   # Windows doesn't need a split for shell=False.
   if platform.system() != "Windows":
     uci_command = shlex.split(uci_command)
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-    server_socket.bind((HOST, PORT))
+    server_socket.bind((HOST, port))
     server_socket.listen(0)
-    print(f"Listening on port {PORT}...", flush=True)
+    print(f"Listening on port {port}...", flush=True)
     process = None
     thread = None
     while True:
@@ -119,6 +119,7 @@ def manage(process, connection):
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Act as a UCI proxy server, listening for UCI proxy clients over TCP")
   parser.add_argument("uci_command", help="UCI engine command")
+  parser.add_argument("port", default=DEFAULT_PORT, type=int, nargs="?", help="port to listen on")
   args = parser.parse_args()
 
-  serve(args.uci_command)
+  serve(args.uci_command, args.port)

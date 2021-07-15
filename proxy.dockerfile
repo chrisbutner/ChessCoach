@@ -7,4 +7,5 @@ FROM eu.gcr.io/${PROJECT_ID}/chesscoach-play:${NETWORK}_${BASE_TAG}
 # CMD ["python3 /usr/local/bin/ChessCoach/uci_proxy_server.py ChessCoachUci"]
 CMD pip3 install wheel && \
   pip3 install /usr/share/tpu/tf_nightly*.whl && \
-  exec python3 /usr/local/bin/ChessCoach/uci_proxy_server.py ChessCoachUci
+  python3 /usr/local/bin/ChessCoach/uci_proxy_server.py ChessCoachUci 24377 & \
+  python3 /usr/local/bin/ChessCoach/uci_proxy_server.py stockfish_13_linux_x64_bmi2 24378

@@ -21,14 +21,12 @@ import re
 import subprocess
 import threading
 import tempfile
-import socket
 from ast import literal_eval
 from skopt import Optimizer
 from skopt import expected_minimum
 import matplotlib.pyplot as plt
 from skopt.plots import plot_objective
 from config import Config, ChessCoachException
-import uci_proxy_client
 try:
   import chesscoach # See PythonModule.cpp
 except:
@@ -56,9 +54,11 @@ class Session:
         raise ChessCoachException("Distributed optimization is only implemented for tournament mode")
       # This can waste hardware if factors don't line up. You could instead find a good GCD with minimal machine waste
       # and run partial instead of complete mini-tournaments in parallel.
+      self.distributed_vs_stockfish = self.config.misc["optimization"]["distributed_vs_stockfish"]
+      self.ip_addresses_per_game = (1 if self.distributed_vs_stockfish else 2)
       ip_addresses = self.get_ip_addresses() # There may be more IP addresses than "hosts"; e.g., with TPU pods we can use multiple workers.
       self.ip_address_count = len(ip_addresses)
-      self.parallelism = max(1, (self.ip_address_count // 2) // self.config.misc["optimization"]["tournament_games"])
+      self.parallelism = max(1, (self.ip_address_count // self.ip_addresses_per_game) // self.config.misc["optimization"]["tournament_games"])
     else:
       self.ip_address_count = None
       self.parallelism = 1
@@ -157,7 +157,7 @@ class Session:
 
   def evaluate_tournaments(self, point_dicts):
     if self.distributed_hosts:
-      # Play UCI proxy against UCI proxy.
+      # Play UCI proxy against UCI proxy/Stockfish.
       while True:
         threads = []
         results = []
@@ -185,8 +185,8 @@ class Session:
   def evaluate_tournament(self, point_dict, ip_addresses):
     tournament_games = self.config.misc["optimization"]["tournament_games"]
     if ip_addresses:
-      # Play UCI proxy against UCI proxy.
-      parallel_game_count = (len(ip_addresses) // 2)
+      # Play UCI proxy against UCI proxy/Stockfish.
+      parallel_game_count = (len(ip_addresses) // self.ip_addresses_per_game)
       # Play more games than necessary if numbers don't divide evenly.
       partial_length = (tournament_games + parallel_game_count - 1) // parallel_game_count
       threads = []
@@ -195,7 +195,7 @@ class Session:
         pgn_paths.append(None)
         def play(i):
           reverse_sides = ((partial_length * i) % 2 == 1)
-          pgn_paths[i] = self.play_partial_tournament(point_dict, ip_addresses[i * 2:(i + 1) * 2], partial_length, reverse_sides)
+          pgn_paths[i] = self.play_partial_tournament(point_dict, ip_addresses[i * self.ip_addresses_per_game:(i + 1) * self.ip_addresses_per_game], partial_length, reverse_sides)
         thread = threading.Thread(target=play, args=(i,))
         thread.start()
         threads.append(thread)
@@ -209,19 +209,24 @@ class Session:
 
   def play_partial_tournament(self, point_dict, ip_addresses, game_count, reverse_sides):
     engine_optimization_options = " ".join([f"option.{name}={value}" for name, value in point_dict.items()])
+    stockfish_options = "option.Threads=1 option.Hash=512" # More information entropy when more closely matched.
     if ip_addresses:
-      # Play UCI proxy against UCI proxy.
-      assert len(ip_addresses) == 2
+      # Play UCI proxy against UCI proxy/Stockfish.
+      assert len(ip_addresses) == self.ip_addresses_per_game
       python = "python" if platform.system() == "Windows" else "python3"
       client = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uci_proxy_client.py")
       engine_commands = [python, python]
       engine_arguments = [[client, ip_address] for ip_address in ip_addresses]
       engine_options = [engine_optimization_options, ""]
+      if len(ip_addresses) == 1:
+        assert self.distributed_vs_stockfish
+        engine_arguments.append([client, ip_addresses[0], "24378"])
+        engine_options[1] = stockfish_options
     else:
       # Play ChessCoach against Stockfish locally, for TPU compatibility (only one process can grab the accelerators).
       engine_commands = ["ChessCoachUci", ("stockfish_13_win_x64_bmi2" if platform.system() == "Windows" else "stockfish_13_linux_x64_bmi2")]
       engine_arguments = [[], []]
-      engine_options = [engine_optimization_options, "option.Threads=1 option.Hash=512"]
+      engine_options = [engine_optimization_options, stockfish_options]
     
     # Prepare to run the mini-tournament. Use a temporary file as the PGN.
     with tempfile.NamedTemporaryFile(delete=False) as pgn:

@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with ChessCoach. If not, see <https://www.gnu.org/licenses/>.
 
-import time
 import math
 import tensorflow as tf
 from tensorflow.keras import backend as K
