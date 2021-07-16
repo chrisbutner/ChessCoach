@@ -6,3 +6,5 @@ cloud-tpu-client
 toml
 scikit-optimize
 matplotlib
+numpy
+beautifulsoup4
