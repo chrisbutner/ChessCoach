@@ -248,7 +248,7 @@ class Session:
     # Cutechess-cli happily treats disconnects/stalls as definitive results: throw away the PGN instead.
     output = process.stdout.decode("utf-8")
     print(output)
-    if "disconnects" in output or "stalls" in output:
+    if "disconnects" in output or "disconnected" in output or "stalls" in output or "stalled" in output:
       print("Discarding partial tournament because of disconnects/stalls")
       return None
     return pgn_path
