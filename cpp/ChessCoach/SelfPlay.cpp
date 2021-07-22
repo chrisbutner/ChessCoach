@@ -1753,7 +1753,7 @@ WeightedNode PuctContext::SelectChild() const
     }
 
     // Select child using max(SBLE-PUCT), but only backpropagate value if its AZ-PUCT is within range of max(AZ-PUCT).
-    const int weight = (!bestWasBlocked) & ((azOfMaxSble / maxAzPuct) >= Config::Network.SelfPlay.BackpropagationPuctThreshold);
+    const int weight = (!bestWasBlocked) & ((maxAzPuct - azOfMaxSble) <= Config::Network.SelfPlay.BackpropagationPuctThreshold);
     return { maxSble, weight };
 }
 
