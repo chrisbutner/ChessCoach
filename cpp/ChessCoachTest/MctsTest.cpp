@@ -31,7 +31,7 @@ SelfPlayGame& PlayGame(SelfPlayWorker& selfPlayWorker, std::function<void (SelfP
 
     selfPlayWorker.DebugGame(index, &game, &state, &values, &policies);
 
-    selfPlayWorker.SetUpGame(index);
+    selfPlayWorker.SetUpGame(index, std::chrono::high_resolution_clock::now());
 
     while (true)
     {
@@ -251,7 +251,7 @@ TEST(Mcts, MateProving)
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     selfPlayWorker.Initialize();
     SelfPlayGame* game;
-    selfPlayWorker.SetUpGame(0);
+    selfPlayWorker.SetUpGame(0, std::chrono::high_resolution_clock::now());
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Expand a small tree (1 root, 3 ply1, 9 ply2).
@@ -331,7 +331,7 @@ TEST(Mcts, TwofoldRepetition)
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     selfPlayWorker.Initialize();
     SelfPlayGame* game;
-    selfPlayWorker.SetUpGame(0);
+    selfPlayWorker.SetUpGame(0, std::chrono::high_resolution_clock::now());
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up a simple 2-repetition.
@@ -401,7 +401,7 @@ TEST(Mcts, SamplingSelfPlay)
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     selfPlayWorker.Initialize();
     SelfPlayGame* game;
-    selfPlayWorker.SetUpGame(0, Game::StartingPosition, {}, false /* tryHard */); // SamplingSelfPlay means tryHard is false.
+    selfPlayWorker.SetUpGame(0, std::chrono::high_resolution_clock::now(), Game::StartingPosition, {}, false /* tryHard */); // SamplingSelfPlay means tryHard is false.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up visit counts for four moves.
@@ -447,7 +447,7 @@ TEST(Mcts, SamplingUci)
     SelfPlayWorker selfPlayWorker(nullptr /* storage */, &searchState, 1 /* gameCount */);
     selfPlayWorker.Initialize();
     SelfPlayGame* game;
-    selfPlayWorker.SetUpGame(0, Game::StartingPosition, {}, true /* tryHard */); // SamplingUci means tryHard is true.
+    selfPlayWorker.SetUpGame(0, std::chrono::high_resolution_clock::now(), Game::StartingPosition, {}, true /* tryHard */); // SamplingUci means tryHard is true.
     selfPlayWorker.DebugGame(0, &game, nullptr, nullptr, nullptr);
 
     // Set up visit counts for four moves.
@@ -508,7 +508,7 @@ TEST(Mcts, PrepareExpandedRoot)
     INetwork::OutputPlanes* policies;
 
     selfPlayWorker.DebugGame(index, &game, &state, &values, &policies);
-    selfPlayWorker.SetUpGame(index);
+    selfPlayWorker.SetUpGame(index, std::chrono::high_resolution_clock::now());
 
     // "GPU" work, in advance.
     const int gameCount = 1;

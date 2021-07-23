@@ -1025,11 +1025,12 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
 
         // Set up any uninitialized games. It's important to do this here so that "_gameStarts" is accurate for MCTS timing.
         // Otherwise, continue games in progress, clearing the prediction cache when the network is updated.
+        const std::chrono::time_point<std::chrono::high_resolution_clock> starting = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < _games.size(); i++)
         {
             if (!_games[i].Root())
             {
-                SetUpGame(i);
+                SetUpGame(i, starting);
             }
         }
 
@@ -1048,7 +1049,7 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
 
                     workCoordinator->OnWorkItemCompleted();
 
-                    SetUpGame(i);
+                    SetUpGame(i, std::chrono::high_resolution_clock::now());
                     Play(i);
                 }
             }
@@ -1078,31 +1079,31 @@ int SelfPlayWorker::ChooseSimulationLimit()
     return Config::Network.SelfPlay.NumSimulations;
 }
 
-void SelfPlayWorker::ClearGame(int index)
+void SelfPlayWorker::ClearGame(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now)
 {
     _states[index] = SelfPlayState::Working;
-    _gameStarts[index] = std::chrono::high_resolution_clock::now();
+    _gameStarts[index] = now;
     _mctsSimulations[index] = 0;
     _mctsSimulationLimits[index] = ChooseSimulationLimit();
     _searchPaths[index].clear();
     _cacheStores[index] = nullptr;
 }
 
-void SelfPlayWorker::SetUpGame(int index)
+void SelfPlayWorker::SetUpGame(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now)
 {
-    ClearGame(index);
+    ClearGame(index, now);
     _games[index] = SelfPlayGame(&_images[index], &_values[index], &_policies[index], &_tablebaseCardinalities[index]);
 }
 
-void SelfPlayWorker::SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard)
+void SelfPlayWorker::SetUpGame(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now, const std::string& fen, const std::vector<Move>& moves, bool tryHard)
 {
-    ClearGame(index);
+    ClearGame(index, now);
     _games[index] = SelfPlayGame(fen, moves, tryHard, &_images[index], &_values[index], &_policies[index], &_tablebaseCardinalities[index]);
 }
 
-void SelfPlayWorker::SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset)
+void SelfPlayWorker::SetUpGameExisting(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now, const std::vector<Move>& moves, int applyNewMovesOffset)
 {
-    ClearGame(index);
+    ClearGame(index, now);
 
     SelfPlayGame& game = _games[index];
 
@@ -1686,7 +1687,7 @@ PuctContext::PuctContext(const SearchState* searchState, Node* parent)
         (std::log((_parentVirtualExploration + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
         std::sqrt(_parentVirtualExploration);
 
-    // At the root, use "eliminationFraction" to exponentially decay down from the top 64 to top 2 children based on AZ-PUCT score,
+    // At the root, use "eliminationFraction" to exponentially decay down from the top N to top 2 children based on AZ-PUCT score,
     // with only the top K receiving SBLE-PUCT linear exploration incentive.
     //
     // At other nodes with fewer visits, eliminate less harshly early on, based on the fraction of root visits.
@@ -2185,15 +2186,18 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
             // Only the primary worker does housekeeping.
             if (primary)
             {
-                // Update "lastBestNodes" for strength tests.
-                const bool principalVariationChanged = _searchState->principalVariationChanged.exchange(false, std::memory_order_acquire);
-                if (principalVariationChanged)
+                if (_searchState->botGameId.empty())
                 {
-                    const uint16_t newBest = _games[0].Root()->bestChild.load(std::memory_order_relaxed)->move;
-                    if (newBest != _searchState->lastBestMove)
+                    // Update "lastBestNodes" for strength tests.
+                    const bool principalVariationChanged = _searchState->principalVariationChanged.exchange(false, std::memory_order_acquire);
+                    if (principalVariationChanged)
                     {
-                        _searchState->lastBestMove = newBest;
-                        _searchState->lastBestNodes = _searchState->nodeCount;
+                        const uint16_t newBest = _games[0].Root()->bestChild.load(std::memory_order_relaxed)->move;
+                        if (newBest != _searchState->lastBestMove)
+                        {
+                            _searchState->lastBestMove = newBest;
+                            _searchState->lastBestNodes = _searchState->nodeCount;
+                        }
                     }
                 }
 
@@ -2281,7 +2285,7 @@ void SelfPlayWorker::SearchUpdatePosition(const std::string& fen, const std::vec
             std::cout << "info string [position] Reusing existing position with "
                 << (moves.size() - _searchState->positionMoves.size()) << " additional moves" << std::endl;
         }
-        SetUpGameExisting(0, moves, static_cast<int>(_searchState->positionMoves.size()));
+        SetUpGameExisting(0, std::chrono::high_resolution_clock::now(), moves, static_cast<int>(_searchState->positionMoves.size()));
     }
     else
     {
@@ -2290,7 +2294,7 @@ void SelfPlayWorker::SearchUpdatePosition(const std::string& fen, const std::vec
             std::cout << "info string [position] Creating new position" << std::endl;
         }
         _games[0].PruneAll();
-        SetUpGame(0, fen, moves, true /* tryHard */);
+        SetUpGame(0, std::chrono::high_resolution_clock::now(), fen, moves, true /* tryHard */);
     }
 
     _searchState->position = &_games[0];
@@ -2658,9 +2662,10 @@ void SelfPlayWorker::SearchInitialize(const SelfPlayGame* position)
 {
     // Set up parallelism. Make N games share a tree but have their own image/value/policy slots.
     _currentParallelism = 0;
+    const std::chrono::time_point<std::chrono::high_resolution_clock> now = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < _games.size(); i++)
     {
-        ClearGame(i);
+        ClearGame(i, now);
         _states[i] = _states[0];
         _gameStarts[i] = _gameStarts[0];
         _games[i] = position->SpawnShadow(&_images[i], &_values[i], &_policies[i]);

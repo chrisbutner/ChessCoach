@@ -362,19 +362,20 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
     PyObject* pythonFen;
     PyObject* pythonMoves;
     PyObject* pythonBotSide;
+    PyObject* pythonCanComment;
     PyObject* pythonLimitSeconds;
     PyObject* pythonWtime;
     PyObject* pythonBtime;
     PyObject* pythonWinc;
     PyObject* pythonBinc;
 
-    if (!PyArg_UnpackTuple(args, "bot_search", 9, 9, &pythonGameId, &pythonFen, &pythonMoves, &pythonBotSide, &pythonLimitSeconds,
+    if (!PyArg_UnpackTuple(args, "bot_search", 10, 10, &pythonGameId, &pythonFen, &pythonMoves, &pythonBotSide, &pythonCanComment, &pythonLimitSeconds,
         &pythonWtime, &pythonBtime, &pythonWinc, &pythonBinc) ||
-        !pythonFen || !pythonMoves || !pythonBotSide || !pythonLimitSeconds || !pythonWtime || !pythonBtime || !pythonWinc || !pythonBinc ||
-        !PyBytes_Check(pythonGameId) || !PyBytes_Check(pythonFen) || !PyBytes_Check(pythonMoves) || !PyLong_Check(pythonBotSide) || !PyLong_Check(pythonLimitSeconds) ||
+        !pythonFen || !pythonMoves || !pythonBotSide || !pythonCanComment || !pythonLimitSeconds || !pythonWtime || !pythonBtime || !pythonWinc || !pythonBinc ||
+        !PyBytes_Check(pythonGameId) || !PyBytes_Check(pythonFen) || !PyBytes_Check(pythonMoves) || !PyLong_Check(pythonBotSide) || !PyBool_Check(pythonCanComment) || !PyLong_Check(pythonLimitSeconds) ||
         !PyLong_Check(pythonWtime) || !PyLong_Check(pythonBtime) || !PyLong_Check(pythonWinc) || !PyLong_Check(pythonBinc))
     {
-        PyErr_SetString(PyExc_TypeError, "Expected 9 args: game_id, fen, moves, bot_side, limit_seconds, wtime, btime, winc, binc");
+        PyErr_SetString(PyExc_TypeError, "Expected 10 args: game_id, fen, moves, bot_side, can_comment, limit_seconds, wtime, btime, winc, binc");
         return nullptr;
     }
 
@@ -391,6 +392,7 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
     std::string moves(dataMoves, sizeMoves);
 
     const Color botSide = Color(PyLong_AsLong(pythonBotSide));
+    const bool canComment = PyObject_IsTrue(pythonCanComment);
     const int limitSeconds = PyLong_AsLong(pythonLimitSeconds);
     const int wtime = PyLong_AsLong(pythonWtime);
     const int btime = PyLong_AsLong(pythonBtime);
@@ -408,20 +410,20 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         assert(Instance().network);
         assert(Instance().workerGroup);
 
-        // Stop and ready workers.
+        // Signal workers to stop.
         Instance().workerGroup->workCoordinator->ResetWorkItemsRemaining(0);
-        Instance().workerGroup->workCoordinator->WaitForWorkers();
 
         // If there's no game ID then we just needed to stop any search/ponder in progress.
         if (gameId.empty())
         {
+            // Finish stopping and readying workers.
+            Instance().workerGroup->workCoordinator->WaitForWorkers();
+
             Py_RETURN_NONE;
         }
 
-        // Set up the position and parse moves. Also generate a commentary image while we have the game set up,
-        // as long as we have enough think time remaining.
+        // Set up the position and parse moves.
         const std::string& actualFen = ((fen == "startpos") ? Game::StartingPosition : fen);
-        std::vector<Move> parsedMoves;
         Game game(actualFen, {});
         std::stringstream uciMoves(moves);
         std::string token;
@@ -439,17 +441,13 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
             }
             game.ApplyMove(move);
         }
-        std::unique_ptr<INetwork::CommentaryInputPlanes> commentaryImage;
-        const int botRemainingMilliseconds = ((botSide == WHITE) ? wtime : btime);
-        if (botRemainingMilliseconds >= Config::Misc.Bot_CommentaryMinimumRemainingMilliseconds)
-        {
-            commentaryImage.reset(new INetwork::CommentaryInputPlanes());
-            game.GenerateCommentaryImage(commentaryImage->data()); // Relies on "game.Moves()", so run before the "std::move"
-        }
-        parsedMoves = std::move(game.Moves());
+        ply = game.Ply();
+
+        // Finish stopping and readying workers.
+        Instance().workerGroup->workCoordinator->WaitForWorkers();
 
         // Propagate the position.
-        Instance().workerGroup->controllerWorker->SearchUpdatePosition(actualFen, parsedMoves, false /* forceNewPosition */);
+        Instance().workerGroup->controllerWorker->SearchUpdatePosition(actualFen, game.Moves(), false /* forceNewPosition */);
 
         // Check whether to search or ponder and set up time control.
         const bool search = (game.ToPlay() == botSide);
@@ -482,18 +480,21 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
 
         // Comment on the position and return the last SAN, as long as there's been at least one move,
         // since the encoder is trained with before-and-after positions (and as long as there's enough
-        // think time remaining).
+        // think time remaining, and API throttling is under control).
         //
         // It's important to do this before waking up search workers so that this call can
         // return to Python quickly. Assume that the additional bot safety buffer covers the time needed.
         //
         // This acquires a "PythonContext" in the PythonNetwork call, so make it here in the
         // "NonPythonContext" so we that don't over-release (even though it's GIL-inefficient).
-        ply = game.Ply();
-        if (!parsedMoves.empty() && commentaryImage)
+        const int botRemainingMilliseconds = ((botSide == WHITE) ? wtime : btime);
+        if (!game.Moves().empty() && canComment && (botRemainingMilliseconds >= Config::Misc.Bot_CommentaryMinimumRemainingMilliseconds))
         {
+            std::unique_ptr<INetwork::CommentaryInputPlanes> commentaryImage(new INetwork::CommentaryInputPlanes());
+            game.GenerateCommentaryImage(commentaryImage->data());
+
             Position& position = game.GetPosition();
-            const Move lastMove = parsedMoves.back();
+            const Move lastMove = game.Moves().back();
             position.undo_move(lastMove);
             san = Pgn::San(position, lastMove, true /* showCheckmate */);
             comments = Instance().network->PredictCommentaryBatch(1, commentaryImage.get());

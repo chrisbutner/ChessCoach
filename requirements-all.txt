@@ -8,3 +8,5 @@ scikit-optimize
 matplotlib
 numpy
 beautifulsoup4
+backoff
+requests

@@ -129,6 +129,8 @@ class Challenge:
 
 class Game:
 
+  comment_frequency_seconds = 30.0
+
   def __init__(self, json, username, base_url):
     self.username = username
     self.id = json.get("id")
@@ -153,7 +155,7 @@ class Game:
 
     self.searching_moves = "(not searching yet)"
     self.pending_comment = None
-    self.last_comment_time = time.time() - 1000.0
+    self.last_comment_time = time.time() - random.uniform(0.0, self.comment_frequency_seconds) - 0.5
 
   def url(self):
     return urljoin(self.base_url, "{}/{}".format(self.id, self.my_color))
@@ -167,19 +169,24 @@ class Game:
   def should_abort_now(self):
     return self.is_abortable() and time.time() > self.abort_at
 
-  # Only allow commenting every 10 seconds, and delay after 429-errors.
+  # Only allow commenting every 30 seconds, and delay after 429-errors.
   def try_pop_comment(self):
     comment = self.pending_comment
     if not comment:
       return None
     now = time.time()
-    if (now - self.last_comment_time) < 10.0:
+    if (now - self.last_comment_time) < self.comment_frequency_seconds:
       return None
     if not throttle.ready():
       return None
     self.pending_comment = None
     self.last_comment_time = now
     return comment
+
+  # Additional optimization layer: only bother generating a comment when it can be immediately posted.
+  def can_comment(self):
+    now = time.time()
+    return (not self.pending_comment) and ((now - self.last_comment_time) >= self.comment_frequency_seconds)
 
   def __str__(self):
     return "{} {} vs {}".format(self.url(), self.perf_name, self.opponent.__str__())
@@ -424,7 +431,8 @@ class Throttle:
 
 class OutgoingChallenges:
 
-  idle_seconds_before_send = 60.0
+  idle_seconds_before_send = 65.0
+  unanswered_seconds_before_cancel = 30.0
 
   minimum_best_rating = 2000
   rating_sample_temperature = 0.1 # About 30x as likely to choose 2700 as 2037, based on a sample of 155 bots.
@@ -448,18 +456,21 @@ class OutgoingChallenges:
     self.lichess = lichess
     self.games = games
     self.rng = np.random.default_rng()
+    self.last_send_attempt = time.time()
 
   def upkeep(self):
-    # Send a new challenge? (Wait 60 seconds in case players want to challenge us, and delay after 429-errors.)
+    # Send a new challenge? (Wait 60 seconds in case players want to challenge us, and delay between sends, and after 429-errors.)
     if (not self.games.queue
         and not self.games.in_progress
         and not self.challenges_active
         and (time.time() >= self.games.last_finish_time + self.idle_seconds_before_send)
+        and (time.time() >= self.last_send_attempt + self.idle_seconds_before_send)
         and throttle.ready()):
       key = self.choose()
       if key:
         username, (limit, increment) = key
         try:
+          self.last_send_attempt = time.time()
           response = self.lichess.send_challenge(username, limit, increment)
           id = response["challenge"]["id"]
           time_sent = time.time()
@@ -478,7 +489,7 @@ class OutgoingChallenges:
     now = time.time()
     remove = []
     for id, (key, time_sent) in self.challenges_active.items():
-      if (now - time_sent) >= 30:
+      if (now - time_sent) >= self.unanswered_seconds_before_cancel:
         username, (limit, increment) = key
         try:
           self.lichess.cancel_challenge(id)
@@ -612,7 +623,7 @@ def loop(li, user_profile):
         game = None
         assert not games.in_progress
         # Stop any search/ponder in progress.
-        chesscoach.bot_search(b"", b"", b"", 0, 0, 0, 0, 0, 0)
+        chesscoach.bot_search(b"", b"", b"", 0, False, 0, 0, 0, 0, 0)
 
       elif event["type"] == "local_play_move":
         if game and game.id == event["id"]:
@@ -745,14 +756,15 @@ def on_game_state(li, game):
   fen = game.initial_fen.encode("utf-8")
   moves = game.state["moves"].encode("utf-8")
   bot_side = (WHITE if game.is_white else BLACK)
+  can_comment = game.can_comment()
   limit_seconds = (10 if game.is_abortable() else 0)
   
   # Start the search/ponder.
-  status, ply, san, comment = chesscoach.bot_search(game_id, fen, moves, bot_side, limit_seconds,
+  status, ply, san, comment = chesscoach.bot_search(game_id, fen, moves, bot_side, can_comment, limit_seconds,
     game.state["wtime"], game.state["btime"], game.state["winc"], game.state["binc"])
   print(f"*** {status.upper()} *** ply: {ply}, SAN: {san}, comment: {comment}")
 
-  # Store the comment and process it in the main loop (we only comment every 5 seconds).
+  # Store the comment and process it in the main loop (we only comment every 30 seconds).
   if comment:
     assert (ply > 0)
     ply_before_move = (ply - 1)

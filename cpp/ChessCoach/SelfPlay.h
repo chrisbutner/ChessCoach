@@ -353,9 +353,9 @@ public:
     void LoopSearch(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
     void LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork* network, NetworkType networkType, int threadIndex);
 
-    void SetUpGame(int index);
-    void SetUpGame(int index, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
-    void SetUpGameExisting(int index, const std::vector<Move>& moves, int applyNewMovesOffset);
+    void SetUpGame(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now);
+    void SetUpGame(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now, const std::string& fen, const std::vector<Move>& moves, bool tryHard);
+    void SetUpGameExisting(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now, const std::vector<Move>& moves, int applyNewMovesOffset);
     void TrainNetwork(INetwork* network, NetworkType networkType, int step, int checkpoint);
     void TrainNetworkWithCommentary(INetwork* network, int step, int checkpoint);
     void SaveNetwork(INetwork* network, NetworkType networkType, int checkpoint);
@@ -394,7 +394,7 @@ private:
     std::pair<int, int> JudgeStrengthTestPosition(const StrengthTestSpec& spec, Move move, int lastBestNodes, int failureNodes);
 
     int ChooseSimulationLimit();
-    void ClearGame(int index);   
+    void ClearGame(int index, const std::chrono::time_point<std::chrono::high_resolution_clock>& now);
     bool IsTerminal(const SelfPlayGame& game) const;
     void SaveToStorageAndLog(INetwork* network, int index);
     void PredictBatchUniform(int batchSize, INetwork::InputPlanes* images, float* values, INetwork::OutputPlanes* policies);
