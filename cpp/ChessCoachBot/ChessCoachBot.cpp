@@ -45,11 +45,11 @@ void ChessCoachBot::Work()
     // and lack of progress in no-increment games.
     Config::Misc.TimeControl_SafetyBufferMilliseconds += 2000;
 
-    // Use the lighter-weight strength test loop, rather than chattier search loop. 
+    // Use the search loop and print principle variations periodically.
     std::unique_ptr<INetwork> network(CreateNetwork());
     WorkerGroup workerGroup;
     workerGroup.Initialize(network.get(), nullptr /* storage */, Config::Network.SelfPlay.PredictionNetworkType,
-        Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
+        Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopSearch);
 
     // Let the bot call back into Python to play a move after searching.
     InitializePythonModule(nullptr /* storage */, network.get(), &workerGroup);

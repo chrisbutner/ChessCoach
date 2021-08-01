@@ -90,8 +90,8 @@ class Challenge:
 
   def is_supported_variant(self):
     return (
-      # Allow standard chess, but only when the colors are random.
-      (self.variant == "standard" and self.color == "random") or
+      # Allow standard chess. Have to support arbitrary colors to allow for rematches.
+      (self.variant == "standard") or
       # Allow piece odds, but only when the opponent has all pieces and we're missing some.
       (self.variant == "fromPosition" and self.color == "white" and
         any(m.is_supported(self.challenger_rating_int, self.initial_fen) for m in self.missing_pieces[BLACK])) or
@@ -130,6 +130,7 @@ class Challenge:
 class Game:
 
   comment_frequency_seconds = 30.0
+  abort_seconds = 30.0 # 10 for first white move, 10 for first black move, 10 buffer
 
   def __init__(self, json, username, base_url):
     self.username = username
@@ -151,7 +152,7 @@ class Game:
     self.opponent = self.black if self.is_white else self.white
     self.base_url = base_url
     self.white_starts = self.initial_fen == "startpos" or self.initial_fen.split()[1] == "w"
-    self.abort_at = time.time() + 20
+    self.abort_at = time.time() + self.abort_seconds
 
     self.searching_moves = "(not searching yet)"
     self.pending_comment = None
@@ -164,7 +165,7 @@ class Game:
     return len(self.state["moves"]) < 6
 
   def on_activity(self):
-    self.abort_at = time.time() + 20
+    self.abort_at = time.time() + self.abort_seconds
 
   def should_abort_now(self):
     return self.is_abortable() and time.time() > self.abort_at
@@ -231,44 +232,53 @@ class Games:
   def enqueue(self, id):
     before = self.status()
     self.queue.add(id)
-    print(f"[Games][Enqueue][{id}] {before} -> {self.status()}")
+    if logging_enabled:
+      log(f"[Games][Enqueue][{id}] {before} -> {self.status()}")
 
   def dequeue(self, id):
     before = self.status()
     try:
       self.queue.remove(id)
     except KeyError:
-      print(f"[Games][Dequeue][{id}] Wasn't in queue (no action)")
+      if logging_enabled:
+        log(f"[Games][Dequeue][{id}] Wasn't in queue (no action)")
       return
-    print(f"[Games][Dequeue][{id}] {before} -> {self.status()}")
+    if logging_enabled:
+      log(f"[Games][Dequeue][{id}] {before} -> {self.status()}")
 
   def starting(self, id):
     if id in self.in_progress:
-      print(f"[Games][Starting][{id}] Already tracked (no action)")
+      if logging_enabled:
+        log(f"[Games][Starting][{id}] Already tracked (no action)")
       return
     before = self.status()
     try:
       self.queue.remove(id)
     except KeyError:
-      print(f"[Games][Starting][{id}] Wasn't in queue")
+      if logging_enabled:
+        log(f"[Games][Starting][{id}] Wasn't in queue")
     self.in_progress[id] = None
-    print(f"[Games][Starting][{id}] {before} -> {self.status()}")
+    if logging_enabled:
+      log(f"[Games][Starting][{id}] {before} -> {self.status()}")
 
   def started(self, game):
     id = game.id
     assert not self.in_progress.get(id, None) # A None in the dictionary is okay (starting) but not a real Game.
     before = self.status()
     self.in_progress[id] = game
-    print(f"[Games][Started][{id}] {before} -> {self.status()}")
+    if logging_enabled:
+      log(f"[Games][Started][{id}] {before} -> {self.status()}")
 
   def finished(self, id):
     if id not in self.in_progress:
-      print(f"[Games][Finished][{id}] Wasn't tracked (no action)")
+      if logging_enabled:
+        log(f"[Games][Finished][{id}] Wasn't tracked (no action)")
       return
     before = self.status()
     self.in_progress.pop(id)
     self.last_finish_time = time.time()
-    print(f"[Games][Finished][{id}] {before} -> {self.status()}")
+    if logging_enabled:
+      log(f"[Games][Finished][{id}] {before} -> {self.status()}")
 
   def status(self):
     return f"(queue: {self.queue}, in_progress: {self.in_progress})"
@@ -281,6 +291,7 @@ ENDPOINTS = {
   "stream": "/api/bot/game/stream/{}",
   "stream_event": "/api/stream/event",
   "bots": "/player/bots",
+  "status": "/api/users/status",
   "game": "/api/bot/game/{}",
   "move": "/api/bot/game/{}/move/{}",
   "chat": "/api/bot/game/{}/chat",
@@ -313,10 +324,11 @@ class Lichess:
                         max_time=60,
                         interval=0.1,
                         giveup=is_final)
-  def api_get(self, path):
+  def api_get(self, path, params=None):
     url = urljoin(self.baseUrl, path)
-    print(url)
-    response = self.session.get(url, timeout=2)
+    if logging_enabled:
+      log(url)
+    response = self.session.get(url, params=params, timeout=2)
     response.raise_for_status()
     return response.json()
 
@@ -327,7 +339,8 @@ class Lichess:
                         giveup=is_final)
   def api_post(self, path, data=None, headers=None):
     url = urljoin(self.baseUrl, path)
-    print(url)
+    if logging_enabled:
+      log(url)
     response = self.session.post(url, data=data, headers=headers, timeout=2)
     response.raise_for_status()
     return response.json()
@@ -350,18 +363,24 @@ class Lichess:
 
   def get_event_stream(self):
     url = urljoin(self.baseUrl, ENDPOINTS["stream_event"])
-    print(url)
+    if logging_enabled:
+      log(url)
     return requests.get(url, headers=self.header, stream=True)
 
   def get_game_stream(self, game_id):
     url = urljoin(self.baseUrl, ENDPOINTS["stream"].format(game_id))
-    print(url)
+    if logging_enabled:
+      log(url)
     return requests.get(url, headers=self.header, stream=True)
 
   def get_bots(self):
     url = urljoin(self.baseUrl, ENDPOINTS["bots"])
-    print(url)
+    if logging_enabled:
+      log(url)
     return requests.get(url)
+
+  def get_status(self, ids):
+    return self.api_get(ENDPOINTS["status"], params={ "ids": ids })
 
   def accept_challenge(self, challenge_id):
     return self.api_post(ENDPOINTS["accept"].format(challenge_id))
@@ -420,7 +439,8 @@ class Throttle:
   def on_exception(self, exception):
     with self.lock:
       if isinstance(exception, HTTPError) and (exception.response.status_code == 429):
-        print(f"*** 429 *** for {exception.request.url}: delaying optional requests by {self.delay_seconds} seconds")
+        if logging_enabled:
+          log(f"*** 429 *** for {exception.request.url}: delaying optional requests by {self.delay_seconds} seconds")
         self.ready_time = (time.time() + self.delay_seconds)
 
   def ready(self):
@@ -431,7 +451,7 @@ class Throttle:
 
 class OutgoingChallenges:
 
-  idle_seconds_before_send = 65.0
+  idle_seconds_before_send = 125.0
   unanswered_seconds_before_cancel = 30.0
 
   minimum_best_rating = 2000
@@ -449,11 +469,12 @@ class OutgoingChallenges:
     (900, 10),
   ]
 
-  def __init__(self, lichess, games):
+  def __init__(self, lichess, username, games):
     self.challenges_active = {}
     self.challenges_declined = set()
     self.challenges_forbidden = set()
     self.lichess = lichess
+    self.username = username
     self.games = games
     self.rng = np.random.default_rng()
     self.last_send_attempt = time.time()
@@ -476,11 +497,16 @@ class OutgoingChallenges:
           time_sent = time.time()
           self.challenges_active[id] = key, time_sent
           self.games.enqueue(id)
-          print(f"*** OUTGOING CHALLENGE SENT *** with ID {id} to {username} with time control {limit}+{increment}")
+          if logging_enabled:
+            log(f"*** OUTGOING CHALLENGE SENT *** with ID {id} to {username} with time control {limit}+{increment}")
         except HTTPError as e:
           if e.response.content and (b"does not accept challenges" in e.response.content):
-            print(f"*** {e.response.status_code} ***: {username}: {e.response.content}")
+            if logging_enabled:
+              log(f"*** {e.response.status_code} ***: {username}: {e.response.content}")
             self.challenges_forbidden.add(username)
+          if e.response.status_code == 429:
+            # Assume that all 429s sending challenges are per-day limits and wait an hour.
+            self.last_send_attempt = time.time() + 3600.0
           throttle.on_exception(e)
         except Exception:
           pass
@@ -493,12 +519,13 @@ class OutgoingChallenges:
         username, (limit, increment) = key
         try:
           self.lichess.cancel_challenge(id)
-          print(f"*** CANCELED OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment}")
+          if logging_enabled:
+            log(f"*** CANCELED OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment}")
         except Exception as e:
           throttle.on_exception(e)
-          print(f"*** ABANDONING OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment} (cancel failed)")
+          if logging_enabled:
+            log(f"*** ABANDONING OUTGOING CHALLENGE *** with ID {id} to {username} with time control {limit}+{increment} (cancel failed)")
         remove.append(id)
-        self.challenges_forbidden.add(username)
     for id in remove:
       self.games.dequeue(id)
       self.challenges_active.pop(id, None)
@@ -515,18 +542,17 @@ class OutgoingChallenges:
       key, _ = challenge
       self.challenges_declined.add(key)
       username, (limit, increment) = key
-      print(f"*** OUTGOING CHALLENGE DECLINED *** with ID {id} to {username} with time control {limit}+{increment}")
+      if logging_enabled:
+        log(f"*** OUTGOING CHALLENGE DECLINED *** with ID {id} to {username} with time control {limit}+{increment}")
 
-  def sample_users(self):
+  def list_users(self):
     response = self.lichess.get_bots()
     soup = BeautifulSoup(response.content, "html.parser")
-
-    usernames = []
-    bests = []
+    users = {}
 
     for link, ratings in zip(soup.select(".user-link"), soup.select(".rating")):
       username = link["href"][3:]
-      if username in self.challenges_forbidden:
+      if username.lower() == self.username.lower() or username in self.challenges_forbidden:
         continue
       best = 0
       for rating in ratings.select("span"):
@@ -534,11 +560,36 @@ class OutgoingChallenges:
         if text:
           best = max(best, int(text))
       if best >= self.minimum_best_rating:
-        usernames.append(username)
-        bests.append(best)
+        users[username] = best
 
-    if not usernames:
+    return users
+
+  def filter_out_playing(self, users):
+    status_limit = 50
+    usernames = list(users.keys())
+    for i in range(0, len(usernames), status_limit):
+      ids = ",".join(usernames[i:i + status_limit])
+      time.sleep(1.0)
+      status = self.lichess.get_status(ids)
+      for user_status in status:
+        if user_status.get("playing", False):
+          users.pop(user_status["name"])
+
+  def sample_users(self):
+    if not throttle.ready():
       return None
+    users = None
+    try:
+      users = self.list_users()
+      self.filter_out_playing(users)
+      if not users:
+        return None
+    except Exception as e:
+      throttle.on_exception(e)
+      return None
+
+    usernames = list(users.keys())
+    bests = list(users.values())
 
     bests = (bests / np.max(bests)) ** (1.0 / self.rating_sample_temperature)
     bests /= np.sum(bests)
@@ -609,13 +660,14 @@ def loop(li, user_profile):
     games = Games()
     game = None
 
-    outgoing_challenges = OutgoingChallenges(li, games)
+    outgoing_challenges = OutgoingChallenges(li, user_profile["username"], games)
 
     while True:
 
       event = event_queue.get()
       if event["type"] != "ping":
-        print(event)
+        if logging_enabled:
+          log(event)
 
       if event["type"] == "local_game_done":
         # We only play one game at a time, so make sure that no games are in progress now.
@@ -662,7 +714,8 @@ def loop(li, user_profile):
             challenge_queues[queue_index].put(challenge)
           else:
             try:
-              print("Decline {} for reason '{}'".format(challenge, decline_reason))
+              if logging_enabled:
+                log("Decline {} for reason '{}'".format(challenge, decline_reason))
               li.decline_challenge(challenge.id, reason=decline_reason)
             except Exception as e:
               throttle.on_exception(e)
@@ -691,7 +744,8 @@ def loop(li, user_profile):
 
       # Handle game upkeep.
       if game and game.should_abort_now():
-        print("Aborting {} by lack of activity".format(game.url()))
+        if logging_enabled:
+          log("Aborting {} by lack of activity".format(game.url()))
         try:
           li.abort(game.id)
         except Exception as e:
@@ -703,12 +757,14 @@ def loop(li, user_profile):
           challenge = pop_challenge(challenge_queues)
           if not challenge:
             break
-          print("Accept {}".format(challenge))
+          if logging_enabled:
+            log("Accept {}".format(challenge))
           li.accept_challenge(challenge.id)
           games.enqueue(challenge.id)
         except (HTTPError, ReadTimeout) as exception:
           if isinstance(exception, HTTPError) and exception.response.status_code == 404:  # ignore missing challenge
-            print("Skip missing {}".format(challenge))
+            if logging_enabled:
+              log("Skip missing {}".format(challenge))
           throttle.on_exception(exception)
         except Exception:
           break
@@ -760,9 +816,11 @@ def on_game_state(li, game):
   limit_seconds = (10 if game.is_abortable() else 0)
   
   # Start the search/ponder.
+  log("Preparing to search/ponder")
   status, ply, san, comment = chesscoach.bot_search(game_id, fen, moves, bot_side, can_comment, limit_seconds,
     game.state["wtime"], game.state["btime"], game.state["winc"], game.state["binc"])
-  print(f"*** {status.upper()} *** ply: {ply}, SAN: {san}, comment: {comment}")
+  if logging_enabled:
+    log(f"*** {status.upper()} *** ply: {ply}, SAN: {san}, comment: {comment}")
 
   # Store the comment and process it in the main loop (we only comment every 30 seconds).
   if comment:
@@ -777,6 +835,13 @@ def on_game_state(li, game):
 def is_game_over(game):
   return game.state["status"] != "started"
 
+# --- Logging ---
+
+logging_enabled = True
+
+def log(message):
+  print(round(time.time(), 2), message)
+
 # --- Global state ---
 
 event_queue = queue.Queue()
@@ -787,8 +852,11 @@ throttle = Throttle()
 def run():
   li = Lichess(os.environ["LICHESS_API_KEY"], "https://lichess.org/")
   user_profile = li.get_profile()
-  print(user_profile)
+  if logging_enabled:
+    log(user_profile)
   loop(li, user_profile)
 
 def play_move(game_id, move):
+  if logging_enabled:
+    log(f"Posting move, id: {game_id}, move: {move}")
   event_queue.put({ "type": "local_play_move", "id": game_id, "move": move })

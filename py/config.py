@@ -184,6 +184,6 @@ class Config:
       return
     os.makedirs(local_path, exist_ok=True)
     idempotent_source = self.join(path, "*")
-    process = subprocess.run(f'gsutil -m cp -r "{idempotent_source}" "{local_path}"', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+    process = subprocess.run(f'gsutil -m cp -r "{idempotent_source}" "{local_path}"', shell=True) # Intentionally print to console, even in UCI/silent mode.
     process.check_returncode()
     

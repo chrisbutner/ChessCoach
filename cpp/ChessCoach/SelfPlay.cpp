@@ -2148,7 +2148,14 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
         if (primary)
         {
             CheckUpdateGui(network, true /* forceUpdate */);
-            OnSearchFinished();
+            const Move bestMove = OnSearchFinished();
+
+            // Report the best move to bot code in Python.
+            if (!_searchState->botGameId.empty() && !_searchState->timeControl.infinite)
+            {
+                const std::string& bestMoveUci = UCI::move(bestMove, false /* chess960 */);
+                network->PlayBotMove(_searchState->botGameId, bestMoveUci);
+            }
         }
     }
 
@@ -2186,18 +2193,15 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
             // Only the primary worker does housekeeping.
             if (primary)
             {
-                if (_searchState->botGameId.empty())
+                // Update "lastBestNodes" for strength tests.
+                const bool principalVariationChanged = _searchState->principalVariationChanged.exchange(false, std::memory_order_acquire);
+                if (principalVariationChanged)
                 {
-                    // Update "lastBestNodes" for strength tests.
-                    const bool principalVariationChanged = _searchState->principalVariationChanged.exchange(false, std::memory_order_acquire);
-                    if (principalVariationChanged)
+                    const uint16_t newBest = _games[0].Root()->bestChild.load(std::memory_order_relaxed)->move;
+                    if (newBest != _searchState->lastBestMove)
                     {
-                        const uint16_t newBest = _games[0].Root()->bestChild.load(std::memory_order_relaxed)->move;
-                        if (newBest != _searchState->lastBestMove)
-                        {
-                            _searchState->lastBestMove = newBest;
-                            _searchState->lastBestNodes = _searchState->nodeCount;
-                        }
+                        _searchState->lastBestMove = newBest;
+                        _searchState->lastBestNodes = _searchState->nodeCount;
                     }
                 }
 
@@ -2207,18 +2211,6 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
 
         // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
         FinalizeMcts();
-
-        // Only the primary worker does housekeeping.
-        if (primary)
-        {
-            // Report the best move to bot code in Python.
-            if (!_searchState->botGameId.empty() && !_searchState->timeControl.infinite)
-            {
-                const Node* bestMove = SelectMove(_games[0], true /* allowDiversity */);
-                const std::string& bestMoveUci = UCI::move(Move(bestMove->move), false /* chess960 */);
-                network->PlayBotMove(_searchState->botGameId, bestMoveUci);
-            }
-        }
     }
 
     Finalize();
@@ -2318,12 +2310,14 @@ void SelfPlayWorker::FinalizeMcts()
     }
 }
 
-void SelfPlayWorker::OnSearchFinished()
+Move SelfPlayWorker::OnSearchFinished()
 {
     // Print the final PV info and bestmove.
-    const Node* bestMove = SelectMove(_games[0], true /* allowDiversity */);
+    const Node* selected = SelectMove(_games[0], true /* allowDiversity */);
+    const Move bestMove = Move(selected->move);
     PrintPrincipalVariation(true /* searchFinished */);
-    std::cout << "bestmove " << UCI::move(Move(bestMove->move), false /* chess960 */) << std::endl;
+    std::cout << "bestmove " << UCI::move(bestMove, false /* chess960 */) << std::endl;
+    return bestMove;
 }
 
 void SelfPlayWorker::CheckPrincipalVariation()

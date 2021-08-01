@@ -382,7 +382,7 @@ private:
     void FailNode(std::vector<WeightedNode>& searchPath);
 
     void FinalizeMcts();
-    void OnSearchFinished();
+    Move OnSearchFinished();
     void CheckPrincipalVariation();
     void CheckUpdateGui(INetwork* network, bool forceUpdate);
     void CheckTimeControl(WorkCoordinator* workCoordinator);
