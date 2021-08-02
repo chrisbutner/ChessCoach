@@ -1477,11 +1477,21 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
         // Also get the root's value from the leaf's perspective in case it's needed for draw-sibling-FPU (see inside Backpropagate()).
         const float rootValue = Game::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), game.Root()->valueAverage.load(std::memory_order_relaxed));
         assert(!std::isnan(rootValue));
+
+        // Decay valuations in endgames to avoid shuffling in local minima without progress.
+        // It doesn't matter if this is a 2-repetition because the decay becomes a no-op.
+        const TerminalValue terminalValue = scratchGame.Root()->terminalValue.load(std::memory_order_relaxed);
+        const bool terminalOrBound = (!terminalValue.IsNonTerminal() || (scratchGame.Root()->tablebaseBound.load(std::memory_order_relaxed) != BOUND_NONE));
+        if (!terminalOrBound)
+        {
+            value += ((CHESSCOACH_VALUE_DRAW - value) * scratchGame.EndgameProportion() * scratchGame.GetPosition().rule50_count() / Config::Network.SelfPlay.ProgressDecayDivisor);
+        }
+        
         Backpropagate(searchPath, value, rootValue);
         _searchState->nodeCount.fetch_add(1, std::memory_order_relaxed);
 
         // If we *just found out* that this leaf is a checkmate, prove it backwards as far as possible.
-        if (!wasImmediateMate && scratchGame.Root()->terminalValue.load(std::memory_order_relaxed).IsMateInN())
+        if (!wasImmediateMate && terminalValue.IsMateInN())
         {
             BackpropagateMate(searchPath);
         }
@@ -1599,6 +1609,65 @@ void SelfPlayWorker::PrepareExpandedRoot(SelfPlayGame& game)
     }
 }
 
+Node* SelfPlayWorker::MinimaxRoot(Node* parent) const
+{
+    Node* best = parent->bestChild;
+    float bestValue = CHESSCOACH_VALUE_UNINITIALIZED;
+
+    // Also apply the "minimax recursion threshold" at the root, falling back to already-computed visit-based selection.
+    const int parentVisitCount = parent->visitCount.load(std::memory_order_relaxed);
+    if (parentVisitCount >= Config::Network.SelfPlay.MinimaxVisitsRecurse)
+    {
+        // Categorical factors such as tablebase rank and proved mates need to be taken into account at the root before valuations.
+        // Fall back to the already-computed visit-based selection if none of the best children have enough visits for value certainty.
+        const std::vector<Node*> bestMoves = CollectBestMoves(parent, CHESSCOACH_VALUE_WIN - CHESSCOACH_VALUE_LOSS);
+        for (Node* child : bestMoves)
+        {
+            const float childValue = Minimax(child, parentVisitCount);
+            if (childValue > bestValue)
+            {
+                bestValue = childValue;
+                best = child;
+            }
+        }
+    }
+    return best;
+}
+
+// Value from the grandparent's perspective (the parent of the provided Node).
+float SelfPlayWorker::Minimax(Node* parent, int grandparentVisitCount) const
+{
+    float bestValue = CHESSCOACH_VALUE_UNINITIALIZED;
+
+    // Nodes with too few visits relative to their parents weren't given enough attention to be confident
+    // about their valuation; i.e., they were already discarded as not good enough.
+    const int parentVisitCount = parent->visitCount.load(std::memory_order_relaxed);
+    if (parentVisitCount < Config::Network.SelfPlay.MinimaxVisitsIgnore * grandparentVisitCount)
+    {
+        return CHESSCOACH_VALUE_UNINITIALIZED;
+    }
+
+    // It eventually makes sense to terminate recursion and return the backpropgated average,
+    // either because children would have too few visits for value certainty, or because calculating
+    // minimax post hoc over too large a sub-tree could be expensive.
+    if (parentVisitCount >= Config::Network.SelfPlay.MinimaxVisitsRecurse)
+    {
+        for (Node& child : *parent)
+        {
+            const float childValue = Minimax(&child, parentVisitCount);
+            if (childValue > bestValue)
+            {
+                bestValue = childValue;
+            }
+        }
+        if (bestValue != CHESSCOACH_VALUE_UNINITIALIZED)
+        {
+            return Game::FlipValue(bestValue);
+        }
+    }
+    return parent->Value();
+}
+
 Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) const
 {
     Node* bestChild = game.Root()->bestChild.load(std::memory_order_relaxed);
@@ -1665,6 +1734,13 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         }
         std::discrete_distribution distribution(bestWeights.begin(), bestWeights.end());
         return best[distribution(Random::Engine)];
+    }
+    else if (game.TryHard() && game.IsEndgame())
+    {
+        // Guiding the search process using minimax in conjunction with neural network evaluations doesn't seem to work well.
+        // However, using a post hoc minimax calculation for final move selection helps avoid vague overconfidence in endgames
+        // and prioritizes concrete positive outcomes.
+        return MinimaxRoot(game.Root());
     }
     else
     {
@@ -1813,7 +1889,7 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
         Node* node = searchPath[i].node;
         node->visitingCount.fetch_sub(1, std::memory_order_relaxed);
         node->visitCount.fetch_add(1, std::memory_order_relaxed);
-         
+
         // If this node has a tablebase score/bound set then we know we can achieve at least/exactly/at most that,
         // so backpropagate the bounded value up the tree.
         //
@@ -1827,6 +1903,10 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
         {
             previous->upWeight.fetch_add(1, std::memory_order_relaxed);
         }
+
+        // Weights are always 0 or 1 with current SBLE-PUCT. We already checked the current weight, so no need for "std::min".
+        weight = searchPath[i].weight;
+        previous = node;
 
         // Implement "draw-sibling-FPU":
         //
@@ -1853,12 +1933,11 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
                     child.valueAverage.compare_exchange_strong(expected, rootValue, std::memory_order_relaxed);
                 }
             }
+            
+            // Also forgive the initial, unexpected draw.
+            weight = 0;
         }
         value = Game::FlipValue(value);
-
-        // Weights are always 0 or 1 with current SBLE-PUCT. We already checked the current weight, so no need for "std::min".
-        weight = searchPath[i].weight;
-        previous = node;
     }
 }
 
@@ -2079,7 +2158,7 @@ std::vector<Node*> SelfPlayWorker::CollectBestMoves(Node* parent, float valueDel
 
         // Other candidates must be within an absolute value difference:
         // "By 1% we mean in absolute value. All our values are between 0 and 1, so if the best move has a value of 0.8, we would sample from all moves with values >= 0.79."
-        if (child.Value() > valueThreshold)
+        if (child.Value() >= valueThreshold)
         {
             best.push_back(&child);
         }

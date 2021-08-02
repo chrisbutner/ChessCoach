@@ -158,6 +158,8 @@ public:
     ~Game();
 
     Color ToPlay() const;
+    bool IsEndgame() const;
+    float EndgameProportion() const;
     void ApplyMove(Move move);
     void ApplyMoveMaybeNull(Move move);
     Move ApplyMoveInfer(const INetwork::PackedPlane* resultingPieces);
@@ -226,6 +228,7 @@ private:
 
 static_assert(CHESSCOACH_VALUE_WIN > CHESSCOACH_VALUE_DRAW);
 static_assert(CHESSCOACH_VALUE_DRAW > CHESSCOACH_VALUE_LOSS);
+static_assert(CHESSCOACH_VALUE_LOSS > CHESSCOACH_VALUE_UNINITIALIZED);
 static_assert(CHESSCOACH_VALUE_UNINITIALIZED == CHESSCOACH_VALUE_UNINITIALIZED);
 
 static_assert(CHESSCOACH_CENTIPAWNS_WIN > CHESSCOACH_CENTIPAWNS_DRAW);

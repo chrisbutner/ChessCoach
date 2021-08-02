@@ -119,6 +119,11 @@ struct SelfPlayConfig
     float MoveDiversityValueDeltaThreshold;
     float MoveDiversityTemperature;
     int MoveDiversityPlies;
+    int TranspositionProgressThreshold;
+    int ProgressDecayDivisor;
+    int EndgameMaterialThreshold;
+    int MinimaxVisitsRecurse;
+    float MinimaxVisitsIgnore;
 
     bool WaitForUpdatedNetwork;
 };

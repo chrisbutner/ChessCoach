@@ -83,7 +83,6 @@ Game::Game(const std::string& fen, const std::vector<Move>& moves)
     : _parentState(nullptr)
     , _currentState(AllocateState())
     , _moves() // Built up in each ApplyMove below
-
 {
     _position.set(fen, false /* isChess960 */, _currentState, Threads.main());
 
@@ -155,6 +154,17 @@ Game::~Game()
 Color Game::ToPlay() const
 {
     return _position.side_to_move();
+}
+
+bool Game::IsEndgame() const
+{
+    return ((_position.non_pawn_material()) <= Config::Network.SelfPlay.EndgameMaterialThreshold);
+}
+
+float Game::EndgameProportion() const
+{
+    const int material = std::clamp(_position.non_pawn_material(), EndgameLimit, MidgameLimit);
+    return (static_cast<float>(MidgameLimit - material) / (MidgameLimit - EndgameLimit));
 }
 
 void Game::ApplyMove(Move move)
@@ -322,7 +332,9 @@ Key Game::GenerateImageKey(bool tryHard)
         // It's possible that it would also be better to include less or no history in self-play mode, but this would
         // require too much end-to-end testing for our current scope (i.e. from scratch with fresh data each time),
         // so err on the proven side.
-        return (_position.key() ^ ((_position.state_info()->repetition != 0) ? PredictionCache_IsRepetition : 0));
+        return (_position.key() ^ ((_position.state_info()->repetition != 0) ? PredictionCache_IsRepetition : 0)) ^
+            (_position.rule50_count() >= Config::Network.SelfPlay.TranspositionProgressThreshold
+                ? PredictionCache_NoProgressCount[std::min(NoProgressSaturationCount, _position.rule50_count())] : 0);
     }
     else
     {

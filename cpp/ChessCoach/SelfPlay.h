@@ -408,6 +408,8 @@ private:
     void ValidatePrincipalVariation(const Node* root);
     
     std::vector<Node*> CollectBestMoves(Node* parent, float valueDeltaThreshold) const;
+    Node* MinimaxRoot(Node* parent) const;
+    float Minimax(Node* parent, int grandparentVisitCount) const;
 
     void UpdateGameForNewSearchRoot(SelfPlayGame& game);
     PredictionStatus WarmUpPredictions(INetwork* network, NetworkType networkType, int batchSize);

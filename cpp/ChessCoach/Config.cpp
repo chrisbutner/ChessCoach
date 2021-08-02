@@ -344,6 +344,11 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<float>(selfPlay.MoveDiversityValueDeltaThreshold, config, "move_diversity_value_delta_threshold");
     policy.template Parse<float>(selfPlay.MoveDiversityTemperature, config, "move_diversity_temperature");
     policy.template Parse<int>(selfPlay.MoveDiversityPlies, config, "move_diversity_plies");
+    policy.template Parse<int>(selfPlay.TranspositionProgressThreshold, config, "transposition_progress_threshold");
+    policy.template Parse<int>(selfPlay.ProgressDecayDivisor, config, "progress_decay_divisor");
+    policy.template Parse<int>(selfPlay.EndgameMaterialThreshold, config, "endgame_material_threshold");
+    policy.template Parse<int>(selfPlay.MinimaxVisitsRecurse, config, "minimax_visits_recurse");
+    policy.template Parse<float>(selfPlay.MinimaxVisitsIgnore, config, "minimax_visits_ignore");
 
     policy.template Parse<bool>(selfPlay.WaitForUpdatedNetwork, config, "wait_for_updated_network");
 }
