@@ -215,6 +215,7 @@ enum class SelfPlayState
 
 struct TimeControl
 {
+    bool pondering;
     bool infinite;
     int nodes;
     int mate;
@@ -306,7 +307,7 @@ private:
 
 struct SearchState
 {
-    void Reset(const TimeControl& setTimeControl);
+    void Reset(const TimeControl& setTimeControl, std::chrono::time_point<std::chrono::high_resolution_clock> setSearchStart);
 
     // Controller + primary worker
     bool gui;

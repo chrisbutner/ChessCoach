@@ -450,32 +450,68 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         Instance().workerGroup->controllerWorker->SearchUpdatePosition(actualFen, game.Moves(), false /* forceNewPosition */);
 
         // Check whether to search or ponder and set up time control.
+        bool skipSearch = false;
         const bool search = (game.ToPlay() == botSide);
         TimeControl timeControl = {};
+        timeControl.timeRemainingMs[WHITE] = wtime;
+        timeControl.timeRemainingMs[BLACK] = btime;
+        timeControl.incrementMs[WHITE] = winc;
+        timeControl.incrementMs[BLACK] = binc;
+
         if (search)
         {
-            timeControl.timeRemainingMs[WHITE] = wtime;
-            timeControl.timeRemainingMs[BLACK] = btime;
-            timeControl.incrementMs[WHITE] = winc;
-            timeControl.incrementMs[BLACK] = binc;
-
-            // It's best to override limits via wtime/btime still so that elimination and safety buffer continue to work.
+            // Limit the first few plies to avoid a game abort. The first limit reached will stop the search.
             if (limitSeconds)
             {
-                const int64_t limitRemainingMs = (Config::Misc.TimeControl_FractionOfRemaining * static_cast<int64_t>(limitSeconds) * 1000);
-                timeControl.timeRemainingMs[WHITE] = std::min(timeControl.timeRemainingMs[WHITE], limitRemainingMs);
-                timeControl.timeRemainingMs[BLACK] = std::min(timeControl.timeRemainingMs[BLACK], limitRemainingMs);
+                timeControl.moveTimeMs = (limitSeconds * 1000);
             }
 
             status = "searching";
         }
         else
         {
-            // Opponent's move, so "ponder".
-            timeControl.infinite = true;
+            // Opponent's move, so "ponder". Pondering adds complications for tree search because pruning the tree
+            // via deallocations can take time. Normally this only consumes "free time", but when told to stop pondering
+            // and start searching, in a real-time bot context, this eats into actual search time.
+            //
+            // This is an even bigger problem right now because of the non-pooled variably-sized Node[] allocations, which can
+            // take ~60+ seconds to deallocate after a ~10 minute search. If more development time were available,
+            // and ponder-based bot play were a priority, this would be one of the highest priorities for improvement.
+            //
+            // A workaround could be to delay post-ponder pruning until just after making a move, thereby eating into
+            // ponder rather than search time. However, this risks running out of memory during the bot's turn.
+            //
+            // Another workaround could be to delegate pruning to a separate thread. Benefits aren't worth the technical risks/complications.
+
+            timeControl.pondering = true;
             status = "pondering";
+
+            // Add a hard limit of 3 minutes pondering to avoid running out of memory.
+            timeControl.moveTimeMs = 3 * 60 * 1000;
+
+            // Take the first-few-plies limit into account.
+            if (limitSeconds)
+            {
+                timeControl.moveTimeMs = std::min(timeControl.moveTimeMs, static_cast<int64_t>(limitSeconds * 1000));
+            }
+
+            // Make sure that deallocation time doesn't eat into our search time too much
+            // (conservatively, max 5% overhead, guess 10% deallocation time, 75% fudge on simplified remaining/increment).
+            timeControl.moveTimeMs = std::min(
+                timeControl.moveTimeMs,
+                (3 * ((timeControl.timeRemainingMs[botSide] / Config::Misc.TimeControl_FractionOfRemaining) + timeControl.incrementMs[botSide]) / 8) - Config::Misc.TimeControl_SafetyBufferMilliseconds);
+
+            if (timeControl.moveTimeMs <= 0)
+            {
+                status = "waiting";
+                skipSearch = true;
+            }
         }
-        Instance().workerGroup->searchState.Reset(timeControl);
+
+        // Even though it is more "correct" to capture the start time before pruning in "SearchUpdatePosition",
+        // this can be dangerous with spiky overhead. An important move could be given near-zero time and blunder
+        // the game away. We instead amortize the spiky overhead by setting an increased safety buffer in ChessCoachBot.cpp.
+        Instance().workerGroup->searchState.Reset(timeControl, std::chrono::high_resolution_clock::now());
         Instance().workerGroup->searchState.botGameId = gameId;
 
         // Comment on the position and return the last SAN, as long as there's been at least one move,
@@ -503,7 +539,10 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         // Start searching/pondering, but don't wait for workers.
         // Return to the bot loop in Python and let the primary search worker
         // send the best move asynchronously (like UCI "bestmove" to stdout).
-        Instance().workerGroup->workCoordinator->ResetWorkItemsRemaining(1);
+        if (!skipSearch)
+        {
+            Instance().workerGroup->workCoordinator->ResetWorkItemsRemaining(1);
+        }
     }
 
     // Pack and return a 4-tuple.

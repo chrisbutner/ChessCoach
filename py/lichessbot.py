@@ -99,7 +99,8 @@ class Challenge:
         any(m.is_supported(self.challenger_rating_int, self.initial_fen) for m in self.missing_pieces[WHITE])))
 
   def is_fast_enough(self):
-    return self.speed in ["bullet", "blitz", "rapid"]
+    # Limit games to 2.5 hours based on 80 moves per side.
+    return (2 * (self.base + self.increment * 80)) <= 150 * 60
 
   def is_slow_enough(self):
     return self.base >= 180 or self.increment >= 3

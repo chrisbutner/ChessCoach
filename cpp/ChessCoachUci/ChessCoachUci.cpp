@@ -485,6 +485,10 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
 
 void ChessCoachUci::HandleGo(std::stringstream& commands)
 {
+    // Capture the start time before expensive tasks such as "PropagatePosition" -> "SearchUpdatePosition"
+    // (although this should already be taken care of via the "position" -> "isready" sequence).
+    const auto searchStart = std::chrono::high_resolution_clock::now();
+    
     TimeControl timeControl = {};
     std::vector<Move> searchMoves;
 
@@ -565,7 +569,7 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
     // Propagate the position if updated.
     PropagatePosition();
 
-    _workerGroup.searchState.Reset(timeControl);
+    _workerGroup.searchState.Reset(timeControl, searchStart);
     _workerGroup.searchState.searchMoves = std::move(searchMoves);
 
     PredictionCache::Instance.ResetProbeMetrics();

@@ -147,7 +147,6 @@ struct MiscConfig
     // Time control
     int TimeControl_SafetyBufferMilliseconds;
     int TimeControl_FractionOfRemaining;
-    int TimeControl_AbsoluteMinimumMilliseconds;
 
     // Search
     int Search_SearchThreads;

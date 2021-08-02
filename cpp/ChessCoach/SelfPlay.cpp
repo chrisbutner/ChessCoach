@@ -942,10 +942,10 @@ Move SelfPlayGame::ParseSan(const std::string& san)
 // (aimed at preventing N self-play worker threads from each clearing).
 Throttle SelfPlayWorker::PredictionCacheResetThrottle(300 * 1000 /* durationMilliseconds */);
 
-void SearchState::Reset(const TimeControl& setTimeControl)
+void SearchState::Reset(const TimeControl& setTimeControl, std::chrono::time_point<std::chrono::high_resolution_clock> setSearchStart)
 {
-    searchStart = std::chrono::high_resolution_clock::now();
-    lastPrincipalVariationPrint = searchStart;
+    searchStart = setSearchStart;
+    lastPrincipalVariationPrint = setSearchStart;
     lastBestMove = MOVE_NONE;
     lastBestNodes = 0;
     timeControl = setTimeControl;
@@ -1273,11 +1273,11 @@ std::tuple<Move, int, int> SelfPlayWorker::StrengthTestPosition(WorkCoordinator*
     // Set up the position.
     SearchUpdatePosition(std::string(spec.fen), {}, true /* forceNewPosition */);
 
-    // Set up search and time control.
+    // Set up search and time control (no position setup overhead during strength tests).
     TimeControl timeControl = {};
     timeControl.moveTimeMs = moveTimeMs;
     timeControl.nodes = nodes;
-    _searchState->Reset(timeControl);
+    _searchState->Reset(timeControl, std::chrono::high_resolution_clock::now());
 
     // Run the search.
     workCoordinator->ResetWorkItemsRemaining(1);
@@ -2151,7 +2151,7 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
             const Move bestMove = OnSearchFinished();
 
             // Report the best move to bot code in Python.
-            if (!_searchState->botGameId.empty() && !_searchState->timeControl.infinite)
+            if (!_searchState->botGameId.empty() && !_searchState->timeControl.pondering)
             {
                 const std::string& bestMoveUci = UCI::move(bestMove, false /* chess960 */);
                 network->PlayBotMove(_searchState->botGameId, bestMoveUci);
@@ -2537,17 +2537,11 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
 
         // 1) Use a fraction of the increment-free remaining time, plus the increment.
         // 2) But use at most the remaining time (if there's a bug) minus safety buffer.
-        // 3) But use at least the absolute minimum time (effectively shortening the fraction
-        //    or risking a loss) to avoid the ratio of thinking-to-overhead devolving to zero,
-        //    losing progress and causing more moves and therefore time to be required overall.
         const int64_t increment = _searchState->timeControl.incrementMs[toPlay];
         const int64_t excludingIncrement = std::max(static_cast<int64_t>(0), totalTimeAllowed - increment);
         const int64_t fractionPlusIncrement = ((excludingIncrement / fraction) + increment);
-        const int64_t timeAllowed =
-            std::max(
-                static_cast<int64_t>(Config::Misc.TimeControl_AbsoluteMinimumMilliseconds),
-                (std::min(fractionPlusIncrement, totalTimeAllowed)
-                    - Config::Misc.TimeControl_SafetyBufferMilliseconds));
+        const int64_t timeAllowed = std::max(static_cast<int64_t>(1),
+            (std::min(fractionPlusIncrement, totalTimeAllowed) - Config::Misc.TimeControl_SafetyBufferMilliseconds));
         if (searchTimeMs >= timeAllowed)
         {
             workCoordinator->OnWorkItemCompleted();
@@ -2565,12 +2559,12 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
         _searchState->timeControl.eliminationFraction = (static_cast<float>(searchTimeMs) / timeAllowed);
     }
 
-    // No limits set/remaining: search for the configured absolute minimum time.
+    // No limits set/remaining: make at least the training number of simulations.
     if ((_searchState->timeControl.nodes <= 0) &&
         (_searchState->timeControl.mate <= 0) &&
         (_searchState->timeControl.moveTimeMs <= 0) &&
         (totalTimeAllowed <= 0) &&
-        (searchTimeMs >= Config::Misc.TimeControl_AbsoluteMinimumMilliseconds))
+        (nodeCount >= Config::Network.SelfPlay.NumSimulations))
     {
         workCoordinator->OnWorkItemCompleted();
         return;
