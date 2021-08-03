@@ -48,6 +48,10 @@ public:
 
     static constexpr const char StartingPosition[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+    static const float CHESSCOACH_VALUE_SYZYGY_WIN;
+    static const float CHESSCOACH_VALUE_SYZYGY_DRAW;
+    static const float CHESSCOACH_VALUE_SYZYGY_LOSS;
+
     static const size_t BlockSizeBytes = 64 * 1024 * 1024; // 64 MiB
     thread_local static PoolAllocator<StateInfo, BlockSizeBytes> StateAllocator;
 

@@ -454,7 +454,7 @@ void PythonNetwork::LaunchGui(const std::string& mode)
 
 void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principalVariation,
     const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& targets,
-    std::vector<float>& priors, std::vector<float>& values, std::vector<float>& puct, std::vector<int>& visits, std::vector<int>& weights, std::vector<int>& upWeights)
+    std::vector<float>& priors, std::vector<float>& values, std::vector<float>& puct, std::vector<int>& visits, std::vector<int>& weights)
 {
     PythonContext context;
 
@@ -502,16 +502,11 @@ void PythonNetwork::UpdateGui(const std::string& fen, const std::string& line, i
         Py_ARRAY_LENGTH(moveDims), moveDims, NPY_INT32, weights.data());
     PythonNetwork::PyAssert(pythonWeights);
 
-    PyObject* pythonUpWeights = PyArray_SimpleNewFromData(
-        Py_ARRAY_LENGTH(moveDims), moveDims, NPY_INT32, upWeights.data());
-    PythonNetwork::PyAssert(pythonUpWeights);
-
     PyObject* result = PyObject_CallFunctionObjArgs(_updateGuiFunction, pythonFen, pythonLine, pythonNodeCount, pythonEvaluation, pythonPrincipalVariation,
-        pythonSans, pythonFroms, pythonTos, pythonTargets, pythonPriors, pythonValues, pythonPuct, pythonVisits, pythonWeights, pythonUpWeights, nullptr);
+        pythonSans, pythonFroms, pythonTos, pythonTargets, pythonPriors, pythonValues, pythonPuct, pythonVisits, pythonWeights, nullptr);
     PyAssert(result);
 
     Py_DECREF(result);
-    Py_DECREF(pythonUpWeights);
     Py_DECREF(pythonWeights);
     Py_DECREF(pythonVisits);
     Py_DECREF(pythonPuct);

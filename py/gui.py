@@ -233,7 +233,7 @@ def launch(mode):
   _ensure_serving()
   webbrowser.open(f"http://localhost:{port}/gui.html")
 
-def update(fen, line, node_count, evaluation, principal_variation, sans, froms, tos, targets, priors, values, puct, visits, weights, up_weights):
+def update(fen, line, node_count, evaluation, principal_variation, sans, froms, tos, targets, priors, values, puct, visits, weights):
   assert gui_mode == "push"
   dispatch(json.dumps({
     "type": "uci_data",
@@ -243,8 +243,8 @@ def update(fen, line, node_count, evaluation, principal_variation, sans, froms, 
     "evaluation": evaluation,
     "principal_variation": principal_variation,
     "policy": [{ "san": san.decode("utf-8"), "from": move_from.decode("utf-8"), "to": move_to.decode("utf-8"), "target": round(float(target), 6),
-      "prior": round(float(prior), 6), "value": round(float(value), 6), "puct": round(float(puct), 6), "visits": int(visits), "weight": int(weight), "up_weight": int(up_weight)}
-      for (san, move_from, move_to, target, prior, value, puct, visits, weight, up_weight) in zip(sans, froms, tos, targets, priors, values, puct, visits, weights, up_weights)],
+      "prior": round(float(prior), 6), "value": round(float(value), 6), "puct": round(float(puct), 6), "visits": int(visits), "weight": int(weight)}
+      for (san, move_from, move_to, target, prior, value, puct, visits, weight) in zip(sans, froms, tos, targets, priors, values, puct, visits, weights)],
   }))
 
 # -----

@@ -22,16 +22,27 @@
 #include <ChessCoach/PredictionCache.h>
 #include <ChessCoach/ChessCoach.h>
 
+std::vector<uint16_t> Quantize(const std::vector<float>& priors)
+{
+    std::vector<uint16_t> quantizedPriors(priors.size());
+    for (int i = 0; i < priors.size(); i++)
+    {
+        quantizedPriors[i] = INetwork::QuantizeProbabilityNoZero(priors[i]);
+    }
+    return quantizedPriors;
+}
+
 bool TryGetPrediction(Key key, bool putOnFailedGet = true, std::vector<float> priors = { 0.1f, 0.2f, 0.3f, 0.4f })
 {
     PredictionCacheChunk* chunk;
     float value;
 
-    std::vector<float> trashablePriors(priors);
+    std::vector<uint16_t> quantizedPriors = Quantize(priors);
+    std::vector<uint16_t> trashablePriors(quantizedPriors);
     bool hit = PredictionCache::Instance.TryGetPrediction(key, static_cast<int>(trashablePriors.size()), &chunk, &value, trashablePriors.data());
     if (!hit && putOnFailedGet)
     {
-        chunk->Put(key, 0.33f, static_cast<int>(priors.size()), priors.data());
+        chunk->Put(key, 0.33f, static_cast<int>(priors.size()), quantizedPriors.data());
     }
     return hit;
 }
@@ -188,19 +199,20 @@ TEST(PredictionCache, Quantization)
     // Put into the cache.
     PredictionCacheChunk* chunk;
     float value;
-    std::vector<float> trashablePriors1(priors1);
+    std::vector<uint16_t> quantizedPriors1 = Quantize(priors1);
+    std::vector<uint16_t> trashablePriors1(quantizedPriors1);
     const bool hit1 = PredictionCache::Instance.TryGetPrediction(game1_key, moveCount, &chunk, &value, trashablePriors1.data());
     EXPECT_FALSE(hit1);
-    chunk->Put(game1_key, value, moveCount, priors1.data());
+    chunk->Put(game1_key, value, moveCount, quantizedPriors1.data());
 
     // Get from the cache.
-    std::vector<float> priors2(moveCount);
-    const bool hit2 = PredictionCache::Instance.TryGetPrediction(game2_key, moveCount, &chunk, &value, priors2.data());
+    std::vector<uint16_t> quantizedPriors2(moveCount);
+    const bool hit2 = PredictionCache::Instance.TryGetPrediction(game2_key, moveCount, &chunk, &value, quantizedPriors2.data());
     EXPECT_TRUE(hit2);
 
     // Make sure that the cached priors are close enough, up to quantization (use a more permissive epsilon).
     for (int i = 0; i < moveCount; i++)
     {
-        EXPECT_NEAR(priors1[i], priors2[i], 1.f / std::numeric_limits<uint8_t>::max());
+        EXPECT_NEAR(INetwork::DequantizeProbabilityNoZero(quantizedPriors1[i]), INetwork::DequantizeProbabilityNoZero(quantizedPriors2[i]), 1.f / std::numeric_limits<uint8_t>::max());
     }
 }

@@ -20,6 +20,9 @@
 
 #include "Config.h"
 
+const float Game::CHESSCOACH_VALUE_SYZYGY_WIN = Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN - CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM);
+const float Game::CHESSCOACH_VALUE_SYZYGY_DRAW = Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM); // Nudge off the exact draw score to help draw-sibling-FPU numerically.
+const float Game::CHESSCOACH_VALUE_SYZYGY_LOSS = Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_LOSS + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM);
 int Game::QueenKnightPlane[SQUARE_NB];
 Key Game::PredictionCache_IsRepetition;
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
@@ -37,6 +40,12 @@ void Game::FreeState(StateInfo* state)
 
 void Game::Initialize()
 {
+    assert(CHESSCOACH_VALUE_WIN > CHESSCOACH_VALUE_SYZYGY_WIN);
+    assert(CHESSCOACH_VALUE_SYZYGY_WIN > CHESSCOACH_VALUE_SYZYGY_DRAW);
+    assert(CHESSCOACH_VALUE_SYZYGY_DRAW > CHESSCOACH_VALUE_DRAW);
+    assert(CHESSCOACH_VALUE_DRAW > CHESSCOACH_VALUE_SYZYGY_LOSS);
+    assert(CHESSCOACH_VALUE_SYZYGY_LOSS > CHESSCOACH_VALUE_LOSS);
+
     // Set up mappings for queen and knight moves to index into policy planes.
 
     for (int& plane : QueenKnightPlane)

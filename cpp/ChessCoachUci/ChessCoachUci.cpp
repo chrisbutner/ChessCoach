@@ -651,7 +651,7 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
 
         if (csv)
         {
-            std::cout << "move,prior,value,puct,visits,weight,upWeight" << std::endl;
+            std::cout << "move,prior,value,puct,visits,weight" << std::endl;
         }
 
         Node* root = puctGame.Root();
@@ -661,23 +661,21 @@ void ChessCoachUci::HandleConsole(std::stringstream& commands)
             if (csv)
             {
                 std::cout << Pgn::San(puctGame.GetPosition(), Move(child.move), true /* showCheckmate */)
-                    << "," << child.prior
+                    << "," << child.Prior()
                     << "," << child.Value()
                     << "," << puctContext.CalculatePuctScoreAdHoc(&child)
                     << "," << child.visitCount
                     << "," << child.valueWeight
-                    << "," << child.upWeight
                     << std::endl;
             }
             else
             {
                 std::cout << Pgn::San(puctGame.GetPosition(), Move(child.move), true /* showCheckmate */)
-                    << " prior=" << child.prior
+                    << " prior=" << child.Prior()
                     << " value=" << child.Value()
                     << " puct=" << puctContext.CalculatePuctScoreAdHoc(&child)
                     << " visits=" << child.visitCount
                     << " weight=" << child.valueWeight
-                    << " upWeight=" << child.upWeight
                     << std::endl;
             }
         }

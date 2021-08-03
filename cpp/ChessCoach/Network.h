@@ -120,7 +120,7 @@ struct INetwork
     virtual void LaunchGui(const std::string& mode) = 0;
     virtual void UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principalVariation,
         const std::vector<std::string>& sans, const std::vector<std::string>& froms, const std::vector<std::string>& tos, std::vector<float>& targets,
-        std::vector<float>& priors, std::vector<float>& values, std::vector<float>& puct, std::vector<int>& visits, std::vector<int>& weights, std::vector<int>& upWeights) = 0;
+        std::vector<float>& priors, std::vector<float>& values, std::vector<float>& puct, std::vector<int>& visits, std::vector<int>& weights) = 0;
     virtual void DebugDecompress(int positionCount, int policySize, float* result, int64_t* imagePiecesAuxiliary,
         int64_t* policyRowLengths, int64_t* policyIndices, float* policyValues, int decompressPositionsModulus,
         InputPlanes* imagesOut, float* valuesOut, OutputPlanes* policiesOut) = 0;

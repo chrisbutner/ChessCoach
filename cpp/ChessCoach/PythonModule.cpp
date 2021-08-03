@@ -486,8 +486,8 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
             timeControl.pondering = true;
             status = "pondering";
 
-            // Add a hard limit of 3 minutes pondering to avoid running out of memory.
-            timeControl.moveTimeMs = 3 * 60 * 1000;
+            // Add a hard limit of 5 minutes pondering to avoid running out of memory.
+            timeControl.moveTimeMs = 5 * 60 * 1000;
 
             // Take the first-few-plies limit into account.
             if (limitSeconds)

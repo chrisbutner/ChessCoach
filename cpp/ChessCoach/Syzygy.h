@@ -38,7 +38,6 @@ private:
 
     static bool ProbeDtzAtRoot(SelfPlayGame& game);
     static bool ProbeWdlAtRoot(SelfPlayGame& game);
-    static void UpdateRootChildValue(Node* node);
 };
 
 #endif // _SYZYGY_H_

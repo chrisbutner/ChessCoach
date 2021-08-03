@@ -36,6 +36,10 @@
 
 class TerminalValue
 {
+private:
+
+    static constexpr int8_t NonTerminal = std::numeric_limits<int8_t>::min();
+
 public:
 
     static int8_t Draw();
@@ -68,7 +72,7 @@ public:
     TerminalValue& operator=(const int8_t value);
     bool operator==(const int8_t other) const;
 
-    bool IsNonTerminal() const;
+    bool IsTerminal() const;
 
     bool IsImmediate() const;
     float ImmediateValue() const;
@@ -84,7 +88,7 @@ public:
 
 private:
 
-    std::optional<int8_t> _value;
+    int8_t _value;
 };
 
 enum class Expansion : uint8_t
@@ -94,8 +98,12 @@ enum class Expansion : uint8_t
     Expanded,
 };
 
-struct alignas(64) Node
+struct alignas(32) Node
 {
+public:
+
+    static constexpr uint8_t NoBest = std::numeric_limits<uint8_t>::max();
+
 public:
 
     using iterator = Node*;
@@ -112,43 +120,44 @@ public:
     const_iterator cbegin() const;
     const_iterator cend() const;
 
+    float Prior() const;
     bool IsExpanded() const;
     float Value() const;
     float ValueWithVirtualLoss() const;
     int SampleValue(float movingAverageBuild, float movingAverageCap, float value);
-    float TablebaseBoundedValue(float value) const;
+    float BoundScore(Bound bound) const;
+    float BoundedValue(float value) const;
     void SetTerminalValue(TerminalValue value);
-    void SetTablebaseScoreBound(float score, Bound bound);
+    void SetTablebaseRankBound(int rank, Bound bound);
+    int TablebaseRank() const;
+    Bound GetBound() const;
+    Bound GetBound(int16_t tablebaseRankBound) const;
+    int16_t BuildTablebaseRankBound(int rank, Bound bound) const;
+    Node* BestChild() const;
 
     Node* Child(Move match);
+    void SetBestChild(Node* bestChild);
 
 public:
 
-    std::atomic<Node*> bestChild;
     Node* children;
-
-    int32_t childCount;
-    float prior;
+    uint8_t childCount; // Cannot store 256, which is still <= MAX_MOVES, but won't be seen in practice
+    std::atomic_uint8_t bestIndex; // Max value 255 is reserved for "none"
     uint16_t move;
-    std::atomic_uint16_t visitingCount;
+    uint16_t quantizedPrior;
+    std::atomic_int16_t tablebaseRankBound; // Stores ((rank << 2) | bound)
+    
     std::atomic_int visitCount;
-
-    std::atomic<float> valueAverage;
-    std::atomic_int valueWeight;
-    std::atomic_int upWeight;
+    std::atomic_uint16_t visitingCount;
     std::atomic<TerminalValue> terminalValue;
     std::atomic<Expansion> expansion;
-    uint8_t padding1[1];
-
-    std::atomic_int tablebaseRank;
-    std::atomic<float> tablebaseScore;
-    std::atomic<Bound> tablebaseBound;
-    uint8_t padding2[4];
+    std::atomic<float> valueAverage;
+    std::atomic_int valueWeight;
 };
-static_assert(sizeof(TerminalValue) == 2);
+static_assert(sizeof(TerminalValue) == 1);
 static_assert(sizeof(Expansion) == 1);
-static_assert(sizeof(Node) == 64);
-static_assert(alignof(Node) == 64);
+static_assert(sizeof(Node) == 32);
+static_assert(alignof(Node) == 32);
 
 struct WeightedNode
 {
@@ -302,7 +311,8 @@ private:
     ExtMove _expandAndEvaluate_moves[MAX_MOVES];
     ExtMove* _expandAndEvaluate_endMoves;
     Key _imageKey;
-    std::array<float, MAX_MOVES> _cachedPriors;
+    std::array<float, MAX_MOVES> _priors;
+    std::array<uint16_t, MAX_MOVES> _quantizedPriors;
 };
 
 struct SearchState

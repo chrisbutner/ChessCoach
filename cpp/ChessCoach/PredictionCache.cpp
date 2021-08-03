@@ -34,7 +34,7 @@ void PredictionCacheChunk::Clear()
     }
 }
 
-bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float* priorsOut)
+bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, uint16_t* priorsOut)
 {
     for (PredictionCacheEntry& entry : _entries)
     {
@@ -80,9 +80,7 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
             {
                 const uint16_t quantizedPrior = entry.policyPriors[m];
                 priorSum += quantizedPrior;
-
-                const float prior = INetwork::DequantizeProbabilityNoZero(quantizedPrior);
-                priorsOut[m] = prior;
+                priorsOut[m] = quantizedPrior;
             }
 
             // Check for type-1 errors and splices and return false. It's important not to
@@ -105,7 +103,7 @@ bool PredictionCacheChunk::TryGet(Key key, int moveCount, float* valueOut, float
     return false;
 }
 
-void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float* priors)
+void PredictionCacheChunk::Put(Key key, float value, int moveCount, const uint16_t* priors)
 {
     // If the same full key is found then that entry needs to be replaced so that
     // TryGet finds it. Otherwise, replace the oldest entry.
@@ -136,10 +134,7 @@ void PredictionCacheChunk::Put(Key key, float value, int moveCount, const float*
     _entries[oldestIndex].key = key;
     _entries[oldestIndex].value = value;
     _entries[oldestIndex].age = std::numeric_limits<int>::min();
-    for (int m = 0; m < moveCount; m++)
-    {
-        _entries[oldestIndex].policyPriors[m] = INetwork::QuantizeProbabilityNoZero(priors[m]);
-    }
+    std::copy(priors, priors + moveCount, _entries[oldestIndex].policyPriors.data());
 
     // Place a "guard" probability of 1.0 immediately after the N legal moves' probabilities
     // so that "TryGet" can more often detect incorrect probability sums (rather than potentially
@@ -274,7 +269,7 @@ void PredictionCache::Free()
 
 // If returning true, valueOut and priorsOut are populated; chunkOut is not populated.
 // If returning false, valueOut is not populated; priorsOut may be clobbered; chunkOut is populated only if the value/policy should be stored when available.
-bool PredictionCache::TryGetPrediction(Key key, int moveCount, PredictionCacheChunk** chunkOut, float* valueOut, float* priorsOut)
+bool PredictionCache::TryGetPrediction(Key key, int moveCount, PredictionCacheChunk** chunkOut, float* valueOut, uint16_t* priorsOut)
 {
     if (_tables.empty())
     {

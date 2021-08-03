@@ -34,7 +34,7 @@ void ApplyMoveExpandWithPattern(SelfPlayWorker& selfPlayWorker, SelfPlayGame& ga
 
     int moveIndex = 0;
     Node* moveNode = nullptr;
-    game.Root()->childCount = legalMoveCount;
+    game.Root()->childCount = static_cast<uint8_t>(legalMoveCount);
     game.Root()->children = new Node[game.Root()->childCount]{};
     for (Move legalMove : legalMoves)
     {
@@ -60,7 +60,7 @@ void ApplyMoveExpandWithPattern(SelfPlayWorker& selfPlayWorker, SelfPlayGame& ga
     ASSERT_NE(moveNode, nullptr);
 
     Node* previousRoot = game.Root();
-    game.Root()->bestChild = moveNode;
+    game.Root()->SetBestChild(moveNode);
     game.StoreSearchStatistics();
     game.ApplyMoveWithRootAndExpansion(move, moveNode, selfPlayWorker);
     game.PruneExcept(previousRoot, moveNode);
@@ -82,7 +82,7 @@ TEST(Network, Policy)
     const int legalMoveCount = static_cast<int>(legalMoves.size());
 
     // Give 5 visits evenly across legal moves, then the rest to the first move.
-    game.Root()->childCount = static_cast<int>(legalMoves.size());
+    game.Root()->childCount = static_cast<uint8_t>(legalMoves.size());
     game.Root()->children = new Node[game.Root()->childCount]{};
     const int evenCount = 5;
     int moveIndex = 0;
@@ -99,7 +99,7 @@ TEST(Network, Policy)
 
     // Generate policy labels. Make sure that legal moves are non-zero and the rest are zero.
     Node* previousRoot = game.Root();
-    game.Root()->bestChild = selected;
+    game.Root()->SetBestChild(selected);
     game.StoreSearchStatistics();
     game.ApplyMoveWithRootAndExpansion(firstMove, selected, dummyWorker);
     game.PruneExcept(previousRoot, selected);

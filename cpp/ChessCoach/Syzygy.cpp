@@ -85,13 +85,8 @@ bool Syzygy::ProbeTablebasesAtRoot(SelfPlayGame& game)
     }
     else if (attemptedProbe)
     {
-        // Clean up if ProbeDtzAtRoot() and ProbeWdlAtRoot() have failed
-        for (Node& child : *game.Root())
-        {
-            child.tablebaseRank.store({}, std::memory_order_relaxed);
-            child.tablebaseScore.store({}, std::memory_order_relaxed);
-            child.tablebaseBound.store({}, std::memory_order_relaxed);
-        }
+        // Data is too intermingled. Just quit if ProbeDtzAtRoot() and ProbeWdlAtRoot() fail.
+        throw ChessCoachException("Failed to probe tablebases at the search root");
     }
     
     return RootInTB;
@@ -164,40 +159,19 @@ bool Syzygy::ProbeDtzAtRoot(SelfPlayGame& game)
         int r = dtz > 0 ? (dtz + rootNoProgressCount <= 99 && !hasRepeated ? 1000 : 1000 - (dtz + rootNoProgressCount))
             : dtz < 0 ? (-dtz * 2 + rootNoProgressCount < 100 ? -1000 : -1000 + (-dtz + rootNoProgressCount))
             : 0;
-        child.tablebaseRank.store(r, std::memory_order_relaxed);
-
-        // Determine the score to be displayed for this move. Assign at least
-        // 1 cp to cursed wins and let it grow to 49 cp as the positions gets
-        // closer to a real win.
-        const int scoreCentipawns = r >= bound ? CHESSCOACH_CENTIPAWNS_WIN - CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM
-            : r > 0 ? Value((std::max(3, r - 800) * int(PawnValueEg)) / 200)
-            : r == 0 ? CHESSCOACH_CENTIPAWNS_DRAW + 1 * CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM // Nudge off the exact draw score to help draw-sibling-FPU numerically.
-            : r > -bound ? Value((std::min(-3, r + 800) * int(PawnValueEg)) / 200)
-            : CHESSCOACH_CENTIPAWNS_LOSS + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM;
-        const float score = Game::CentipawnsToProbability(scoreCentipawns);
 
         const Bound tablebaseBound =
             r >= bound ? BOUND_LOWER
             : r <= -bound ? BOUND_UPPER
             : BOUND_EXACT;
         
-        child.SetTablebaseScoreBound(score, tablebaseBound);
-
-        UpdateRootChildValue(&child);
+        // Sacrifice cursed win/blessed loss differentiation. This can be added back using signal bits in "tablebaseRankBound"
+        // if needed.
+        child.SetTablebaseRankBound(r, tablebaseBound);
     }
 
     return true;
 }
-
-const float WDL_to_value[] =
-{
-    // Don't worry about ply: deltas are too small for PUCT to differentiate meaningfully.
-    Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_LOSS + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM),
-    Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW - 2 * CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM),
-    Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW + 1 * CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM), // Nudge off the exact draw score to help draw-sibling-FPU numerically.
-    Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW + 2 * CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM),
-    Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN - CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM),
-};
 
 // Use the WDL tables to rank root moves.
 // This is a fallback for the case that some or all DTZ tables are missing.
@@ -226,38 +200,17 @@ bool Syzygy::ProbeWdlAtRoot(SelfPlayGame& game)
             return false;
         }
 
-        child.tablebaseRank.store(WDL_to_rank[wdl + 2], std::memory_order_relaxed);
-
-        const float score = WDL_to_value[wdl + 2];
-
         const Bound tablebaseBound =
             wdl > 1 ? BOUND_LOWER
             : wdl < -1 ? BOUND_UPPER
             : BOUND_EXACT;
 
-        child.SetTablebaseScoreBound(score, tablebaseBound);
-
-        UpdateRootChildValue(&child);
+        // Sacrifice cursed win/blessed loss differentiation. This can be added back using signal bits in "tablebaseRankBound"
+        // if needed.
+        child.SetTablebaseRankBound(WDL_to_rank[wdl + 2], tablebaseBound);
     }
 
     return true;
-}
-
-void Syzygy::UpdateRootChildValue(Node* node)
-{
-    // Update value using the the tablebase score as a bound, regardless of "valueWeight".
-    // This sounds bold, but it follows the same logic as in SelfPlayWorker::Backpropagate.
-    // Ignore the existing value for the sake of bounding (e.g. std::max) if it's just FPU (no weight).
-    // Note that this is a single-threaded section (see SelfPlayWorker::PrepareExpandedRoot).
-    assert(node->tablebaseBound.load(std::memory_order_relaxed) != BOUND_NONE);
-    if (node->valueWeight.load(std::memory_order_relaxed) == 0)
-    {
-        node->valueAverage.store(node->tablebaseScore.load(std::memory_order_relaxed));
-    }
-    else
-    {
-        node->valueAverage.store(node->TablebaseBoundedValue(node->valueAverage.load(std::memory_order_relaxed)), std::memory_order_relaxed);
-    }
 }
 
 bool Syzygy::ProbeWdl(SelfPlayGame& game, bool isSearchRoot)
@@ -290,19 +243,13 @@ bool Syzygy::ProbeWdl(SelfPlayGame& game, bool isSearchRoot)
     // Always use 50-move rule.
     const int drawScore = 1;
 
-    // Don't worry about ply: deltas are too small for PUCT to differentiate meaningfully.
-    const int scoreCentipawns = wdl < -drawScore ? CHESSCOACH_CENTIPAWNS_LOSS + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM
-        : wdl > drawScore ? CHESSCOACH_CENTIPAWNS_WIN - CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM
-        : wdl == 0 ? CHESSCOACH_CENTIPAWNS_DRAW + 1 * CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM // Nudge off the exact draw score to help draw-sibling-FPU numerically.
-        : CHESSCOACH_CENTIPAWNS_DRAW + 2 * wdl * drawScore * CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM;
-    
-    const float score = Game::CentipawnsToProbability(scoreCentipawns);
-
     const Bound tablebaseBound =
         wdl < -drawScore ? BOUND_UPPER
         : wdl >  drawScore ? BOUND_LOWER
         : BOUND_EXACT;
 
-    game.Root()->SetTablebaseScoreBound(score, tablebaseBound);
+    // Sacrifice cursed win/blessed loss differentiation. This can be added back using signal bits in "tablebaseRankBound"
+    // if needed.
+    game.Root()->SetTablebaseRankBound(game.Root()->TablebaseRank(), tablebaseBound);
     return true;
 }

@@ -52,7 +52,7 @@
 
     function clearMoves(example) {
         document.getElementById("moves").innerHTML = (example["prior"] !== undefined) ?
-            "<tr><th>Move</th><th>Policy</th><th>Prior</th><th>Value</th><th>PUCT</th><th>Visits</th><th>Weight</th><th>UpWeight</th></tr>" :
+            "<tr><th>Move</th><th>Policy</th><th>Prior</th><th>Value</th><th>PUCT</th><th>Visits</th><th>Weight</th></tr>" :
             "<tr><th>Move</th><th>Policy</th>";
     }
 
@@ -74,7 +74,6 @@
             addField(row, move, "puct");
             addField(row, move, "visits");
             addField(row, move, "weight");
-            addField(row, move, "up_weight");
         }
 
         row.addEventListener("mouseover", () => {

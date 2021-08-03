@@ -66,15 +66,15 @@ std::vector<Node*> GeneratePrincipalVariation(const SelfPlayWorker& selfPlayWork
         {
             if (child.visitCount > 0)
             {
-                const bool bestIsNotBest = selfPlayWorker.WorseThan(node->bestChild, &child);
+                const bool bestIsNotBest = selfPlayWorker.WorseThan(node->BestChild(), &child);
                 if (bestIsNotBest) throw ChessCoachException("bestIsNotBest");
             }
         }
-        if (node->bestChild)
+        if (node->BestChild())
         {
-            principalVariation.push_back(node->bestChild);
+            principalVariation.push_back(node->BestChild());
         }
-        node = node->bestChild;
+        node = node->BestChild();
     }
 
     return principalVariation;
@@ -85,11 +85,11 @@ void MockExpand(Node* node, int count)
     const float prior = (1.f / count);
 
     node->children = new Node[count]{};
-    node->childCount = count;
+    node->childCount = static_cast<uint8_t>(count);
     for (int i = 0; i < count; i++)
     {
         node->children[i].move = static_cast<uint16_t>(i);
-        node->children[i].prior = prior;
+        node->children[i].quantizedPrior = INetwork::QuantizeProbabilityNoZero(prior);
     }
 }
 
@@ -215,7 +215,7 @@ TEST(Mcts, MateComparisons)
     const int nodeCount = 9;
     Node nodes[nodeCount] = {};
     nodes[0].terminalValue = TerminalValue::OpponentMateIn<6>();
-    nodes[0].tablebaseRank = -1000;
+    nodes[0].tablebaseRankBound = nodes[0].BuildTablebaseRankBound(-1000, BOUND_NONE);
     nodes[1].terminalValue = TerminalValue::OpponentMateIn<2>();
     nodes[2].terminalValue = TerminalValue::OpponentMateIn<4>();
     nodes[3].visitCount = 10;
@@ -225,7 +225,7 @@ TEST(Mcts, MateComparisons)
     nodes[6].terminalValue = TerminalValue::MateIn<3>();
     nodes[7].terminalValue = TerminalValue::MateIn<1>();
     nodes[8].terminalValue = TerminalValue::MateIn<5>();
-    nodes[8].tablebaseRank = 1000;
+    nodes[8].tablebaseRankBound = nodes[8].BuildTablebaseRankBound(1000, BOUND_NONE);
 
     // Check all pairs.
     for (int i = 0; i < nodeCount - 1; i++)
@@ -347,7 +347,7 @@ TEST(Mcts, TwofoldRepetition)
         node->children = new Node[1]{};
         node = &node->children[0];
         node->move = static_cast<uint16_t>(move);
-        node->prior = 1.f;
+        node->quantizedPrior = INetwork::QuantizeProbabilityNoZero(1.f);
         nodes.push_back(node);
     }
 
@@ -408,19 +408,19 @@ TEST(Mcts, SamplingSelfPlay)
     game->Root()->childCount = 4;
     game->Root()->children = new Node[4]{};
     game->Root()->children[0].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E4));
-    game->Root()->children[0].prior = 0.25f;
+    game->Root()->children[0].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[0].visitCount = 350;
     game->Root()->children[1].move = static_cast<uint16_t>(make_move(SQ_D2, SQ_D4));
-    game->Root()->children[1].prior = 0.25f;
+    game->Root()->children[1].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[1].visitCount = 250;
     game->Root()->children[2].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E3));
-    game->Root()->children[2].prior = 0.25f;
+    game->Root()->children[2].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[2].visitCount = 150;
     game->Root()->children[3].move = static_cast<uint16_t>(make_move(SQ_C2, SQ_C4));
-    game->Root()->children[3].prior = 0.25f;
+    game->Root()->children[3].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[3].visitCount = 50;
     game->Root()->visitCount = (game->Root()->children[0].visitCount + game->Root()->children[1].visitCount + game->Root()->children[2].visitCount + game->Root()->children[3].visitCount);
-    game->Root()->bestChild = &game->Root()->children[0];
+    game->Root()->SetBestChild(&game->Root()->children[0]);
 
     // Validate self-play sampling. Just shove samples in "valueWeight".
     // Expect visits in proportion to visit count.
@@ -454,19 +454,19 @@ TEST(Mcts, SamplingUci)
     game->Root()->childCount = 4;
     game->Root()->children = new Node[4]{};
     game->Root()->children[0].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E4));
-    game->Root()->children[0].prior = 0.25f;
+    game->Root()->children[0].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[0].visitCount = 350;
     game->Root()->children[1].move = static_cast<uint16_t>(make_move(SQ_D2, SQ_D4));
-    game->Root()->children[1].prior = 0.25f;
+    game->Root()->children[1].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[1].visitCount = 250;
     game->Root()->children[2].move = static_cast<uint16_t>(make_move(SQ_E2, SQ_E3));
-    game->Root()->children[2].prior = 0.25f;
+    game->Root()->children[2].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[2].visitCount = 150;
     game->Root()->children[3].move = static_cast<uint16_t>(make_move(SQ_C2, SQ_C4));
-    game->Root()->children[3].prior = 0.25f;
+    game->Root()->children[3].quantizedPrior = INetwork::QuantizeProbabilityNoZero(0.25f);
     game->Root()->children[3].visitCount = 50;
     game->Root()->visitCount = (game->Root()->children[0].visitCount + game->Root()->children[1].visitCount + game->Root()->children[2].visitCount + game->Root()->children[3].visitCount);
-    game->Root()->bestChild = &game->Root()->children[0];
+    game->Root()->SetBestChild(&game->Root()->children[0]);
 
     // Back up temperature.
     const float temperatureBackup = Config::Network.SelfPlay.MoveDiversityTemperature;
@@ -535,7 +535,7 @@ TEST(Mcts, PrepareExpandedRoot)
             // Expect exploration noise at the root.
             if (game->Root()->childCount >= 2)
             {
-                EXPECT_NE(game->Root()->children[0].prior, game->Root()->children[1].prior);
+                EXPECT_NE(game->Root()->children[0].quantizedPrior, game->Root()->children[1].quantizedPrior);
                 coverageA = true;
             }
 
@@ -552,7 +552,7 @@ TEST(Mcts, PrepareExpandedRoot)
                 {
                     // No win-FPU or exploration noise deeper in the tree.
                     EXPECT_FALSE((child.children[0].visitCount == 0) && (child.children[0].valueAverage == CHESSCOACH_FIRST_PLAY_URGENCY_ROOT));
-                    EXPECT_EQ(child.children[0].prior, child.children[1].prior);
+                    EXPECT_EQ(child.children[0].quantizedPrior, child.children[1].quantizedPrior);
                     coverageC = true;
                 }
             }

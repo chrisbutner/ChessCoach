@@ -40,12 +40,12 @@ struct alignas(1024) PredictionCacheChunk
 {
 public:
 
-    void Put(Key key, float value, int moveCount, const float* priors);
+    void Put(Key key, float value, int moveCount, const uint16_t* priors);
 
 private:
 
     void Clear();
-    bool TryGet(Key key, int moveCount, float* valueOut, float* priorsOut);
+    bool TryGet(Key key, int moveCount, float* valueOut, uint16_t* priorsOut);
 
 private:
 
@@ -77,7 +77,7 @@ public:
     void Allocate(int sizeMebibytes);
     void Free();
 
-    bool TryGetPrediction(Key key, int moveCount, PredictionCacheChunk** chunkOut, float* valueOut, float* priorsOut);
+    bool TryGetPrediction(Key key, int moveCount, PredictionCacheChunk** chunkOut, float* valueOut, uint16_t* priorsOut);
     void Clear();
     void ResetProbeMetrics();
 

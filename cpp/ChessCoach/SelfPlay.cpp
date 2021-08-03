@@ -51,7 +51,7 @@ int8_t TerminalValue::OpponentMateIn(int8_t n)
 }
 
 TerminalValue::TerminalValue()
-    : _value()
+    : _value(NonTerminal)
 {
 }
 
@@ -71,15 +71,14 @@ bool TerminalValue::operator==(const int8_t other) const
     return (_value == other);
 }
 
-bool TerminalValue::IsNonTerminal() const
+bool TerminalValue::IsTerminal() const
 {
-    return !_value;
+    return (_value != NonTerminal);
 }
 
 bool TerminalValue::IsImmediate() const
 {
-    return (_value &&
-        ((*_value == Draw()) || (*_value == MateIn<1>())));
+    return ((_value == Draw()) || (_value == MateIn<1>()));
 }
 
 float TerminalValue::ImmediateValue() const
@@ -94,27 +93,27 @@ float TerminalValue::ImmediateValue() const
 
 bool TerminalValue::IsMateInN() const
 {
-    return (_value && (*_value > 0));
+    return (IsTerminal() && (_value > 0));
 }
 
 bool TerminalValue::IsOpponentMateInN() const
 {
-    return (_value && (*_value < 0));
+    return (IsTerminal() && (_value < 0));
 }
 
 int8_t TerminalValue::MateN() const
 {
-    return static_cast<int8_t>(_value ? std::max(0, static_cast<int>(*_value)) : 0);
+    return static_cast<int8_t>(IsTerminal() ? std::max(0, static_cast<int>(_value)) : 0);
 }
 
 int8_t TerminalValue::OpponentMateN() const
 {
-    return static_cast<int8_t>(_value ? std::max(0, -*_value) : 0);
+    return static_cast<int8_t>(IsTerminal() ? std::max(0, -_value) : 0);
 }
 
 int8_t TerminalValue::EitherMateN() const
 {
-    return (_value ? *_value : 0);
+    return (IsTerminal() ? _value : 0);
 }
 
 float TerminalValue::MateScore(float explorationRate) const
@@ -151,42 +150,35 @@ float TerminalValue::MateScore(float explorationRate) const
     }
 }
 
-// GCC doesn't like "Node() = default", needs a nested brace for terminalValue.
 Node::Node()
-    : bestChild{}
-    , children{}
+    : children{}
     , childCount{}
-    , prior{}
+    , bestIndex(NoBest)
     , move{}
-    , visitingCount{}
+    , quantizedPrior{}
+    , tablebaseRankBound{}
     , visitCount{}
-    , valueAverage{}
-    , valueWeight{}
-    , upWeight{}
+    , visitingCount{}
     , terminalValue{ {} }
     , expansion{}
-    , tablebaseRank{}
-    , tablebaseScore{}
-    , tablebaseBound{}
+    , valueAverage{}
+    , valueWeight{}
 {
 }
 
 Node::Node(const Node& other)
-    : bestChild(other.bestChild.load(std::memory_order_relaxed))
-    , children(other.children)
+    : children(other.children)
     , childCount(other.childCount)
-    , prior(other.prior)
+    , bestIndex(other.bestIndex.load(std::memory_order_relaxed))
     , move(other.move)
-    , visitingCount(other.visitingCount.load(std::memory_order_relaxed))
+    , quantizedPrior(other.quantizedPrior)
+    , tablebaseRankBound(other.tablebaseRankBound.load(std::memory_order_relaxed))
     , visitCount(other.visitCount.load(std::memory_order_relaxed))
-    , valueAverage(other.valueAverage.load(std::memory_order_relaxed))
-    , valueWeight(other.valueWeight.load(std::memory_order_relaxed))
-    , upWeight(other.upWeight.load(std::memory_order_relaxed))
+    , visitingCount(other.visitingCount.load(std::memory_order_relaxed))
     , terminalValue(other.terminalValue.load(std::memory_order_relaxed))
     , expansion(other.expansion.load(std::memory_order_relaxed))
-    , tablebaseRank(other.tablebaseRank.load(std::memory_order_relaxed))
-    , tablebaseScore(other.tablebaseScore.load(std::memory_order_relaxed))
-    , tablebaseBound(other.tablebaseBound.load(std::memory_order_relaxed))
+    , valueAverage(other.valueAverage.load(std::memory_order_relaxed))
+    , valueWeight(other.valueWeight.load(std::memory_order_relaxed))
 {
 }
 
@@ -220,6 +212,11 @@ Node::const_iterator Node::cend() const
     return (children + childCount);
 }
 
+float Node::Prior() const
+{
+    return INetwork::DequantizeProbabilityNoZero(quantizedPrior);
+}
+
 bool Node::IsExpanded() const
 {
     return (children != nullptr);
@@ -227,12 +224,11 @@ bool Node::IsExpanded() const
 
 float Node::Value() const
 {
-    // Return a win for a proved mate or loss for a proved opponent mate.
-    const int eitherMateN = terminalValue.load(std::memory_order_relaxed).EitherMateN();
-    const int mateSign = ((eitherMateN > 0) - (eitherMateN < 0));
-    if (mateSign != 0)
+    // Return bound scores for proved and tablebase-probed wins, losses and draws.
+    const Bound bound = GetBound();
+    if (bound != BOUND_NONE)
     {
-        return INetwork::MapProbability11To01(static_cast<float>(mateSign));
+        return BoundScore(bound);
     }
 
     // Initialize "valueAverage" to first-play urgency (FPU) and "valueWeight" to zero.
@@ -242,12 +238,11 @@ float Node::Value() const
 
 float Node::ValueWithVirtualLoss() const
 {
-    // Return a win for a proved mate or loss for a proved opponent mate.
-    const int eitherMateN = terminalValue.load(std::memory_order_relaxed).EitherMateN();
-    const int mateSign = ((eitherMateN > 0) - (eitherMateN < 0));
-    if (mateSign != 0)
+    // Return bound scores for proved and tablebase-probed wins, losses and draws, bypassing virtual loss.
+    const Bound bound = GetBound();
+    if (bound != BOUND_NONE)
     {
-        return INetwork::MapProbability11To01(static_cast<float>(mateSign));
+        return BoundScore(bound);
     }
 
     // Initialize "valueAverage" to first-play urgency (FPU) and "valueWeight" to zero.
@@ -269,24 +264,42 @@ int Node::SampleValue(float movingAverageBuild, float movingAverageCap, float va
     return newWeight;
 }
 
-// If needed, this bounding can be merged with mate-proving and TerminalValue, but it all becomes very complicated.
-float Node::TablebaseBoundedValue(float value) const
+float Node::BoundScore(Bound bound) const
 {
-    // It would be most correct to write score then bound with release-store, and read score then bound
-    // with acquire-load. However, we only backpropagate value, not bounds, so the worst-case impact is
-    // low on platforms that don't auto-release. Just take the risk and skip the fence for performance.
-    const float score = tablebaseScore.load(std::memory_order_relaxed);
-    const Bound bound = tablebaseBound.load(std::memory_order_relaxed);
+
+    // It would be most correct to write terminalValue then bound with release-store, and read terminalValue then bound
+    // with acquire-load. However, worst-case impact is low on platforms that don't auto-release. Just take the risk and
+    // skip the fence for performance.
+    assert(bound != BOUND_NONE);
+    const bool isTerminal = terminalValue.load(std::memory_order_relaxed).IsTerminal();
+    switch (bound)
+    {
+    case BOUND_UPPER:
+        return (isTerminal ? CHESSCOACH_VALUE_LOSS : Game::CHESSCOACH_VALUE_SYZYGY_LOSS);
+    case BOUND_LOWER:
+        return (isTerminal ? CHESSCOACH_VALUE_WIN : Game::CHESSCOACH_VALUE_SYZYGY_WIN);
+    case BOUND_EXACT:
+        // Sacrifice cursed win/blessed loss differentiation. This can be added back using signal bits in "tablebaseRankBound"
+        // if needed.
+        return (isTerminal ? CHESSCOACH_VALUE_DRAW : Game::CHESSCOACH_VALUE_SYZYGY_DRAW);
+    default:
+        throw ChessCoachException("Unexpected Bound type");
+    }
+}
+
+float Node::BoundedValue(float value) const
+{
+    const Bound bound = GetBound();
     switch (bound)
     {
     case BOUND_NONE:
         return value;
     case BOUND_UPPER:
-        return std::min(score, value);
+        return std::min(BoundScore(bound), value);
     case BOUND_LOWER:
-        return std::max(score, value);
+        return std::max(BoundScore(bound), value);
     case BOUND_EXACT:
-        return score;
+        return BoundScore(bound);
     default:
         throw ChessCoachException("Unexpected Bound type");
     }
@@ -294,14 +307,48 @@ float Node::TablebaseBoundedValue(float value) const
 
 void Node::SetTerminalValue(TerminalValue value)
 {
-    const TerminalValue previous = terminalValue.exchange(value, std::memory_order_relaxed);
+    // It would be most correct to write terminalValue then bound with release-store, and read terminalValue then bound
+    // with acquire-load. However, worst-case impact is low on platforms that don't auto-release. Just take the risk and
+    // skip the fence for performance.
+    terminalValue.store(value, std::memory_order_relaxed);
     
+    const int eitherMateN = value.EitherMateN();
+    Bound bound = (eitherMateN == 0) ? BOUND_EXACT
+        : (eitherMateN < 0) ? BOUND_UPPER
+        : BOUND_LOWER;
+
+    // Keep the existing tablebase rank, but set a bound representing the terminal value.
+    SetTablebaseRankBound(TablebaseRank(), bound);
+}
+
+void Node::SetTablebaseRankBound(int rank, Bound bound)
+{
+    // Update "valueAverage" using the the provided score as a bound, regardless of current "valueWeight".
+    // This sounds bold, but it follows the same logic as in SelfPlayWorker::Backpropagate -> Node::BoundedValue.
+    // Ignore the existing value for the sake of bounding (e.g. std::max) if it's just FPU (no weight).
+    //
+    // Note that while this is a single-threaded section for root probes (between moves) and WDL probes (expansion ownership),
+    // it is multi-threaded for mate proving. This introduces a race condition, for example where thread A can update valueWeight to a
+    // lower bound of 1.0, then thread B can finish its "compare_exchange_weak" loop in "SampleValue" and average in a lower value.
+    // Return the bounded value in Value() and ValueWithVirtualLoss() for safety (and also bypass virtual loss).
+    assert(bound != BOUND_NONE);
+    const int16_t previousRankBound = tablebaseRankBound.exchange(BuildTablebaseRankBound(rank, bound), std::memory_order_relaxed);
+    const Bound previousBound = GetBound(previousRankBound);
+    if (valueWeight.load(std::memory_order_relaxed) == 0)
+    {
+        valueAverage.store(BoundScore(bound));
+    }
+    else
+    {
+        valueAverage.store(BoundedValue(valueAverage.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+    }
+
     // Clear out almost all prior-based incentive to explore forced losses.
     // This helps avoid wasted visits to high-prior but lost positions, sometimes causing blunders.
     //
     // The search will scramble to visit every other non-losing sibling before returning to known losses,
     // which helps find some alternative value faster, and helps prove forced parent wins faster, but may
-    // make it harder to differentiate between faster and slower forced losses (opponent mates). This feels
+    // make it harder to differentiate between faster and slower forced losses (e.g., opponent mates). This feels
     // like a very acceptable trade-off.
     //
     // When scrambling, search threads may visit every other sibling and put them into an Expanding
@@ -318,27 +365,42 @@ void Node::SetTerminalValue(TerminalValue value)
     // In order to leave some texture behind, divide the prior by a large number rather than zeroing it.
     //
     // See "TerminalValue::MateScore" for more TerminalValue special-casing and explanation.
-    if (!previous.IsOpponentMateInN() && value.IsOpponentMateInN())
-    {
-        // Only this thread has permission to clobber the non-atomic prior field.
-        prior /= 1000.f;
-    }
-}
-
-void Node::SetTablebaseScoreBound(float score, Bound bound)
-{
-    // It would be most correct to write score then bound with release-store, and read score then bound
-    // with acquire-load. However, we only backpropagate value, not bounds, so the worst-case impact is
-    // low on platforms that don't auto-release. Just take the risk and skip the fence for performance.
-    tablebaseScore.store(score, std::memory_order_relaxed);
-    const Bound previousBound = tablebaseBound.exchange(bound, std::memory_order_relaxed);
-
-    // Follow the same logic as "SetTerminalValue()" for clearing exploration incentive for known losses.
     if ((previousBound != BOUND_UPPER) && (bound == BOUND_UPPER))
     {
         // Only this thread has permission to clobber the non-atomic prior field.
-        prior /= 1000.f;
+        quantizedPrior /= 1000;
     }
+}
+
+int Node::TablebaseRank() const
+{
+    return (tablebaseRankBound.load(std::memory_order_relaxed) >> 2);
+}
+
+Bound Node::GetBound() const
+{
+    return GetBound(tablebaseRankBound.load(std::memory_order_relaxed));
+}
+
+Bound Node::GetBound(int16_t haveTablebaseRankBound) const
+{
+    return static_cast<Bound>(haveTablebaseRankBound & 0x3);
+}
+
+int16_t Node::BuildTablebaseRankBound(int rank, Bound bound) const
+{
+    return static_cast<int16_t>((rank << 2) | bound);
+}
+
+Node* Node::BestChild() const
+{
+    const uint8_t loadedBestIndex = bestIndex.load(std::memory_order_relaxed);
+    return ((loadedBestIndex == NoBest) ? nullptr : &children[loadedBestIndex]);
+}
+
+void Node::SetBestChild(Node* bestChild)
+{
+    bestIndex.store(static_cast<uint8_t>(bestChild - children), std::memory_order_relaxed);
 }
 
 Node* Node::Child(Move match)
@@ -613,7 +675,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
         {
             // Value from the parent's perspective (easy, it's a draw).
             // Don't cache the 2-repetition; check again next time.
-            assert(root->terminalValue.load(std::memory_order_relaxed).IsNonTerminal());
+            assert(!root->terminalValue.load(std::memory_order_relaxed).IsTerminal());
             assert(state == SelfPlayState::Working);
             return TerminalValue(TerminalValue::Draw()).ImmediateValue();
         }
@@ -645,7 +707,7 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
             // Note that "_imageKey" may be stale whenever "cacheStore" is null.
             _imageKey = GenerateImageKey(TryHard());
             hitCached = PredictionCache::Instance.TryGetPrediction(_imageKey, workingMoveCount,
-                &cacheStore, &cachedValue, _cachedPriors.data());
+                &cacheStore, &cachedValue, _quantizedPriors.data());
         }
         if (hitCached)
         {
@@ -677,10 +739,14 @@ float SelfPlayGame::ExpandAndEvaluate(SelfPlayState& state, PredictionCacheChunk
     int moveCount = 0;
     for (ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
     {
-        _cachedPriors[moveCount] = PolicyValue(*_policy, cur->move); // Logits
+        _priors[moveCount] = PolicyValue(*_policy, cur->move); // Logits
         moveCount++;
     }
-    Softmax(moveCount, _cachedPriors.data()); // Logits -> priors
+    Softmax(moveCount, _priors.data()); // Logits -> priors
+    for (int i = 0; i < moveCount; i++)
+    {
+        _quantizedPriors[i] = INetwork::QuantizeProbabilityNoZero(_priors[i]);
+    }
 
     return FinishExpanding(state, cacheStore, searchState, isSearchRoot, moveCount, value);
 }
@@ -691,14 +757,14 @@ float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*&
     if (cacheStore)
     {
         assert(moveCount <= PredictionCacheEntry::MaxMoveCount);
-        cacheStore->Put(_imageKey, value, moveCount, _cachedPriors.data());
+        cacheStore->Put(_imageKey, value, moveCount, _quantizedPriors.data());
     }
 
     // Handle the UCI "searchmoves" filter at the search root.
     if (isSearchRoot && !searchState->searchMoves.empty())
     {
         // Perform a simplified parallel-array version of std::remove_if, knowing that values are small and primitive.
-        float filteredSum = 0.f;
+        uint32_t filteredSum = 0;
         int replace = 0;
         for (int i = 0; i < moveCount; i++)
         {
@@ -706,8 +772,8 @@ float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*&
             {
                 // This move is allowed, so move it to the start. No need to std::move primitives.
                 _expandAndEvaluate_moves[replace] = _expandAndEvaluate_moves[i];
-                _cachedPriors[replace] = _cachedPriors[i];
-                filteredSum += _cachedPriors[i];
+                _quantizedPriors[replace] = _quantizedPriors[i];
+                filteredSum += _quantizedPriors[i];
                 replace++;
             }
         }
@@ -716,9 +782,10 @@ float SelfPlayGame::FinishExpanding(SelfPlayState& state, PredictionCacheChunk*&
         // Iterate back over the allowed moves and re-normalize their priors.
         moveCount = replace;
         assert(moveCount == searchState->searchMoves.size());
+        constexpr uint32_t desiredSum = INetwork::QuantizeProbabilityNoZero(1.f);
         for (int i = 0; i < replace; i++)
         {
-            _cachedPriors[i] /= filteredSum;
+            _quantizedPriors[i] = static_cast<uint16_t>((_quantizedPriors[i] * desiredSum) / filteredSum);
         }
     }
 
@@ -742,14 +809,15 @@ void SelfPlayGame::Expand(int moveCount, float firstPlayUrgency)
     Node* root = _root;
     assert(!root->IsExpanded());
     assert(moveCount > 0);
+    assert(moveCount <= std::numeric_limits<uint8_t>::max());
 
     root->children = new Node[moveCount]{};
-    root->childCount = moveCount;
+    root->childCount = static_cast<uint8_t>(moveCount);
     for (int i = 0; i < moveCount; i++)
     {
         root->children[i].move = static_cast<uint16_t>(_expandAndEvaluate_moves[i].move);
-        root->children[i].prior = _cachedPriors[i];
-        root->children[i].valueAverage = firstPlayUrgency;
+        root->children[i].quantizedPrior = _quantizedPriors[i];
+        root->children[i].valueAverage.store(firstPlayUrgency, std::memory_order_relaxed);
     }
 }
 
@@ -763,10 +831,14 @@ void SelfPlayGame::DebugExpandCanonicalOrdering()
     int moveCount = 0;
     for (ExtMove* cur = _expandAndEvaluate_moves; cur != _expandAndEvaluate_endMoves; cur++)
     {
-        _cachedPriors[moveCount] = PolicyValue(*_policy, cur->move); // Logits
+        _priors[moveCount] = PolicyValue(*_policy, cur->move); // Logits
         moveCount++;
     }
-    Softmax(moveCount, _cachedPriors.data()); // Logits -> priors
+    Softmax(moveCount, _priors.data()); // Logits -> priors
+    for (int i = 0; i < moveCount; i++)
+    {
+        _quantizedPriors[i] = INetwork::QuantizeProbabilityNoZero(_priors[i]);
+    }
     Expand(moveCount, CHESSCOACH_FIRST_PLAY_URGENCY_DEFAULT);
 }
 
@@ -807,7 +879,7 @@ float SelfPlayGame::CalculateMctsValue() const
     // Root value underestimates true value because it includes value from poor moves that we don't have to make.
     // Other children may have higher value than the best child, but we're much more sure about the best child's value,
     // whereas others are less explored and have higher value error.
-    Node* bestChild = _root->bestChild.load(std::memory_order_relaxed);
+    Node* bestChild = _root->BestChild();
     assert(bestChild);
     return bestChild->Value();
 }
@@ -898,22 +970,23 @@ void SelfPlayGame::AddExplorationNoise()
 {
     std::gamma_distribution<float> gamma(Config::Network.SelfPlay.RootDirichletAlpha, 1.f);
 
-    // Use "_cachedPriors" as scratch space.
+    // Use "_priors" as scratch space.
 
     float noiseSum = 0.f;
     for (int i = 0; i < _root->childCount; i++)
     {
-        _cachedPriors[i] = gamma(Random::Engine);
-        noiseSum += _cachedPriors[i];
+        _priors[i] = gamma(Random::Engine);
+        noiseSum += _priors[i];
     }
 
     int childIndex = 0;
     for (Node& child : *_root)
     {
-        const float normalized = (_cachedPriors[childIndex++] / noiseSum);
+        const float normalized = (_priors[childIndex++] / noiseSum);
         assert(!std::isnan(normalized));
         assert(!std::isinf(normalized));
-        child.prior = (child.prior * (1 - Config::Network.SelfPlay.RootExplorationFraction) + normalized * Config::Network.SelfPlay.RootExplorationFraction);
+        child.quantizedPrior = INetwork::QuantizeProbabilityNoZero(
+            (child.Prior() * (1 - Config::Network.SelfPlay.RootExplorationFraction) + normalized * Config::Network.SelfPlay.RootExplorationFraction));
     }
 }
 
@@ -1475,14 +1548,12 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
         // as the side-to-play's broad evaluation of the position.
         assert(!std::isnan(value));
         // Also get the root's value from the leaf's perspective in case it's needed for draw-sibling-FPU (see inside Backpropagate()).
-        const float rootValue = Game::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), game.Root()->valueAverage.load(std::memory_order_relaxed));
+        const float rootValue = Game::FlipValue(Color(game.ToPlay() ^ scratchGame.ToPlay()), game.Root()->Value());
         assert(!std::isnan(rootValue));
 
         // Decay valuations in endgames to avoid shuffling in local minima without progress.
         // It doesn't matter if this is a 2-repetition because the decay becomes a no-op.
-        const TerminalValue terminalValue = scratchGame.Root()->terminalValue.load(std::memory_order_relaxed);
-        const bool terminalOrBound = (!terminalValue.IsNonTerminal() || (scratchGame.Root()->tablebaseBound.load(std::memory_order_relaxed) != BOUND_NONE));
-        if (!terminalOrBound)
+        if (scratchGame.Root()->GetBound() == BOUND_NONE) // Includes terminals (draws and proved mates) and tablebase bounds
         {
             value += ((CHESSCOACH_VALUE_DRAW - value) * scratchGame.EndgameProportion() * scratchGame.GetPosition().rule50_count() / Config::Network.SelfPlay.ProgressDecayDivisor);
         }
@@ -1491,7 +1562,7 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
         _searchState->nodeCount.fetch_add(1, std::memory_order_relaxed);
 
         // If we *just found out* that this leaf is a checkmate, prove it backwards as far as possible.
-        if (!wasImmediateMate && terminalValue.IsMateInN())
+        if (!wasImmediateMate && scratchGame.Root()->terminalValue.load(std::memory_order_relaxed).IsMateInN())
         {
             BackpropagateMate(searchPath);
         }
@@ -1513,7 +1584,6 @@ bool SelfPlayWorker::RunMcts(SelfPlayGame& game, SelfPlayGame& scratchGame, Self
             game.Root()->visitCount.store(1, std::memory_order_relaxed);
             game.Root()->valueAverage.store(CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed); // Meaningless, but be consistent.
             game.Root()->valueWeight.store(0, std::memory_order_relaxed);
-            game.Root()->upWeight.store(0, std::memory_order_relaxed);
 
             // Perform necessary preparations, like adding exploration noise for self-play games.
             PrepareExpandedRoot(game);
@@ -1572,9 +1642,6 @@ void SelfPlayWorker::PrepareExpandedRoot(SelfPlayGame& game)
         // between multi-threaded work, or we've taken expansion ownership until we go back and set Expansion::Expanded.
         //
         // Therefore, it's safe to replace whatever FPU was there, as long as "valueWeight" is zero (e.g. replace draw-sibling-FPU, which could be anything).
-        //
-        // We may overwrite a root-probed tablebase score, but it will be restored on the first backpropagation because of the
-        // bounded value (see SelfPlayWorker::Backpropagate) and zero "valueWeight" (see Node::SampleValue).
         if (child.valueWeight.load(std::memory_order_relaxed) == 0)
         {
             child.valueAverage.store(CHESSCOACH_FIRST_PLAY_URGENCY_ROOT, std::memory_order_relaxed);
@@ -1611,7 +1678,7 @@ void SelfPlayWorker::PrepareExpandedRoot(SelfPlayGame& game)
 
 Node* SelfPlayWorker::MinimaxRoot(Node* parent) const
 {
-    Node* best = parent->bestChild;
+    Node* best = parent->BestChild();
     float bestValue = CHESSCOACH_VALUE_UNINITIALIZED;
 
     // Also apply the "minimax recursion threshold" at the root, falling back to already-computed visit-based selection.
@@ -1670,7 +1737,7 @@ float SelfPlayWorker::Minimax(Node* parent, int grandparentVisitCount) const
 
 Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) const
 {
-    Node* bestChild = game.Root()->bestChild.load(std::memory_order_relaxed);
+    Node* bestChild = game.Root()->BestChild();
     if (!bestChild)
     {
         // Haven't had enough time to explore anything, so just pick the highest prior.
@@ -1681,7 +1748,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
             Node* bestPrior = nullptr;
             for (Node& child : *game.Root())
             {
-                if (!bestPrior || (bestPrior->prior < child.prior))
+                if (!bestPrior || (bestPrior->quantizedPrior < child.quantizedPrior))
                 {
                     bestPrior = &child;
                 }
@@ -1777,7 +1844,7 @@ PuctContext::PuctContext(const SearchState* searchState, Node* parent)
         (static_cast<int64_t>(1) << Config::Network.SelfPlay.EliminationBaseExponent),
         ((static_cast<int64_t>(1) << eliminationExponent) * static_cast<int64_t>(rootVisitCount) / parentVisitCount)
         ));
-    _eliminationTopCount = std::min(_parent->childCount, rootVisitAdjusted);
+    _eliminationTopCount = std::min(static_cast<int>(_parent->childCount), rootVisitAdjusted);
 
     // Localize repeatedly-used config.
     _linearExplorationRate = Config::Network.SelfPlay.LinearExplorationRate;
@@ -1843,7 +1910,7 @@ float PuctContext::CalculateAzPuctScore(const Node* child, float childVirtualExp
     const float explorationRate = _explorationNumerator / (childVirtualExploration + 1.f);
 
     // (a) prior score
-    const float priorScore = explorationRate * child->prior;
+    const float priorScore = explorationRate * child->Prior();
 
     // (b) mate-in-N score
     const float mateScore = child->terminalValue.load(std::memory_order_relaxed).MateScore(explorationRate);
@@ -1877,7 +1944,6 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
     const float movingAverageBuild = Config::Network.SelfPlay.MovingAverageBuild;
     const float movingAverageCap = Config::Network.SelfPlay.MovingAverageCap;
     int weight = 1;
-    Node* previous = nullptr;
     for (int i = static_cast<int>(searchPath.size()) - 1; i >= 0; i--)
     {
         if (!weight)
@@ -1890,23 +1956,18 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
         node->visitingCount.fetch_sub(1, std::memory_order_relaxed);
         node->visitCount.fetch_add(1, std::memory_order_relaxed);
 
-        // If this node has a tablebase score/bound set then we know we can achieve at least/exactly/at most that,
+        // If this node has a terminal or tablebase score/bound set then we know we can achieve at least/exactly/at most that,
         // so backpropagate the bounded value up the tree.
         //
-        // Also, if this node has a tablebase score/bound set and we picked a sub-par exploration-only node down below
+        // Also, if this node has a terminal or tablebase score/bound set and we picked a sub-par exploration-only node down below
         // (i.e. weight is now zero, and we didn't reach this point), we could restart the weight chain, since we know
         // that the bounded value accurately represents the node. However, this has performance impact, and may not be necessary.
-        value = node->TablebaseBoundedValue(value);
+        value = node->BoundedValue(value);
 
         const int newWeight = node->SampleValue(movingAverageBuild, movingAverageCap, value);
-        if (previous)
-        {
-            previous->upWeight.fetch_add(1, std::memory_order_relaxed);
-        }
 
         // Weights are always 0 or 1 with current SBLE-PUCT. We already checked the current weight, so no need for "std::min".
         weight = searchPath[i].weight;
-        previous = node;
 
         // Implement "draw-sibling-FPU":
         //
@@ -2025,7 +2086,7 @@ void SelfPlayWorker::FixPrincipalVariation(const std::vector<WeightedNode>& sear
     // We may update the best child multiple times in this loop. E.g. just discovered current best loses to mate,
     // then loop through and see 9 visits, then 10 visits, then 11 visits.
     bool updateBestChild = false;
-    Node* parentBestChild = parent->bestChild.load(std::memory_order_relaxed);
+    Node* parentBestChild = parent->BestChild();
     for (Node& child : *parent)
     {
         if (WorseThan(parentBestChild, &child))
@@ -2038,7 +2099,7 @@ void SelfPlayWorker::FixPrincipalVariation(const std::vector<WeightedNode>& sear
     // We're updating a best-child, but that only changes the principal variation if this parent was part of it.
     if (updateBestChild)
     {
-        parent->bestChild.store(parentBestChild, std::memory_order_relaxed);
+        parent->SetBestChild(parentBestChild);
         for (int i = 0; i < searchPath.size() - 1; i++)
         {
             if (searchPath[i].node == parent)
@@ -2047,7 +2108,7 @@ void SelfPlayWorker::FixPrincipalVariation(const std::vector<WeightedNode>& sear
                 _searchState->principalVariationChanged.store(true, std::memory_order_release);
                 break;
             }
-            if (searchPath[i].node->bestChild.load(std::memory_order_relaxed) != searchPath[i + 1].node)
+            if (searchPath[i].node->BestChild() != searchPath[i + 1].node)
             {
                 break;
             }
@@ -2060,9 +2121,9 @@ void SelfPlayWorker::UpdatePrincipalVariation(const std::vector<WeightedNode>& s
     bool isPrincipalVariation = true;
     for (int i = 0; i < searchPath.size() - 1; i++)
     {
-        if (WorseThan(searchPath[i].node->bestChild.load(std::memory_order_relaxed), searchPath[i + 1].node))
+        if (WorseThan(searchPath[i].node->BestChild(), searchPath[i + 1].node))
         {
-            searchPath[i].node->bestChild.store(searchPath[i + 1].node, std::memory_order_relaxed);
+            searchPath[i].node->SetBestChild(searchPath[i + 1].node);
             if (isPrincipalVariation)
             {
                 // Use release-store to synchronize with the acquire-load of the PV printing so that the PV is updated.
@@ -2071,7 +2132,7 @@ void SelfPlayWorker::UpdatePrincipalVariation(const std::vector<WeightedNode>& s
         }
         else
         {
-            isPrincipalVariation &= (searchPath[i].node->bestChild.load(std::memory_order_relaxed) == searchPath[i + 1].node);
+            isPrincipalVariation &= (searchPath[i].node->BestChild() == searchPath[i + 1].node);
         }
     }
 }
@@ -2086,7 +2147,7 @@ void SelfPlayWorker::ValidatePrincipalVariation(const Node* root)
 
     while (root)
     {
-        const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
+        const Node* bestChild = root->BestChild();
         for (const Node& child : *root)
         {
             if (child.visitCount.load(std::memory_order_relaxed) > 0)
@@ -2116,9 +2177,11 @@ bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
     // With perfect search, we could find a faster mate than the "safe" Syzygy route, since Syzygy tables don't
     // include distance-to-mate (DTM) information. However, if we considered proven mate information before
     // tablebase rank we could end up drawing via the 50-move rule, so choose the safest route.
-    if (lhs->tablebaseRank != rhs->tablebaseRank)
+    const int lhsTablebaseRank = lhs->TablebaseRank();
+    const int rhsTablebaseRank = rhs->TablebaseRank();
+    if (lhsTablebaseRank != rhsTablebaseRank)
     {
-        return lhs->tablebaseRank < rhs->tablebaseRank;
+        return lhsTablebaseRank < rhsTablebaseRank;
     }
 
     // Prefer faster mates and slower opponent mates.
@@ -2140,17 +2203,17 @@ bool SelfPlayWorker::WorseThan(const Node* lhs, const Node* rhs) const
 
 std::vector<Node*> SelfPlayWorker::CollectBestMoves(Node* parent, float valueDeltaThreshold) const
 {
-    Node* bestChild = parent->bestChild.load(std::memory_order_relaxed);
+    Node* bestChild = parent->BestChild();
     assert(bestChild);
     std::vector<Node*> best = { bestChild };
-    const int bestTablebaseRank = bestChild->tablebaseRank.load(std::memory_order_relaxed);
+    const int bestTablebaseRank = bestChild->TablebaseRank();
     const int bestEitherMateN = bestChild->terminalValue.load(std::memory_order_relaxed).EitherMateN();
     const float valueThreshold = (bestChild->Value() - valueDeltaThreshold);
     for (Node& child : *parent)
     {
         // Other candidates must be in the same tablebase rank and mate categories as the best child.
         if ((&child == bestChild) ||
-            (child.tablebaseRank.load(std::memory_order_relaxed) != bestTablebaseRank) ||
+            (child.TablebaseRank() != bestTablebaseRank) ||
             (child.terminalValue.load(std::memory_order_relaxed).EitherMateN() != bestEitherMateN))
         {
             continue;
@@ -2276,7 +2339,7 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
                 const bool principalVariationChanged = _searchState->principalVariationChanged.exchange(false, std::memory_order_acquire);
                 if (principalVariationChanged)
                 {
-                    const uint16_t newBest = _games[0].Root()->bestChild.load(std::memory_order_relaxed)->move;
+                    const uint16_t newBest = _games[0].Root()->BestChild()->move;
                     if (newBest != _searchState->lastBestMove)
                     {
                         _searchState->lastBestMove = newBest;
@@ -2427,7 +2490,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
 
         // Wait to update the GUI until a principal variation exists.
         const Node* root = lineGame.Root();
-        const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
+        const Node* bestChild = root->BestChild();
         if (!bestChild)
         {
             return;
@@ -2461,7 +2524,7 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
                 (pvBestChild->terminalValue.load(std::memory_order_relaxed) == TerminalValue::MateIn<1>()) /* showCheckmate */);
             principalVariation << san << " ";
             pvGame.ApplyMove(move);
-            pvBestChild = pvBestChild->bestChild.load(std::memory_order_relaxed);
+            pvBestChild = pvBestChild->BestChild();
         }
 
         std::vector<std::string> sans;
@@ -2473,7 +2536,6 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
         std::vector<float> puct;
         std::vector<int> visits;
         std::vector<int> weights;
-        std::vector<int> upWeights;
 
         float sumChildVisits = 0.f;
         for (const Node& child : *lineGame.Root())
@@ -2488,16 +2550,15 @@ void SelfPlayWorker::CheckUpdateGui(INetwork* network, bool forceUpdate)
             froms.emplace_back(Game::SquareName[from_sq(move)]);
             tos.emplace_back(Game::SquareName[to_sq(move)]);
             targets.push_back(static_cast<float>(child.visitCount.load(std::memory_order_relaxed)) / sumChildVisits);
-            priors.push_back(child.prior);
+            priors.push_back(child.Prior());
             values.push_back(child.Value());
             puct.push_back(puctContext.CalculatePuctScoreAdHoc(&child));
             visits.push_back(child.visitCount.load(std::memory_order_relaxed));
             weights.push_back(child.valueWeight.load(std::memory_order_relaxed));
-            upWeights.push_back(child.upWeight.load(std::memory_order_relaxed));
         }
 
         network->UpdateGui(fen, _searchState->guiLine, nodeCount, evaluation.str(), principalVariation.str(),
-            sans, froms, tos, targets, priors, values, puct, visits, weights, upWeights);
+            sans, froms, tos, targets, priors, values, puct, visits, weights);
     }
     _searchState->previousNodeCount = nodeCount;
 }
@@ -2521,7 +2582,7 @@ void SelfPlayWorker::GuiShowLine(INetwork* network, const std::string& line)
         lineGame.ApplyMoveWithRoot(move, lineGame.Root()->Child(move));
 
         // Don't show lines for unexpanded nodes, or nodes with no principal variation.
-        const Node* bestChild = lineGame.Root()->bestChild.load(std::memory_order_relaxed);
+        const Node* bestChild = lineGame.Root()->BestChild();
         if (!lineGame.Root()->IsExpanded() || !bestChild)
         {
             return;
@@ -2540,7 +2601,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
     // Note that this may not be possible because of a hard "stop" or "position" command,
     // so SelectMove, PrintPrincipalVariation and OnSearchFinished handle the case of no bestChild.
     const Node* root = _games[0].Root();
-    const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
+    const Node* bestChild = root->BestChild();
     if (!bestChild)
     {
         // Stop despite any other instructions (e.g. infinite) if the root is terminal.
@@ -2655,7 +2716,7 @@ void SelfPlayWorker::PrintPrincipalVariation(bool searchFinished)
     const Node* root = _games[0].Root();
     std::vector<Move> principalVariation;
 
-    const Node* bestChild = root->bestChild.load(std::memory_order_relaxed);
+    const Node* bestChild = root->BestChild();
     if (!bestChild)
     {
         // No best move was found, so this is either a terminal node (mate or draw-on-the-board)
@@ -2674,7 +2735,7 @@ void SelfPlayWorker::PrintPrincipalVariation(bool searchFinished)
     while (pvBestChild)
     {
         principalVariation.push_back(Move(pvBestChild->move));
-        pvBestChild = pvBestChild->bestChild.load(std::memory_order_relaxed);
+        pvBestChild = pvBestChild->BestChild();
     }
 
     const bool debug = _searchState->debug.load(std::memory_order_relaxed);
