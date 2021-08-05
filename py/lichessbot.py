@@ -258,6 +258,14 @@ class Games:
     except KeyError:
       if logging_enabled:
         log(f"[Games][Starting][{id}] Wasn't in queue")
+      # Unfortunately, there's no direct correlation between a rematch challenge ID (which remains the same as the original game)
+      # and the resulting rematch game ID. So, rely on our only playing one game at a time and just dequeue a single game and log
+      # when the IDs don't match.
+      if len(self.queue) == 1:
+        existing_id = next(iter(self.queue))
+        self.queue.clear()
+        if logging_enabled:
+          log(f"[Games][Starting][{id}] Assuming a rematch, dequeuing {existing_id}")
     self.in_progress[id] = None
     if logging_enabled:
       log(f"[Games][Starting][{id}] {before} -> {self.status()}")
@@ -455,10 +463,11 @@ class OutgoingChallenges:
   idle_seconds_before_send = 125.0
   unanswered_seconds_before_cancel = 30.0
 
-  minimum_best_rating = 2000
+  minimum_best_rating = 1800
   rating_sample_temperature = 0.1 # About 30x as likely to choose 2700 as 2037, based on a sample of 155 bots.
 
   time_controls = [
+    (30, 3),
     (60, 3),
     (180, 0),
     (180, 2),
@@ -503,7 +512,7 @@ class OutgoingChallenges:
         except HTTPError as e:
           if e.response.content and (b"does not accept challenges" in e.response.content):
             if logging_enabled:
-              log(f"*** {e.response.status_code} ***: {username}: {e.response.content}")
+              log(f"Forbidding challenges to {username}: {e.response.content} ({e.response.status_code})")
             self.challenges_forbidden.add(username)
           if e.response.status_code == 429:
             # Assume that all 429s sending challenges are per-day limits and wait an hour.
@@ -537,6 +546,7 @@ class OutgoingChallenges:
 
   def declined(self, event):
     id = event["challenge"]["id"]
+    reason = event["challenge"]["declineReason"]
     self.games.dequeue(id)
     challenge = self.challenges_active.pop(id, None)
     if challenge:
@@ -545,6 +555,15 @@ class OutgoingChallenges:
       username, (limit, increment) = key
       if logging_enabled:
         log(f"*** OUTGOING CHALLENGE DECLINED *** with ID {id} to {username} with time control {limit}+{increment}")
+      if (("I'm not accepting challenges from bots." in reason) or
+        ("I'm not willing to play this variant right now." in reason) or
+        ("Please send me a casual challenge instead." in reason) or
+        ("only accepts challenges from friends." in reason) or
+        ("does not accept challenges." in reason) or
+        ("Please register to send challenges." in reason)):
+        if logging_enabled:
+          log(f"Forbidding challenges to {username}: {reason}")
+        self.challenges_forbidden.add(username)
 
   def list_users(self):
     response = self.lichess.get_bots()
