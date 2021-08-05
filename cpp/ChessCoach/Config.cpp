@@ -336,6 +336,7 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
 
     policy.template Parse<float>(selfPlay.LinearExplorationRate, config, "linear_exploration_rate");
     policy.template Parse<float>(selfPlay.LinearExplorationBase, config, "linear_exploration_base");
+    policy.template Parse<float>(selfPlay.VirtualExplorationCoefficient, config, "virtual_exploration_coefficient");
     policy.template Parse<float>(selfPlay.VirtualLossCoefficient, config, "virtual_loss_coefficient");
     policy.template Parse<float>(selfPlay.MovingAverageBuild, config, "moving_average_build");
     policy.template Parse<float>(selfPlay.MovingAverageCap, config, "moving_average_cap");

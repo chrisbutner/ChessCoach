@@ -1935,7 +1935,8 @@ float PuctContext::CalculatePuctScoreAdHoc(const Node* child) const
 
 float PuctContext::VirtualExploration(const Node* node) const
 {
-    return static_cast<float>(node->visitCount.load(std::memory_order_relaxed) + node->visitingCount.load(std::memory_order_relaxed));
+    return static_cast<float>(node->visitCount.load(std::memory_order_relaxed) +
+        (node->visitingCount.load(std::memory_order_relaxed) * Config::Network.SelfPlay.VirtualExplorationCoefficient));
 }
 
 void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue)
