@@ -84,8 +84,7 @@ role = "train|play"
 
 [[networks]]
 
-    # To finalize training, copy selfplay11_003600000/student/swa, selfplay11a_005600000/teacher/swa and
-    # selfplay11b_000400000/teacher/commentary into chesscoach1_005600000.
+    # To finalize training, selfplay11a_005600000/teacher/swa and selfplay11b_000400000/teacher/commentary into chesscoach1_005600000.
     name = "chesscoach1"
 
     [networks.training]
@@ -93,12 +92,10 @@ role = "train|play"
     stages = [
         # Already trained: just signal loading SWA weights.
         { stage = "save_swa", target = "teacher" },
-        { stage = "save_swa", target = "student" },
     ]
 
     [networks.self_play]
 
-    # Use "student" on GTX 1080 (applies to UCI; teacher is still required for commentary).
     network_type = "teacher"
 
 [[networks]]
@@ -189,7 +186,7 @@ network_type = "student"
 # Instead of using the latest weights found for "network_name", use these specific ones; e.g., selfplay6a_001000000.
 network_weights = ""
 
-# Use 4*512 on GTX 1080 (student), 4*512 on 4x V100 (student/teacher), 8*512 on v3-8 TPU (student/teacher).
+# Use 2*512 on GTX 1080 (student/teacher), 4*512 on 4x V100 (student/teacher), 8*512 on v3-8 TPU (student/teacher).
 num_workers = 8
 prediction_batch_size = 512
 
@@ -237,7 +234,7 @@ fraction_remaining = 20
 
 [search]
 
-# Use 2*256 on GTX 1080 (student), 4*256 on 4x V100 (student/teacher), 8*256 on v3-8 TPU (student/teacher).
+# Use 2*256 on GTX 1080 (teacher), 4*256 on 4x V100 (teacher), 8*256 on v3-8 TPU (teacher).
 search_threads = 8
 search_parallelism = 256
 slowstart_nodes = 1024
