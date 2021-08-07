@@ -464,7 +464,7 @@ class OutgoingChallenges:
   unanswered_seconds_before_cancel = 30.0
 
   minimum_best_rating = 1800
-  rating_sample_temperature = 0.1 # About 30x as likely to choose 2700 as 2037, based on a sample of 155 bots.
+  rating_sample_temperature = 0.5
 
   time_controls = [
     (30, 3),
@@ -477,6 +477,8 @@ class OutgoingChallenges:
     (600, 5),
     (900, 0),
     (900, 10),
+    (1800, 0),
+    (1800, 20),
   ]
 
   def __init__(self, lichess, username, games):
