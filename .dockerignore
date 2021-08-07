@@ -11,9 +11,10 @@ Dockerfile
 *.input
 *.pgn
 build
+cluster
 dist
-data
 protobuf*
+scripts
 **/.vscode
 **/__pycache__
 **/.vs

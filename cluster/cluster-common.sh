@@ -3,7 +3,7 @@ set -eux
 pushd "$(dirname "$0")"
 
 SERVICE_ACCOUNT_NAME=chesscoach-cluster-account
-SERVICE_ACCOUNT_KEY_PATH=key.json
+SERVICE_ACCOUNT_KEY_PATH=../key.json
 CREDENTIALS_NAME=chesscoach-credentials
 
 CLUSTER_VERSION=1.17
