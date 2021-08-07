@@ -25,7 +25,7 @@ class ChessCoachStrengthTest : public ChessCoach
 {
 public:
 
-    ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath,
+    ChessCoachStrengthTest(const std::filesystem::path& epdPath,
         int moveTimeMs, int nodes, int failureNodes, int positionLimit, float slopeArg, float interceptArg);
 
     void Initialize();
@@ -34,7 +34,6 @@ public:
 
 private:
 
-    NetworkType _networkType;
     std::filesystem::path _epdPath;
     int _moveTimeMs;
     int _nodes;
@@ -46,8 +45,6 @@ private:
 
 int main(int argc, char* argv[])
 {
-    std::string network;
-    NetworkType networkType = NetworkType_Count;
     std::string epdPath;
     int moveTimeMs;
     int nodes;
@@ -60,7 +57,6 @@ int main(int argc, char* argv[])
     {
         TCLAP::CmdLine cmd("ChessCoachStrengthTest: Tests ChessCoach using a provided .epd file to generate a score and optionally a rating", ' ', "0.9");
 
-        TCLAP::ValueArg<std::string> networkArg("n", "network", "Network to test, teacher or student", false /* req */, "student", "string");
         TCLAP::ValueArg<std::string> epdArg("e", "epd", "Path to the .epd file to test", true /* req */, "", "string");
         TCLAP::ValueArg<int> moveTimeArg("t", "movetime", "Move time per position (ms)", false /* req */, 0, "whole number");
         TCLAP::ValueArg<int> nodesArg("o", "nodes", "Nodes per position", false /* req */, 0, "whole number");
@@ -77,24 +73,8 @@ int main(int argc, char* argv[])
         cmd.add(nodesArg);
         cmd.add(moveTimeArg);
         cmd.add(epdArg);
-        cmd.add(networkArg);
 
         cmd.parse(argc, argv);
-
-        network = networkArg.getValue();
-        if (network == "teacher")
-        {
-            networkType = NetworkType_Teacher;
-        }
-        else if (network == "student")
-        {
-            networkType = NetworkType_Student;
-        }
-        else
-        {
-            std::cerr << "Expected 'teacher' or 'student' for 'network argument" << std::endl;
-            return 1;
-        }
 
         epdPath = epdArg.getValue();
         moveTimeMs = moveTimeArg.getValue();
@@ -110,7 +90,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    ChessCoachStrengthTest strengthTest(networkType, epdPath, moveTimeMs, nodes, failureNodes, positionLimit, slope, intercept);
+    ChessCoachStrengthTest strengthTest(epdPath, moveTimeMs, nodes, failureNodes, positionLimit, slope, intercept);
 
     strengthTest.PrintExceptions();
     strengthTest.Initialize();
@@ -122,10 +102,9 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-ChessCoachStrengthTest::ChessCoachStrengthTest(NetworkType networkType, const std::filesystem::path& epdPath,
+ChessCoachStrengthTest::ChessCoachStrengthTest(const std::filesystem::path& epdPath,
     int moveTimeMs, int nodes, int failureNodes, int positionLimit, float slope, float intercept)
-    : _networkType(networkType)
-    , _epdPath(epdPath)
+    : _epdPath(epdPath)
     , _moveTimeMs(moveTimeMs)
     , _nodes(nodes)
     , _failureNodes(failureNodes)
@@ -158,7 +137,7 @@ void ChessCoachStrengthTest::StrengthTest()
 
     std::unique_ptr<INetwork> network(CreateNetwork());
     WorkerGroup workerGroup;
-    workerGroup.Initialize(network.get(), nullptr /* storage */, _networkType,
+    workerGroup.Initialize(network.get(), nullptr /* storage */, Config::Network.SelfPlay.PredictionNetworkType,
         Config::Misc.Search_SearchThreads, Config::Misc.Search_SearchParallelism, &SelfPlayWorker::LoopStrengthTest);
 
     std::cout << "Testing " << _epdPath.stem() << "...\n\nPosition, Target, Chosen, Score, Total, Nodes" << std::endl;

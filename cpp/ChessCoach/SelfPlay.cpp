@@ -1396,7 +1396,9 @@ std::pair<int, int> SelfPlayWorker::JudgeStrengthTestPosition(const StrengthTest
     if (spec.pointSans.empty() && !spec.avoidSans.empty())
     {
         // There's no granular node information for avoid-move (am) positions.
-        return { 1, 0 };
+        // Return a "nodes required" metric value of 1 to differentiate from
+        // a "failure nodes" value of 0 during non-optimization strength testing.
+        return { 1, 1 };
     }
     return { 0, failureNodes };
 }
