@@ -1087,7 +1087,7 @@ void SelfPlayWorker::LoopSelfPlay(WorkCoordinator* workCoordinator, INetwork* ne
         // Warm up the GIL and predictions.
         if (!_generateUniformPredictions)
         {
-            const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, 1);
+            const PredictionStatus warmupStatus = WarmUpPredictions(network, networkType, static_cast<int>(_images.size()));
             if ((warmupStatus & PredictionStatus_UpdatedNetwork) && PredictionCacheResetThrottle.TryFire())
             {
                 // This thread has permission to clear the prediction cache after seeing an updated network.
@@ -2251,7 +2251,10 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
     Initialize();
 
     // Warm up the GIL and predictions.
-    WarmUpPredictions(network, networkType, 1);
+    // It's important to hit TPUs with each possible batch size to avoid 2+ second latency later
+    // while the TPU is working out some kind of execution and tiling plan.
+    WarmUpPredictions(network, networkType, Config::Misc.Search_SlowstartParallelism);
+    WarmUpPredictions(network, networkType, static_cast<int>(_games.size()));
 
     // Wait until searching is required.
     while (workCoordinator->WaitForWorkItems())
@@ -2270,9 +2273,6 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
                 continue;
             }
 
-            // GPU work
-            network->PredictBatch(networkType, _currentParallelism, _images.data(), _values.data(), _policies.data());
-
             // Only the primary worker does housekeeping.
             if (primary)
             {
@@ -2282,6 +2282,9 @@ void SelfPlayWorker::LoopSearch(WorkCoordinator* workCoordinator, INetwork* netw
 
                 CheckTimeControl(workCoordinator);
             }
+
+            // GPU work
+            network->PredictBatch(networkType, _currentParallelism, _images.data(), _values.data(), _policies.data());
         }
 
         // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
@@ -2311,7 +2314,10 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
     Initialize();
 
     // Warm up the GIL and predictions.
-    WarmUpPredictions(network, networkType, 1);
+    // It's important to hit TPUs with each possible batch size to avoid 2+ second latency later
+    // while the TPU is working out some kind of execution and tiling plan.
+    WarmUpPredictions(network, networkType, Config::Misc.Search_SlowstartParallelism);
+    WarmUpPredictions(network, networkType, static_cast<int>(_games.size()));
 
     // Wait until searching is required.
     while (workCoordinator->WaitForWorkItems())
@@ -2330,9 +2336,6 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
                 continue;
             }
 
-            // GPU work
-            network->PredictBatch(networkType, _currentParallelism, _images.data(), _values.data(), _policies.data());
-
             // Only the primary worker does housekeeping.
             if (primary)
             {
@@ -2350,6 +2353,9 @@ void SelfPlayWorker::LoopStrengthTest(WorkCoordinator* workCoordinator, INetwork
 
                 CheckTimeControl(workCoordinator);
             }
+
+            // GPU work
+            network->PredictBatch(networkType, _currentParallelism, _images.data(), _values.data(), _policies.data());
         }
 
         // Let the original position owner free nodes via SearchUpdatePosition(), but fix up node visits/expansions in flight.
