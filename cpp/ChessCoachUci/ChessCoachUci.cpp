@@ -395,7 +395,11 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
     }
 
     // Handle custom updates.
-    if (name == "network_weights")
+    if (((name == "search_threads") || (name == "search_parallelism") || (name == "network_weights")) && _workerGroup.IsInitialized())
+    {
+        throw ChessCoachException("Threads, parallelism, and weights need to be set before readying/searching");
+    }
+    else if (name == "network_weights")
     {
         InitializeNetwork();
         _network->UpdateNetworkWeights(Config::Network.SelfPlay.NetworkWeights);
@@ -408,10 +412,6 @@ void ChessCoachUci::HandleSetOption(std::stringstream& commands)
     else if (name == "Hash")
     {
         InitializePredictionCache();
-    }
-    else if (((name == "search_threads") || (name == "search_parallelism")) && _workerGroup.IsInitialized())
-    {
-        throw ChessCoachException("Threads and parallelism need to be set before readying/searching");
     }
 }
 

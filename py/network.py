@@ -192,26 +192,12 @@ class Network:
     self.network_type = network_type
     self.model_builder = model_builder
     self.training_compiler = None
-    self._network_weights = config.self_play["network_weights"]
+    self.network_weights = config.self_play["network_weights"]
     self.prediction_model_type = "swa" if config.is_swa_for_network_type(network_type) else "model"
-    self.initialize()
-
-  @property
-  def network_weights(self):
-    return self._network_weights
-
-  @network_weights.setter
-  def network_weights(self, value):
-    self._network_weights = value
-
-    # Clear out any loaded models, ready to lazy-load using the new weights path.
-    self.initialize()
-
-  def initialize(self):
     self.models_predict = [PredictionModels() for _ in devices]
     self.models_train = TrainingModels()
     self.tensorboard_writer_training = None
-    self.tensorboard_writer_validation = None
+    self.tensorboard_writer_validation = None    
 
   @property
   def info(self):

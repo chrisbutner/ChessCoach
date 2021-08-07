@@ -331,7 +331,7 @@ minimax_visits_ignore = '(0.1, 0.5)'
 [uci_options]
 
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
-# NOTE: Some options can only be set before initialization; e.g., search threads and parallelism.
+# NOTE: Some options can only be set before initialization; e.g., search threads, parallelism, and weights.
 network_type = { type = "string" }
 network_weights = { type = "string" }
 search_threads = { type = "spin", min = 1, max = 256 }
