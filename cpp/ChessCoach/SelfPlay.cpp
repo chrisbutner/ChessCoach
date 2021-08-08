@@ -2686,11 +2686,17 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
 
         // 1) Use a fraction of the increment-free remaining time, plus the increment.
         // 2) But use at most the remaining time (if there's a bug) minus safety buffer.
+        // 3) But use at least the absolute minimum time (effectively shortening the fraction
+        //    or risking a loss) to avoid the ratio of thinking-to-overhead devolving to zero,
+        //    losing progress and causing more moves and therefore time to be required overall.
         const int64_t increment = _searchState->timeControl.incrementMs[toPlay];
         const int64_t excludingIncrement = std::max(static_cast<int64_t>(0), totalTimeAllowed - increment);
         const int64_t fractionPlusIncrement = ((excludingIncrement / fraction) + increment);
-        const int64_t timeAllowed = std::max(static_cast<int64_t>(1),
-            (std::min(fractionPlusIncrement, totalTimeAllowed) - Config::Misc.TimeControl_SafetyBufferMilliseconds));
+        const int64_t timeAllowed =
+            std::max(
+                static_cast<int64_t>(std::max(1, Config::Misc.TimeControl_AbsoluteMinimumMilliseconds)),
+                (std::min(fractionPlusIncrement, totalTimeAllowed)
+                    - Config::Misc.TimeControl_SafetyBufferMilliseconds));
         if (searchTimeMs >= timeAllowed)
         {
             workCoordinator->OnWorkItemCompleted();
@@ -2708,12 +2714,12 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
         _searchState->timeControl.eliminationFraction = (static_cast<float>(searchTimeMs) / timeAllowed);
     }
 
-    // No limits set/remaining: make at least the training number of simulations.
+    // No limits set/remaining: search for the configured absolute minimum time.
     if ((_searchState->timeControl.nodes <= 0) &&
         (_searchState->timeControl.mate <= 0) &&
         (_searchState->timeControl.moveTimeMs <= 0) &&
         (totalTimeAllowed <= 0) &&
-        (nodeCount >= Config::Network.SelfPlay.NumSimulations))
+        (searchTimeMs >= Config::Misc.TimeControl_AbsoluteMinimumMilliseconds))
     {
         workCoordinator->OnWorkItemCompleted();
         return;

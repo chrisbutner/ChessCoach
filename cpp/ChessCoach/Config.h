@@ -153,6 +153,7 @@ struct MiscConfig
     // Time control
     int TimeControl_SafetyBufferMilliseconds;
     int TimeControl_FractionOfRemaining;
+    int TimeControl_AbsoluteMinimumMilliseconds;
 
     // Search
     int Search_SearchThreads;
@@ -164,6 +165,9 @@ struct MiscConfig
 
     // Bot
     int Bot_CommentaryMinimumRemainingMilliseconds;
+    int Bot_PonderBufferMaxMilliseconds;
+    int Bot_PonderBufferMinMilliseconds;
+    float Bot_PonderBufferProportion;
 
     // Storage
     int Storage_GamesPerChunk;

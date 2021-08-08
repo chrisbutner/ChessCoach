@@ -458,6 +458,22 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         timeControl.incrementMs[WHITE] = winc;
         timeControl.incrementMs[BLACK] = binc;
 
+        // Add additional safety buffer to compensate for network calls, commentary,
+        // amortizing ponder pruning, and lack of progress in no-increment games.
+        static int originalBuffer = Config::Misc.TimeControl_SafetyBufferMilliseconds;
+        assert(Config::Misc.Bot_PonderBufferMinMilliseconds <= Config::Misc.Bot_PonderBufferMaxMilliseconds);
+        const int ponderBuffer = std::clamp(
+            static_cast<int>(Config::Misc.Bot_PonderBufferProportion * timeControl.timeRemainingMs[botSide]),
+            Config::Misc.Bot_PonderBufferMinMilliseconds,
+            Config::Misc.Bot_PonderBufferMaxMilliseconds);
+        Config::Misc.TimeControl_SafetyBufferMilliseconds = (originalBuffer + ponderBuffer);
+
+        // Lichess only allows ~3 moves per second, plus some burst. Going over the limit
+        // means getting hit with a 429 error and having to wait 1 minute, effectively losing.
+        // Try to split the difference, allowing for some deallocation and request overhead,
+        // but also eating into some burst allowance as remaining time nears zero.
+        Config::Misc.TimeControl_AbsoluteMinimumMilliseconds = std::max(Config::Misc.TimeControl_AbsoluteMinimumMilliseconds, 50);
+
         if (search)
         {
             // Limit the first few plies to avoid a game abort. The first limit reached will stop the search.

@@ -230,7 +230,8 @@ max_ply = 30
 [time_control]
 
 safety_buffer_milliseconds = 100
-fraction_remaining = 20
+fraction_of_remaining = 40
+absolute_minimum_milliseconds = 10
 
 [search]
 
@@ -250,6 +251,9 @@ temperature = 1.5
 [bot]
 
 commentary_minimum_remaining_milliseconds = 30_000
+ponder_buffer_max_milliseconds = 1500
+ponder_buffer_min_milliseconds = 750
+ponder_buffer_proportion = 0.01
 
 [storage]
 
@@ -306,6 +310,7 @@ tournament_time_control = "60+0.6" # 60+0.6 fast (1.8 min each for 80 moves), 30
 # '("small", "medium", "large")'
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # NOTE: Parameters must also be listed under [uci_options] when using mini-tournament-based optimization.
+fraction_of_remaining = '(20, 50)'
 exploration_rate_base = '(15_000.0, 100_000.0)'
 exploration_rate_init = '(1.0, 3.0)'
 linear_exploration_rate = '(1000.0, 5000.0)'
@@ -333,6 +338,7 @@ network_type = { type = "string" }
 network_weights = { type = "string" }
 search_threads = { type = "spin", min = 1, max = 256 }
 search_parallelism = { type = "spin", min = 1, max = 4096 }
+fraction_of_remaining = { type = "spin", min = 5, max = 100 }
 safety_buffer_milliseconds = { type = "spin", min = 0, max = 5000 }
 Hash = { type = "spin", min = 0, max = 262_144 }
 exploration_rate_base = { type = "float" }

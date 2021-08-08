@@ -41,10 +41,6 @@ int main()
 
 void ChessCoachBot::Work()
 {
-    // Add additional safety buffer to compensate for network calls, commentary,
-    // amortizing ponder pruning, and lack of progress in no-increment games.
-    Config::Misc.TimeControl_SafetyBufferMilliseconds += 1500;
-
     // Use the search loop and print principle variations periodically.
     std::unique_ptr<INetwork> network(CreateNetwork());
     WorkerGroup workerGroup;
