@@ -325,6 +325,24 @@ TEST(Network, QueenKnightPlanes)
     ChessCoach chessCoach;
     chessCoach.Initialize();
 
+    {
+        int badSum = 0;
+        for (int& plane : Game::BadQueenKnightPlane)
+        {
+            badSum += (plane != Game::NO_PLANE);
+        }
+        EXPECT_EQ(badSum, 45);
+    }
+
+    {
+        int sum = 0;
+        for (int& plane : Game::QueenKnightPlane)
+        {
+            sum += (plane != Game::NO_PLANE);
+        }
+        EXPECT_EQ(sum, 64);
+    }
+
     float policySums[COLOR_NB] = {};
     for (int i = 0; i < COLOR_NB; i++)
     {

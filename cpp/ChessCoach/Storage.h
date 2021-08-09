@@ -72,6 +72,8 @@ public:
 
 public:
 
+    void FixChunk(INetwork* network, const std::string& filename);
+
     Storage();
     void InitializeLocalGamesChunks(INetwork* network);
     int AddTrainingGame(INetwork* network, SavedGame&& game);

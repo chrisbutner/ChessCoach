@@ -78,10 +78,18 @@ int main()
     return 0;
 }
 
+#include <execution>
 void ChessCoachTrain::TrainChessCoach()
 {
     std::unique_ptr<INetwork> network(CreateNetwork());
     Storage storage;
+
+    std::vector<std::string> filenames = network->ListChunks();
+    std::for_each(std::execution::par_unseq, filenames.begin(), filenames.end(), [&](const std::string& filename) {
+        storage.FixChunk(network.get(), filename);
+        std::cout << "Fixed " << filename << std::endl;
+        });
+    if (network.get()) return;
 
     // We need to reach into Python for network info in case it's coming from cloud storage.
     int networkStepCountTeacher;

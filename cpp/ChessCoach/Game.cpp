@@ -23,7 +23,8 @@
 const float Game::CHESSCOACH_VALUE_SYZYGY_WIN = Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_WIN - CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM);
 const float Game::CHESSCOACH_VALUE_SYZYGY_DRAW = Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_DRAW + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM); // Nudge off the exact draw score to help draw-sibling-FPU numerically.
 const float Game::CHESSCOACH_VALUE_SYZYGY_LOSS = Game::CentipawnsToProbability(CHESSCOACH_CENTIPAWNS_LOSS + CHESSCOACH_CENTIPAWNS_SYZYGY_QUANTUM);
-int Game::QueenKnightPlane[SQUARE_NB];
+int Game::BadQueenKnightPlane[SQUARE_NB];
+int Game::QueenKnightPlane[256];
 Key Game::PredictionCache_IsRepetition;
 Key Game::PredictionCache_NoProgressCount[NoProgressSaturationCount + 1];
 thread_local PoolAllocator<StateInfo, Game::BlockSizeBytes> Game::StateAllocator;
@@ -48,6 +49,10 @@ void Game::Initialize()
 
     // Set up mappings for queen and knight moves to index into policy planes.
 
+    for (int& plane : BadQueenKnightPlane)
+    {
+        plane = NO_PLANE;
+    }
     for (int& plane : QueenKnightPlane)
     {
         plane = NO_PLANE;
@@ -55,20 +60,28 @@ void Game::Initialize()
     int nextPlane = 0;
 
     const Direction QueenDirections[] = { NORTH, NORTH_EAST, EAST, SOUTH_EAST, SOUTH, SOUTH_WEST, WEST, NORTH_WEST };
+    const Square QueenFrom[] = { SQ_A1, SQ_A8, SQ_H8, SQ_H1 };
     const int MaxDistance = 7;
-    for (Direction direction : QueenDirections)
+    for (int directionIndex = 0; directionIndex < std::size(QueenDirections); directionIndex++)
     {
+        const Direction direction = QueenDirections[directionIndex];
+        const Square from = QueenFrom[directionIndex / 2];
         for (int distance = 1; distance <= MaxDistance; distance++)
         {
-            QueenKnightPlane[(SQUARE_NB + direction * distance) % SQUARE_NB] = nextPlane++;
+            BadQueenKnightPlane[(SQUARE_NB + direction * distance) % SQUARE_NB] = nextPlane;
+            QueenKnightPlane[Delta88(from, from + direction * distance)] = nextPlane;
+            nextPlane++;
         }
     }
 
     const int KnightMoves[] = { NORTH_EAST + NORTH, NORTH_EAST + EAST, SOUTH_EAST + EAST, SOUTH_EAST + SOUTH,
         SOUTH_WEST + SOUTH, SOUTH_WEST + WEST, NORTH_WEST + WEST, NORTH_WEST + NORTH };
+    const Square knightFrom = SQ_E4;
     for (int delta : KnightMoves)
     {
-        QueenKnightPlane[(SQUARE_NB + delta) % SQUARE_NB] = nextPlane++;
+        BadQueenKnightPlane[(SQUARE_NB + delta) % SQUARE_NB] = nextPlane;
+        QueenKnightPlane[Delta88(knightFrom, Square(knightFrom + delta))] = nextPlane;
+        nextPlane++;
     }
 
     // Set up additional Zobrist hash keys for prediction caching (additional info beyond position).
@@ -509,11 +522,35 @@ float& Game::PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const
     }
     else
     {
-        plane = QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB];
+        plane = QueenKnightPlane[Delta88(from, to)];
         assert((plane >= 0) && (plane < INetwork::OutputPlaneCount));
     }
 
     return policyInOut[plane][rank_of(from)][file_of(from)];
+}
+
+int Game::BadPolicyIndex(Move move) const
+{
+    // If it's black to play, flip the board and flip colors: always from the "current player's" perspective.
+    move = FlipMove(ToPlay(), move);
+    Square from = from_sq(move);
+    Square to = to_sq(move);
+
+    int plane;
+    PieceType promotion;
+    if ((type_of(move) == PROMOTION) && ((promotion = promotion_type(move)) != QUEEN))
+    {
+        plane = UnderpromotionPlane[promotion - KNIGHT][to - from - NORTH_WEST];
+        assert((plane >= 0) && (plane < INetwork::OutputPlaneCount));
+    }
+    else
+    {
+        plane = BadQueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB];
+        assert((plane >= 0) && (plane < INetwork::OutputPlaneCount));
+    }
+
+    const INetwork::PlanesPointerFlat zero = 0;
+    return static_cast<int>(&reinterpret_cast<INetwork::PlanesPointer>(zero)[plane][rank_of(from)][file_of(from)] - zero);
 }
 
 // Callers must zero "policyOut" before calling: only some values are set.

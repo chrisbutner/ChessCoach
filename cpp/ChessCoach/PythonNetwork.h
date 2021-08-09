@@ -81,6 +81,7 @@ public:
     virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* swaStepCountOut, int* trainingChunkCountOut, std::string* relativePathOut);
     virtual void SaveFile(const std::string& relativePath, const std::string& data);
     virtual std::string LoadFile(const std::string& relativePath);
+    virtual std::vector<std::string> ListChunks();
     virtual bool FileExists(const std::string& relativePath);
     virtual void LaunchGui(const std::string& mode);
     virtual void UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principalVariation,
@@ -110,6 +111,7 @@ private:
     PyObject* _getNetworkInfoFunction[NetworkType_Count];
     PyObject* _saveFileFunction;
     PyObject* _loadFileFunction;
+    PyObject* _listChunksFunction;
     PyObject* _fileExistsFunction;
     PyObject* _launchGuiFunction;
     PyObject* _updateGuiFunction;

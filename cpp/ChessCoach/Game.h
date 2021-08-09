@@ -121,6 +121,17 @@ public:
 
     constexpr static const INetwork::PackedPlane FillPlanePacked[COLOR_NB] = { 0, static_cast<INetwork::PackedPlane>(0xFFFFFFFFFFFFFFFFULL) };
 
+    constexpr static int Square88(Square square)
+    {
+        const int squareInt = static_cast<int>(square);
+        return (squareInt + (squareInt & ~7));
+    }
+
+    constexpr static int Delta88(Square from, Square to)
+    {
+        return (0x77 + Square88(to) - Square88(from));
+    }
+
     constexpr static const int NO_PLANE = -1;
 
     // UnderpromotionPlane[Piece - KNIGHT][to - from - NORTH_WEST]
@@ -131,8 +142,10 @@ public:
         { 70, 71, 72, },
     };
 
-    // QueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB]
-    static int QueenKnightPlane[SQUARE_NB];
+    // BadQueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB]
+    // QueenKnightPlane[Delta88(from, to)]
+    static int BadQueenKnightPlane[SQUARE_NB];
+    static int QueenKnightPlane[256];
 
     constexpr static const int NoProgressSaturationCount = 99;
 
@@ -181,6 +194,7 @@ public:
     float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
     float& PolicyValue(INetwork::PlanesPointerFlat policyInOut, Move move) const;
     float& PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const;
+    int BadPolicyIndex(Move move) const;
     void GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::OutputPlanes& policyOut) const;
     void GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const;
     void GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIndices, const float* policyValues, INetwork::OutputPlanes& policyOut);

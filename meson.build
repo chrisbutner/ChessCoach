@@ -10,9 +10,9 @@ if get_option('buildtype') == 'release'
 endif
 
 # Support C++17 on GCC8, faster CRC32C and faster Stockfish (no prefetch though: we don't use their transposition table).
-add_project_arguments('-lstdc++fs', '-msse', '-msse2', '-msse3', '-msse4.1', '-msse4.2', '-mavx2', '-mpopcnt', '-mbmi2',
+add_project_arguments('-ltbb', '-lstdc++fs', '-msse', '-msse2', '-msse3', '-msse4.1', '-msse4.2', '-mavx2', '-mpopcnt', '-mbmi2',
   '-DNO_PREFETCH', '-DUSE_POPCNT', '-DUSE_PEXT', '-DIS_64BIT', language: 'cpp')
-add_project_link_arguments('-lstdc++fs', language: 'cpp')
+add_project_link_arguments('-ltbb', '-lstdc++fs', language: 'cpp')
 
 # Rely on MSVC's less pedantic signed/unsigned checking, e.g. around loop indices.
 add_project_arguments('-Wall', '-Wextra', '-Wpedantic', '-Wno-unknown-pragmas', '-Wno-sign-compare', language: 'cpp')
