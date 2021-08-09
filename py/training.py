@@ -278,7 +278,7 @@ class Schedule(tf.keras.optimizers.schedules.PiecewiseConstantDecay):
       boundaries.append(0)
       values.append(values[0])
     super().__init__(boundaries, values)
-    self.warmup_steps = warmup_steps
+    self.warmup_steps = (warmup_steps // device_count)
     self.device_count = device_count
 
   def __call__(self, step):
