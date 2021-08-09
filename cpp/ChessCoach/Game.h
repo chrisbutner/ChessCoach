@@ -142,9 +142,7 @@ public:
         { 70, 71, 72, },
     };
 
-    // BadQueenKnightPlane[(to - from + SQUARE_NB) % SQUARE_NB]
     // QueenKnightPlane[Delta88(from, to)]
-    static int BadQueenKnightPlane[SQUARE_NB];
     static int QueenKnightPlane[256];
 
     constexpr static const int NoProgressSaturationCount = 99;
@@ -194,7 +192,6 @@ public:
     float& PolicyValue(INetwork::OutputPlanes& policy, Move move) const;
     float& PolicyValue(INetwork::PlanesPointerFlat policyInOut, Move move) const;
     float& PolicyValue(INetwork::PlanesPointer policyInOut, Move move) const;
-    int BadPolicyIndex(Move move) const;
     void GeneratePolicy(const std::map<Move, float>& childVisits, INetwork::OutputPlanes& policyOut) const;
     void GeneratePolicyCompressed(const std::map<Move, float>& childVisits, int64_t* policyIndicesOut, float* policyValuesOut) const;
     void GeneratePolicyDecompress(int childVisitsSize, const int64_t* policyIndices, const float* policyValues, INetwork::OutputPlanes& policyOut);

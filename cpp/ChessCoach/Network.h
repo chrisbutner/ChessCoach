@@ -116,7 +116,6 @@ struct INetwork
     virtual void GetNetworkInfo(NetworkType networkType, int* stepCountOut, int* swaStepCountOut, int* trainingChunkCountOut, std::string* relativePathOut) = 0;
     virtual void SaveFile(const std::string& relativePath, const std::string& data) = 0;
     virtual std::string LoadFile(const std::string& relativePath) = 0;
-    virtual std::vector<std::string> ListChunks() = 0;
     virtual bool FileExists(const std::string& relativePath) = 0;
     virtual void LaunchGui(const std::string& mode) = 0;
     virtual void UpdateGui(const std::string& fen, const std::string& line, int nodeCount, const std::string& evaluation, const std::string& principalVariation,

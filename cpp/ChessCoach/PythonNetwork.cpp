@@ -90,7 +90,6 @@ PythonNetwork::PythonNetwork()
     _getNetworkInfoFunction[NetworkType_Student] = LoadFunction(module, "get_network_info_student");
     _saveFileFunction = LoadFunction(module, "save_file");
     _loadFileFunction = LoadFunction(module, "load_file");
-    _listChunksFunction = LoadFunction(module, "list_chunks");
     _fileExistsFunction = LoadFunction(module, "file_exists");
     _launchGuiFunction = LoadFunction(module, "launch_gui");
     _updateGuiFunction = LoadFunction(module, "update_gui");
@@ -131,7 +130,6 @@ PythonNetwork::~PythonNetwork()
     Py_XDECREF(_fileExistsFunction);
     Py_XDECREF(_updateGuiFunction);
     Py_XDECREF(_launchGuiFunction);
-    Py_XDECREF(_listChunksFunction);
     Py_XDECREF(_loadFileFunction);
     Py_XDECREF(_saveFileFunction);
     Py_XDECREF(_getNetworkInfoFunction[NetworkType_Student]);
@@ -420,32 +418,6 @@ std::string PythonNetwork::LoadFile(const std::string& relativePath)
     Py_DECREF(pythonRelativePath);
 
     return fileData;
-}
-
-std::vector<std::string> PythonNetwork::ListChunks()
-{
-    PythonContext context;
-
-    PyObject* result = PyObject_CallFunctionObjArgs(_listChunksFunction, nullptr);
-    PyAssert(result);
-    PyAssert(PyList_Check(result));
-
-    // Extract the filenames.
-    std::vector<std::string> filenames;
-    const int length = static_cast<int>(PyList_Size(result));
-    for (int i = 0; i < length; i++)
-    {
-        PyObject* pythonFilename = PyList_GetItem(result, i);
-        PyBytes_Check(pythonFilename);
-
-        const Py_ssize_t size = PyBytes_GET_SIZE(pythonFilename);
-        const char* data = PyBytes_AS_STRING(pythonFilename);
-        filenames.emplace_back(data, size);
-    }
-
-    Py_DECREF(result);
-
-    return filenames;
 }
 
 bool PythonNetwork::FileExists(const std::string& relativePath)

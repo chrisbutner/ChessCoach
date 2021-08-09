@@ -606,11 +606,6 @@ def save_file(relative_path, data):
 def load_file(relative_path):
   return config.load_file(relative_path)
 
-def list_chunks():
-  filenames = tf.io.gfile.glob(config.join(config.training["games_path_training"], "*.chunk"))
-  relative_filenames = [config.unmake_path(p).encode("utf-8") for p in filenames]
-  return relative_filenames
-
 def file_exists(relative_path):
   return config.file_exists(relative_path)
 

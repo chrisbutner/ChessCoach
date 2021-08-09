@@ -38,7 +38,7 @@ role = "train|play"
 [[networks]]
 
     # To prepare for teacher-only prediction, copy selfplay11_000800000 to selfplay11c_000800000
-    # and copy 800k steps' worth of chunks from Fresh7 to Fresh7a (6286000 games, 3143 chunks).
+    # and copy 800k steps' worth of chunks from Fresh7 to Fresh7b (6286000 games, 3143 chunks).
     name = "selfplay11c"
 
     [networks.training]
@@ -56,7 +56,7 @@ role = "train|play"
         { stage = "strength_test", target = "teacher" },
     ]
 
-    games_path_training = "Games/Fresh7a"
+    games_path_training = "Games/Fresh7b"
 
     [networks.self_play]
 
