@@ -512,7 +512,7 @@ class OutgoingChallenges:
           if logging_enabled:
             log(f"*** OUTGOING CHALLENGE SENT *** with ID {id} to {username} with time control {limit}+{increment}")
         except HTTPError as e:
-          if e.response.content and (b"does not accept challenges" in e.response.content):
+          if e.response.status_code == 400:
             if logging_enabled:
               log(f"Forbidding challenges to {username}: {e.response.content} ({e.response.status_code})")
             self.challenges_forbidden.add(username)
