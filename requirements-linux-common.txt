@@ -7,3 +7,4 @@ numpy
 beautifulsoup4
 backoff
 requests
+websockets
