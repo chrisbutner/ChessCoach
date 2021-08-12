@@ -18,6 +18,6 @@ if [ ! -f $SERVICE_ACCOUNT_KEY_PATH ]; then
 fi
 
 # Grant the "storage.admin" role to the service account, matching the way things are set up for TPU workers.
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT_EMAIL --role=roles/storage.admin
+gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT_EMAIL --role=roles/storage.admin --role=roles/tpu.admin
 
 popd
