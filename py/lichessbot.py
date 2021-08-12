@@ -331,7 +331,7 @@ class Lichess:
   @backoff.on_exception(backoff.constant,
                         (RemoteDisconnected, ConnectionError, ProtocolError, HTTPError, ReadTimeout),
                         max_time=60,
-                        interval=0.1,
+                        interval=1.0,
                         giveup=is_final)
   def api_get(self, path, params=None):
     url = urljoin(self.baseUrl, path)
@@ -344,7 +344,7 @@ class Lichess:
   @backoff.on_exception(backoff.constant,
                         (RemoteDisconnected, ConnectionError, ProtocolError, HTTPError, ReadTimeout),
                         max_time=60,
-                        interval=0.1,
+                        interval=1.0,
                         giveup=is_final)
   def api_post(self, path, data=None, headers=None):
     url = urljoin(self.baseUrl, path)
@@ -648,10 +648,11 @@ def watch_control_stream(event_queue, li):
       for line in lines:
         event_queue.put(decode_json(line))
     except Exception as e:
-        throttle.on_exception(e)
-        pass
+      throttle.on_exception(e)
+      pass
+    time.sleep(1.0)
 
-@backoff.on_exception(backoff.expo, BaseException, max_time=600, giveup=is_final)
+@backoff.on_exception(backoff.constant, BaseException, max_time=600, interval=1.0, giveup=is_final)
 def watch_game_stream(li, game_id, event_queue, user_profile):
   watch_game = None
   response = li.get_game_stream(game_id)
