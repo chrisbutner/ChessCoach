@@ -1986,6 +1986,8 @@ void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float 
         // - If another thread just backpropagated into a sibling with an exact loss score as its first (few) sample(s)
         //   then we may clobber the actual weighted average, because we can only CAS against one variable. This could be
         //   dangerous, delaying future visits to the win potentially for a long time, but should be exceedingly rare.
+        //
+        // It would be better to be able to instead check for BOUND_EXACT, but this would not include 2-repetitions.
         if ((newWeight == 1) && (value == CHESSCOACH_VALUE_DRAW) && (i == static_cast<int>(searchPath.size()) - 1) && (i > 0))
         {
             // Iterate over siblings.
