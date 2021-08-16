@@ -198,12 +198,12 @@ num_simulations = 800
 root_dirichlet_alpha = 0.3
 root_exploration_fraction = 0.25
 
-exploration_rate_base = 37_800.0
-exploration_rate_init = 2.35
+exploration_rate_base = 19652.0
+exploration_rate_init = 1.25
 linear_exploration_rate = 4240.0
 linear_exploration_base = 397_000.0
-virtual_exploration_coefficient = 1.0
-virtual_loss_coefficient = 0.05 # Mostly deferring to virtual exploration.
+virtual_exploration_coefficient = 0.3
+virtual_loss_coefficient = 0.65
 moving_average_build = 0.837
 moving_average_cap = 8_000_000.0
 backpropagation_puct_threshold = 0.05
@@ -231,7 +231,7 @@ max_ply = 30
 [time_control]
 
 safety_buffer_milliseconds = 100
-fraction_of_remaining = 36
+fraction_of_remaining = 20
 absolute_minimum_milliseconds = 100
 
 [search]
@@ -311,23 +311,23 @@ tournament_time_control = "60+0.6" # 60+0.6 fast (1.8 min each for 80 moves), 30
 # '("small", "medium", "large")'
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # NOTE: Parameters must also be listed under [uci_options] when using mini-tournament-based optimization.
-fraction_of_remaining = '(20, 60)'
-exploration_rate_base = '(15_000.0, 100_000.0)'
-exploration_rate_init = '(1.0, 3.0)'
+#fraction_of_remaining = '(20, 60)'
+#exploration_rate_base = '(15_000.0, 100_000.0)'
+#exploration_rate_init = '(1.0, 3.0)'
 linear_exploration_rate = '(500.0, 4000.0)'
-linear_exploration_base = '(1e6, 1e7)'
-virtual_exploration_coefficient = '(0.2, 0.9)'
-virtual_loss_coefficient = '(0.2, 0.9)'
-moving_average_build = '(0.6, 1.0)'
-moving_average_cap = '(1e5, 1e6)'
-backpropagation_puct_threshold = '(0.0, 0.1)'
+linear_exploration_base = '(1e5, 1e8, "log-uniform")'
+virtual_exploration_coefficient = '(0.1, 0.6)'
+virtual_loss_coefficient = '(0.45, 0.9)'
+moving_average_build = '(0.85, 1.0)'
+moving_average_cap = '(1e6, 1e9, "log-uniform")'
+backpropagation_puct_threshold = '(0.0, 0.05)'
 #elimination_base_exponent = '(2, 16)'
 #move_diversity_value_delta_threshold = '(2e-3, 8e-3)'
 #move_diversity_temperature = '(0.25, 8.0)'
 #move_diversity_plies = '(4, 24)'
 transposition_progress_threshold = '(75, 95)'
-progress_decay_divisor = '(100, 600)'
-endgame_material_threshold = '(6000, 10000)'
+progress_decay_divisor = '(125, 500)'
+endgame_material_threshold = '(6000, 15258)'
 minimax_visits_recurse = '(10, 5000)'
 minimax_visits_ignore = '(0.1, 0.3)'
 
