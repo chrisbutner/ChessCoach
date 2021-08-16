@@ -4,7 +4,7 @@
 
 [network]
 
-network_name = "selfplay11c"
+network_name = "chesscoach1"
 role = "train|play"
 
 [[networks]]
@@ -64,9 +64,9 @@ role = "train|play"
 
 [[networks]]
 
-    # To prepare for commentary training, copy selfplay11c_005600000 to selfplay11d_000000000,
-    # delete teacher/model, and rename teacher/swa to teacher/model.
-    name = "selfplay11d"
+    # To prepare for commentary training, check for selfplay11c_005600000, run "network.networks.teacher.make_final_swa()" in Python,
+    # then copy selfplay11c_999999999/teacher/swa to selfplay11e_000000000/teacher/model.
+    name = "selfplay11e"
     
     [networks.training]
 
@@ -84,7 +84,8 @@ role = "train|play"
 
 [[networks]]
 
-    # To finalize training, selfplay11c_005600000/teacher/swa and selfplay11d_000400000/teacher/commentary into chesscoach1_005600000.
+    # To finalize training, copy selfplay11c_999999999/teacher/swa to chesscoach1_005600000/teacher/swa
+    # and selfplay11e_000400000/teacher/commentary to chesscoach1_005600000/teacher/commentary.
     name = "chesscoach1"
 
     [networks.training]

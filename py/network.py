@@ -438,14 +438,7 @@ class Network:
 
     # Set up the stochastic weight averaging (SWA) network if none exists yet.
     if not self.models_train.swa_full:
-      log(f"Creating new model ({log_device_context}/{self.network_type}/swa)")
-      with trainer.strategy.scope():
-        self.models_train.swa_full = self.model_builder()
-        self.models_train.swa_train = ModelBuilder().subset_train(self.models_train.swa_full)
-        self.training_compiler(self.models_train.swa_train, learning_rate=0.0)
-      self.models_train.swa_network = SwaNetwork(self.models_train.swa_train)
-      self.models_train.swa_count = 0
-      self.models_train.swa_required = self.calculate_swa_networks_required()
+      self.create_swa(log_device_context)
       
       # Contribute existing checkpoint weights up to the required count.
       _, model_paths = self.latest_model_paths("model", self.models_train.swa_required)
@@ -461,6 +454,55 @@ class Network:
 
     # Save the SWA model.
     model_path = self.make_model_path("swa", checkpoint)
+    log(f"Saving model ({log_device_context}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
+    self.models_train.swa_full.save_weights(model_path.path, save_format="tf")
+
+  def create_swa(self, log_device_context):
+    log(f"Creating new model ({log_device_context}/{self.network_type}/swa)")
+    with trainer.strategy.scope():
+      self.models_train.swa_full = self.model_builder()
+      self.models_train.swa_train = ModelBuilder().subset_train(self.models_train.swa_full)
+      self.training_compiler(self.models_train.swa_train, learning_rate=0.0)
+    self.models_train.swa_network = SwaNetwork(self.models_train.swa_train)
+    self.models_train.swa_count = 0
+    self.models_train.swa_required = self.calculate_swa_networks_required()
+
+  def make_final_swa(self):
+    assert not self.models_train.swa_full
+    log_device_context = "training"
+    self.create_swa(log_device_context)
+
+    self.models_train.swa_required = 80 # Split the minimum learning rate range (4m-5.6m), waiting for some new knowledge then starting to average.
+    _, model_paths = self.latest_model_paths("model", self.models_train.swa_required)
+    assert len(model_paths) == self.models_train.swa_required
+
+    # Contribute weights equally, without decay.
+    scratch = self.model_builder()
+    for model_path in model_paths:
+      log(f"Contributing weights to SWA model: ({log_device_context}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
+      scratch.load_weights(model_path.path)
+      weights = np.array(scratch.get_weights(), dtype=object)
+      if self.models_train.swa_count == 0:
+        self.models_train.swa_full.set_weights(weights)
+      else:
+        self.models_train.swa_full.set_weights(
+          np.array(self.models_train.swa_full.get_weights(), dtype=object) + weights)
+      self.models_train.swa_count += 1
+    assert self.models_train.swa_count == self.models_train.swa_required
+    assert self.models_train.swa_count > 0
+    self.models_train.swa_full.set_weights(
+      np.array(self.models_train.swa_full.get_weights(), dtype=object) / self.models_train.swa_count)
+
+    # Re-train batch normalization using zero learning rate after averaging weights (scale up steps).
+    assert self.network_type == "teacher"
+    checkpoint = self.config.training["steps"]
+    batchnorm_steps_required = self.config.training["swa_batchnorm_steps"] * math.ceil(self.models_train.swa_required / self.calculate_swa_networks_required())
+    starting_step = (checkpoint - batchnorm_steps_required + 1)
+    log(f"Re-training batch normalization from {starting_step} to {checkpoint}")
+    trainer.train(self.models_train.swa_network, None, starting_step, checkpoint, log=False)
+
+    # Save the SWA model with a large, fake checkpoint number.
+    model_path = self.make_model_path("swa", 999999999)
     log(f"Saving model ({log_device_context}/{self.network_type}/{model_path.model_type()}): {model_path.log_name()}")
     self.models_train.swa_full.save_weights(model_path.path, save_format="tf")
 
