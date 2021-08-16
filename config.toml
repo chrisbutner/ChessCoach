@@ -231,8 +231,8 @@ max_ply = 30
 [time_control]
 
 safety_buffer_milliseconds = 100
-fraction_of_remaining = 40
-absolute_minimum_milliseconds = 10
+fraction_of_remaining = 36
+absolute_minimum_milliseconds = 100
 
 [search]
 

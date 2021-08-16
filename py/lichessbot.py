@@ -103,7 +103,7 @@ class Challenge:
     return (2 * (self.base + self.increment * 80)) <= 150 * 60
 
   def is_slow_enough(self):
-    return self.base >= 180 or self.increment >= 3
+    return self.base >= 60 or self.increment >= 1
 
   # Returns (queue index, decline reason) tuple.
   # Prefer rated games over casual games.
@@ -468,7 +468,8 @@ class OutgoingChallenges:
 
   time_controls = [
     (30, 3),
-    (60, 3),
+    (60, 0),
+    (120, 1),
     (180, 0),
     (180, 2),
     (300, 0),
