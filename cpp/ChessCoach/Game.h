@@ -173,7 +173,6 @@ public:
     ~Game();
 
     Color ToPlay() const;
-    bool IsEndgame() const;
     float EndgameProportion() const;
     void ApplyMove(Move move);
     void ApplyMoveMaybeNull(Move move);

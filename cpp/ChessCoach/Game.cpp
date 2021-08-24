@@ -168,11 +168,6 @@ Color Game::ToPlay() const
     return _position.side_to_move();
 }
 
-bool Game::IsEndgame() const
-{
-    return ((_position.non_pawn_material()) <= Config::Network.SelfPlay.EndgameMaterialThreshold);
-}
-
 float Game::EndgameProportion() const
 {
     const int material = std::clamp(_position.non_pawn_material(), EndgameLimit, MidgameLimit);

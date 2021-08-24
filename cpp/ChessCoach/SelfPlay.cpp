@@ -1804,11 +1804,13 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         std::discrete_distribution distribution(bestWeights.begin(), bestWeights.end());
         return best[distribution(Random::Engine)];
     }
-    else if (game.TryHard() && game.IsEndgame())
+    else if (game.TryHard()
+        && (game.GetPosition().non_pawn_material() <= Config::Network.SelfPlay.MinimaxMaterialMaximum)
+        && (game.Root()->visitCount.load(std::memory_order_relaxed) >= Config::Network.SelfPlay.MinimaxVisitsRootMinimum))
     {
         // Guiding the search process using minimax in conjunction with neural network evaluations doesn't seem to work well.
         // However, using a post hoc minimax calculation for final move selection helps avoid vague overconfidence in endgames
-        // and prioritizes concrete positive outcomes.
+        // and prioritizes concrete positive outcomes, especially in conjunction with 50-move rule value decay.
         return MinimaxRoot(game.Root());
     }
     else
@@ -1937,8 +1939,7 @@ float PuctContext::CalculatePuctScoreAdHoc(const Node* child) const
 
 float PuctContext::VirtualExploration(const Node* node) const
 {
-    return static_cast<float>(node->visitCount.load(std::memory_order_relaxed) +
-        (node->visitingCount.load(std::memory_order_relaxed) * Config::Network.SelfPlay.VirtualExplorationCoefficient));
+    return static_cast<float>(node->visitCount.load(std::memory_order_relaxed) + node->visitingCount.load(std::memory_order_relaxed));
 }
 
 void SelfPlayWorker::Backpropagate(std::vector<WeightedNode>& searchPath, float value, float rootValue)
@@ -2769,7 +2770,6 @@ void SelfPlayWorker::PrintPrincipalVariation(bool searchFinished)
     const int tablebaseHitCount = _searchState->tablebaseHitCount.load(std::memory_order_relaxed);
     const float searchTimeSeconds = std::chrono::duration<float>(sinceSearchStart).count();
     const int nodesPerSecond = static_cast<int>(nodeCount / searchTimeSeconds);
-    const int failedNodesPerSecond = static_cast<int>(_searchState->failedNodeCount.load(std::memory_order_relaxed) / searchTimeSeconds);
     const int hashfullPermille = PredictionCache::Instance.PermilleFull();
 
     std::cout << "info depth " << depth;
@@ -2787,6 +2787,7 @@ void SelfPlayWorker::PrintPrincipalVariation(bool searchFinished)
     std::cout << " nodes " << nodeCount << " nps " << nodesPerSecond;
     if (debug)
     {
+        const int failedNodesPerSecond = static_cast<int>(_searchState->failedNodeCount.load(std::memory_order_relaxed) / searchTimeSeconds);
         std::cout << " fnps " << failedNodesPerSecond;
     }
     std::cout << " tbhits " << tablebaseHitCount << " time " << searchTimeMs << " hashfull " << hashfullPermille;

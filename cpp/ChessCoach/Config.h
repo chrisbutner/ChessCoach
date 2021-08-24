@@ -111,7 +111,6 @@ struct SelfPlayConfig
 
     float LinearExplorationRate;
     float LinearExplorationBase;
-    float VirtualExplorationCoefficient;
     float VirtualLossCoefficient;
     float MovingAverageBuild;
     float MovingAverageCap;
@@ -122,7 +121,8 @@ struct SelfPlayConfig
     int MoveDiversityPlies;
     int TranspositionProgressThreshold;
     int ProgressDecayDivisor;
-    int EndgameMaterialThreshold;
+    int MinimaxMaterialMaximum;
+    int MinimaxVisitsRootMinimum;
     int MinimaxVisitsRecurse;
     float MinimaxVisitsIgnore;
 
