@@ -29,7 +29,7 @@ bool Throttle::TryFire()
 {
     const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-    int64_t last = _last;
+    int64_t last = _last.load(std::memory_order_relaxed);
 
     while ((now - last) >= _durationMilliseconds)
     {
