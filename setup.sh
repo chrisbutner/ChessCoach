@@ -9,6 +9,13 @@ sudo apt-get install -y --no-install-recommends \
   meson g++ pkg-config python3-dev libgtest-dev zlib1g-dev python3-pip \
   autoconf automake libtool curl make g++ unzip
 
+# Install gsutil.
+sudo apt-get install -y --no-install-recommends curl gnupg && \
+  echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+  curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
+  sudo apt-get update -y && \
+  sudo apt-get install -y --no-install-recommends google-cloud-sdk
+
 # Install our Python dependencies. Don't install TensorFlow yet, as it varies between alpha and non-alpha TPUs.
 pip3 install -U pip
 pip3 install setuptools
