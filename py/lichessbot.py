@@ -99,8 +99,7 @@ class Challenge:
         any(m.is_supported(self.challenger_rating_int, self.initial_fen) for m in self.missing_pieces[WHITE])))
 
   def is_fast_enough(self):
-    # Limit games to 2.5 hours based on 80 moves per side.
-    return (2 * (self.base + self.increment * 80)) <= 150 * 60
+    return self.base <= 1800 and self.increment <= 10
 
   def is_slow_enough(self):
     return self.base >= 60 or self.increment >= 1
@@ -478,8 +477,6 @@ class OutgoingChallenges:
     (600, 5),
     (900, 0),
     (900, 10),
-    (1800, 0),
-    (1800, 20),
   ]
 
   def __init__(self, lichess, username, games):
