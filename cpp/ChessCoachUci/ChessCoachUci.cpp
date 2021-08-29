@@ -485,10 +485,6 @@ void ChessCoachUci::HandlePosition(std::stringstream& commands)
 
 void ChessCoachUci::HandleGo(std::stringstream& commands)
 {
-    // Capture the start time before expensive tasks such as "PropagatePosition" -> "SearchUpdatePosition"
-    // (although this should already be taken care of via the "position" -> "isready" sequence).
-    const auto searchStart = std::chrono::high_resolution_clock::now();
-    
     TimeControl timeControl = {};
     std::vector<Move> searchMoves;
 
@@ -568,6 +564,14 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
 
     // Propagate the position if updated.
     PropagatePosition();
+
+    // It would be more accurate to capture the start time at the top of this method, in case ChessCoach
+    // is asked to play where it can lose on time, but is not given "isready" commands to prepare
+    // (since initializing workers and "PropagatePosition" -> "SearchUpdatePosition" can be expensive, especially on TPU).
+    //
+    // However, not receiving "isready" breaks the spec and shouldn't be common. Instead, capture here, so that ad-hoc
+    // usage makes more sense, rather than giving zero search time after long initializaiton.
+    const auto searchStart = std::chrono::high_resolution_clock::now();
 
     _workerGroup.searchState.Reset(timeControl, searchStart);
     _workerGroup.searchState.searchMoves = std::move(searchMoves);
