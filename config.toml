@@ -37,7 +37,7 @@ role = "train|play"
 
 [[networks]]
 
-    # To prepare for teacher-only prediction, copy selfplay11_000800000 to selfplay11c_000800000
+    # To prepare for teacher-only prediction, copy selfplay11_000800000/teacher to selfplay11c_000800000/teacher
     # and copy 800k steps' worth of chunks from Fresh7 to Fresh7b (6286000 games, 3143 chunks).
     name = "selfplay11c"
 
@@ -64,9 +64,8 @@ role = "train|play"
 
 [[networks]]
 
-    # To prepare for commentary training, check for selfplay11c_005600000, run "network.networks.teacher.make_final_swa()" in Python,
-    # then copy selfplay11c_999999999/teacher/swa to selfplay11e_000000000/teacher/model.
-    name = "selfplay11e"
+    # To prepare for commentary training, copy selfplay11c_005600000/teacher/swa to selfplay11d_000000000/teacher/model.
+    name = "selfplay11d"
     
     [networks.training]
 
@@ -84,8 +83,7 @@ role = "train|play"
 
 [[networks]]
 
-    # To finalize training, copy selfplay11c_999999999/teacher/swa to chesscoach1_005600000/teacher/swa
-    # and selfplay11e_000400000/teacher/commentary to chesscoach1_005600000/teacher/commentary.
+    # To finalize training, selfplay11c_005600000/teacher/swa and selfplay11d_000400000/teacher/commentary into chesscoach1_005600000.
     name = "chesscoach1"
 
     [networks.training]
