@@ -209,7 +209,7 @@ class Session:
 
   def play_partial_tournament(self, point_dict, ip_addresses, game_count, reverse_sides):
     engine_optimization_options = " ".join([f"option.{name}={value}" for name, value in point_dict.items()])
-    stockfish_options = "option.Threads=1 option.Hash=512" # More information entropy when more closely matched.
+    stockfish_options = "option.Threads=8 option.Hash=8192" # More information entropy when more closely matched.
     if ip_addresses:
       # Play UCI proxy against UCI proxy/Stockfish.
       assert len(ip_addresses) == self.ip_addresses_per_game
