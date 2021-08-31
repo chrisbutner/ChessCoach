@@ -1804,9 +1804,7 @@ Node* SelfPlayWorker::SelectMove(const SelfPlayGame& game, bool allowDiversity) 
         std::discrete_distribution distribution(bestWeights.begin(), bestWeights.end());
         return best[distribution(Random::Engine)];
     }
-    else if (game.TryHard()
-        && (game.GetPosition().non_pawn_material() <= Config::Network.SelfPlay.MinimaxMaterialMaximum)
-        && (game.Root()->visitCount.load(std::memory_order_relaxed) >= Config::Network.SelfPlay.MinimaxVisitsRootMinimum))
+    else if (game.TryHard() && (game.GetPosition().non_pawn_material() <= Config::Network.SelfPlay.MinimaxMaterialMaximum))
     {
         // Guiding the search process using minimax in conjunction with neural network evaluations doesn't seem to work well.
         // However, using a post hoc minimax calculation for final move selection helps avoid vague overconfidence in endgames

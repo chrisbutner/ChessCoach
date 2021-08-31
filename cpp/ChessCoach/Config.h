@@ -122,7 +122,6 @@ struct SelfPlayConfig
     int TranspositionProgressThreshold;
     int ProgressDecayDivisor;
     int MinimaxMaterialMaximum;
-    int MinimaxVisitsRootMinimum;
     int MinimaxVisitsRecurse;
     float MinimaxVisitsIgnore;
 

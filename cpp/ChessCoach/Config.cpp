@@ -347,7 +347,6 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
     policy.template Parse<int>(selfPlay.TranspositionProgressThreshold, config, "transposition_progress_threshold");
     policy.template Parse<int>(selfPlay.ProgressDecayDivisor, config, "progress_decay_divisor");
     policy.template Parse<int>(selfPlay.MinimaxMaterialMaximum, config, "minimax_material_maximum");
-    policy.template Parse<int>(selfPlay.MinimaxVisitsRootMinimum, config, "minimax_visits_root_minimum");
     policy.template Parse<int>(selfPlay.MinimaxVisitsRecurse, config, "minimax_visits_recurse");
     policy.template Parse<float>(selfPlay.MinimaxVisitsIgnore, config, "minimax_visits_ignore");
 

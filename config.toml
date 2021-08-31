@@ -211,7 +211,6 @@ move_diversity_plies = 12
 transposition_progress_threshold = 80
 progress_decay_divisor = 151
 minimax_material_maximum = 6080
-minimax_visits_root_minimum = 50_000
 minimax_visits_recurse = 3258
 minimax_visits_ignore = 0.14
 
@@ -310,10 +309,10 @@ tournament_time_control = "60+0.6" # 60+0.6 fast (1.8 min each for 80 moves), 30
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # NOTE: Parameters must also be listed under [uci_options] when using mini-tournament-based optimization.
 #fraction_of_remaining = '(20, 60)'
-exploration_rate_base = '(254_700.0, 311_300.0)'
+exploration_rate_base = '(50_000.0, 350_000.0)'
 exploration_rate_init = '(1.512, 1.848)'
 linear_exploration_rate = '(3123.0, 3817.0)'
-linear_exploration_base = '(922_500.0, 1_127_500.0)'
+linear_exploration_base = '(500_000.0, 1_500_000.0)'
 virtual_loss_coefficient = '(0.0, 1.0)'
 #moving_average_build = '(0.6, 1.0)'
 #moving_average_cap = '(1e6, 1e9, "log-uniform")'
@@ -322,12 +321,12 @@ virtual_loss_coefficient = '(0.0, 1.0)'
 #move_diversity_value_delta_threshold = '(2e-3, 8e-3)'
 #move_diversity_temperature = '(0.25, 8.0)'
 #move_diversity_plies = '(4, 24)'
-transposition_progress_threshold = '(75, 95)'
-progress_decay_divisor = '(250, 400)'
-minimax_material_maximum = '(7000, 14_000)'
-minimax_visits_root_minimum = '(0, 5_000_000)'
-minimax_visits_recurse = '(1500, 5000)'
-minimax_visits_ignore = '(0.1, 0.3)'
+#transposition_progress_threshold = '(75, 95)'
+#progress_decay_divisor = '(250, 400)'
+#minimax_material_maximum = '(7000, 14_000)'
+#minimax_visits_root_minimum = '(0, 5_000_000)'
+#minimax_visits_recurse = '(1500, 5000)'
+#minimax_visits_ignore = '(0.1, 0.3)'
 
 [uci_options]
 
@@ -356,7 +355,6 @@ syzygy = { type = "string" }
 transposition_progress_threshold = { type = "spin", min = 0, max = 100 }
 progress_decay_divisor = { type = "spin", min = 100, max = 1000 }
 minimax_material_maximum = { type = "spin", min = 0, max = 15258 }
-minimax_visits_root_minimum = { type = "spin", min = 0, max = 10_000_000 }
 minimax_visits_recurse = { type = "spin", min = 0, max = 10_000 }
 minimax_visits_ignore = { type = "float" }
 
