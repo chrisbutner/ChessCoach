@@ -320,6 +320,7 @@ void ParseSelfPlay(SelfPlayConfig& selfPlay, const TomlValue& config, const Poli
 {
     policy.template Parse<NetworkType>(selfPlay.PredictionNetworkType, config, "network_type"); // GCC doesn't like type/name colliding
     policy.template Parse<std::string>(selfPlay.NetworkWeights, config, "network_weights");
+    policy.template Parse<bool>(selfPlay.AllowUniform, config, "allow_uniform");
 
     policy.template Parse<int>(selfPlay.NumWorkers, config, "num_workers");
     policy.template Parse<int>(selfPlay.PredictionBatchSize, config, "prediction_batch_size");

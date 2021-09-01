@@ -221,8 +221,8 @@ void ChessCoachTrain::StagePlay(const TrainingState& state)
             // Coordinate workers and print when initially starting, or restarting after a false finish.
             std::cout << "Playing " << gamesToPlay << " games..." << std::endl;
 
-            // Generate uniform predictions for the first network (rather than use random weights).
-            state.workerGroup->workCoordinator->GenerateUniformPredictions() = (state.networkNumber == 1);
+            // If allowed, generate uniform predictions for the first network (rather than use random weights).
+            state.workerGroup->workCoordinator->GenerateUniformPredictions() = (Config::Network.SelfPlay.AllowUniform && (state.networkNumber == 1));
 
             // Play the games.
             state.workerGroup->workCoordinator->ResetWorkItemsRemaining(gamesToPlay);

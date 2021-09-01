@@ -128,12 +128,14 @@ role = "train|play"
 
     stages = [
         # Self-play
-        { stage = "play", window_size = 1_000_000, num_games = 1_440_000 },
+        { stage = "play" },
     ]
 
     games_path_training = "Games/Benchmark"
 
-    # NOTE: Still need to (a) turn off prediction cache if network untrained or testing without, (b) turn off uniform predictions if steps <= 0
+    [networks.self_play]
+
+    allow_uniform = false
 
 ###############################################################################
 #     Default training and self-play configuration. Networks can override.    #
@@ -184,6 +186,7 @@ rates = [2.0e-2, 2.5e-3, 2.5e-4, 2.5e-5] # Multiplied by device_count
 network_type = "student"
 # Instead of using the latest weights found for "network_name", use these specific ones; e.g., selfplay6a_001000000.
 network_weights = ""
+allow_uniform = true
 
 # Use 2*512 on GTX 1080 (student/teacher), 4*512 on 4x V100 (student/teacher), 8*512 on v3-8 TPU (student/teacher).
 num_workers = 8

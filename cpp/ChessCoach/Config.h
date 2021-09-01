@@ -95,6 +95,7 @@ struct SelfPlayConfig
 {
     NetworkType PredictionNetworkType;
     std::string NetworkWeights;
+    bool AllowUniform;
 
     int NumWorkers;
     int PredictionBatchSize;
