@@ -472,7 +472,7 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         // means getting hit with a 429 error and having to wait 1 minute, effectively losing.
         // Try to split the difference, allowing for some deallocation and request overhead,
         // but also eating into some burst allowance as remaining time nears zero.
-        assert(Config::Misc.TimeControl_AbsoluteMinimumMilliseconds >= 100);
+        assert(Config::Misc.TimeControl_AbsoluteMinimumMilliseconds >= 150);
 
         if (search)
         {
