@@ -2704,11 +2704,22 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
             return;
         }
 
-        // In game clock mode, time can always be saved up for future moves, so if there's only one legal move then make it.
-        if (root->IsExpanded() && (root->childCount == 1))
+        // Stop searching early sometimes when not pondering.
+        if (!_searchState->timeControl.pondering)
         {
-            workCoordinator->OnWorkItemCompleted();
-            return;
+            // In game clock mode, time can always be saved up for future moves, so if there's only one legal move then make it.
+            if (root->IsExpanded() && (root->childCount == 1))
+            {
+                workCoordinator->OnWorkItemCompleted();
+                return;
+            }
+
+            // Be polite and play out forced mates relatively quickly.
+            if ((searchTimeMs >= 3000) && bestChild->terminalValue.load(std::memory_order_relaxed).IsMateInN())
+            {
+                workCoordinator->OnWorkItemCompleted();
+                return;
+            }
         }
 
         // We are "eliminationFraction" of the way through the search, based on time remaining and simple time control strategy.
