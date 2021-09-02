@@ -7,10 +7,10 @@ pushd "$(dirname "$0")"
 # very little disk by default, so this may be the only option.
 
 CHESSCOACH_DATA="${XDG_DATA_HOME-$HOME/.local/share}/ChessCoach"
-CHESSCOACH_SYZYGY="${CHESSCOACH_DATA}/Syzygy6"
+CHESSCOACH_SYZYGY_SIX="${CHESSCOACH_DATA}/Syzygy6"
 
-mkdir -p "${CHESSCOACH_SYZYGY}"
-sudo mount -t tmpfs -o size=155g tmpfs "${CHESSCOACH_SYZYGY}"
+mkdir -p "${CHESSCOACH_SYZYGY_SIX}"
+sudo mount -t tmpfs -o size=155g tmpfs "${CHESSCOACH_SYZYGY_SIX}"
 
 echo "Syzygy configuration in installed config.toml:"
 grep "syzygy" /usr/local/share/ChessCoach/config.toml

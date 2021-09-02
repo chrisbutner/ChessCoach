@@ -209,7 +209,8 @@ class Session:
 
   def play_partial_tournament(self, point_dict, ip_addresses, game_count, reverse_sides):
     engine_optimization_options = " ".join([f"option.{name}={value}" for name, value in point_dict.items()])
-    stockfish_options = "option.Threads=8 option.Hash=8192" # More information entropy when more closely matched.
+    syzygy_path = self.config.make_local_path(self.config.misc["paths"]["syzygy"]) # Assume same configuration on proxies, if proxying.
+    stockfish_options = f"option.Threads=8 option.Hash=8192 option.SyzygyPath={syzygy_path}" # More information entropy when more closely matched.
     if ip_addresses:
       # Play UCI proxy against UCI proxy/Stockfish.
       assert len(ip_addresses) == self.ip_addresses_per_game
