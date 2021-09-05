@@ -379,6 +379,7 @@ void ParseMisc(MiscConfig& misc, const TomlValue& config, const Policy& policy)
     policy.template Parse<int>(misc.Bot_PonderBufferMaxMilliseconds, bot, "ponder_buffer_max_milliseconds");
     policy.template Parse<int>(misc.Bot_PonderBufferMinMilliseconds, bot, "ponder_buffer_min_milliseconds");
     policy.template Parse<float>(misc.Bot_PonderBufferProportion, bot, "ponder_buffer_proportion");
+    policy.template Parse<float>(misc.Bot_IncrementFraction, bot, "increment_fraction");
 
     const auto& storage = toml::find_or(config, "storage", {});
     policy.template Parse<int>(misc.Storage_GamesPerChunk, storage, "games_per_chunk");

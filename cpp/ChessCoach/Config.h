@@ -168,6 +168,7 @@ struct MiscConfig
     int Bot_PonderBufferMaxMilliseconds;
     int Bot_PonderBufferMinMilliseconds;
     float Bot_PonderBufferProportion;
+    float Bot_IncrementFraction;
 
     // Storage
     int Storage_GamesPerChunk;

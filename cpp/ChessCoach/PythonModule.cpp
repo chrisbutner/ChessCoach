@@ -468,6 +468,10 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
             Config::Misc.Bot_PonderBufferMaxMilliseconds);
         Config::Misc.TimeControl_SafetyBufferMilliseconds = (originalBuffer + ponderBuffer);
 
+        // Protect against dropping to increment-only and losing to a lag spike.
+        timeControl.incrementMs[WHITE] *= Config::Misc.Bot_IncrementFraction;
+        timeControl.incrementMs[BLACK] *= Config::Misc.Bot_IncrementFraction;
+
         // Lichess only allows ~3 moves per second, plus some burst. Going over the limit
         // means getting hit with a 429 error and having to wait 1 minute, effectively losing.
         // Try to split the difference, allowing for some deallocation and request overhead,

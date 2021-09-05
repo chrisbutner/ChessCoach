@@ -253,8 +253,9 @@ temperature = 1.5
 
 commentary_minimum_remaining_milliseconds = 30_000
 ponder_buffer_max_milliseconds = 1500
-ponder_buffer_min_milliseconds = 750
+ponder_buffer_min_milliseconds = 250
 ponder_buffer_proportion = 0.01
+increment_fraction = 0.95
 
 [storage]
 
