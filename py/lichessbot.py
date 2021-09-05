@@ -459,7 +459,7 @@ class Throttle:
 
 class OutgoingChallenges:
 
-  idle_seconds_before_send = 125.0
+  idle_seconds_before_send = 65.0
   unanswered_seconds_before_cancel = 30.0
 
   minimum_best_rating = 1800
