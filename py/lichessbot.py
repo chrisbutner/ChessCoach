@@ -99,7 +99,7 @@ class Challenge:
         any(m.is_supported(self.challenger_rating_int, self.initial_fen) for m in self.missing_pieces[WHITE])))
 
   def is_fast_enough(self):
-    return self.base <= 1800 and self.increment <= 10
+    return self.base <= 900 and self.increment <= 10
 
   def is_slow_enough(self):
     return self.base >= 60 or self.increment >= 1
@@ -460,7 +460,7 @@ class Throttle:
 class OutgoingChallenges:
 
   idle_seconds_before_send = 65.0
-  unanswered_seconds_before_cancel = 30.0
+  unanswered_seconds_before_cancel = 15.0
 
   minimum_best_rating = 1800
   rating_sample_temperature = 0.5
