@@ -47,10 +47,7 @@ void Game::Initialize()
     assert(CHESSCOACH_VALUE_SYZYGY_LOSS > CHESSCOACH_VALUE_LOSS);
 
     // Set up mappings for queen and knight moves to index into policy planes.
-    for (int& plane : QueenKnightPlane)
-    {
-        plane = NO_PLANE;
-    }
+    std::fill(std::begin(QueenKnightPlane), std::end(QueenKnightPlane), NO_PLANE);
     int nextPlane = 0;
 
     const Direction QueenDirections[] = { NORTH, NORTH_EAST, EAST, SOUTH_EAST, SOUTH, SOUTH_WEST, WEST, NORTH_WEST };
