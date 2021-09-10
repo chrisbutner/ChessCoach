@@ -1826,8 +1826,8 @@ PuctContext::PuctContext(const SearchState* searchState, Node* parent)
     // Pre-compute repeatedly-used terms.
     _parentVirtualExploration = VirtualExploration(parent);
 
-    const float explorationRateBase = Config::Network.SelfPlay.ExplorationRateBase;
     const float explorationRateInit = Config::Network.SelfPlay.ExplorationRateInit;
+    const float explorationRateBase = Config::Network.SelfPlay.ExplorationRateBase;
     _explorationNumerator =
         (std::log((_parentVirtualExploration + explorationRateBase + 1.f) / explorationRateBase) + explorationRateInit) *
         std::sqrt(_parentVirtualExploration);
@@ -1850,7 +1850,7 @@ PuctContext::PuctContext(const SearchState* searchState, Node* parent)
 
     // Localize repeatedly-used config.
     _linearExplorationRate = Config::Network.SelfPlay.LinearExplorationRate;
-    _linearExplorationBase = Config::Network.SelfPlay.LinearExplorationBase;
+    _linearExplorationDelay = Config::Network.SelfPlay.LinearExplorationDelay;
 }
 
 // It's possible because of nodes marked off-limits via "expanding"
@@ -1924,7 +1924,7 @@ float PuctContext::CalculateAzPuctScore(const Node* child, float childVirtualExp
 float PuctContext::CalculateSblePuctScore(float azPuctScore, float childVirtualExploration) const
 {
     // Calculate SBLE-PUCT linear term.
-    const float linear = _parentVirtualExploration / ((_linearExplorationRate * childVirtualExploration) + _linearExplorationBase);
+    const float linear = _parentVirtualExploration / ((_linearExplorationRate * childVirtualExploration) + _linearExplorationDelay);
 
     return (azPuctScore + linear);
 }

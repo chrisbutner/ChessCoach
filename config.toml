@@ -191,18 +191,18 @@ num_simulations = 800
 root_dirichlet_alpha = 0.3
 root_exploration_fraction = 0.25
 
-exploration_rate_base = 283_000.0
-exploration_rate_init = 1.68
+exploration_rate_init = 2.35
+exploration_rate_base = 185_000.0
 linear_exploration_rate = 3590.0
-linear_exploration_base = 1_050_000.0
-virtual_loss_coefficient = 0.25
+linear_exploration_delay = 1_050_000.0
+virtual_loss_coefficient = 0.1
 moving_average_build = 0.8
 moving_average_cap = 25_000_000.0
-backpropagation_puct_threshold = 0.015
+backpropagation_puct_threshold = 0.02
 elimination_base_exponent = 10 # Start by giving the top 2^10 = 1024 children linear exploration incentive, decaying down to 2^1 = 2.
 move_diversity_value_delta_threshold = 0.0089
 move_diversity_temperature = 2.52
-move_diversity_plies = 12
+move_diversity_plies = 4
 transposition_progress_threshold = 80
 progress_decay_divisor = 151
 minimax_material_maximum = 6080
@@ -256,7 +256,7 @@ games_per_chunk = 2000
 
 [paths]
 
-# With the below config, a network may be saved to "gs://chesscoach-eu/ChessCoach/Networks/network_000001000".
+# With the below config, a network may be saved to "gs://chesscoach-eu/ChessCoach/Networks/network_000010000".
 # If the path can be accessed via tf.io.gfile then ChessCoach will run in a "cloud" configuration.
 # This is currently only supported on Linux, as tf.io.gfile doesn't handle gs:// on Windows.
 cloud_data_root = "gs://chesscoach-eu/ChessCoach"
@@ -292,7 +292,7 @@ epd_nodes = 0
 epd_failure_nodes = 10_000_000
 epd_position_limit = 10
 
-# Elo metric is calculated relative to baseline (Stockfish 13 NNUE with 1 thread and 512 MiB hash).
+# Elo metric is calculated relative to baseline (Stockfish 13 NNUE with 8 threads, 8192 MiB hash, 3-4-5 Syzygy tablebases).
 tournament_games = 10
 tournament_time_control = "60+0.6" # 60+0.6 fast (1.8 min each for 80 moves), 300+3 slow (9 min each)
 
@@ -305,25 +305,7 @@ tournament_time_control = "60+0.6" # 60+0.6 fast (1.8 min each for 80 moves), 30
 # '("small", "medium", "large")'
 # NOTE: Updates are only seen by C++. Custom propagation is needed if Python needs to see an update.
 # NOTE: Parameters must also be listed under [uci_options] when using mini-tournament-based optimization.
-#fraction_of_remaining = '(20, 60)'
-exploration_rate_base = '(50_000.0, 350_000.0)'
-exploration_rate_init = '(1.5, 2.5)'
-#linear_exploration_rate = '(3123.0, 3817.0)'
-#linear_exploration_base = '(500_000.0, 1_500_000.0)'
-#virtual_loss_coefficient = '(0.0, 1.0)'
-#moving_average_build = '(0.6, 1.0)'
-#moving_average_cap = '(1e6, 1e9, "log-uniform")'
-#backpropagation_puct_threshold = '(0.0, 0.05)'
-#elimination_base_exponent = '(2, 16)'
-#move_diversity_value_delta_threshold = '(2e-3, 8e-3)'
-#move_diversity_temperature = '(0.25, 8.0)'
-#move_diversity_plies = '(4, 24)'
-#transposition_progress_threshold = '(75, 95)'
-#progress_decay_divisor = '(250, 400)'
-#minimax_material_maximum = '(7000, 14_000)'
-#minimax_visits_root_minimum = '(0, 5_000_000)'
-#minimax_visits_recurse = '(1500, 5000)'
-#minimax_visits_ignore = '(0.1, 0.3)'
+#fraction_of_remaining = '(20, 60)' # Example
 
 [uci_options]
 
@@ -337,10 +319,10 @@ fraction_of_remaining = { type = "spin", min = 5, max = 100 }
 safety_buffer_move_milliseconds = { type = "spin", min = 0, max = 5000 }
 safety_buffer_overall_milliseconds = { type = "spin", min = 0, max = 30000 }
 Hash = { type = "spin", min = 0, max = 262_144 }
-exploration_rate_base = { type = "float" }
 exploration_rate_init = { type = "float" }
+exploration_rate_base = { type = "float" }
 linear_exploration_rate = { type = "float" }
-linear_exploration_base = { type = "float" }
+linear_exploration_delay = { type = "float" }
 virtual_loss_coefficient = { type = "float" }
 moving_average_build = { type = "float" }
 moving_average_cap = { type = "float" }

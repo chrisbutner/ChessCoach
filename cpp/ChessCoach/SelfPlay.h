@@ -212,7 +212,7 @@ private:
     float _explorationNumerator;
     int _eliminationTopCount;
     float _linearExplorationRate;
-    float _linearExplorationBase;
+    float _linearExplorationDelay;
 };
 
 enum class SelfPlayState

@@ -107,11 +107,10 @@ struct SelfPlayConfig
     float RootDirichletAlpha;
     float RootExplorationFraction;
 
-    float ExplorationRateBase;
     float ExplorationRateInit;
-
+    float ExplorationRateBase;
     float LinearExplorationRate;
-    float LinearExplorationBase;
+    float LinearExplorationDelay;
     float VirtualLossCoefficient;
     float MovingAverageBuild;
     float MovingAverageCap;
