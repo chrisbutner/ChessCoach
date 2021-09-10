@@ -222,7 +222,8 @@ max_ply = 30
 
 [time_control]
 
-safety_buffer_milliseconds = 100
+safety_buffer_move_milliseconds = 100
+safety_buffer_overall_milliseconds = 1000
 fraction_of_remaining = 32
 absolute_minimum_milliseconds = 150
 
@@ -248,7 +249,6 @@ commentary_minimum_remaining_milliseconds = 30_000
 ponder_buffer_max_milliseconds = 1500
 ponder_buffer_min_milliseconds = 250
 ponder_buffer_proportion = 0.01
-increment_fraction = 0.95
 
 [storage]
 
@@ -334,7 +334,8 @@ network_weights = { type = "string" }
 search_threads = { type = "spin", min = 1, max = 256 }
 search_parallelism = { type = "spin", min = 1, max = 4096 }
 fraction_of_remaining = { type = "spin", min = 5, max = 100 }
-safety_buffer_milliseconds = { type = "spin", min = 0, max = 5000 }
+safety_buffer_move_milliseconds = { type = "spin", min = 0, max = 5000 }
+safety_buffer_overall_milliseconds = { type = "spin", min = 0, max = 30000 }
 Hash = { type = "spin", min = 0, max = 262_144 }
 exploration_rate_base = { type = "float" }
 exploration_rate_init = { type = "float" }

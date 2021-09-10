@@ -2697,7 +2697,7 @@ void SelfPlayWorker::CheckTimeControl(WorkCoordinator* workCoordinator)
             std::max(
                 static_cast<int64_t>(std::max(1, Config::Misc.TimeControl_AbsoluteMinimumMilliseconds)),
                 (std::min(fractionPlusIncrement, totalTimeAllowed)
-                    - Config::Misc.TimeControl_SafetyBufferMilliseconds));
+                    - Config::Misc.TimeControl_SafetyBufferMoveMilliseconds));
         if (searchTimeMs >= timeAllowed)
         {
             workCoordinator->OnWorkItemCompleted();

@@ -510,10 +510,14 @@ void ChessCoachUci::HandleGo(std::stringstream& commands)
         else if (token == "wtime")
         {
             commands >> timeControl.timeRemainingMs[WHITE];
+            timeControl.timeRemainingMs[WHITE] = std::max(static_cast<int64_t>(1), // Zero means "no limit".
+                timeControl.timeRemainingMs[WHITE] - Config::Misc.TimeControl_SafetyBufferOverallMilliseconds);
         }
         else if (token == "btime")
         {
             commands >> timeControl.timeRemainingMs[BLACK];
+            timeControl.timeRemainingMs[BLACK] = std::max(static_cast<int64_t>(1), // Zero means "no limit".
+                timeControl.timeRemainingMs[BLACK] - Config::Misc.TimeControl_SafetyBufferOverallMilliseconds);
         }
         else if (token == "winc")
         {

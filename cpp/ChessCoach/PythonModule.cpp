@@ -450,27 +450,25 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         Instance().workerGroup->controllerWorker->SearchUpdatePosition(actualFen, game.Moves(), false /* forceNewPosition */);
 
         // Check whether to search or ponder and set up time control.
+        // Protect against dropping to increment-only and losing to a lag spike by using the overall safety buffer.
+        assert(Config::Misc.TimeControl_SafetyBufferOverallMilliseconds >= 1000);
         bool skipSearch = false;
         const bool search = (game.ToPlay() == botSide);
         TimeControl timeControl = {};
-        timeControl.timeRemainingMs[WHITE] = wtime;
-        timeControl.timeRemainingMs[BLACK] = btime;
+        timeControl.timeRemainingMs[WHITE] = std::max(1, wtime - Config::Misc.TimeControl_SafetyBufferOverallMilliseconds); // Zero means "no limit".
+        timeControl.timeRemainingMs[BLACK] = std::max(1, btime - Config::Misc.TimeControl_SafetyBufferOverallMilliseconds); // Zero means "no limit".
         timeControl.incrementMs[WHITE] = winc;
         timeControl.incrementMs[BLACK] = binc;
 
         // Add additional safety buffer to compensate for network calls, commentary,
         // amortizing ponder pruning, and lack of progress in no-increment games.
-        static int originalBuffer = Config::Misc.TimeControl_SafetyBufferMilliseconds;
+        static int originalBuffer = Config::Misc.TimeControl_SafetyBufferMoveMilliseconds;
         assert(Config::Misc.Bot_PonderBufferMinMilliseconds <= Config::Misc.Bot_PonderBufferMaxMilliseconds);
         const int ponderBuffer = std::clamp(
             static_cast<int>(Config::Misc.Bot_PonderBufferProportion * timeControl.timeRemainingMs[botSide]),
             Config::Misc.Bot_PonderBufferMinMilliseconds,
             Config::Misc.Bot_PonderBufferMaxMilliseconds);
-        Config::Misc.TimeControl_SafetyBufferMilliseconds = (originalBuffer + ponderBuffer);
-
-        // Protect against dropping to increment-only and losing to a lag spike.
-        timeControl.incrementMs[WHITE] = static_cast<int64_t>(timeControl.incrementMs[WHITE] * Config::Misc.Bot_IncrementFraction);
-        timeControl.incrementMs[BLACK] = static_cast<int64_t>(timeControl.incrementMs[BLACK] * Config::Misc.Bot_IncrementFraction);
+        Config::Misc.TimeControl_SafetyBufferMoveMilliseconds = (originalBuffer + ponderBuffer);
 
         // Lichess only allows ~3 moves per second, plus some burst. Going over the limit
         // means getting hit with a 429 error and having to wait 1 minute, effectively losing.
@@ -519,7 +517,7 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
             // (conservatively, max 5% overhead, guess 10% deallocation time, 75% fudge on simplified remaining/increment).
             timeControl.moveTimeMs = std::min(
                 timeControl.moveTimeMs,
-                (3 * ((timeControl.timeRemainingMs[botSide] / Config::Misc.TimeControl_FractionOfRemaining) + timeControl.incrementMs[botSide]) / 8) - Config::Misc.TimeControl_SafetyBufferMilliseconds);
+                (3 * ((timeControl.timeRemainingMs[botSide] / Config::Misc.TimeControl_FractionOfRemaining) + timeControl.incrementMs[botSide]) / 8) - Config::Misc.TimeControl_SafetyBufferMoveMilliseconds);
 
             if (timeControl.moveTimeMs <= 0)
             {
