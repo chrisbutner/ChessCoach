@@ -450,8 +450,6 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
         Instance().workerGroup->controllerWorker->SearchUpdatePosition(actualFen, game.Moves(), false /* forceNewPosition */);
 
         // Check whether to search or ponder and set up time control.
-        // Protect against dropping to increment-only and losing to a lag spike by using the overall safety buffer.
-        assert(Config::Misc.TimeControl_SafetyBufferOverallMilliseconds >= 1000);
         bool skipSearch = false;
         const bool search = (game.ToPlay() == botSide);
         TimeControl timeControl = {};
@@ -469,6 +467,10 @@ PyObject* PythonModule::BotSearch(PyObject*/* self*/, PyObject* args)
             Config::Misc.Bot_PonderBufferMinMilliseconds,
             Config::Misc.Bot_PonderBufferMaxMilliseconds);
         Config::Misc.TimeControl_SafetyBufferMoveMilliseconds = (originalBuffer + ponderBuffer);
+
+        // Protect against dropping to increment-only and losing to a lag spike.
+        timeControl.incrementMs[WHITE] = static_cast<int64_t>(timeControl.incrementMs[WHITE] * Config::Misc.Bot_IncrementFraction);
+        timeControl.incrementMs[BLACK] = static_cast<int64_t>(timeControl.incrementMs[BLACK] * Config::Misc.Bot_IncrementFraction);
 
         // Lichess only allows ~3 moves per second, plus some burst. Going over the limit
         // means getting hit with a 429 error and having to wait 1 minute, effectively losing.
