@@ -7,7 +7,7 @@ CHESSCOACH_DATA_ZIP="${CHESSCOACH_DATA}/Data.zip"
 
 mkdir -p "${CHESSCOACH_DATA}"
 
-curl -L https://github.com/chrisbutner/ChessCoachData/releases/download/v1.0/Data.zip -o "${CHESSCOACH_DATA_ZIP}"
+curl -L https://github.com/chrisbutner/ChessCoachData/releases/download/v1.0.0/Data.zip -o "${CHESSCOACH_DATA_ZIP}"
 
 unzip -o "${CHESSCOACH_DATA_ZIP}" -d "${CHESSCOACH_DATA}"
 

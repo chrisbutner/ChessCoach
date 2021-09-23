@@ -1,0 +1,192 @@
+body {
+    background-color: #d9d9d9;
+}
+
+.content {
+    max-width: 902px;
+    margin: 0 auto 0 auto;
+    padding: 8px 32px 32px 32px;
+    background-color: #ffffff;
+}
+
+.markdown-body > :last-child {
+    margin-bottom: 32px !important;
+}
+
+.markdown-body > :first-child {
+    margin-top: 32px !important;
+}
+
+.contents {
+    position: relative;
+}
+
+.contents-body {
+    position: absolute;
+    padding: 0;
+    margin-left: -352px;
+    margin-top: -8px;
+    width: 300px;
+}
+
+.contents-part {
+    padding: 24px;
+    margin-bottom: 20px;
+    background-color: #ffffff;
+}
+
+.contents-part > :last-child {
+    margin-bottom: 0px;
+}
+
+.contents-part > :first-child {
+    margin-top: 0px;
+}
+
+#by-narrow {
+    display: none;
+}
+
+.compact p {
+    margin-bottom: 4px;
+}
+
+@media screen and (max-width: 1541px) {
+    #intra {
+        display: none;
+    }
+
+    .contents {
+        position: inherit;
+    }
+
+    .contents-body {
+        position: inherit;
+        margin: 20px 0 20px 0;
+        width: 100%;
+    }
+
+    .contents-part {
+        padding: 0;
+    }
+
+    .contents h3 {
+        display: inline-block;
+    }
+
+    #by-wide {
+        display: none;
+    }
+
+    #by-narrow {
+        display: inline;
+    }
+
+    .compact p {
+        margin-bottom: 8px;
+    }
+}
+
+img {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+figure {
+    margin: 32px;
+}
+
+figcaption {
+    margin-top: 12px;
+    color: #5e5e5e;
+}
+
+figcaption p {
+    margin-bottom: 4px !important;
+}
+
+@media screen and (max-width: 767px) {
+    .content {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    figure {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+.attribution {
+    font-size: 14px;
+}
+
+ol.lettered > li {
+    list-style: none;
+    counter-increment: list;
+}
+
+ol.lettered > li::marker {
+    content: counter(list, lower-alpha) ")\a0";
+}
+
+table.commentary li {
+    margin-top: 0px !important;
+}
+
+table.commentary td {
+    vertical-align: top;
+}
+
+table.commentary td:first-child {
+    width: 128px;
+    min-width: 128px;
+    max-width: 128px;
+}
+
+.footer {
+    color: #777777;
+    border-top: 1px solid #eaecef;
+    margin-top: 32px !important;
+    padding-top: 8px;
+}
+
+.legend {
+    display: inline-block;
+    width: 236px;
+    height: 28px;
+    background-image: url("legendsheet.png");
+}
+
+.legend-1 {
+    background-position: 0 0;
+}
+
+.legend-2 {
+    background-position: 0 -28px;
+}
+
+.legend-3 {
+    background-position: 0 -56px;
+}
+
+.legend-4 {
+    background-position: 0 -84px;
+}
+
+.legend-5 {
+    background-position: 0 -112px;
+}
+
+.legend-6 {
+    background-position: 0 -140px;
+}
+
+.legend-7 {
+    background-position: 0 -168px;
+}
+
+.legend-8 {
+    background-position: 0 -196px;
+}

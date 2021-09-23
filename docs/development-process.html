@@ -1,0 +1,198 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Development process | ChessCoach</title>
+
+    <link href="github-markdown.css" rel="stylesheet" />
+    <link href="site.css" rel="stylesheet" />
+    <style>
+        figure {
+            margin: 48px 0 48px 0;
+        }
+    </style>
+</head>
+<body class="markdown-body">
+    <article class="content">
+        <div class="contents">
+            <div class="contents-body">
+                <div id="header" class="contents-part">
+                    <h3>ChessCoach</h3> <span id="by-narrow">– <a href="mailto:chris.butner@outlook.com">Chris Butner</a></span>
+                    <p>A neural network-based chess engine capable of natural language commentary</p>
+                    <p id="by-wide"><a href="mailto:chris.butner@outlook.com">Chris Butner</a></p>
+                </div>
+                <div id="inter" class="contents-part compact">
+                    <p><a href="index.html">Overview</a></p>
+                    <p><a href="high-level-explanation.html">High-level explanation</a></p>
+                    <p><a href="technical-explanation.html">Technical explanation</a></p>
+                    <p><strong><a href="development-process.html">Development process</a></strong></p>
+                    <p><a href="data.html">Data</a></p>
+                    <p><a href="https://github.com/chrisbutner/ChessCoach#readme">Code and Installation (GitHub)</a></p>
+                    <p><a href="https://lichess.org/@/PlayChessCoach">@PlayChessCoach (Lichess)</a></p>
+                </div>
+                <div id="intra" class="contents-part compact">
+                    <p><a href="#introduction">Introduction</a></p>
+                    <p><a href="#learnings">Learnings</a></p>
+                    <p><a href="#timeline">Timeline</a></p>
+                    <p><a href="#major-bugs">Major bugs</a></p>
+                    <p><a href="#failures">Failures</a></p>
+                    <p><a href="#future-work">Future work</a></p>
+                </div>
+            </div>
+        </div>
+
+        <h1>Development process</h1>
+
+        <h2 id="introduction">Introduction</h2>
+        <p>The combination of large, talented, corporate-backed research teams and furtive publishing creates a &quot;competitive moat&quot; that others must cross when replicating and extending results. Developing software and gathering data to catch up to existing results can be complex, especially when high performance systems or specialized applications are required, and when details are missing or ambiguously specified. Perhaps more importantly, failed ideas are usually not presented, so others must wade through the same initially promising layers of low and medium-hanging fruit before reaching truly new idea space.</p>
+        <p>Community projects with public discussions and work tracking provide a good counterexample. I would like to take a similar approach here by listing experiments, bugs, failures, and ideas for future work, in the hope that I can save others time or frustration. <a href="technical-explanation.html">Technical documentation</a>, <a href="https://github.com/chrisbutner/ChessCoach#user-content-files">code</a> and <a href="data.html">data</a> are also available.</p>
+
+        <h2 id="learnings">Learnings</h2>
+        <p>It was enlightening to discover just how much time is required on the research side trying many ideas before finally finding one that works. Reinforcement learning makes this especially time consuming and expensive because of the raw computation required for end-to-end experiments. Improving a process can require running it many times. It was naïve of me to try to speed up training when initially lacking the resources to complete even a quarter of it.</p>
+        <p>The contrast between machine learning systems and general software engineering also became very clear when validating behavior and results. You can usually look at a partially developed website or application and say, &quot;this thing is working correctly&quot;, or &quot;these three things are broken&quot;. With ChessCoach, there was often not a hard, expected result from components such as neural network evaluations, training processes, and search logic. Results can be underwhelming because more training is needed, or because other components need to catch up, or because of a bug. This is even more of a problem with fewer eyes on the project. I underestimated the subtlety of bugs that could emerge and the strict validation necessary to maintain confidence, and trust in additional experiments.</p>
+
+        <h2 id="timeline">Timeline</h2>
+        <p>I started preparation in March 2020. Beyond reading some articles, watching the AlphaGo match vs. Lee Se-dol, and taking an undergraduate subject covering MNIST handwriting recognition years ago, the machine learning side was going to be new. Research papers were extremely useful, spanning earlier neural network-based engines, autoencoders, commentary, criticality, introspection, and the AlphaGo family. I highly recommend the book, <em>Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow</em> (Géron, 2019). Some online courses seemed valuable but were a little too low-level and slow-going for the pace I was aiming for.</p>
+        <p>In mid-March 2020, I started development, using the <a href="https://github.com/Zeta36/chess-alpha-zero#readme">Zeta36/chess-alpha-zero project (Zeta36, 2017)</a> as a reference for TensorFlow 2 (Keras) model code, and the <a href="https://science.sciencemag.org/content/suppl/2018/12/05/362.6419.1140.DC1">AlphaZero pseudocode (Silver et al., 2018)</a> as a reference for self-play and training code. A little over a year of development time was required, running experiments and programming in parallel. Not much code was needed in the end. Most of the time was spent discovering (most likely rediscovering) what works and what does not, and scaling self-play infrastructure up and out. Work tracking was via <a href="https://github.com/chrisbutner/ChessCoach/commits/v1.0.0/TODO.txt">TODO.txt</a>, and I found that keeping a detailed development journal was also invaluable.</p>
+
+        <figure>
+            <img src="timeline.png" />
+        </figure>
+
+        <h2 id="major-bugs">Major bugs</h2>
+        <p>Throughout most of the project, nowhere near enough computational power and data were available for ChessCoach to progress meaningfully. It was not always clear whether it was working correctly but needed more training, or should be working better but had a bug. This meant that some particularly egregious bugs existed for long periods, even while the engine grew much stronger than I had initially planned.</p>
+
+        <figure>
+            <img src="bugs.png" />
+        </figure>
+
+        <h2 id="failures">Failures</h2>
+        <h3>Neural network architecture</h3>
+        <p>Many different neural network architectures and parameterizations were tried in the hope of improving training and inference speed on consumer GPUs without significantly reducing comprehension. Unfortunately, only Inception-based architectures matched the baseline performance during supervised training, but with higher complexity. Attention-based architectures were usually slower and no better in quality. While aiming to be more efficient, mobile-based architectures ended up less so because of their lower memory efficiency, limiting batch sizes on limited consumer GPU memory.</p>
+        <p>Neural network architecture failures:</p>
+        <ul>
+            <li>2D relative self-attention</li>
+            <li>Attention-augmented convolutional networks</li>
+            <li>ShuffleNet V2</li>
+            <li>Inception with residuals, with and without separable convolutions, with and without attention</li>
+            <li>Shuffleception</li>
+        </ul>
+
+        <h3>Training</h3>
+        <p>Some training experiments simply failed to produce results. Others were more dangerous, providing short-term benefits in training convergence, but ending up neutral or harmful as the schedule reached 100,000 AlphaZero steps and beyond. This is something to be wary of in partial replications of AlphaZero-style reinforcement learning.</p>
+        <p>Some techniques that help in Go appear to hurt convergence in chess, either because of flipped perspective between moves, or tactical non-smoothness.</p>
+        <p>I was surprised to see no benefit from Squeeze-and-Excitation-style techniques after three attempts throughout the project, in contrast to Lc0. It may have been flawed implementation or parameterization on my part, or the non-stationary policy plane mappings in place until 2021/08/08.</p>
+        <p>The concept of <em>trained criticality</em> morphed into training-free SBLE-PUCT and other tournament play techniques.</p>
+        <p>Training failures:</p>
+        <ul>
+            <li>Squeeze-and-Excitation, KataGo pooling, and hybrids (no benefit)</li>
+            <li>Fixup Initialization (seemed to prevent learning rate decreases; hints of instability)</li>
+            <li>Curriculum learning: last-N moves, game start and biased sampling (disastrous)</li>
+            <li>Data augmentation: rotating/mixing supervised and self-play data (eventually harmful)</li>
+            <li>Auxiliary training targets: reply policy (eventually harmful)</li>
+            <li>Forced playouts and policy targeting pruning (inconclusive; prior sharpening worries; some convergence instability without the pruning, once exploration noise was fixed)</li>
+            <li>Trained criticality (too difficult to statistically classify without chicken-and-egg problems; too difficult to train stably; too difficult to propagate at search time from root outwards)</li>
+            <li>Gradient accumulation (should help single-GPU achieve gradient smoothness and higher learning rate of multi-GPU/TPU, but two different implementation approaches hung TensorFlow; Model.fit() hangs were fixed in 2.4.0, so this may be better now)</li>
+            <li>15% auxiliary-style Syzygy probing during self-play (policy divergence)</li>
+            <li>5% auxiliary-style 10k deep simulations during self-play (policy divergence)</li>
+            <li>Even (non-decaying) SWA at the end of training over many checkpoints (sacrificed too much certainty and endgame knowledge; commentary more vague; better suited to many epochs over stationary datasets; possibly still an improvement with fewer checkpoints)</li>
+        </ul>
+
+        <h3>Self-play and tournament play</h3>
+        <p>Most self-play and tournament play failures centered on child selection during PUCT and simply showed no benefit. However, evaluation is quite sensitive to specific implementation and parameterization, and I believe that some of these ideas could work with more time and effort.</p>
+        <p>Before the network was fully trained, manually investigating individual Arasan21 positions was helpful, with successful techniques such as SBLE-PUCT able to redirect &quot;wasted&quot; simulations into broader exploration. Once policies were more accurate, it became more beneficial to manually investigate tournament blunders against Stockfish 13, discovering more varied problems and applying more targeted solutions.</p>
+        <p>Self-play and tournament play failures:</p>
+        <ul>
+            <li>CPU-to-GPU prediction multiplexing (competed with prediction freshness; may require C++ API)</li>
+            <li>Stockfish valuation blending (eventually harmful)</li>
+            <li>Regret-pruning</li>
+            <li>Unpropagated value catch-up</li>
+            <li>Macro-minimax, micro-minimax and last-value experiments</li>
+            <li>Value standard error</li>
+            <li>Killer heuristic, Stockfish-style, with multi-FPU-weight</li>
+            <li>RAVE</li>
+            <li>Prior squish, clip and decay</li>
+            <li>Virtual loss only for selection checking, not backpropagation checking</li>
+            <li>Sub-tree flood protection</li>
+            <li>Exponential cyclic elimination for unbudgeted searches</li>
+        </ul>
+
+        <h2 id="future-work">Future work</h2>
+        <p>Although I have no current plans for further development, it may be helpful to list ideas I was considering as part of the original scope.</p>
+        <ul>
+            <li>
+                Playing strength
+                <ul>
+                    <li>Improvements for all-winning/all-losing/all-drawing value-delta-versus-exploration, including better tablebase/PUCT integration (for example, PUCT leader debounce)</li>
+                    <li>Finish-fast utility score to encourage progress</li>
+                    <li>Contempt</li>
+                </ul>
+            </li>
+            <li>
+                Performance
+                <ul>
+                    <li>TensorFlow C++ API</li>
+                    <li>TensorRT and/or mixed precision</li>
+                    <li>TensorFlow profiling and architecture-specific optimizations</li>
+                    <li>PUCT vectorization</li>
+                    <li>Reduced node size</li>
+                    <li>Hard elimination, pruning sub-trees during search</li>
+                </ul>
+            </li>
+            <li>
+                Training
+                <ul>
+                    <li>Larger chunks (without hurting self-play worker and training turnaround) or BigTable</li>
+                    <li>TPU pod support for training</li>
+                    <li>Gradient accumulation on GPU</li>
+                    <li>Fast-SWA</li>
+                    <li>Playout cap randomization</li>
+                    <li>Game branching, seeking higher blunder/imbalance blend, with clipped result attribution</li>
+                    <li>Draw avoidance in the feedback cycle</li>
+                    <li><a href="https://arxiv.org/pdf/1908.00858.pdf">Knowledge distillation for regression (Saputra, de Gusmão, Almalioglu, Markham &amp; Trigoni, 2019)</a></li>
+                </ul>
+            </li>
+            <li>
+                Data augmentation
+                <ul>
+                    <li><a href="https://openaccess.thecvf.com/content_ICCV_2017/papers/Lazarow_Introspective_Neural_Networks_ICCV_2017_paper.pdf">Pseudo-negatives (Jin, Lazarow &amp; Tu, 2018)</a></li>
+                    <li><a href="https://arxiv.org/pdf/2011.09471v3.pdf">FROST (Liu &amp; Smith, 2020)</a></li>
+                    <li><a href="https://arxiv.org/pdf/2009.08449.pdf">&quot;Less Than One&quot;-Shot Learning (Sucholutsky &amp; Schonlau, 2020)</a></li>
+                </ul>
+            </li>
+            <li>
+                UCI
+                <ul>
+                    <li>MultiPV</li>
+                    <li>Ponder (bot uses custom implementation)</li>
+                </ul>
+            </li>
+            <li>
+                Commentary
+                <ul>
+                    <li>Varying sampling diversity based on token/phrase information entropy, with global evaluation and/or backtracking (for example, square/piece vs. connective)</li>
+                    <li><a href="https://arxiv.org/pdf/2103.03206.pdf">Perceiver (Jaegle et al., 2021)</a></li>
+                </ul>
+            </li>
+            <li>
+                Debug GUI
+                <ul>
+                    <li>Invert UCI/GUI relationship</li>
+                    <li>Browse EPDs</li>
+                    <li>Set up positions</li>
+                    <li>Control searches</li>
+                    <li>Visual clarity</li>
+                    <li>Information layout</li>
+                    <li>WebSocket reconnect</li>
+                </ul>
+            </li>
+        </ul>
+
+        <p class="footer">Written 22 September 2021</p>
+    </article>
+</body>
+</html>
+
+

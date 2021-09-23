@@ -1,0 +1,1204 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Data | ChessCoach</title>
+
+    <link href="github-markdown.css" rel="stylesheet" />
+    <link href="site.css" rel="stylesheet" />
+</head>
+<body class="markdown-body">
+    <article class="content">
+        <div class="contents">
+            <div class="contents-body">
+                <div id="header" class="contents-part">
+                    <h3>ChessCoach</h3> <span id="by-narrow">– <a href="mailto:chris.butner@outlook.com">Chris Butner</a></span>
+                    <p>A neural network-based chess engine capable of natural language commentary</p>
+                    <p id="by-wide"><a href="mailto:chris.butner@outlook.com">Chris Butner</a></p>
+                </div>
+                <div id="inter" class="contents-part compact">
+                    <p><a href="index.html">Overview</a></p>
+                    <p><a href="high-level-explanation.html">High-level explanation</a></p>
+                    <p><a href="technical-explanation.html">Technical explanation</a></p>
+                    <p><a href="development-process.html">Development process</a></p>
+                    <p><strong><a href="data.html">Data</a></strong></p>
+                    <p><a href="https://github.com/chrisbutner/ChessCoach#readme">Code and Installation (GitHub)</a></p>
+                    <p><a href="https://lichess.org/@/PlayChessCoach">@PlayChessCoach (Lichess)</a></p>
+                </div>
+                <div id="intra" class="contents-part compact">
+                    <p><a href="#introduction">Introduction</a></p>
+                    <p><a href="#self-play-and-training-process">Self-play and training process</a></p>
+                    <p><a href="#neural-network-weights">Neural network weights</a></p>
+                    <p><a href="#neural-network-history">Neural network history</a></p>
+                    <p><a href="#training-data">Training data</a></p>
+                    <p><a href="#strength">Strength</a></p>
+                    <p><a href="#performance">Performance</a></p>
+                    <p><a href="#commentary-suite">Commentary suite</a></p>
+                    <p><a href="#training-charts">Training charts</a></p>
+                    <p><a href="#appendix-a">Appendix A: Raw data, tournament results</a></p>
+                    <p><a href="#appendix-b">Appendix B: Raw data, Strategic Test Suite (STS) results</a></p>
+                    <p><a href="#appendix-c">Appendix C: Raw data, Arasan21 suite results</a></p>
+                    <p><a href="#appendix-d">Appendix D: Raw data, search performance, nodes per second (NPS)</a></p>
+                    <p><a href="#appendix-e">Appendix E: Raw data, self-play performance</a></p>
+                    <p><a href="#appendix-f">Appendix F: Raw data, training performance</a></p>
+                </div>
+            </div>
+        </div>
+
+        <h1>Data</h1>
+
+        <h2 id="introduction">Introduction</h2>
+        <p>All self-play, training, strength testing, performance testing, and data collection has been run on newer-style v3-8 <a href="https://cloud.google.com/blog/products/compute/introducing-cloud-tpu-vms">Cloud TPU VMs</a>.</p>
+        <p>AlphaZero trained using 700,000 batches of 4,096 positions each. ChessCoach also trains using 700,000 batches of 4,096 positions each, but views this in configuration, training logs and TensorBoard charts as 5,600,000 batches (or <em>steps</em>) of 512 positions each. On a v3-8 TPU, the batch count is divided by the number of replicas (8), and the batch size is multiplied by the number of replicas (8). Dividing total positions sampled by total training positions available gives a sample ratio of 0.483, estimating positions per game at 135.</p>
+        <p>ChessCoach trains commentary using 50,000 batches of 4,096 positions each, configured as 400,000 batches (or steps) of 512 positions each. This covers approximately 230 epochs of the training data.</p>
+        <p>ChessCoach usually generates self-play data using the student model for prediction until 800,000 steps, training teacher and student models, and then generates self-play data using the teacher model for prediction from 800,000 to 5,600,000 steps, training only the teacher model.</p>
+        <p>In the TensorBoard charts below, and in the default configuration in <a href="https://github.com/chrisbutner/ChessCoach/blob/v1.0.0/config.toml">config.toml</a>, <em>selfplay11</em> is the student-prediction network, <em>selfplay11c</em> is the teacher-prediction network, and <em>selfplay11d</em> is the commentary network.</p>
+        <p>Selfplay11 would normally be stopped at 800,000 steps, but its data was branched off and self-play and training was continued until 3,600,000 steps for comparison. Selfplay11c would normally start at 800,000 steps, but it was retrained from step 1 on existing data after moving to stationary policy plane mappings on 2021/08/08.</p>
+
+        <h2 id="self-play-and-training-process">Self-play and training process</h2>
+        <p>Self-play and training rely on data located at ${XDG_DATA_HOME}/ChessCoach, or failing that, at ~/.local/share/ChessCoach on Linux, and at %LOCALAPPDATA%/ChessCoach on Windows. This can also be located in Google Cloud Storage instead; for example, gs://chesscoach-eu/ChessCoach.</p>
+        <p>Set up, build and install ChessCoach, <a href="https://github.com/chrisbutner/ChessCoach#installation">following instructions in the README</a>.</p>
+        <p>Install validation data, using the <a href="https://lczero.org/blog/2018/09/a-standard-dataset/"><em>CCRL Dataset</em> published by Lc0 (2018)</a>, based on <a href="https://ccrl.chessdom.com/ccrl/4040/about.html">Computer Chess Ratings Lists (CCRL)</a> data. This requires a 539 MiB download, 3.56 GiB disk space, and 5.86 GiB peak disk space while installing.</p>
+        <ul>
+            <li><strong>Linux:</strong> Run <code>scripts/download_install_validation_data.sh</code></li>
+            <li><strong>Windows:</strong> Run <code>scripts/download_install_validation_data.cmd</code></li>
+            <li>After running, …/ChessCoach/Games/Supervised and …/ChessCoach/Games/Validation should exist.</li>
+        </ul>
+        <p>The <em>Supervised</em> directory can be deleted to save disk space if supervised training is not required. If you are customizing training, the datasets in original .pgn form can be combined, split, and repurposed, using the scrape.py and ChessCoachPgnToGames utilities as necessary.</p>
+        <p>If you would like to train the primary network but skip self-play, and/or train the commentary decoder, existing data from the ChessCoach project can be made available in the form of self-play and commentary chunks. See <a href="#training-data">Training data</a> below.</p>
+        <p>In general, the training process skips work that has already been completed, and resumes from the most recent artifacts. Therefore, when using existing self-play data, or resuming training after an interruption, configuration rarely needs to be modified.</p>
+        <p>See <a href="technical-explanation.html#distributed-training-and-self-play">Distributed training and self-play</a> in the Technical explanation for details on setting up and running ChessCoach self-play and training on a cluster on Google Cloud Platform.</p>
+        <p>Some ugly network surgery is required because the configuration system was originally intended for single-phase training with multiple rotated stages per checkpoint, rather than multiple distinct phases. However, this work is usually spread over multiple weeks of wall-clock time.</p>
+
+        <p><strong>Student-prediction phase</strong></p>
+        <ol>
+            <li>In config.toml, update <strong>network_name</strong> under <strong>network</strong> to <strong>selfplay11</strong>, and reinstall.</li>
+            <li>Run <code>ChessCoachTrain.</code></li>
+            <li>Expect …/ChessCoach/Networks/selfplay11_000800000 upon completion.</li>
+        </ol>
+
+        <p><strong>Teacher-prediction phase</strong></p>
+        <ol>
+            <li>In config.toml, update <strong>network_name</strong> under <strong>network</strong> to <strong>selfplay11c</strong>, and reinstall.</li>
+            <li>Copy …/ChessCoach/Networks/selfplay11_000800000/teacher to …/ChessCoach/Networks/selfplay11c_000800000/teacher.</li>
+            <li>Copy 3,143 self-play chunks from …/ChessCoach/Games/Fresh7 to …/ChessCoach/Games/Fresh7b.</li>
+            <li>Run <code>ChessCoachTrain</code>.</li>
+            <li>Expect …/ChessCoach/Networks/selfplay11c_005600000 upon completion.</li>
+        </ol>
+
+        <p><strong>Commentary phase</strong></p>
+        <ol>
+            <li>In config.toml, update <strong>network_name</strong> under <strong>network</strong> to <strong>selfplay11d</strong>, and reinstall.</li>
+            <li>Copy …/ChessCoach/Networks/selfplay11c_005600000/teacher/swa to …/ChessCoach/Networks/selfplay11d_000000000/teacher/model.</li>
+            <li>Run <code>ChessCoachTrain</code>.</li>
+            <li>Expect …/ChessCoach/Networks/selfplay11d_000400000 upon completion.</li>
+        </ol>
+
+        <p><strong>Wrap-up phase</strong></p>
+        <ol>
+            <li>In config.toml, update <strong>network_name</strong> under <strong>network</strong> to <strong>chesscoach1</strong>, and reinstall.</li>
+            <li>Copy …/ChessCoach/Networks/selfplay11c_005600000/teacher/swa to …/ChessCoach/Networks/chesscoach1_005600000/teacher/swa.</li>
+            <li>Copy …/ChessCoach/Networks/selfplay11d_000400000/teacher/commentary to …/ChessCoach/Networks/chesscoach1_005600000/teacher/commentary.</li>
+        </ol>
+
+        <h2 id="neural-network-weights">Neural network weights</h2>
+        Neural network weights, comprising the primary model, commentary decoder, and commentary tokenizer, are located at <a href="https://github.com/chrisbutner/ChessCoachData/releases/download/v1.0.0/Data.zip">https://github.com/chrisbutner/ChessCoachData/releases/download/v1.0.0/Data.zip</a>.
+        The <a href="https://github.com/chrisbutner/ChessCoach#post-installation">Post-installation</a> section of the README covers scripted installation.
+
+        <h2 id="neural-network-history">Neural network history</h2>
+        Training checkpoints and TensorBoard logs for the selfplay11, selfplay11c and selfplay11d networks can be made available. However, I still need to work out hosting details, as the data is approximately 200 GiB.
+
+        <h2 id="training-data">Training data</h2>
+        Training data in the form of Fresh7 and Fresh7b self-play chunks, and commentary chunks, can be made available. However, I still need to work out hosting details, as the data is approximately 600 GiB.
+
+        <h2 id="strength">Strength</h2>
+
+        <h3 id="strength-tournaments">Tournaments</h3>
+        <p><a href="#appendix-a">Appendix A: Raw data, tournament results</a></p>
+        <p>Methodology</p>
+        <ul>
+            <li>All engines were set to use 8 threads, 8192 MiB hash, and 3-4-5 Syzygy endgame tablebases.</li>
+            <li>Additionally, <a href="http://www.3dkingdoms.com/chess/slow.htm">Slow Chess Blitz 2.7</a> was instructed not to use its own opening book, in order to match CCRL guidelines. Compared to running with its own opening book, this improved its results against <a href="https://stockfishchess.org/blog/2021/stockfish-14/">Stockfish 14</a>, but did not affect its results against ChessCoach 1.0.0 or <a href="https://github.com/vshcherbyna/igel/commits/301fc70234ae58227ce38723d456fca6e6db2b3f">Igel 3.0.10</a>.</li>
+            <li>In ChessCoach vs. ChessCoach games spanning training history, the <strong>network_weights</strong> UCI option was used, and UCI proxying was used to allow for independent TPU device ownership.</li>
+            <li>No arbitration was used for wins or draws, in order for the data to fully cover all game phases.</li>
+            <li>Elo ratings were calculated using bayeselo. Stockfish 14 was pinned to 3550 Elo, using the most recent <a href="https://ccrl.chessdom.com/ccrl/4040/index.html">CCRL 40/15 rating</a> for Stockfish 14 64-bit 4CPU. This configuration does not match most threads/hash and time controls below and serves as a coarse approximation.</li>
+            <li>The data covers a limited range of engines and few total games, so ratings have very high uncertainty.</li>
+        </ul>
+        <p>Tournament with 40 moves in 15 minutes, repeating (40/15)</p>
+        <ul>
+            <li>3535 Elo rating, against <a href="https://stockfishchess.org/blog/2021/stockfish-14/">Stockfish 14</a> (3550, pinned), <a href="http://www.3dkingdoms.com/chess/slow.htm">Slow Chess Blitz 2.7</a> (3505) and <a href="https://github.com/vshcherbyna/igel/commits/301fc70234ae58227ce38723d456fca6e6db2b3f">Igel 3.0.10</a> (3487)</li>
+        </ul>
+        <p>Tournament with 300 seconds per game plus 3 seconds increment per move (300+3, also known as 5+3)</p>
+        <ul>
+            <li>3486 Elo rating, against <a href="https://stockfishchess.org/blog/2021/stockfish-14/">Stockfish 14</a> (3550, pinned) to <a href="https://www.dropbox.com/sh/75gzfgu7qo94pvh/NlXX-QLGu6">Stockfish 8</a> (3362)</li>
+        </ul>
+        <p>Tournament with 60 seconds per game plus 0.6 seconds increment per move (60+0.6)</p>
+        <ul>
+            <li>3445 Elo rating, against <a href="https://stockfishchess.org/blog/2021/stockfish-14/">Stockfish 14</a> (3550, pinned) and training history spanning ChessCoach with 5,200,000 steps trained (3439) to ChessCoach with 400,000 steps trained (2810)</li>
+        </ul>
+
+        <figure>
+            <img src="training_history.svg" />
+        </figure>
+
+        <h3 id="strength-test-suites">Test suites</h3>
+        <p><a href="#appendix-b">Appendix B: Raw data, Strategic Test Suite (STS) results</a></p>
+        <p><a href="#appendix-c">Appendix C: Raw data, Arasan21 suite results</a></p>
+        <p>Methodology</p>
+        <ul>
+            <li>Test suite scoring is strict: if the search prefers the correct move for 9.9 seconds, then changes its mind for the final 0.1 seconds, it gets an incorrect score.</li>
+            <li>
+                Strategic Test Suite (STS), with 1,500 positions, searching for 200 milliseconds per position:
+                <ul>
+                    <li>Run <code>ChessCoachStrengthTest -e &quot;/usr/local/share/ChessCoach/StrengthTests/STS.epd&quot; -t 200 -s 445.23 -i -242.85</code>; take 11 measurements, recording score and rating; take median.</li>
+                </ul>
+            </li>
+            <li>
+                Arasan21 suite, with 199 positions, searching for 10 seconds per position:
+                <ul>
+                    <li>Run <code>ChessCoachStrengthTest -e &quot;/usr/local/share/ChessCoach/StrengthTests/Arasan21.epd&quot; -t 10000</code>; take 5 measurements, recording score; take median.</li>
+                </ul>
+            </li>
+        </ul>
+        <p>Note that engine parameters are optimized for tournament strength, rather than for test suite scores.</p>
+        <p>Strategic Test Suite (STS)</p>
+        <ul>
+            <li>Score: 11,994 out of 15,000</li>
+            <li>Rating: 3317</li>
+            <li>Most common range is 3260 - 3350, varying with exploration and other parameters.</li>
+        </ul>
+        <p>Arasan21 suite</p>
+        <ul>
+            <li>Score: 117 out of 199</li>
+            <li>Most common range is 118 - 126, varying with exploration and other parameters.</li>
+        </ul>
+
+        <h2 id="performance">Performance</h2>
+        <p>Note that tournament play and self-play underutilize Cloud TPU VM hardware because of threading and scheduling contention and overhead in CPython and the TensorFlow Python API. However, even via Python, it is possible that improvements could be made to ChessCoach Python/C++ code or model architecture, as while experiments with CPU and GPU/TPU multiplexing showed no benefit, little overall development time was spent in this area, and no TensorFlow profiling was performed.</p>
+
+        <h3 id="performance-nodes-per-second-nps">Search, nodes per second (NPS)</h3>
+        <p><a href="#appendix-d">Appendix D: Raw data, search performance, nodes per second (NPS)</a></p>
+        <p>Methodology:</p>
+        <ul>
+            <li>Choose the starting position, a tactical middlegame position (r1q1k2r/1p1nbpp1/2p2np1/p1Pp4/3Pp3/P1N1P1P1/1P1B1P1P/R2QRBK1 b kq - 0 1) and an endgame position not yet in tablebases (6k1/1R5R/5p2/3P1B2/3K2P1/4rP2/r7/3n4 b - - 2 55).</li>
+            <li>Install 3-4-5 Syzygy endgame tablebases (see the <a href="https://github.com/chrisbutner/ChessCoach#post-installation">Post-installation</a> section of the README).</li>
+            <li>
+                For each position:
+                <ul>
+                    <li>Launch <code>ChessCoachUci</code>.</li>
+                    <li>
+                        Run through five times:
+                        <ul>
+                            <li>Run <code>ucinewgame</code> to clear the search tree and prediction cache.</li>
+                            <li>Run <code>position …</code>, <code>isready</code>, and <code>go movetime 60000</code> commands.</li>
+                            <li>Record the final <strong>info</strong> data.</li>
+                        </ul>
+                    </li>
+                    <li>Calculate total nodes divided by total time, truncating to thousands.</li>
+                </ul>
+            </li>
+        </ul>
+        <p>These measurements are taken starting with an empty search tree and empty cache and reflect overall NPS, not instantaneous NPS at search completion. With 8 logical GPUs/TPUs and CPU threads, performance reaches a maximum of approximately 500,000 NPS in simple positions with cache available. However, this can include repeated visits to terminal nodes, which is a technical concession to sequential PUCT and not a useful measure. Tablebase nodes do not produce such a cutoff and are instead searched deeper.</p>
+        <p>Search performance</p>
+        <ul>
+            <li>125,000 NPS in the starting position</li>
+            <li>68,000 NPS in a middlegame position involving a tactical sacrifice</li>
+            <li>141,000 NPS in an endgame position not yet in tablebases (12 pieces remaining, including kings)</li>
+        </ul>
+
+        <h3 id="performance-self-play">Self-play</h3>
+        <p><a href="#appendix-e">Appendix E: Raw data, self-play performance</a></p>
+        <p>Methodology:</p>
+        <ul>
+            <li>Copy …/ChessCoach/Networks/selfplay11c_005600000/teacher/swa to …/ChessCoach/Networks/benchmark1_000000000/teacher/model.</li>
+            <li>Copy …/ChessCoach/Networks/selfplay11_003600000/student/swa to …/ChessCoach/Networks/benchmark1_000000000/student/model.</li>
+            <li>In config.toml, update <strong>network_name</strong> under <strong>network</strong> to <strong>benchmark1</strong>.</li>
+            <li>Teacher: in config.toml, update <strong>network_type</strong> under <strong>self_play</strong> to <strong>teacher</strong>; reinstall; delete games in local storage (for example,  ~/.local/share/ChessCoach/Games/Benchmark); run <code>ChessCoachTrain</code> and record 13 chunk timestamps.</li>
+            <li>Student: in config.toml, update <strong>network_type</strong> under <strong>self_play</strong> to <strong>student</strong>; reinstall; delete games in local storage (for example, ~/.local/share/ChessCoach/Games/Benchmark); run <code>ChessCoachTrain</code> and record 13 chunk timestamps.</li>
+            <li>For teacher and student: take 13 chunk timestamps; calculate 12 intervals; discard first 2 intervals (short game bias); calculate mean of remaining 10 intervals.</li>
+        </ul>
+        <p>Self-play time, teacher prediction</p>
+        <ul>
+            <li>3,051 seconds per chunk of 2,000 games</li>
+            <li>2,360 games per hour</li>
+        </ul>
+        <p>Self-play time, student prediction</p>
+        <ul>
+            <li>1,930 seconds per chunk of 2,000 games</li>
+            <li>3,731 games per hour</li>
+        </ul>
+        <p>Estimated full self-play time</p>
+        <ul>
+            <li>22,000 chunks of 2,000 games each, with 18,857 using teacher prediction, 3,143 using student prediction</li>
+            <li>Teacher prediction: 57,530,000 TPU-seconds</li>
+            <li>Student prediction: 6,066,000 TPU-seconds</li>
+            <li>Total on one TPU: 736 days, 2 hours, 18 minutes</li>
+            <li>Total on 50 TPUs: 14 days, 17 hours, 20 minutes</li>
+        </ul>
+
+        <h3 id="performance-training">Training</h3>
+        <p><a href="#appendix-f">Appendix F: Raw data, training performance</a></p>
+        <p>Methodology:</p>
+        <ul>
+            <li>Record times from original selfplay11 training logs and calculate mean.</li>
+            <li>Record times from fresh commentary training logs and calculate mean.</li>
+        </ul>
+        <p>Training time including validation, selfplay11 teacher</p>
+        <ul>
+            <li>337.0 seconds per checkpoint of 1,250 batches of 4,096 positions each (configured as 10,000 batches of 512 positions each)</li>
+        </ul>
+        <p>Training time including validation, selfplay11 student</p>
+        <ul>
+            <li>275.1 seconds per checkpoint of 1,250 batches of 4,096 positions each (configured as 10,000 batches of 512 positions each)</li>
+        </ul>
+        <p>Training time including validation, selfplay11d (commentary)</p>
+        <ul>
+            <li>931.9 seconds per checkpoint of 1,250 batches of 4,096 positions each (configured as 10,000 batches of 512 positions each)</li>
+        </ul>
+        <p>Estimated full training time for selfplay11 (student prediction, training teacher and student)</p>
+        <ul>
+            <li>100,000 batches of 4,096 positions each (configured as 800,000 batches of 512 positions each)</li>
+            <li>80 checkpoints of 1,250 batches each (configured as 10,000 batches each)</li>
+            <li>20 STS strength tests, 1 per 4 checkpoints (estimated 300 seconds per, 1500&nbsp;×&nbsp;200 milliseconds)</li>
+            <li>Teacher: 26,960 seconds training + 6,000 seconds strength testing</li>
+            <li>Student: 22,010 seconds training + 6,000 seconds strength testing</li>
+            <li>Total: 16 hours, 56 minutes</li>
+        </ul>
+        <p>Estimated full training time for selfplay11c (teacher prediction, training teacher only)</p>
+        <ul>
+            <li>600,000 batches of 4,096 positions each (configured as 4,800,000 batches of 512 positions each)</li>
+            <li>480 checkpoints of 1,250 batches each (configured as 10,000 batches each)</li>
+            <li>120 STS strength tests, 1 per 4 checkpoints (estimated 300 seconds per)</li>
+            <li>Teacher: 161,800 seconds training + 36,000 seconds strength testing</li>
+            <li>Total: 54 hours, 56 minutes</li>
+        </ul>
+        <p>Estimated full training time for selfplay11d (commentary)</p>
+        <ul>
+            <li>50,000 batches of 4,096 positions each (configured as 400,000 batches of 512 positions each)</li>
+            <li>40 checkpoints of 1,250 batches each (configured as 10,000 batches each)</li>
+            <li>Commentary: 37,280 seconds training</li>
+            <li>Total: 10 hours, 21 minutes</li>
+        </ul>
+        <p>Estimated full training time overall</p>
+        <ul>
+            <li>3 days, 10 hours, 13 minutes (~3 days in parallel with self-play, ~10 hours after)</li>
+        </ul>
+
+        <h2 id="commentary-suite">Commentary suite</h2>
+        <p>Methodology:</p>
+        <ul>
+            <li>
+                COVET sampling with p = 0.1, temperature = 1.5 (variation on Nucleus (top-p) sampling)
+                <ul>
+                    <li>Run <code>ChessCoachGui</code> and click <strong>Suite</strong> button twice, recording results.</li>
+                </ul>
+            </li>
+            <li>
+                Nucleus (top-p) sampling with &quot;normal&quot; p = 0.9 ∈ [0.9, 1)
+                <ul>
+                    <li>In config.toml, update <strong>top_p</strong> under <strong>commentary</strong> from 0.1 to 0.9.</li>
+                    <li>In config.toml, update <strong>temperature</strong> under <strong>commentary</strong> from 1.5 to 1.0.</li>
+                    <li>Reinstall.</li>
+                    <li>Run <code>ChessCoachGui</code> and click <strong>Suite</strong> button twice, recording results.</li>
+                </ul>
+            </li>
+            <li>
+                Beam search with default beam size = 4, length normalization α = 0.6 ∈ [0.6, 0.7]
+                <ul>
+                    <li>Revert changes in py/transformer.py from commit 62a63a73.</li>
+                    <li>Revert changes in py/transformer.py from commit 035e7e64.</li>
+                    <li>Remove <strong>sample_temperature</strong> and <strong>top_p</strong> argument passing in model.py.</li>
+                    <li>Reinstall.</li>
+                    <li>Run <code>ChessCoachGui</code> and click <strong>Suite</strong> button twice, recording results.</li>
+                </ul>
+            </li>
+        </ul>
+        <p>The following table gives a sample of ChessCoach's natural language commentary generation, using the primary neural network and the commentary decoder neural network. Ten outputs are given for each of three different sampling methods. This is repeated for eleven different positions and corresponding moves, comprising ChessCoach's commentary test suite.</p>
+        <p>Note that the <a href="https://github.com/chrisbutner/ChessCoach/blob/v1.0.0/py/suites.py#L1">commentary test suite</a> uses a non-optimal method of input, providing FENs for the before and after-positions rather than full move history, requiring synthesis of history planes. When full position history is available, for example, with a <code>position startpos moves …</code> UCI command, commentary may be improved, for piece and square identification especially.</p>
+        <table class="commentary">
+            <tr>
+                <td>
+                    <img src="suite1.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong> <a href="https://www.cs.cmu.edu/~hovy/papers/18ACL-chess-commentary.pdf">(Jhamtani, Gangal, Hovy, Neubig &amp; Berg-Kirkpatrick, 2018)</a>
+                    <ul>
+                        <li>Blocking the bishop out and eyeing for f4 and mate on c</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>Black is a pawn up, but his king is still in the center, and he has a strong centre.</li>
+                        <li>White has a lot of choices here, but I'm not worried.</li>
+                        <li>I don't know why he played this. But, I would've played 19...Kf8 to prevent mate. But, it's still a little complicated.</li>
+                        <li>I could have played 19...Kd7 or 19...Kd7. I would have answered with 20.Qg3, but I decided to play this, instead.</li>
+                        <li>White is still down a piece, but he has two pieces. The rest is easy.</li>
+                        <li>...and he moves his king to block the check. I had a little concern here, as he has no good moves left, but he can't castle anymore. I'm not sure what I'm doing here. I'm just trying to figure out how to deal with his knight, so I can play on with my king.</li>
+                        <li>And here I realized I had lost the game. I thought that I had a good game, but I had a plan.</li>
+                        <li>I had no choice but to play Ke7 which would have forced me to take the knight.</li>
+                        <li>I'm not sure why he played this. I think he's trying to win my LSB. But, it's not a problem because he is going to win my pawn back.</li>
+                        <li>...but I didn't like this move. I was planning on bringing my rook into the game, but this move also puts my king in check.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>Not sure what I'm doing so, but I think this forces a slight weakness in his castle.</li>
+                        <li>I feel very safe for my king. I've got the extra rook and a bishop at the same time that can be useful in the endgame. I've got to get my king into the game so it's not always a good idea to block in your own pieces, especially when you're already in an endgame.</li>
+                        <li>Guess he is assumeing this! he had planned out it a bit more, but probably a different reason takes.</li>
+                        <li>The reason I'd be looking forward to a draw is because I feel the poor things to be ahead by a rook should be kept on the board. Of course I know I'll try to get trouble hot and material loss.</li>
+                        <li>Immediately I fall for it. 22...f5 22...Qxe5 23.Bxe5+ would have been a mistake, e.g. 22...Rxg badly losing control of e6.</li>
+                        <li>Although it doesn't prevent 19.Kd7 due to, Janet has the advantage here, as opposed to, 19.h3 which was also played. I think you can still look at something like 19.Kd solid but that would've been a nice example of how things went terribly wrong.</li>
+                        <li>No se vunerable check, block the check. My pawns are coming soon.</li>
+                        <li>Bringed the Queen back to close out, as well as attacking the Bishop at b2.</li>
+                        <li>I could've waited to mate him but would've looked at this. But, that isn't a big deal, and with that being said, I decided to take his B+R to prevent him from getting a nasty. This time, however, it is not enough because I will take on f5, instead, first.</li>
+                        <li>Getting away from Qh3. I like this move better because it frees up Black's king bishop and targets the a2 pawn. Of course I'm not taking any risks on d7 as White is down a bishop and pawns.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>I'm not sure why he played this. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite2.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong> <a href="https://www.cs.cmu.edu/~hovy/papers/18ACL-chess-commentary.pdf">(Jhamtani, Gangal, Hovy, Neubig &amp; Berg-Kirkpatrick, 2018)</a>
+                    <ul>
+                        <li>Letting the Queen join the attack.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>Black is ahead in development, and is threatening to win the rook. White's position is hopeless.</li>
+                        <li>...but my opponent's queen comes out to attack my knight...</li>
+                        <li>I thought about moving my knight to c6 to try and break up the queenside pawns, but I didn't want to allow that.</li>
+                        <li>I was not sure why Jack played this. But, I was thinking that he was trying to get my Queen out of harm's way.</li>
+                        <li>So, I continue with my development.</li>
+                        <li>...and he brings his queen out to cover his knight...</li>
+                        <li>Now I am going to be in a position to attack his bishop with my queen, and I am attacking his knight with my queen.</li>
+                        <li>A good developing move, but Black is also looking for the way to develop his queen to c6 to threaten White's queen.</li>
+                        <li>White has lost the bishop pair, but the black knight is not in a good position.</li>
+                        <li>Now black's knight is pinned to the queen, and it's time to move it out of the way.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>The use of the vulnerable square d3 compensate for the destroyed pawn structure. White's main problem is that he cannot castle anyway.</li>
+                        <li>The bishop is blocked in on g7, and a potential pawn storm has been over. White will try to gain the initiative, although his queenside position is slightly worse than before.</li>
+                        <li>I must have played this anyway, and it proves to be a mistake. I wanted to prevent Nf3 , but in hindsight, the White bishop is still being present in the game, and no other square. I could have played this a couple moves ago, and I would not have been able to do that ( I still didn't see ...Nd3), so I just preferred to save the knight and try to re-group my forces. The game is already lost for Black.</li>
+                        <li>16...Nc6 Both knights have moved far away from the center. This move add to the control of d4 and prepares the coming manoeuvre Nc6-b4-b4 striking at b2</li>
+                        <li>Pinning the knight while also preparing to bring out the other minor piece.</li>
+                        <li>want a retreat to reduce the influence of his queen power down the a3-f8 diagonal,i must have been thinking about offering a queen trade, not a clever decision but fortunately that means losing a tempo for white</li>
+                        <li>Bg2! I don't know why he resigned as all the positions I got were open for my bishop. I allow my dsb to get out, and then support my knight with a pawn's advance which will give me an advantage over the bishop pair.</li>
+                        <li>I'm not sure if i should have considered Knight on d6 here instead.</li>
+                        <li>The bishop is away, and there is no place to go, so black castles kingside, often.</li>
+                        <li>I didn't actually look at this move during the game, because it lets the rook out the third time with the queen. I have some resources, b7 if ever my rook makes that pressure.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>I'm not sure why he played this. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite3.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong> <a href="https://arxiv.org/pdf/1909.10413.pdf">(Zang, Yu &amp; Wan, 2019)</a>
+                    <ul>
+                        <li>White develops his knight to protect the pawn and protects the knight.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>This move has become popular recently. The main idea is to avoid the well-known Berlin Defence, where Black can play d7-d5 and Bb4 to force White to take on c3.</li>
+                        <li>White develops his knight to f3 and is attacking the pawn at e5.</li>
+                        <li>I have never seen this before, but I'm not sure why he played this.</li>
+                        <li>This is a rather unusual move, which is a common response to the Ruy Lopez. The knight move is the most common response to the Ruy Lopez.</li>
+                        <li>White decides to play the Berlin Defence. This move is very popular in the 19th century.</li>
+                        <li>The most popular reply. It is a rare guest in top level tournaments, but I have never seen it before. The idea is to play d4 and d4 and to play against the weak f7 pawn.</li>
+                        <li>I don't know why he played this. But, it's not a good move because it's a center pawn. But, in this position, I'm not going to give it a mistake, as it will give me a tempo. Better was 4.Nf3, or 4.Bc4. In fact, this is where I start to go wrong.</li>
+                        <li>The Italian game. A very rare line in the Ruy Lopez.</li>
+                        <li>The most common move. The knight will go to e2 and White will be able to play e4 and try to play d4 at some point.</li>
+                        <li>I have never seen this move before. I have never played it before. It's an interesting move, which can lead to a more positional game. I'm not sure if it's a mistake or not, but I think it's a mistake.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>French Defense - Marco Piano. It looks like a breadball dreaded Italian game.</li>
+                        <li>Opting for the Four Knights variation, but I like to get into a variation, which normally leads to a dull game. Seems to me I will start playing it until I in least a few moves.</li>
+                        <li>White wants to regain centre control by redeveloping his Bishop to keep the tension in the centre. After 4. ... d5 5. d4 cxb4 6. Nxe5 I may end up two or three pawns down but have my bishop pair and control over the center of the board.</li>
+                        <li>Now it's not an exciting moment to try to fight for advantage. My personal opinion is that @Sueden recommended to watch our game (Kalashnikov), where in a Judit Polgar game vs Gata Kamsky (who played against Garry Kasparov) I had to learn more about the English Opening.</li>
+                        <li>White frees the knight without risking to double his pawns. But I think that I could have won that situation with the rook behind it.</li>
+                        <li>Still book theory as far as this opening can be.</li>
+                        <li>This is the Richter-Rauzer attack. It is not played in this exact line anymore, and the main idea of this move is to develop the knight to f3 via f3. But never mind, it has a concrete purpose. It does strike at black's center, but it does undermine the potential pin on the f6 knight.</li>
+                        <li>4.d3?! We examine here both possibilities, while 4.c3 is good for White. But this move is good because Black's KB is no longer in danger. The alternatives are 4.Nf3, 4.Nd5 and 4.Ne2. The move made by White's play is very flexible and clear: to play aggressively. Usually, Black occupies the center with a piece, or to push a pawn to d5, so White must play actively. Second, 4.Nf3, 4.Ne2 or 4.Ng3 (Say be preferable).</li>
+                        <li>An old move. I remember playing the first time against Peterburg in Paris in 2005. However after Peter Svidlerxdxdpts to put the knight on the rim and wind up in a passive position.</li>
+                        <li>Prokobilava is classical and very explosive in this system. The Accelerated dragon is the most often used opening by Soviet (Master, 1925). White's early attack on the king side (11.e4?! d5!), the king will induce Black to lose a tempo when the king's knight is delayed. With the move played, White prevents the unpleasant pin on the queen, at least temporarily.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>I'm not sure why he played this. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite4.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong> <a href="https://arxiv.org/pdf/1909.10413.pdf">(Zang, Yu &amp; Wan, 2019)</a>
+                    <ul>
+                        <li>White's pawn is opening up the bishop and queen on the diagonal.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>So, I continue with my development. The idea being is that after he takes, I'll take back with my c pawn, and if he takes, I'll recapture with my d pawn. This way, I'll be able to castle short, at once.</li>
+                        <li>This is the second most common move. The main idea is to develop quickly and to control the center. The other option is to take the pawn on d5 with the knight, and after 3...Qxd5 4. Nc3 black has a good game.</li>
+                        <li>This is the main line. The idea is to recapture with the pawn and then to take back with the queen.</li>
+                        <li>White is trying to open up the game, but I don't like the positions of the queen's gambit, so I can't play Nf3 as it gives me the chance to play e5 and I'm also not afraid of black playing e5 because of the weakness of my d5 pawn.</li>
+                        <li>And, I take. I was surprised to see Ted play this. As I had anticipated 4.Nf3 which would be a mistake because of what I noted earlier. But, it's a mistake because of what's about to happen.</li>
+                        <li>I don't like this move. It's not bad, but it does give black a good center. It also gives black a chance to play d5 which I don't like.</li>
+                        <li>I think this is the best move. White doesn't have to take the pawn because of the line 3.c4 dxc4 4.Bxc4 Nxe4 and white has a small advantage.</li>
+                        <li>Now that I have played the Scandinavian Defence (or Petroff Defence) I decided to go for a more solid continuation.</li>
+                        <li>d4 is a good move, I think. It develops a piece and attacks the pawn on c5.</li>
+                        <li>I was happy to see this move, as I wanted to keep the pawn on d5 protected and to avoid any tactical tricks after ...c5. However, I decided to play the main line and to avoid any complications.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>Developing a piece. Goshaps for that! While I had remusing to take my e-pawn, I can't touch it as it doesn't interfere in any other piece's development. On the other hand, if I take, I'll gain a tempo.</li>
+                        <li>Not the most good way to play against this gambit. It's inferior to either 4. Nc3 or 4. Nf3 because of ... of Black playing ...Nbd7. The text move also targets the d5 pawn</li>
+                        <li>The Caro-Kann, some of the most popular openings in master games -- GMs tend to play closed positions.</li>
+                        <li>Most players prefer d4 or Nf3. The idea is to open a line for the queen to get to d3 later on and enhance the strength of the two bishops.</li>
+                        <li>In this position, white used to play 3.Nf3 (the Open Variation), which is the most common response. The move is definitely the best if not made for the same reason, but there's no other option. By playing this, he is now able to develop his Bf1. If this happens, however, he will probably do this for the same reason.</li>
+                        <li>Bc5 is OK here but why not place the bishop on b5 is still a much more active option for white but it can't be a bad idea. It's not always good to have the King safely castled</li>
+                        <li>Why not take with the queen? Because it allows me the queen to make a passive defence with the only good move. If 4. ... Qxd5 then 5. Nc3 wins the white pawn at d4.</li>
+                        <li>I wasn't keen on playing 3.d4, as this was dubious due to Black's dominant center. But now I can exchange Bishops on my next move and develop another piece whilst attacking Black's weakened e-pawn.</li>
+                        <li>There's a lot of options for Black. It's part of the &quot;safe&quot; way to exploit the hole created upon the queens side. For Black, the Exchange Variation gives Black a free pawn, and Black's' centre, more likely to lack open lines. White's most aggressive option is to accept the pawn and hold the position rather than transposing into a favorable endgame with 3. Nc3.</li>
+                        <li>Although the GK computer doesn't agree this is okay</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>I'm not sure why he played this. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite5.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong>
+                    <ul>
+                        <li>White starts a back rank mate in 2.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>and black resigned, because of the mate threat on f8 and a5</li>
+                        <li>Black resigned. A nice game by me, I'm sure. Thanks for reading and comments, and please leave comments.</li>
+                        <li>And the checkmate. This is the end of the tunnel. I'm proud of this game, and it's very fun to see how the game turned out.</li>
+                        <li>And Black resigned. A nice and wonderful game by the young Russian who is an excellent performance. I hope you enjoyed it and please leave comments.</li>
+                        <li>Now I can take his rook with my queen. He can only move his king or my rook, but I will lose the rook.</li>
+                        <li>A great game by White, who is now winning.</li>
+                        <li>A nice win by Caruana.</li>
+                        <li>A pretty finish.</li>
+                        <li>And there it is. I was very lucky to win this game, because I didn't play well, and I was not able to make it work. But I was able to make the most of my advantage. Thanks for reading!</li>
+                        <li>The game is over.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>The final position (in which I played several sample moves, including Qe1 or Bc4). In order to save my queen with rooks, I played correctly... &lt;&lt;&lt;(Taufiq) I think that you should have played 24. Rxb1!? axb5 25. Rxd3 (forced), and that's it, you'd have to do so with your queen...&gt;&gt;&gt;</li>
+                        <li>But it's ashamed. This is a two-way mate or checkmate. A typical of our games. I initially stopped making a mistake here, but took a while to analyze how the position got so complicated that it seemed to me that there was too many threats in my calculations that allowed Black to take the advantage, actually? I was pretty sure that I'd missed the mate but overlooked Black's simple threat.</li>
+                        <li>would be even better, as Black will lose another pawn and the game.</li>
+                        <li>Piket,J-Sokolov,I/Wijk aan Zee NED 2000/The Week in Chess 318 (38)</li>
+                        <li>....this move finished the game....I hope I can explain why I didn't.I hope you enjoyed the game and please add your comments in suggestions. i dont think any mistakes or inaccuracies are made or inaccuracy and continue with them with your moves...So i will let you know if you have any comments or comments in any comments, or opinions in any way...</li>
+                        <li>Here, I resigned because after Re8 White wins the queen. A fun game to play.</li>
+                        <li>So here i resigned. I have received a draw in our game and as often his position is so bad for him. Ion, i challenged me for the first time in this tourney, thanks for watching and comments.</li>
+                        <li>The reason why 38.Re3 was not a mistake was because I had played this quite quickly. But, I know that there's still nothing that could be done about the pin and then, as we know, is not going to allow you to win a Queen. Instead, I chose to place me in check with my f pawn. That's because I will explain that later on, when I've made the wrong mistake on Erika.</li>
+                        <li>Thanks toanov for a great game, and for the bishop's switch to Zhao Xue, this was a very good game for me, that shows how blunders and wins the pawn back only one move later.</li>
+                        <li>There it is! This game has been won by black. I love finishing, can I use this. I hope you have enjoyed it dear reader!</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>and Black resigned. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite6.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong>
+                    <ul>
+                        <li>White wins the queen but misses a fast mate.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>Now I have a forced mate.</li>
+                        <li>This was a great game by me, but I was able to see the win.</li>
+                        <li>The game is over, white is a rook up and black has no counterplay. The rest is easy.</li>
+                        <li>Black resigns, as there is no way to prevent the loss of the rook.</li>
+                        <li>Black resigns, as there is no way to prevent mate. A very interesting game, and a very interesting one, and one I have to admit I was playing very well, and it was not a very good game, and a very good game.</li>
+                        <li>And Black resigned. A very interesting game by the Chinese player, and a great effort by both players. It's interesting to see how many strong GMs would play this position, but in this game, they both had chances to outplay their opponent and take advantage of their mistakes.</li>
+                        <li>And black resigned. The rook and bishop will fall.</li>
+                        <li>The game was over.</li>
+                        <li>The final position is hopeless for Black. He can't prevent White from winning by exchanging queens.</li>
+                        <li>A great game by the youngster.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>is also a quicker way to play, but Tiger may be having something up his sleeve in his sleeve.</li>
+                        <li>Even with a rook down, pawns should be lost. In an endgame like this, Black has to give up for even one rook to prevent mate, so his king has been nearly doomed to the corner.</li>
+                        <li>leads to a forced mate</li>
+                        <li>dxc3 - with a man playing for mate but now the BK is submitted to a trade and must lose her way. Thankfully Fou Lenoir won't get pinned to my rook on b4. The rest of the game is a quick technical loss for Bob.</li>
+                        <li>A good learning performance by the young Ker crowd.</li>
+                        <li>Creating a safe spot for the Bishop and also displaced Black's Rook at the same time.</li>
+                        <li>the threat that wins at least the rook. This is benefft way for the black rook. However, other than that, white is still winning.</li>
+                        <li>Materially down, black is busted. I knew black would lose, but I had nothing to be scared of.</li>
+                        <li>BAM!</li>
+                        <li>Purely advised. Not only is black down to 2 pawns, however, in this situation the loss of both rooks is inevitable. The only move, while Rxc3 or Qc2 would be the least of black's difficulties, if he didn't have much time to play Rh6 to pin the rook as well. He resigned. I think it was good game by both players who showed great fighting spirit, but I hope you enjoyed it. Feel free to leave comments.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>and White wins. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite7.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong>
+                    <ul>
+                        <li>Falling into the Lasker Trap.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>White accepts the sacrifice, but this is a serious mistake. White had to play 8.Qf3 to prevent 8...Qxf3 9.Qxf3 Qxf3 10.Qxd3 Ne7 11.Qd2 and Black has the better game.</li>
+                        <li>Now the bishop has no choice but to take it.</li>
+                        <li>This is the losing move, but it does lose the bishop.</li>
+                        <li>The only way to avoid losing a piece, but White's attack is still dangerous.</li>
+                        <li>White has to take with the queen. In this position, he could have played the queen to e7 or f6, but I am not going to let him take my queen, and I will be a rook down. In addition, I am threatening to capture his queen with my knight, so I will be 8 points ahead.</li>
+                        <li>A bad move. White should have taken the bishop with the queen, and after the game, I had a much better position, and it is not easy to see how black could get out of the opening. In fact, it is a mistake, because after 7... Qxf3 8. Qxf3 dxe3 9. Qxe3 white is down a pawn, but has a huge advantage.</li>
+                        <li>It was better to play the queen to e7 first, as after the queen takes on f2, white has a dangerous attack on the king.</li>
+                        <li>White has to recapture with the queen, but he will lose a pawn after the next move.</li>
+                        <li>White has nothing better than this, and he chooses to take the pawn.</li>
+                        <li>I don't think this is a good move, because it allows me to gain a tempo with my queen, and gives me a strong attack. I should have taken the pawn with my bishop, but I didn't want to give him a tempo.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>Looks like 10. fxe3 has provided far too much compensation for a pawn from here.</li>
+                        <li>This is the most active response. White is lagging in development and this hurts the safety of his King. He didn'tw the need to play the text move, and clearly should have gone for e3.</li>
+                        <li>Which he does. I was rather worried about him getting his king to the QS, after all.</li>
+                        <li>Like this, I figured out that if he took, my only move would've been to capture his Bf1 with his bishop, which was my best move. Therefore, he is going to win my other rook, after this game.</li>
+                        <li>I played this move because I thought he would play 6.dxc7+, and after 6... bxc6, it was just a remembering game but, the damage is that I've overlooked and caused him to blunder blunder. Therefore, I played this, instead. This time, it's mate in one, afterall. As Tom told me after the game, he said, &quot;You're winning, no matter what you do.&quot;</li>
+                        <li>This seems to be a blunder. Black's best choice now is 6... d6 7. dxe5 Bxe2 14. Nf3 Bxf1+ 15. Kxf1 Qxd1+ 16. Kxd1 fxe2, leaving White with a large advantage.</li>
+                        <li>I think that it's hard to see why this is just a common error after 6.Qb3+ Nf6 7.Nc3. Even though the gamenged, Black can then win the Queen with 7...Qa5+, but White has no choice, and he develops with 7...Qxe2.</li>
+                        <li>Now a somewhat weak king becomes a weapon in the endgame. If black takes with the queen, Qxe3+ follows.</li>
+                        <li>he takes my pawn</li>
+                        <li>With that being said, I took his B, but now I'm behind. One way or another, though, it looks like I'd win back a pawn, at worst. But, what I forgot to do is what's about to unfold which is why I sometimes make the tellings of the bad position.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>This is the only move that doesn't lose material. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite8.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong>
+                    <ul>
+                        <li>Simplifying to a won bishop and knight endgame.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>I'm not sure why white played this. It appears that he wanted to get a passed pawn. But, I'm not sure why he played this.</li>
+                        <li>I was expecting Kc7 or Kd7 to win the bishop. I didn't want to give up my bishop for the knight, and I was afraid of a queen exchange, but I didn't want to give him the chance to play Qd7 and keep my king close to my king. I was expecting a king trade, which I didn't want to do.</li>
+                        <li>The White Queen checks the Black King. The White King can't move to b7 because of the without check.</li>
+                        <li>The bishop is not needed to defend the a-pawn, but this is a serious mistake. White could have played 44.Qc4 with a draw.</li>
+                        <li>This is a nice move, which forces the black king to the back rank.</li>
+                        <li>The last move was a mistake.</li>
+                        <li>I think this is the best way to continue. If black takes the knight, white will have to take the bishop and then the king will be forced to the back rank.</li>
+                        <li>The rest of the game is just a matter of technique.</li>
+                        <li>This move was played after a long think. I had considered taking with the knight, but I wanted to keep the queen on the board, and I was not sure if I could find a way to win the game.</li>
+                        <li>This is a bad move. It gives Black a chance to get back into the game with a check. If Black takes the knight, then the king takes the bishop and the game is drawn. If Black doesn't take the bishop, White will play Qc1 and mate. If Black plays Kc7, then White plays Qd8 and wins. If Black plays Kc7, then after Qa7, then Black has a series of checks, which wins.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>Putting pressure on the King and pushing black to the corner. More likely, he will be forced to either lose his Bishop or give up his Rook. The first thing you know is that the Bishop is no longer without an asset or a weakness. Both players have to pull under control to keep that advantage against someone with less than 500 rating points.</li>
+                        <li>White ought to be satisfied withsacing the queen swap at once: 39 ... K-Q2 40 RxB K-N1 41 R-B7 ch K-K1 42 K-B2 R-Q2 43 K-B5 ch 41 K-B5 ch K-N2 42 KxP ch K-B3 43 K-B3 ch 43 K-B4B8 44 K-B4 45 K3 Q-B5 and wins.</li>
+                        <li>Kxc7 - I had looked at a couple of trades but decided to keep Glenda on the board. I now have an opportunity to trade queens and then I could convert the advantage to a victory. Luckily for me, my opponent misses the killer blow and rating dropped below his rating. I will demonstrate that my very first victory with ever a bishop versus knight.</li>
+                        <li>Now black has two defences to defend. Kd5 stops the queen promotion. But Kc5 seems better. Either way, white is going to remove this possibility or he will capture the pawn. It's pretty hard to see how to stop the pawn from queening so long.</li>
+                        <li>The immediate 53 Qxa7 would have broken the above chain. If I gave up Black's f-pawn instead, I would have won the e-pawn, so I have to give up a pawn.</li>
+                        <li>take it</li>
+                        <li>This was one of those positions when the king varies for the rooks coordinated.</li>
+                        <li>After this move, I felt I had many winning chances.</li>
+                        <li>I take it.</li>
+                        <li>...but this is also why I thought I had the win: 37. Qxa7+ Kd7 38. Ra7+ Kd6 39. Bd4+ Ne6 40. Bxf6 Kxf6 41. Bc5+ and I win an exchange and the game. I didn't think I had enought to hold on, so I went for another queen with no compensation.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>I'm not sure why he played this. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite9.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong> (position only from <a href="https://github.com/chrisbutner/ChessCoach/blob/v1.0.0/cpp/StrengthTests/Arasan21.epd#L1">Arasan21 suite (Dart, 2019)</a>)
+                    <ul>
+                        <li>Sacrifices the bishop to open up e5 for the knight into an attack on white's king, with the help of the half-open h file.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>This is the typical sacrifice in this type of position. Black sacrifices a piece in order to open up the position and get a strong attack on the kingside.</li>
+                        <li>I decided to give up my knight for a strong attack.</li>
+                        <li>I was not sure about this move, but it was the best one. It's very hard to find a good plan for Black, and it's not easy to find any good moves for White.</li>
+                        <li>The exchange sacrifice is not so good, because the N on e5 is hanging.</li>
+                        <li>The position is very complicated, but White's chances are preferable.</li>
+                        <li>A strong sacrifice.</li>
+                        <li>I decided to sacrifice the knight for the two bishops and a clear advantage in the centre.</li>
+                        <li>I thought about taking the knight with the pawn, but didn't see any reason to give up the bishop pair. I didn't want to give up the knight for the bishop, but I was concerned about the knight coming to g4.</li>
+                        <li>It is a good idea to open up the position for the ^^.</li>
+                        <li>is an interesting try.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>Strange sacrifice sacrifice:</li>
+                        <li>Forced, or else 12. ..e5 traps the white queen.</li>
+                        <li>had to be tried in a blitz game, although it is logical to accept the offer:</li>
+                        <li>b4 - this move now out of the DB as I thought I was about to win the exchange, but then I decided to project the exchange of Fou Lenoir. Note that if I took the knight I would have a double pawns on the b file and a nice lead in development that could have lined up on Henry one more move before resigning. I am really acknowledging a cramp on my position and see if I could survive the coming onslaught.</li>
+                        <li>was much safer.</li>
+                        <li>That's it! This is a typical sacrifice of the c6-pawn, opening up the a-file for the black rook. But from strategical point of view it loses an important tempo.</li>
+                        <li>Marchmann,E-Raziewicz,P/Paris/1997/</li>
+                        <li>was the last chance to escape.</li>
+                        <li>A decisive mistake, once again the play. Black forgets about the threats on the &gt;&gt;. Now he gets to play it, but things are far from clear, because Black already has to defend the weaknesses on the &lt;&lt;.</li>
+                        <li>The wrong decision to capture. Even though the pawn position remains fixed on e5, Black is already slightly better thanks to his piece activity and the better pawn structure. However, in the middlegame very concrete considerations managed to transform it into something more significant. He should have kept the knight on c7 for one move, making the threat of b7-b5 more dangerous.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>This is the point! (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite10.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong> <a href="https://www.chess.com/article/view/best-chess-moves#vladimirov">(Stapczynski, 2020)</a>
+                    <ul>
+                        <li>The only good move on the board.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>A very nice and nice move, I was hoping to take on h6 with check. I was very happy with this move, as it forces black to take on b2 with the knight, and after that the queen will be able to defend both the rook and the bishop.</li>
+                        <li>White is in trouble. He should have taken the queen with the bishop, as after the king moves to h7 and check the king on g8 black can't take the bishop because of the mate on g7.</li>
+                        <li>A nice finish. Black cannot avoid the loss of the queen.</li>
+                        <li>I'm still not sure what I was thinking here. I'm not sure what I was thinking, but it was still a good move.</li>
+                        <li>White gets mated.</li>
+                        <li>I had to take with the rook, otherwise I would have to lose my queen, but then I would have taken with the bishop and rook, and I would have had a chance to promote the f pawn.</li>
+                        <li>I'm still hoping to get a draw. I think I can still draw here, but I have to be careful.</li>
+                        <li>and the only move.</li>
+                        <li>White wins a piece.</li>
+                        <li>The best move. White wins a piece, but his attack will be faster.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>...now, mate will come. GRAVE WHAT. A mistake. I think this was the best move for Black to avoid this. Any other move from black would have saved him the game, and give him a chance to escape: allerdings wird der Art von Fehler. Iggeschützung der Partie, gewann ihm ein. Wherever some of this crazy sequence would have saved him, but it doesn't matter where the king moves.</li>
+                        <li>with mate: 37... Rxh6 38. Rf8+ Ke8 39. Rxf6++</li>
+                        <li>Kramnik's reaction was much more stubborn as Black's king and his centre is too weak that this whole variation was a prominent for his analyses.</li>
+                        <li>An excellent. White still retains good play, but with the queen activated from d7 Black has no reasonable ways of making any of of his threats a few more difficult.</li>
+                        <li>This ends the game, do you see what happens?</li>
+                        <li>Willing to exchange Queens with Bg4 Bg4 was better but haven't found this after 24. Rxh5 Bg3 in retrospect because of 25. Rd8 Kf8 26. Be6+ Ke7 27. Rxf7 Be6 though he'll soon be a rook ahead</li>
+                        <li>Ge7g8] Black resign resign but there is not enough material to maintain the attack.</li>
+                        <li>The only move, but most likely best. Now, due to time pressure, I didn't want to risk my opponent. A nice escape square for a queen, but the white bishop would get the free rook.</li>
+                        <li>A worrisome move. He's hoping to escape from perpetual check</li>
+                        <li>Passtac must have missed the mate threat 37.Rxb3 with 37...Rxf5 38.Kf4 Qxh6</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>The only move. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="suite11.png" />
+                </td>
+                <td>
+                    <strong>Baseline</strong> <a href="https://raskerino.wordpress.com/2020/03/09/speed-chess-championship-2019-final/">(raskerino, 2020)</a>
+                    <ul>
+                        <li>So finds the best defense, creating for himself …Ba6 defenses that pin a c4 knight to e2. He's a brillint player too of course.</li>
+                    </ul>
+
+                    <strong>COVET sampling</strong>
+                    <ul>
+                        <li>and White has some problems with his development.</li>
+                        <li>Black has a strong pressure on the &lt;&lt;, but White has a nice ^^ and a strong P majority on the &lt;&lt;.</li>
+                        <li>and Black has good counterchances on the &lt;&lt;, while White has no obvious way to increase his pressure.</li>
+                        <li>I don't know why black played this. It's because he's not in a good spot for his N. But, in this position, it's not a good idea to get it out. In fact, this move is a mistake because it gives away a pawn. Better was to bring his other N to b4 where it's more active.</li>
+                        <li>is the other main line.</li>
+                        <li>I think Black should have been able to equalise.</li>
+                        <li>Black has a comfortable position. His bishop is better than the knight and the knight is not doing much on c5.</li>
+                        <li>The point of Black's play. He is not only preventing the white bishop from coming to b2, but also prepares to activate the rook via the d-file.</li>
+                        <li>The point of the previous move.</li>
+                        <li>is a bit passive, but White can't exploit the weaknesses of the b3-square.</li>
+                    </ul>
+
+                    <strong>Nucleus (top-p) sampling</strong>
+                    <ul>
+                        <li>Now Black's hope of a better development might outweigh White's superior pawn structure.</li>
+                        <li>The move of the rook uses the liberty of anticipating the march of the white king to a and b files as this greatly weakens the d6 square.</li>
+                        <li>Black has reached the desired position. His stability on b5 will be easy to stabilise, while his bishops in such a way restrict the enemy bishop.</li>
+                        <li>is still a draw.</li>
+                        <li>What's wrong with this move? It's not necessary to do it, but after an interesting forthcoming exchange on c5, the black knight will be better than the white bishop.</li>
+                        <li>I quite like this move. Black pushes forward his pawn, he wants that knight on b4.</li>
+                        <li>It is necessary to defend the pawn on a6, while e6-square becomes weak.</li>
+                        <li>where White has better chances due to the weakness of Black's queenside pawns but Black's position is less dangerous than in the game:</li>
+                        <li>is a bit passive. The text prepares Black to get his rooks connected and, if allowed, will create some counterplay on the c-file, but White can retain better chances by tactical means. wäre ein wenig aktives Erlangsam. Der Textzug ist alles forciert, wird Schwarz seine Figuren verschieden, um seinen Pc5 verschafft und, wenn Weiß bessere Initiative standul unfoldn, danach Weiß bessere Chancen bekommen scheint.</li>
+                        <li>Yc7a6,Yc6a6] Step one of the points- black prepares to put the bishop to b7 and keeping open the 'a' file for rooks.</li>
+                    </ul>
+
+                    <strong>Beam search</strong>
+                    <ul>
+                        <li>Black has a very solid position. (×10)</li>
+                    </ul>
+                </td>
+            </tr>
+        </table>
+
+        <h2 id="training-charts">Training charts</h2>
+        <p>Note that selfplay11 shown in the charts below used non-stationary policy plane mappings and only generated SWA models for the student model at the time, not the teacher model. The lack of SWA on the selfplay11 teacher model reduces STS rating estimation by approximately 50 to 100 Elo in early training. Configuration has since been updated to generate SWA for the selfplay11 teacher also.</p>
+        <p>In contrast, selfplay11c was fully retrained on existing data using stationary policy plane mappings after 2021/08/08. SWA models were always generated. Little difference was seen between non-stationary and stationary policy plane mappings, although a fresh end-to-end run may show improvement, owing to the feedback cycle.</p>
+
+        <h3>Selfplay11 and selfplay11c: Elo rating estimation from the Strategic Test Suite (STS)</h3>
+        <figure>
+            <img src="sts_rating.png" />
+            <span class="legend legend-2"></span>
+            <span class="legend legend-4"></span>
+            <span class="legend legend-6"></span>
+        </figure>
+
+        <h3>Selfplay11: Value and policy</h3>
+        <figure>
+            <img src="11_value.png" />
+            <div>
+                <span class="legend legend-1"></span>
+                <span class="legend legend-2"></span>
+            </div>
+            <div>
+                <span class="legend legend-3"></span>
+                <span class="legend legend-4"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="11_policy_teacher.png" />
+            <div>
+                <span class="legend legend-1"></span>
+                <span class="legend legend-2"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="11_policy_student.png" />
+            <div>
+                <span class="legend legend-3"></span>
+                <span class="legend legend-4"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="11_policy_accuracy.png" />
+            <div>
+                <span class="legend legend-1"></span>
+                <span class="legend legend-2"></span>
+            </div>
+            <div>
+                <span class="legend legend-3"></span>
+                <span class="legend legend-4"></span>
+            </div>
+        </figure>
+
+        <h3>Selfplay11c: Value and policy</h3>
+        <figure>
+            <img src="11c_value.png" />
+            <div>
+                <span class="legend legend-5"></span>
+                <span class="legend legend-6"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="11c_policy.png" />
+            <div>
+                <span class="legend legend-5"></span>
+                <span class="legend legend-6"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="11c_policy_accuracy.png" />
+            <div>
+                <span class="legend legend-5"></span>
+                <span class="legend legend-6"></span>
+            </div>
+        </figure>
+
+        <h3>Selfplay11 and selfplay11c: MCTS value loss (before auxiliary x0.15), L2 regularization loss, and learning rate</h3>
+        <figure>
+            <img src="mctsvalue.png" />
+            <div>
+                <span class="legend legend-1"></span>
+                <span class="legend legend-2"></span>
+                <span class="legend legend-3"></span>
+                <span class="legend legend-4"></span>
+                <span class="legend legend-5"></span>
+                <span class="legend legend-6"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="l2.png" />
+            <div>
+                <span class="legend legend-1"></span>
+                <span class="legend legend-2"></span>
+                <span class="legend legend-3"></span>
+                <span class="legend legend-4"></span>
+                <span class="legend legend-5"></span>
+                <span class="legend legend-6"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="learningrate_primary.png" />
+            <div>
+                <span class="legend legend-1"></span>
+                <span class="legend legend-3"></span>
+                <span class="legend legend-5"></span>
+            </div>
+        </figure>
+
+        <h3>Selfplay11d: Commentary loss and learning rate</h3>
+        <figure>
+            <img src="11d_commentary.png" />
+            <div>
+                <span class="legend legend-7"></span>
+                <span class="legend legend-8"></span>
+            </div>
+        </figure>
+        <figure>
+            <img src="learningrate_commentary.png" />
+            <span class="legend legend-7"></span>
+        </figure>
+
+        <h2 id="appendix-a">Appendix A: Raw data, tournament results</h2>
+        <p><a href="#strength-tournaments">Methodology and summary</a></p>
+
+        <h3>40 moves in 15 minutes, repeating (40/15)</h3>
+        <p><a href="https://github.com/chrisbutner/ChessCoachData/blob/main/tournaments/20210915_40_15.pgn">20210915_40_15.pgn</a> (180 games)</p>
+        <table>
+            <tr><th>Engine</th><th>Elo rating</th></tr>
+            <tr><td>Stockfish 14</td><td>3550</td></tr>
+            <tr><td>ChessCoach 1.0.0</td><td>3535</td></tr>
+            <tr><td>Slow Chess Blitz 2.7</td><td>3505</td></tr>
+            <tr><td>Igel 3.0.10</td><td>3487</td></tr>
+        </table>
+        <table>
+            <tr><th>Engine</th><th>Opponent</th><th>Wins, losses, draws</th><th>Score</th></tr>
+            <tr><td>Stockfish 14</td><td>ChessCoach 1.0.0</td><td>0 - 0 - 30</td><td>15.0 : 15.0</td></tr>
+            <tr><td></td><td>Slow Chess Blitz 2.7</td><td>7 - 0 - 23</td><td>18.5 : 11.5</td></tr>
+            <tr><td></td><td>Igel 3.0.10</td><td>8 - 0 - 22</td><td>19.0 : 11.0</td></tr>
+            <tr><td>ChessCoach 1.0.0</td><td>Slow Chess Blitz 2.7</td><td>0 - 0 - 30</td><td>15.0 : 15.0</td></tr>
+            <tr><td></td><td>Igel 3.0.10</td><td>8 - 0 - 22</td><td>19.0 : 11.0</td></tr>
+            <tr><td>Slow Chess Blitz 2.7</td><td>Igel 3.0.10</td><td>0 - 0 - 30</td><td>15.0 : 15.0</td></tr>
+        </table>
+
+        <h3>300 seconds per game plus 3 seconds increment per move (300+3, also known as 5+3)</h3>
+        <p><a href="https://github.com/chrisbutner/ChessCoachData/blob/main/tournaments/20210915_300_3.pgn">20210915_300_3.pgn</a> (840 games)</p>
+        <table>
+            <tr><th>Engine</th><th>Elo rating</th></tr>
+            <tr><td>Stockfish 14</td><td>3550</td></tr>
+            <tr><td>Stockfish 13</td><td>3538</td></tr>
+            <tr><td>Stockfish 12</td><td>3520</td></tr>
+            <tr><td>ChessCoach 1.0.0</td><td>3486</td></tr>
+            <tr><td>Stockfish 11</td><td>3450</td></tr>
+            <tr><td>Stockfish 10</td><td>3393</td></tr>
+            <tr><td>Stockfish 9</td><td>3380</td></tr>
+            <tr><td>Stockfish 8</td><td>3362</td></tr>
+        </table>
+        <table>
+            <tr><th>Engine</th><th>Opponent</th><th>Wins, losses, draws</th><th>Score</th></tr>
+            <tr><td>Stockfish 14</td><td>Stockfish 13</td><td>2 - 0 - 28</td><td>16.0 : 14.0</td></tr>
+            <tr><td></td><td>Stockfish 12</td><td>2 - 0 - 28</td><td>16.0 : 14.0</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0</td><td>3 - 0 - 27</td><td>16.5 : 13.5</td></tr>
+            <tr><td></td><td>Stockfish 11</td><td>12 - 0 - 18</td><td>21.0 : 9.0</td></tr>
+            <tr><td></td><td>Stockfish 10</td><td>22 - 0 - 8</td><td>26.0 : 4.0</td></tr>
+            <tr><td></td><td>Stockfish 9</td><td>16 - 0 - 14</td><td>23.0 : 7.0</td></tr>
+            <tr><td></td><td>Stockfish 8</td><td>15 - 0 - 15</td><td>22.5 : 7.5</td></tr>
+            <tr><td>Stockfish 13</td><td>Stockfish 12</td><td>1 - 0 - 29</td><td>15.5 : 14.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0</td><td>1 - 0 - 29</td><td>15.5 : 14.5</td></tr>
+            <tr><td></td><td>Stockfish 11</td><td>13 - 0 - 17</td><td>21.5 : 8.5</td></tr>
+            <tr><td></td><td>Stockfish 10</td><td>20 - 1 - 9</td><td>24.5 : 5.5</td></tr>
+            <tr><td></td><td>Stockfish 9</td><td>15 - 0 - 15</td><td>22.5 : 7.5</td></tr>
+            <tr><td></td><td>Stockfish 8</td><td>15 - 0 - 15</td><td>22.5 : 7.5</td></tr>
+            <tr><td>Stockfish 12</td><td>ChessCoach 1.0.0</td><td>0 - 1 - 29</td><td>14.5 : 15.5</td></tr>
+            <tr><td></td><td>Stockfish 11</td><td>8 - 0 - 22</td><td>19.0 : 11.0</td></tr>
+            <tr><td></td><td>Stockfish 10</td><td>16 - 0 - 14</td><td>23.0 : 7.0</td></tr>
+            <tr><td></td><td>Stockfish 9</td><td>14 - 1 - 15</td><td>21.5 : 8.5</td></tr>
+            <tr><td></td><td>Stockfish 8</td><td>15 - 0 - 15</td><td>22.5 : 7.5</td></tr>
+            <tr><td>ChessCoach 1.0.0</td><td>Stockfish 11</td><td>3 - 2 - 25</td><td>15.5 : 14.5</td></tr>
+            <tr><td></td><td>Stockfish 10</td><td>8 - 3 - 19</td><td>17.5 : 12.5</td></tr>
+            <tr><td></td><td>Stockfish 9</td><td>8 - 5 - 17</td><td>16.5 : 13.5</td></tr>
+            <tr><td></td><td>Stockfish 8</td><td>13 - 0 - 17</td><td>21.5 : 8.5</td></tr>
+            <tr><td>Stockfish 11</td><td>Stockfish 10</td><td>6 - 2 - 22</td><td>17.0 : 13.0</td></tr>
+            <tr><td></td><td>Stockfish 9</td><td>12 - 0 - 18</td><td>21.0 : 9.0</td></tr>
+            <tr><td></td><td>Stockfish 8</td><td>10 - 0 - 20</td><td>20.0 : 10.0</td></tr>
+            <tr><td>Stockfish 10</td><td>Stockfish 9</td><td>8 - 2 - 20</td><td>18.0 : 12.0</td></tr>
+            <tr><td></td><td>Stockfish 8</td><td>9 - 0 - 21</td><td>19.5 : 10.5</td></tr>
+            <tr><td>Stockfish 9</td><td>Stockfish 8</td><td>2 - 0 - 28</td><td>16.0 : 14.0</td></tr>
+        </table>
+
+        <h3>60 seconds per game plus 0.6 seconds increment per move (60+0.6)</h3>
+        <p><a href="https://github.com/chrisbutner/ChessCoachData/blob/main/tournaments/20210915_60_06.pgn">20210915_60_06.pgn</a> (3,150 games)</p>
+        <table>
+            <tr><th>Engine</th><th>Elo rating</th></tr>
+            <tr><td>Stockfish 14</td><td>3550</td></tr>
+            <tr><td>ChessCoach 1.0.0 5.6m</td><td>3445</td></tr>
+            <tr><td>ChessCoach 1.0.0 5.2m</td><td>3439</td></tr>
+            <tr><td>ChessCoach 1.0.0 4.8m</td><td>3426</td></tr>
+            <tr><td>ChessCoach 1.0.0 4.4m</td><td>3422</td></tr>
+            <tr><td>ChessCoach 1.0.0 4.0m</td><td>3425</td></tr>
+            <tr><td>ChessCoach 1.0.0 3.6m</td><td>3405</td></tr>
+            <tr><td>ChessCoach 1.0.0 3.2m</td><td>3419</td></tr>
+            <tr><td>ChessCoach 1.0.0 2.8m</td><td>3398</td></tr>
+            <tr><td>ChessCoach 1.0.0 2.4m</td><td>3354</td></tr>
+            <tr><td>ChessCoach 1.0.0 2.0m</td><td>3327</td></tr>
+            <tr><td>ChessCoach 1.0.0 1.6m</td><td>3313</td></tr>
+            <tr><td>ChessCoach 1.0.0 1.2m</td><td>3291</td></tr>
+            <tr><td>ChessCoach 1.0.0 0.8m</td><td>2978</td></tr>
+            <tr><td>ChessCoach 1.0.0 0.4m</td><td>2810</td></tr>
+        </table>
+        <table>
+            <tr><th>Engine</th><th>Opponent</th><th>Wins, losses, draws</th><th>Score</th></tr>
+            <tr><td>Stockfish 14</td><td>ChessCoach 1.0.0 5.6m</td><td>10 - 0 - 20</td><td>20.0 : 10.0</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 5.2m</td><td>8 - 0 - 22</td><td>19.0 : 11.0</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 4.8m</td><td>14 - 0 - 16</td><td>22.0 : 8.0</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 4.4m</td><td>14 - 0 - 16</td><td>22.0 : 8.0</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 4.0m</td><td>13 - 0 - 17</td><td>21.5 : 8.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 3.6m</td><td>18 - 0 - 12</td><td>24.0 : 6.0</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 3.2m</td><td>17 - 0 - 13</td><td>23.5 : 6.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 2.8m</td><td>15 - 0 - 15</td><td>22.5 : 7.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 2.4m</td><td>18 - 0 - 12</td><td>24.0 : 6.0</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 2.0m</td><td>21 - 0 - 9</td><td>25.5 : 4.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 1.6m</td><td>15 - 0 - 15</td><td>22.5 : 7.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 1.2m</td><td>21 - 0 - 9</td><td>25.5 : 4.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 0.8m</td><td>29 - 0 - 1</td><td>29.5 : 0.5</td></tr>
+            <tr><td></td><td>ChessCoach 1.0.0 0.4m</td><td>30 - 0 - 0</td><td>30 : 0</td></tr>
+        </table>
+
+        <h2 id="appendix-b">Appendix B: Raw data, Strategic Test Suite (STS) results</h2>
+        <p><a href="#strength-test-suites">Methodology and summary</a></p>
+        <pre>
+Score: 12022 out of 15000
+Rating: 3325
+Score: 11990 out of 15000
+Rating: 3316
+Score: 11971 out of 15000
+Rating: 3310
+Score: 11968 out of 15000
+Rating: 3309
+Score: 11998 out of 15000
+Rating: 3318
+Score: 11994 out of 15000
+Rating: 3317
+Score: 11997 out of 15000
+Rating: 3318
+Score: 11949 out of 15000
+Rating: 3303
+Score: 11995 out of 15000
+Rating: 3317
+Score: 12014 out of 15000
+Rating: 3323
+Score: 11960 out of 15000
+Rating: 3307
+</pre>
+
+        <h2 id="appendix-c">Appendix C: Raw data, Arasan21 suite results</h2>
+        <p><a href="#strength-test-suites">Methodology and summary</a></p>
+        <pre>
+Score: 119 out of 199
+Score: 115 out of 199
+Score: 117 out of 199
+Score: 116 out of 199
+Score: 119 out of 199
+</pre>
+
+        <h2 id="appendix-d">Appendix D: Raw data, search performance, nodes per second (NPS)</h2>
+        <p><a href="#performance-nodes-per-second-nps">Methodology and summary</a></p>
+        <p>Note that the depth that ChessCoach prints is just the length of the principal variation, which may be higher or lower than the best approximation of classical depth when the search finishes.</p>
+        <h3>Starting position</h3>
+        <pre>
+info depth 25 score cp 15 nodes 7731270 nps 128700 tbhits 0 time 60071 hashfull 37 pv d2d4 g8f6 c2c4 e7e6 g2g3 f8b4 b1d2 e8g8 f1g2 d7d5 g1f3 b7b6 e1g1 c8b7 b2b3 b8d7 c1b2 a8c8 f3e5 c7c5 a2a3 b4d2 d1d2 c5d4 d2d4
+info depth 22 score cp 15 nodes 7537754 nps 125556 tbhits 0 time 60034 hashfull 39 pv d2d4 g8f6 c2c4 e7e6 b1c3 f8b4 g1f3 b7b6 d1b3 a7a5 g2g3 h7h6 f1g2 c8b7 e1g1 e8g8 f1d1 f8e8 c3a4 b4f8 a4c3 f8b4
+info depth 22 score cp 15 nodes 7547549 nps 125682 tbhits 0 time 60052 hashfull 39 pv d2d4 g8f6 c2c4 e7e6 b1c3 f8b4 g1f3 b7b6 d1b3 a7a5 g2g3 h7h6 f1g2 c8b7 e1g1 e8g8 f1d1 f8e8 c3a4 b4f8 a4c3 f8b4
+info depth 22 score cp 15 nodes 7314811 nps 121834 tbhits 0 time 60038 hashfull 37 pv d2d4 g8f6 c2c4 e7e6 b1c3 f8b4 g1f3 b7b6 d1b3 a7a5 g2g3 h7h6 f1g2 c8b7 e1g1 e8g8 f1d1 f8e8 c3a4 b4f8 a4c3 f8b4
+info depth 29 score cp 15 nodes 7507158 nps 125058 tbhits 0 time 60029 hashfull 37 pv d2d4 g8f6 c2c4 e7e6 g2g3 f8b4 b1d2 e8g8 f1g2 d7d5 g1f3 b7b6 f3e5 c8b7 e1g1 a7a5 d2b1 b8d7 c1g5 b4e7 b1c3 c7c6 a1c1 d7e5 d4e5 f6d7 g5e7 d8e7 c4d5
+</pre>
+
+        <h3>Middlegame position</h3>
+        <pre>r1q1k2r/1p1nbpp1/2p2np1/p1Pp4/3Pp3/P1N1P1P1/1P1B1P1P/R2QRBK1 b kq - 0 1</pre>
+        <pre>
+info depth 42 score cp 138 nodes 3933660 nps 65510 tbhits 0 time 60046 hashfull 36 pv e7c5 b2b4 c5e7 b4a5 d7f8 a1b1 f8e6 f1g2 e6g5 h2h4 g5h3 g1f1 g6g5 d1b3 c8f5 e1e2 e7d6 b3b7 e8g8 h4g5 h3g5 b7c6 d6g3 b1b5 a8d8 a5a6 g5f3 f2g3 f3d4 e2f2 f5f2 f1f2 d4c6 b5b6 c6e5 c3b5 e5c4 b6b7 c4d2 a6a7 d2c4 b5c7
+info depth 32 score cp 138 nodes 4095336 nps 68219 tbhits 0 time 60031 hashfull 36 pv e7c5 b2b4 c5e7 b4a5 d7f8 a1b1 f8e6 f1g2 a8a7 c3e2 g6g5 d2b4 g5g4 b4e7 e8e7 d1b3 f6e8 a5a6 b7b5 a3a4 b5a4 b3a4 a7a6 a4b4 e8d6 b1a1 c8a8 a1a6 a8a6 e2f4 e6f4 g3f4
+info depth 33 score cp 137 nodes 4011045 nps 66812 tbhits 0 time 60034 hashfull 36 pv e7c5 f2f3 e4f3 d1f3 c5a7 g3g4 c8c7 e1e2 g6g5 a1c1 c7d6 f3f5 d6e6 f5g5 f6g4 e2g2 g4f6 f1d3 g7g6 c3e2 a7b8 e2f4 e6e7 c1f1 b8d6 d3g6 h8g8 g6f7 e7f7 g5g8 f6g8 f4d5 f7d5
+info depth 40 score cp 136 nodes 4176532 nps 69569 tbhits 0 time 60034 hashfull 37 pv e7c5 f2f3 e4f3 d1f3 c5a7 a1d1 e8g8 g3g4 f6h7 h2h4 h7f6 f1d3 d7b6 g4g5 f6h5 c3e2 b6c4 d3c4 d5c4 d2a5 a7d4 a5b4 c6c5 d1d4 c5d4 b4f8 c8f8 e2d4 f8e7 e1c1 a8c8 c1c3 c8c5 a3a4 g8h7 g1f2 e7c7 f2e1 h5g3 f3f4
+info depth 30 score cp 137 nodes 4253002 nps 70827 tbhits 0 time 60047 hashfull 37 pv e7c5 f2f3 e4f3 d1f3 c5b6 a1d1 e8f8 g3g4 c8c7 h2h3 a8e8 f1d3 f8g8 g4g5 f6h7 h3h4 h7f8 e1f1 f7f5 d2e1 c7d8 e1g3 b6c7 c3e2 f8e6 b2b4 a5b4 a3b4 c7g3 f3g3
+</pre>
+
+        <h3>Endgame position</h3>
+        <pre>6k1/1R5R/5p2/3P1B2/3K2P1/4rP2/r7/3n4 b - - 2 55</pre>
+        <pre>
+info depth 16 score cp -1245 nodes 8486337 nps 141314 tbhits 837 time 60052 hashfull 38 pv a2a4 d4c5 a4a5 c5b4 a5a8 f5e6 e3e6 d5e6 a8a4 b4a4 d1b2 a4b5 b2d1 h7d7 d1c3 b5c4
+info depth 17 score cp -1248 nodes 8564029 nps 142673 tbhits 832 time 60025 hashfull 38 pv a2a4 d4c5 a4a5 c5b4 a5a8 f5e6 e3e6 d5e6 a8a4 b4a4 d1b2 a4b5 b2d1 h7d7 d1c3 b5c4 c3a4
+info depth 17 score cp -1245 nodes 8624577 nps 143608 tbhits 834 time 60056 hashfull 39 pv a2a4 d4c5 a4a5 c5b4 a5a8 f5e6 e3e6 d5e6 a8a4 b4a4 d1b2 a4b5 b2d1 h7d7 d1c3 b5c4 c3a4
+info depth 17 score cp -1245 nodes 8468469 nps 141060 tbhits 821 time 60034 hashfull 38 pv a2a4 d4c5 a4a5 c5b4 a5a8 f5e6 e3e6 d5e6 a8a4 b4a4 d1c3 a4b3 c3d5 h7d7 d5e7 d7e7 f6f5
+info depth 17 score cp -1246 nodes 8270744 nps 137733 tbhits 836 time 60048 hashfull 37 pv a2a4 d4c5 a4a5 c5b4 a5a8 f5e6 e3e6 d5e6 a8a4 b4a4 d1b2 a4b5 b2d1 h7d7 d1c3 b5c4 c3a4
+</pre>
+
+        <h2 id="appendix-e">Appendix E: Raw data, self-play performance</h2>
+        <p><a href="#performance-self-play">Methodology and summary</a></p>
+        <h3>Teacher prediction, fresh self-play data, using selfplay11c_005600000/teacher/swa</h3>
+        <pre>
+20210902_082950_816_B03CF7CA_000000001.chunk
+20210902_092148_523_B03CF7CA_000000002.chunk
+20210902_101529_321_B03CF7CA_000000003.chunk
+20210902_110617_064_B03CF7CA_000000004.chunk
+20210902_115610_860_B03CF7CA_000000005.chunk
+20210902_124654_558_B03CF7CA_000000006.chunk
+20210902_133825_162_B03CF7CA_000000007.chunk
+20210902_142737_455_B03CF7CA_000000008.chunk
+20210902_151941_470_B03CF7CA_000000009.chunk
+20210902_161050_486_B03CF7CA_000000010.chunk
+20210902_170249_091_B03CF7CA_000000011.chunk
+20210902_175305_095_B03CF7CA_000000012.chunk
+20210902_184401_396_B03CF7CA_000000013.chunk
+</pre>
+
+        <h3>Student prediction, fresh self-play data, using selfplay11_003600000/student/swa</h3>
+        <pre>
+20210902_000911_997_CDF008BB_000000001.chunk
+20210902_004411_362_CDF008BB_000000002.chunk
+20210902_011431_200_CDF008BB_000000003.chunk
+20210902_014551_067_CDF008BB_000000004.chunk
+20210902_021811_270_CDF008BB_000000005.chunk
+20210902_025115_993_CDF008BB_000000006.chunk
+20210902_032231_690_CDF008BB_000000007.chunk
+20210902_035354_835_CDF008BB_000000008.chunk
+20210902_042625_242_CDF008BB_000000009.chunk
+20210902_045954_545_CDF008BB_000000010.chunk
+20210902_053224_662_CDF008BB_000000011.chunk
+20210902_060450_010_CDF008BB_000000012.chunk
+20210902_063607_272_CDF008BB_000000013.chunk
+</pre>
+
+        <h2 id="appendix-f">Appendix F: Raw data, training performance</h2>
+        <p><a href="#performance-training">Methodology and summary</a></p>
+        <h3>Selfplay11 teacher</h3>
+        <pre>
+Trained steps 3000001-3010000, total time 374.065, step time 0.0374065
+Trained steps 3010001-3020000, total time 369.948, step time 0.0369948
+Trained steps 3020001-3030000, total time 533.027, step time 0.0533027
+Trained steps 3030001-3040000, total time 319.813, step time 0.0319813
+Trained steps 3040001-3050000, total time 329.212, step time 0.0329212
+Trained steps 3050001-3060000, total time 303.816, step time 0.0303816
+Trained steps 3060001-3070000, total time 302.458, step time 0.0302458
+Trained steps 3070001-3080000, total time 298.395, step time 0.0298395
+Trained steps 3080001-3090000, total time 331.418, step time 0.0331418
+Trained steps 3090001-3100000, total time 315.599, step time 0.0315599
+Trained steps 3100001-3110000, total time 322.777, step time 0.0322777
+Trained steps 3110001-3120000, total time 316.692, step time 0.0316692
+Trained steps 3120001-3130000, total time 315.867, step time 0.0315867
+Trained steps 3130001-3140000, total time 308.975, step time 0.0308975
+Trained steps 3140001-3150000, total time 318.309, step time 0.0318309
+Trained steps 3150001-3160000, total time 317.987, step time 0.0317987
+Trained steps 3160001-3170000, total time 334.9, step time 0.03349
+Trained steps 3170001-3180000, total time 342.504, step time 0.0342504
+Trained steps 3180001-3190000, total time 354.754, step time 0.0354754
+Trained steps 3190001-3200000, total time 329.453, step time 0.0329453
+</pre>
+
+        <h3>Selfplay11 student</h3>
+        <pre>
+Trained steps 3000001-3010000, total time 281.451, step time 0.0281451
+Trained steps 3010001-3020000, total time 285.581, step time 0.0285581
+Trained steps 3020001-3030000, total time 355.919, step time 0.0355919
+Trained steps 3030001-3040000, total time 272.08, step time 0.027208
+Trained steps 3040001-3050000, total time 263.388, step time 0.0263388
+Trained steps 3050001-3060000, total time 261.446, step time 0.0261446
+Trained steps 3060001-3070000, total time 251.013, step time 0.0251013
+Trained steps 3070001-3080000, total time 256.01, step time 0.025601
+Trained steps 3080001-3090000, total time 263.746, step time 0.0263746
+Trained steps 3090001-3100000, total time 258.114, step time 0.0258114
+Trained steps 3100001-3110000, total time 267.097, step time 0.0267097
+Trained steps 3110001-3120000, total time 274.047, step time 0.0274047
+Trained steps 3120001-3130000, total time 270.588, step time 0.0270588
+Trained steps 3130001-3140000, total time 271.816, step time 0.0271816
+Trained steps 3140001-3150000, total time 269.123, step time 0.0269123
+Trained steps 3150001-3160000, total time 267.029, step time 0.0267029
+Trained steps 3160001-3170000, total time 280.487, step time 0.0280487
+Trained steps 3170001-3180000, total time 315.979, step time 0.0315979
+Trained steps 3180001-3190000, total time 277.471, step time 0.0277471
+Trained steps 3190001-3200000, total time 259.324, step time 0.0259324
+</pre>
+
+        <h3>Commentary, fresh run</h3>
+        <pre>
+Trained commentary steps 10001-20000, total time 931.68, step time 0.093168
+Trained commentary steps 20001-30000, total time 935.3, step time 0.09353
+Trained commentary steps 30001-40000, total time 936.939, step time 0.0936939
+Trained commentary steps 40001-50000, total time 931.887, step time 0.0931887
+Trained commentary steps 50001-60000, total time 927.141, step time 0.0927141
+Trained commentary steps 60001-70000, total time 930.331, step time 0.0930331
+Trained commentary steps 70001-80000, total time 929.892, step time 0.0929892
+Trained commentary steps 80001-90000, total time 931.536, step time 0.0931536
+Trained commentary steps 90001-100000, total time 930.682, step time 0.0930682
+Trained commentary steps 100001-110000, total time 934.055, step time 0.0934055
+</pre>
+
+        <p class="footer">Written 22 September 2021</p>
+    </article>
+</body>
+</html>
+
+

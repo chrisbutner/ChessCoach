@@ -1,0 +1,105 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Overview | ChessCoach</title>
+
+    <link href="github-markdown.css" rel="stylesheet" />
+    <link href="site.css" rel="stylesheet" />
+</head>
+<body class="markdown-body">
+    <article class="content">
+        <div class="contents">
+            <div class="contents-body">
+                <div id="header" class="contents-part">
+                    <h3>ChessCoach</h3> <span id="by-narrow">– <a href="mailto:chris.butner@outlook.com">Chris Butner</a></span>
+                    <p>A neural network-based chess engine capable of natural language commentary</p>
+                    <p id="by-wide"><a href="mailto:chris.butner@outlook.com">Chris Butner</a></p>
+                </div>
+                <div id="inter" class="contents-part compact">
+                    <p><strong><a href="index.html">Overview</a></strong></p>
+                    <p><a href="high-level-explanation.html">High-level explanation</a></p>
+                    <p><a href="technical-explanation.html">Technical explanation</a></p>
+                    <p><a href="development-process.html">Development process</a></p>
+                    <p><a href="data.html">Data</a></p>
+                    <p><a href="https://github.com/chrisbutner/ChessCoach#readme">Code and Installation (GitHub)</a></p>
+                    <p><a href="https://lichess.org/@/PlayChessCoach">@PlayChessCoach (Lichess)</a></p>
+                </div>
+                <div id="intra" class="contents-part compact">
+                    <p><a href="#introduction">Introduction</a></p>
+                    <p><a href="#motivation">Motivation</a></p>
+                    <p><a href="#comparisons">Comparisons</a></p>
+                    <p><a href="#results">Results</a></p>
+                    <p><a href="#measurements">Measurements</a></p>
+                    <p><a href="#programs-files-installation-usage-running-tests">Programs, Files, Installation, Usage, Running tests</a></p>
+                    <p><a href="#acknowledgements">Acknowledgements</a></p>
+                    <p><a href="#license">License</a></p>
+                    <p><a href="#contact">Contact</a></p>
+                </div>
+            </div>
+        </div>
+
+        <h1>Overview</h1>
+        <p>
+            <a href="https://lichess.org/xoqYpvX6#36"><img src="intro.gif" style="max-width: 100%;"></a>
+            @PlayChessCoach on Lichess: <a href="https://lichess.org/@/PlayChessCoach/tv">Watch</a> | <a href="https://lichess.org/@/PlayChessCoach">Stats</a> | <a href="https://lichess.org/?user=PlayChessCoach#friend">Challenge</a> (1+0 or 0+1 up to 15+10)
+        </p>
+
+        <h2 id="introduction">Introduction</h2>
+        <p>ChessCoach is a neural network-based chess engine capable of natural-language commentary. It plays chess with a rating of approximately 3450 Elo, which means it should usually beat even the strongest human players at 2850 Elo, and many other engines, but will often lose to the strongest, such as Stockfish 14 at 3550 Elo.</p>
+        <p>As with all engines, ChessCoach relies on examining millions of chess positions to decide on the best move to play. It uses a large, slow neural network just like AlphaZero or Leela Chess Zero (Lc0) to evaluate each position, unlike classical engines which aim for speed with a much simpler evaluation, or more recent NNUE engines, which are a stronger hybrid of both styles.</p>
+        <p>The neural network at the core of the engine is trained by playing against itself, using a feedback cycle to start from almost zero knowledge – just the rules of chess – and learn new ways to beat itself as it grows stronger. Stronger neural network evaluations let it search better, and stronger search results let it train its neural network evaluation more effectively.</p>
+        <p>ChessCoach can also feed its chess knowledge into an additional neural network to comment on moves and positions in English. It is not very insightful and often wrong but shows some promise for the limited data it has been able to train on.</p>
+
+        <h2 id="motivation">Motivation</h2>
+        <p>I started developing ChessCoach as a two to three-month project to see whether I liked machine learning and ended up taking things further than I expected. The original plan had three overly ambitious goals: replicating a small AlphaZero-like engine, adding natural-language commentary to the training feedback cycle, and making some degree of training possible on a single-GPU workstation.</p>
+        <p>After a little over a year of development, I can claim almost no progress on training methods. However, I am happy with the commentary that ChessCoach produces, all things considered, and surprised at the eventual strength of the engine.</p>
+        <p>I was lucky to have so many public resources available, including free cloud compute and freely available papers, discussions and data. I am also very grateful to a number of folks who have helped with important clarifications, discussions and debugging.</p>
+
+        <h2 id="comparisons">Comparisons</h2>
+        <p>The chess engine at the core of ChessCoach is very similar to that of <a href="https://kstatic.googleusercontent.com/files/2f51b2a749a284c2e2dfa13911da965f4855092a179469aedd15fbe4efe8f8cbf9c515ef83ac03a6515fa990e6f85fd827dcd477845e806f23a17845072dc7bd">AlphaZero (Silver et al., 2018)</a> or <a href="https://github.com/LeelaChessZero/lc0#readme">Lc0 (Linscott &amp; Pascutto, 2018)</a>, in the structure of the neural network, training schedule and search algorithm, but with a practical, engineering approach by necessity, lacking the breadth and depth of research talent of a larger team. However, I hope that there are a few new ideas that can be useful elsewhere.</p>
+        <p>The natural-language commentary piece is most like the work of <a href="https://www.cs.cmu.edu/~hovy/papers/18ACL-chess-commentary.pdf">Learning to Generate Move-by-Move Commentary for Chess Games from Large-Scale Social Forum Data (Jhamtani, Gangal, Hovy, Neubig &amp; Berg-Kirkpatrick, 2018)</a> and <a href="https://arxiv.org/pdf/1909.10413.pdf">Automated Chess Commentator Powered by Neural Chess Engine (Zang, Yu &amp; Wan, 2019)</a>, but relies on a more heavily trained chess engine and larger training corpus, albeit with more simplistic architecture.</p>
+
+        <h2 id="results">Results</h2>
+        <p>ChessCoach is designed to be somewhat minimal and portable. It runs on Linux and Windows and supports single-GPU, multi-GPU and Tensor Processing Units (TPUs). Performance-oriented code is in C++ (10.5k lines) and neural network code is in Python (3.7k lines), relying on TensorFlow 2. Stockfish code is used for position management, move generation and endgame tablebase probing, but not for search or evaluation. Self-play training data has been completely generated within the ChessCoach project, following the AlphaZero schedule of 44 million games and 700,000 training batches of 4,096 positions each.</p>
+        <p>Some ideas beyond AlphaZero but existing in literature and projects such as <a href="https://arxiv.org/pdf/1902.10565.pdf">KataGo (Wu, 2020)</a> and <a href="https://github.com/LeelaChessZero/lc0#readme">Lc0</a> have been integrated (often I thought I was trying something new, but it turns out smart folks at Lc0 have tried almost everything). These include mate-proving, endgame tablebase probing, endgame minimax, stochastic weight averaging (SWA), exponentially weighted moving averages (EWMA), various exploration incentives, prediction caching, auxiliary training targets, and knowledge distillation.</p>
+        <p>I believe that some ideas are new. The first is a search method that aims to avoid tactical traps and minimize simple regret via Linear Exploration and Selective Backpropagation, applied via elimination – <a href="high-level-explanation.html#sble-puct">SBLE-PUCT</a>. The second is a simple <a href="high-level-explanation.html#commentary-architecture">neural architecture for natural-language commentary</a> on positions and moves in conjunction with a tweaked application of nucleus sampling (top-p) focused on correctness-with-variety – <a href="high-level-explanation.html#covet-sampling">COVET sampling</a>.</p>
+        <p>The outcome is a suite of tools to play chess, train the neural networks, optimize parameters, test strength, process training data, view and debug training data, organize training data, unit-test, and coordinate clusters. To wrap up the project, a bot is set up at <a href="https://lichess.org/@/PlayChessCoach">https://lichess.org/@/PlayChessCoach</a> to play games against challengers and other bots, and provide commentary to spectators.</p>
+
+        <h2 id="measurements">Measurements</h2>
+        <p>On a newer-style v3-8 <a href="https://cloud.google.com/blog/products/compute/introducing-cloud-tpu-vms">Cloud TPU VM</a>:</p>
+        <ul>
+            <li>Approximate tournament Elo ratings of 3535 at 40/15 time, 3486 at 300+3 time, 3445 at 60+0.6 time, vs. Stockfish 14 with 8 threads, 8192 hash, 3-4-5 Syzygy, pinned to 3550 Elo <a href="data.html#strength-tournaments">(details)</a></li>
+            <li>125,000 nodes per second (NPS) (varying 68,000 - 141,000 with position) <a href="data.html#performance-nodes-per-second-nps">(details)</a></li>
+            <li>2,360 self-play games per hour (lots of room for improvement) <a href="data.html#performance-self-play">(details)</a></li>
+            <li>3317 STS Elo estimation (commonly varying 3260 - 3350 with parameters) <a href="data.html#strength-test-suites">(details)</a></li>
+            <li>117 out of 199 Arasan21 score (commonly varying 118 - 126 with parameters) <a href="data.html#strength-test-suites">(details)</a></li>
+        </ul>
+
+        <h2 id="programs-files-installation-usage-running-tests">Programs, Files, Installation, Usage, Running tests</h2>
+        <p>See the <a href="https://github.com/chrisbutner/ChessCoach#contents">README</a> on ChessCoach's GitHub for technical instructions.</p>
+
+        <h2 id="acknowledgements">Acknowledgements</h2>
+        <p>Google's <a href="https://sites.research.google/trc/about/">TPU Research Cloud (TRC)</a> program has been exceptionally generous with computing resources that made this project possible, and I thank Jonathan Caton in particular for making things happen.</p>
+        <p>I'm very appreciative of Google's Cloud TPU team for the use of <a href="https://cloud.google.com/blog/products/compute/introducing-cloud-tpu-vms">Cloud TPU VMs</a>, and especially Michael Banfield for engineering assistance throughout the alpha of the new technology.</p>
+        <p>I sincerely thank Karlson Pfannschmidt (Paderborn University), whose <a href="https://github.com/kiudee/chess-tuning-tools#readme">Chess Tuning Tools</a> and <a href="https://github.com/kiudee/bayes-skopt#readme">Bayes-skopt</a> implementation, and advice on Bayesian optimization were invaluable in strengthening the ChessCoach engine.</p>
+        <p>I'm very grateful to Matthew Lai (DeepMind) for providing in an independent capacity, important clarifications on the AlphaZero paper.</p>
+        <p>I extend thanks to Pierre de Wulf for providing research credits for <a href="https://www.scrapingbee.com/">ScrapingBee</a> to enable natural-language commentary training in ChessCoach.</p>
+        <p>Thank you to Ted Li for valuable ideas and discussions at the commencement of the project.</p>
+        <p>Thank you to Freya Wilcox for assistance with diagram prototyping.</p>
+        <p>And special thanks to Gary Butner and Lynelle Rafton for editing, proofreading and support.</p>
+
+        <h2 id="license">License</h2>
+        <p>ChessCoach is released under the <a href="https://github.com/chrisbutner/ChessCoach/blob/main/LICENSE">GPLv3 or later</a> license.</p>
+
+        <h2 id="contact">Contact</h2>
+        <p>Chris Butner, <a href="mailto:chris.butner@outlook.com">chris.butner@outlook.com</a></p>
+
+        <p class="footer">Written 22 September 2021</p>
+    </article>
+</body>
+</html>
+
+
