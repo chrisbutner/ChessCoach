@@ -21,8 +21,8 @@ pip3 install -U pip
 pip3 install setuptools
 pip3 install -r requirements-linux-common.txt
 
-# Install cutechess dependencies.
-sudo apt-get install -y --no-install-recommends qt5-default
+# Install cutechess dependencies (Ubuntu 20.04 || Ubuntu 22.04).
+sudo bash -c 'apt-get install -y --no-install-recommends qt5-default || apt-get install -y --no-install-recommends qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools'
 
 # Build and install protobuf.
 curl -L https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protobuf-cpp-3.13.0.tar.gz | tar -xz

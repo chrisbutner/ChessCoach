@@ -64,6 +64,7 @@ stockfish_sources = [
 stockfish = static_library(
   'stockfish',
   stockfish_sources,
+  override_options: ['werror=false'],
   )
 
 ###############################################################################
